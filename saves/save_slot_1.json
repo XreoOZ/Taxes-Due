@@ -1136,7 +1136,15 @@
           "assigned_bed_id": "furn_1",
           "carrying_furniture_id": null,
           "watering_timer": 0.0,
-          "tilling_timer": 0.0
+          "tilling_timer": 0.0,
+          "hunger": 100.0,
+          "thirst": 100.0,
+          "daily_food_consumed": 1,
+          "daily_water_consumed": 1,
+          "is_alive": true,
+          "status": "ALIVE",
+          "death_reason": null,
+          "death_day": null
         },
         {
           "id": "vil_2",
@@ -1164,7 +1172,15 @@
           "assigned_bed_id": "furn_2",
           "carrying_furniture_id": null,
           "watering_timer": 0.0,
-          "tilling_timer": 0.0
+          "tilling_timer": 0.0,
+          "hunger": 100.0,
+          "thirst": 100.0,
+          "daily_food_consumed": 1,
+          "daily_water_consumed": 1,
+          "is_alive": true,
+          "status": "ALIVE",
+          "death_reason": null,
+          "death_day": null
         },
         {
           "id": "vil_3",
@@ -1192,7 +1208,15 @@
           "assigned_bed_id": "furn_3",
           "carrying_furniture_id": null,
           "watering_timer": 0.0,
-          "tilling_timer": 0.0
+          "tilling_timer": 0.0,
+          "hunger": 100.0,
+          "thirst": 100.0,
+          "daily_food_consumed": 1,
+          "daily_water_consumed": 1,
+          "is_alive": true,
+          "status": "ALIVE",
+          "death_reason": null,
+          "death_day": null
         }
       ]
     }

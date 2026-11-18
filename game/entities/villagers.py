@@ -1366,6 +1366,15 @@ class Villager:
                             self.say("Collecting water for our household needs!", duration=2.5)
                             return
 
+        # Evaluasi Makan & Minum Malam (Dinner & Daily Needs Fulfillment)
+        if sched_activity in ("LEISURE", "ANY") and cur_hour >= 18.0 and self.need_seek_cooldown <= 0.0:
+            if self.daily_food_consumed < DAILY_FOOD_REQUIREMENT and (self.hunger < 95.0 or cur_hour >= 20.0):
+                self.task = "SEEKING_FOOD"
+                return
+            if self.daily_water_consumed < DAILY_WATER_REQUIREMENT and (self.thirst < 95.0 or cur_hour >= 20.0):
+                self.task = "SEEKING_WATER"
+                return
+
         self.idle_wander_timer -= dt
         if self.idle_wander_timer <= 0:
             self.idle_wander_timer = random.uniform(4.0, 8.0)

@@ -414,8 +414,15 @@ def load_from_slot(slot_id, day_cycle, resources, player, permit_manager, buildi
             v.tilling_timer = m_d.get("tilling_timer", 0.0)
             v.hunger = float(m_d.get("hunger", 100.0))
             v.thirst = float(m_d.get("thirst", 100.0))
-            v.daily_food_consumed = int(m_d.get("daily_food_consumed", 0))
-            v.daily_water_consumed = int(m_d.get("daily_water_consumed", 0))
+            if "daily_food_consumed" in m_d:
+                v.daily_food_consumed = int(m_d["daily_food_consumed"])
+            else:
+                v.daily_food_consumed = 1 if v.hunger >= 50.0 else 0
+
+            if "daily_water_consumed" in m_d:
+                v.daily_water_consumed = int(m_d["daily_water_consumed"])
+            else:
+                v.daily_water_consumed = 1 if v.thirst >= 50.0 else 0
             v.is_alive = bool(m_d.get("is_alive", True))
             v.status = str(m_d.get("status", "ALIVE"))
             v.death_reason = m_d.get("death_reason", None)
