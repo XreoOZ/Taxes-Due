@@ -161,9 +161,9 @@ class RaportUI:
             {"id": "building", "title": "Buildings", "wip": False},
             {"id": "permit", "title": "Permits", "wip": False},
             {"id": "priority", "title": "Priority", "wip": False},
-            {"id": "schedule", "title": "Schedule", "wip": False},
+            {"id": "schedule", "title": "Schedule", "wip": False, "hidden": True},
             {"id": "villagers", "title": "Household", "wip": False},
-            {"id": "workers", "title": "Workers", "wip": False},
+            {"id": "workers", "title": "Jobs", "wip": False},
             {"id": "production", "title": "Production", "wip": False},
             {"id": "tax", "title": "Taxes", "wip": True},
             {"id": "planning", "title": "Roadmap", "wip": True},
@@ -288,11 +288,12 @@ class RaportUI:
         self.worker_inc_btn_rects = {}
         self.worker_auto_btn_rects = {}
 
-        # Workers Tab Controls
+        # Workers / Jobs Tab Controls
         self.selected_job_id = None
         self.back_to_jobs_btn_rect = None
         self.auto_sort_all_btn_rect = None
         self.job_select_btn_rects = {}
+        self.job_schedule_btn_rects = {}
         self.worker_assign_btn_rects = {}
         self.worker_unassign_btn_rects = {}
 
@@ -332,6 +333,8 @@ class RaportUI:
         self.selected_member_inventory_id = None
         self.show_assign_permit_picker = False
         self.crop_picker_permit_id = None
+        self.selected_job_id = None
+        self.selected_schedule_job_id = None
 
     def open_household_directly(self, family_id):
         """Contextual View: Opens Town Ledger directly to the specified family's View Family screen"""
@@ -603,6 +606,8 @@ class RaportUI:
                 self.grant_amounts = {}
                 self.active_grant_input_item = None
                 self.show_assign_permit_picker = False
+                self.selected_job_id = None
+                self.selected_schedule_job_id = None
                 return f"switch_tab_{i}"
 
         # 4. Tab 0: Building Management
@@ -945,22 +950,41 @@ class RaportUI:
                             self.show_assign_permit_picker = False
                             return "close_assign_permit_picker"
 
-        # 8. Tab 5: Dedicated Workers Management
+        # 8. Tab 5: Dedicated Jobs & Schedule Management
         elif self.active_tab == 5:
-            # View 1: Job Directory
-            if self.selected_job_id is None:
-                if self.auto_sort_all_btn_rect and self.auto_sort_all_btn_rect.collidepoint(mouse_pos):
-                    if villager_manager:
-                        permit_manager.auto_sort_workers(villager_manager)
-                    return "auto_sort_all"
+            # Sub-view A: 24-Hour Schedule Matrix for Selected Job
+            if self.selected_schedule_job_id is not None:
+                if self.schedule_back_btn_rect and self.schedule_back_btn_rect.collidepoint(mouse_pos):
+                    self.selected_schedule_job_id = None
+                    return "back_to_jobs"
 
-                for job_id, rect in self.job_select_btn_rects.items():
-                    if rect.collidepoint(mouse_pos):
-                        self.selected_job_id = job_id
-                        return f"select_job_{job_id}"
+                if schedule_manager:
+                    for brush_type, rect in self.schedule_brush_btn_rects.items():
+                        if rect.collidepoint(mouse_pos):
+                            self.selected_schedule_brush = brush_type
+                            return f"select_brush_{brush_type}"
 
-            # View 2: Worker Roster for Selected Job
-            else:
+                    for hour_idx, rect in self.schedule_hour_cell_rects.items():
+                        if rect.collidepoint(mouse_pos):
+                            schedule_manager.set_hour_activity(self.selected_schedule_job_id, hour_idx, self.selected_schedule_brush)
+                            return f"paint_hour_{hour_idx}_{self.selected_schedule_brush}"
+
+                    for preset_name, rect in self.schedule_preset_btn_rects.items():
+                        if rect.collidepoint(mouse_pos):
+                            if preset_name == "standard":
+                                schedule_manager.reset_to_default(self.selected_schedule_job_id)
+                            elif preset_name == "hardwork":
+                                sched = ["SLEEP"]*5 + ["LEISURE"] + ["WORK"]*15 + ["LEISURE"] + ["SLEEP"]*2
+                                for h in range(24):
+                                    schedule_manager.set_hour_activity(self.selected_schedule_job_id, h, sched[h])
+                            elif preset_name == "relaxed":
+                                sched = ["SLEEP"]*7 + ["LEISURE"]*2 + ["WORK"]*7 + ["LEISURE"]*6 + ["SLEEP"]*2
+                                for h in range(24):
+                                    schedule_manager.set_hour_activity(self.selected_schedule_job_id, h, sched[h])
+                            return f"apply_schedule_preset_{preset_name}"
+
+            # Sub-view B: Worker Roster for Selected Job
+            elif self.selected_job_id is not None:
                 if self.back_to_jobs_btn_rect and self.back_to_jobs_btn_rect.collidepoint(mouse_pos):
                     self.selected_job_id = None
                     return "back_to_jobs"
@@ -990,6 +1014,23 @@ class RaportUI:
                                     ))
                                     permit_manager.assign_worker_to_permit(avail_permits[0].id, worker.id)
                         return f"assign_worker_{v_id}"
+
+            # View 1: Root Jobs Directory
+            else:
+                if self.auto_sort_all_btn_rect and self.auto_sort_all_btn_rect.collidepoint(mouse_pos):
+                    if villager_manager:
+                        permit_manager.auto_sort_workers(villager_manager)
+                    return "auto_sort_all"
+
+                for job_id, rect in self.job_select_btn_rects.items():
+                    if rect.collidepoint(mouse_pos):
+                        self.selected_job_id = job_id
+                        return f"select_job_{job_id}"
+
+                for job_id, rect in self.job_schedule_btn_rects.items():
+                    if rect.collidepoint(mouse_pos):
+                        self.selected_schedule_job_id = job_id
+                        return f"edit_schedule_{job_id}"
 
         # 9. Tab 8: Planning & Roadmap Tab
         elif self.active_tab == 8:
@@ -1060,11 +1101,16 @@ class RaportUI:
         tab_x = mx + 20
         tab_y = my + 50
         tab_spacing = 8
-        avail_w = self.modal_w - 40 - ((len(self.tabs) - 1) * tab_spacing)
-        tab_w = avail_w // len(self.tabs)
+        visible_tabs = [t for t in self.tabs if not t.get("hidden", False)]
+        avail_w = self.modal_w - 40 - ((len(visible_tabs) - 1) * tab_spacing)
+        tab_w = avail_w // len(visible_tabs)
         tab_h = 32
 
         for i, tab in enumerate(self.tabs):
+            if tab.get("hidden", False):
+                self.tab_rects.append(pygame.Rect(-9999, -9999, 0, 0))
+                continue
+
             t_rect = pygame.Rect(tab_x, tab_y, tab_w, tab_h)
             self.tab_rects.append(t_rect)
             is_active = (i == self.active_tab)
@@ -1104,7 +1150,10 @@ class RaportUI:
         elif self.active_tab == 4:
             self._draw_villagers_tab(surface, mx, content_y, villager_manager, permit_manager, building_manager, furniture_manager=furniture_manager, stockpile_manager=stockpile_manager, resources=resources, servant_manager=servant_manager, production_system=production_system)
         elif self.active_tab == 5:
-            self._draw_workers_tab(surface, mx, content_y, villager_manager, permit_manager)
+            if self.selected_schedule_job_id is not None:
+                self._draw_schedule_tab(surface, mx, content_y, schedule_manager=schedule_manager, day_cycle=day_cycle)
+            else:
+                self._draw_workers_tab(surface, mx, content_y, villager_manager, permit_manager)
         elif self.active_tab == 6:
             self._draw_production_tab(surface, mx, content_y, villager_manager, permit_manager, furniture_manager=furniture_manager, stockpile_manager=stockpile_manager, production_system=production_system)
         elif self.active_tab == 7:
@@ -2738,6 +2787,7 @@ class RaportUI:
 
             y_cur = cy + 46
             self.job_select_btn_rects = {}
+            self.job_schedule_btn_rects = {}
 
             all_vils = villager_manager.get_all_villagers() if villager_manager else []
 
@@ -2772,18 +2822,34 @@ class RaportUI:
                     assigned_vils = [v for v in job_vils if any(v.id in getattr(p, "assigned_workers", set()) for p in permit_manager.permits)]
                     unassigned_count = len(job_vils) - len(assigned_vils)
 
-                    stat_str = f"Workforce: {len(assigned_vils)}/{len(job_vils)} Assigned ({unassigned_count} Idle) — Daily field watering & harvesting"
+                    job_desc = job_cfg.get("desc", "Guild duties")
+                    stat_str = f"Workforce: {len(assigned_vils)}/{len(job_vils)} Assigned ({unassigned_count} Idle) — {job_desc}"
+                    if len(stat_str) > 75:
+                        stat_str = stat_str[:72] + "..."
                     surface.blit(self.font_body.render(stat_str, True, (34, 197, 94) if unassigned_count == 0 else (245, 158, 11)), (card_rect.x + 46, card_rect.y + 30))
 
-                    # Action Button: [View Workers ➔]
-                    view_btn = pygame.Rect(card_rect.right - 130, card_rect.y + 13, 118, 32)
-                    self.job_select_btn_rects[job_id] = view_btn
-                    v_hover = view_btn.collidepoint(mouse_pos)
-                    pygame.draw.rect(surface, (37, 99, 235) if v_hover else (30, 58, 138), view_btn, border_radius=6)
-                    pygame.draw.rect(surface, (96, 165, 250), view_btn, width=1, border_radius=6)
+                    # Action Buttons: [View Workers] and [Edit Schedule]
+                    btn_w = 110
+                    btn_h = 30
+                    btn_y = card_rect.y + 14
 
-                    lbl = self.font_badge.render("View Workers ->", True, (255, 255, 255))
-                    surface.blit(lbl, (view_btn.centerx - lbl.get_width() // 2, view_btn.centery - lbl.get_height() // 2))
+                    # 1. View Workers Button
+                    vw_rect = pygame.Rect(card_rect.right - 14 - (btn_w * 2 + 10), btn_y, btn_w, btn_h)
+                    self.job_select_btn_rects[job_id] = vw_rect
+                    vw_hover = vw_rect.collidepoint(mouse_pos)
+                    pygame.draw.rect(surface, (37, 99, 235) if vw_hover else (30, 58, 138), vw_rect, border_radius=6)
+                    pygame.draw.rect(surface, (96, 165, 250), vw_rect, width=1, border_radius=6)
+                    vw_lbl = self.font_badge.render("View Workers", True, (255, 255, 255))
+                    surface.blit(vw_lbl, (vw_rect.centerx - vw_lbl.get_width() // 2, vw_rect.centery - vw_lbl.get_height() // 2))
+
+                    # 2. Edit Schedule Button
+                    es_rect = pygame.Rect(card_rect.right - 14 - btn_w, btn_y, btn_w, btn_h)
+                    self.job_schedule_btn_rects[job_id] = es_rect
+                    es_hover = es_rect.collidepoint(mouse_pos)
+                    pygame.draw.rect(surface, (14, 116, 144) if es_hover else (15, 23, 42), es_rect, border_radius=6)
+                    pygame.draw.rect(surface, (56, 189, 248), es_rect, width=1, border_radius=6)
+                    es_lbl = self.font_badge.render("Edit Schedule", True, (255, 255, 255))
+                    surface.blit(es_lbl, (es_rect.centerx - es_lbl.get_width() // 2, es_rect.centery - es_lbl.get_height() // 2))
 
                 y_cur += card_h + 8
 
