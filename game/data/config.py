@@ -147,10 +147,20 @@ VILLAGER_FEMALE_NAMES = [
     "Emma", "Matilda", "Eleanor", "Beatrice", "Cecily"
 ]
 DEDICATED_JOBS = {
+    "Unassigned": {
+        "id": "Unassigned",
+        "name": "Unassigned",
+        "title": "Unassigned",
+        "color": (148, 163, 184),
+        "wip": False,
+        "workplace_permit": None,
+        "desc": "Individual with no assigned job. Available for assignment.",
+        "required_tools": []
+    },
     "Farmer": {
         "id": "Farmer",
         "name": "Farmer",
-        "title": "Peasant Farmer",
+        "title": "Farmer",
         "color": (34, 197, 94),
         "wip": False,
         "workplace_permit": "farm",
@@ -160,7 +170,7 @@ DEDICATED_JOBS = {
     "Builder": {
         "id": "Builder",
         "name": "Builder",
-        "title": "Village Builder",
+        "title": "Builder",
         "color": (245, 158, 11),
         "wip": False,
         "workplace_permit": "construction",
@@ -170,7 +180,7 @@ DEDICATED_JOBS = {
     "Blacksmith": {
         "id": "Blacksmith",
         "name": "Blacksmith",
-        "title": "Village Blacksmith (WIP)",
+        "title": "Blacksmith (WIP)",
         "color": (239, 68, 68),
         "wip": True,
         "workplace_permit": "smithy",
@@ -180,7 +190,7 @@ DEDICATED_JOBS = {
     "Carpenter": {
         "id": "Carpenter",
         "name": "Carpenter",
-        "title": "Wood Carpenter (WIP)",
+        "title": "Carpenter (WIP)",
         "color": (234, 179, 8),
         "wip": True,
         "workplace_permit": "workshop",
@@ -190,7 +200,7 @@ DEDICATED_JOBS = {
     "Baker": {
         "id": "Baker",
         "name": "Baker",
-        "title": "Village Baker (WIP)",
+        "title": "Baker (WIP)",
         "color": (249, 115, 22),
         "wip": True,
         "workplace_permit": "bakery",
@@ -200,7 +210,7 @@ DEDICATED_JOBS = {
     "Fisherman": {
         "id": "Fisherman",
         "name": "Fisherman",
-        "title": "Coastal Fisherman (WIP)",
+        "title": "Fisherman (WIP)",
         "color": (56, 189, 248),
         "wip": True,
         "workplace_permit": "fishery",
@@ -210,7 +220,7 @@ DEDICATED_JOBS = {
     "Priest": {
         "id": "Priest",
         "name": "Priest",
-        "title": "Village Priest",
+        "title": "Priest",
         "color": (168, 85, 247),
         "wip": False,
         "workplace_permit": "church",
@@ -220,7 +230,7 @@ DEDICATED_JOBS = {
     "Gravedigger": {
         "id": "Gravedigger",
         "name": "Gravedigger",
-        "title": "Cemetery Gravedigger",
+        "title": "Gravedigger",
         "color": (100, 116, 139),
         "wip": False,
         "workplace_permit": "cemetery",
@@ -609,8 +619,8 @@ BUILDING_TYPES = {
     "wooden_structure": {
         "id": "wooden_structure",
         "name": "Wooden Structure",
-        "category": "Residential & Timber",
-        "category_id": "wooden_structure",
+        "category": "Structure",
+        "category_id": "structure",
         "desc": "Timber-framed building constructed from logs and wooden planks.",
         "cost_wood": 5,
         "cost_stone": 1,
@@ -622,8 +632,8 @@ BUILDING_TYPES = {
     "stone_structure": {
         "id": "stone_structure",
         "name": "Stone Structure",
-        "category": "Stone Masonry & Manor",
-        "category_id": "stone_structure",
+        "category": "Structure",
+        "category_id": "structure",
         "desc": "Heavy masonry structure built from carved stones and mortar.",
         "cost_wood": 1,
         "cost_stone": 5,
@@ -635,7 +645,7 @@ BUILDING_TYPES = {
     "well": {
         "id": "well",
         "name": "Well",
-        "category": "Civic & Water Infrastructure",
+        "category": "Well",
         "category_id": "well",
         "desc": "Fresh water well built of masonry and timber. Impenetrable 4-tile solid structure.",
         "cost_wood": 5,
@@ -651,8 +661,8 @@ BUILDING_TYPES = {
     },
     "market": {
         "id": "market",
-        "name": "Market",
-        "category": "Commercial & Trade",
+        "name": "Market Stall",
+        "category": "Market Stall",
         "category_id": "market",
         "desc": "Medieval marketplace stall for trading food, goods, and currency. Footprint: 3x2 tiles.",
         "cost_wood": 15,
@@ -671,7 +681,7 @@ BUILDING_TYPES = {
     "toilet": {
         "id": "toilet",
         "name": "Toilet",
-        "category": "Sanitation & Latrine",
+        "category": "Toilet",
         "category_id": "toilet",
         "desc": "Medieval wooden outhouse latrine. Footprint: 1x1 tile. Does not require a Permit.",
         "cost_wood": 5,
@@ -719,7 +729,7 @@ def get_building_categories():
     # Furniture Category
     categories["furniture"] = {
         "id": "furniture",
-        "name": "Furniture & Furnishings",
+        "name": "Furniture",
         "desc": "Household storage chests, beds, and interior living fixtures.",
         "color": (250, 204, 21),
         "kind": "furniture",

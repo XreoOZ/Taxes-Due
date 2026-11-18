@@ -72,11 +72,13 @@ class ScheduleManager:
     def get_current_activity(self, job_id, current_hour, day="Monday"):
         """
         Returns the schedule activity for a job at the specified hour and day.
+        Only the Prayer Time block is forced onto other jobs; outside Prayer Time,
+        each job retains its own independently configurable schedule.
         """
         h = int(current_hour) % 24
-        sched = self.get_schedule(job_id, day)
-        if job_id == "Priest" and self.prayer_start_hour <= h < self.prayer_end_hour:
+        if self.prayer_start_hour <= h < self.prayer_end_hour:
             return SCHEDULE_PRAYER
+        sched = self.get_schedule(job_id, day)
         return sched[h]
 
     def set_hour_activity(self, job_id, hour_idx, activity_type, day="Monday"):

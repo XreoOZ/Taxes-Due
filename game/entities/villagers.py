@@ -107,7 +107,18 @@ class Villager:
         self.generation = generation  # 1: Grandparents, 2: Parents, 3: Adult Offspring
         self.role = role              # Grandfather, Grandmother, Father, Mother, Adult Son, Adult Daughter
         self.family_id = family_id if family_id is not None else "fam_default"
-        self.job = role if role in DEDICATED_JOBS else "Farmer"           # Dedicated Job (Concept: Job is the uniform/dedicated profession)
+        if role in DEDICATED_JOBS:
+            self.job = role
+        elif role == "Peasant Farmer":
+            self.job = "Farmer"
+        elif role == "Village Builder":
+            self.job = "Builder"
+        elif role == "Village Priest":
+            self.job = "Priest"
+        elif role == "Cemetery Gravedigger":
+            self.job = "Gravedigger"
+        else:
+            self.job = "Unassigned"           # Dedicated Job starts as Unassigned (Requirement 3)
         self.previous_job = None
         self.needs_tool_reassessment = False
         self.assigned_permit_id = None
@@ -445,6 +456,11 @@ class Villager:
                 sm.drop_resource("Potato", self.carrying_crop, cur_gx, cur_gy, owner_type="villager", owner_id=fam_str)
             if getattr(self, "carrying_res", None) and getattr(self, "carrying_amount", 0) > 0:
                 sm.drop_resource(self.carrying_res, self.carrying_amount, cur_gx, cur_gy, owner_type="villager", owner_id=fam_str)
+            if hasattr(self, "currency") and isinstance(self.currency, dict):
+                for denom in ("Copper", "Silver", "Gold"):
+                    c_amt = self.currency.get(denom, 0)
+                    if c_amt > 0 and denom not in self.inventory:
+                        sm.drop_resource(denom, c_amt, cur_gx, cur_gy, owner_type="villager", owner_id=fam_str)
 
         self.inventory = {}
         self.active_tool = None
@@ -1319,26 +1335,56 @@ class Villager:
 
         if is_prayer:
             if self == priest_worker:
-                ChurchSystem.execute_priest_preaching(self, dt, building_manager, all_entities=all_entities)
-                return
+                # 1. Travel to Church
+                # 2. Receive Church Tax from household representatives
+                # 3. Remain at the Church until Prayer Time ends
+                if church_p:
+                    tiles = ChurchSystem.get_church_walkable_tiles(church_p, building_manager)
+                    if tiles:
+                        altar_tile = tiles[0]
+                        twx = (altar_tile[0] + 0.5) * TILE_SIZE
+                        twy = (altar_tile[1] + 0.5) * TILE_SIZE
+                        self.task = "LEADING_PRAYER"
+                        self._move_towards(twx, twy, dt, arrival_dist=12, all_entities=all_entities, player=player, building_manager=building_manager, furniture_manager=furniture_manager, exclusive_target=True)
+                        return
+                else:
+                    self.task = "LEADING_PRAYER"
+                    return
             else:
                 fam_obj = villager_manager.get_family_by_id(self.family_id) if (villager_manager and self.family_id) else None
                 rep = ChurchSystem.select_household_representative(fam_obj, villager_manager)
-                if rep and rep.id == self.id and church_p and priest_worker:
-                    ChurchSystem.process_church_tax_payment(self, priest_worker, church_p, furniture_manager)
 
                 church_tile = ChurchSystem.find_free_church_tile(self, church_p, building_manager)
-                if church_tile:
+                if church_tile and church_p:
                     twx = (church_tile[0] + 0.5) * TILE_SIZE
                     twy = (church_tile[1] + 0.5) * TILE_SIZE
                     self.task = "ATTENDING_PRAYER"
-                    self._move_towards(twx, twy, dt, arrival_dist=12, all_entities=all_entities, player=player, building_manager=building_manager, furniture_manager=furniture_manager)
+                    arrived = self._move_towards(twx, twy, dt, arrival_dist=12, all_entities=all_entities, player=player, building_manager=building_manager, furniture_manager=furniture_manager)
+                    if rep and rep.id == self.id and priest_worker:
+                        dist_to_church = math.hypot(self.x - twx, self.y - twy)
+                        if dist_to_church <= 48.0 or arrived:
+                            ChurchSystem.process_church_tax_payment(self, priest_worker, church_p, furniture_manager)
                     return
                 # If Church is full: immediately proceed to normal activity without waiting outside or blocking doors
         else:
             ChurchSystem.release_church_tile(self)
             if self == priest_worker:
-                ChurchSystem.priest_deposit_tithes_home(self, furniture_manager)
+                # 4. After Prayer Time ends, return to the Household Chest of assigned household
+                # 5. Deposit all collected coins into that Household Chest
+                fam_id = getattr(self, "family_id", None)
+                chest = furniture_manager.get_storage_for_family(fam_id) if (furniture_manager and fam_id) else None
+                priest_copper = to_copper(getattr(self, "currency", {}))
+                if chest and priest_copper > 0:
+                    cx, cy = chest.get_world_pos(TILE_SIZE)
+                    dist_to_chest = math.hypot(self.x - cx, self.y - cy)
+                    if dist_to_chest > 20.0:
+                        self.task = "RETURNING_TITHES_HOME"
+                        self._move_towards(cx, cy, dt, arrival_dist=16, all_entities=all_entities, player=player, building_manager=building_manager, furniture_manager=furniture_manager)
+                        return
+                    else:
+                        ChurchSystem.priest_deposit_tithes_home(self, furniture_manager)
+
+                # 6. If it is Work Time, begin preaching near village infrastructure
                 if sched_activity in ("WORK", "ANY"):
                     ChurchSystem.execute_priest_preaching(self, dt, building_manager, all_entities=all_entities)
                     return
@@ -3199,28 +3245,34 @@ class VillagerManager:
 
         # AI entities pass freely through each other while moving.
         # AI must never pass through the Landlord/player.
-        # Stationary AI sleeping on the floor gently separate if on the exact same coordinate (< 8px).
-        for i in range(len(all_vils)):
-            v1 = all_vils[i]
-            if not getattr(v1, "is_alive", True) or getattr(v1, "is_moving", False):
-                continue
-            for j in range(i + 1, len(all_vils)):
-                v2 = all_vils[j]
-                if not getattr(v2, "is_alive", True) or getattr(v2, "is_moving", False):
+        # Gentle micro-separation so no two living AI ever occupy the exact identical coordinate.
+        for _ in range(2):
+            for i in range(len(all_vils)):
+                v1 = all_vils[i]
+                if not getattr(v1, "is_alive", True):
                     continue
-                if getattr(v1, "task", "") == "SLEEPING" and getattr(v2, "task", "") == "SLEEPING":
-                    dx = v2.x - v1.x
-                    dy = v2.y - v1.y
+                for j in range(i + 1, len(all_vils)):
+                    v2 = all_vils[j]
+                    if not getattr(v2, "is_alive", True):
+                        continue
+                    dx = v1.x - v2.x
+                    dy = v1.y - v2.y
                     dist = math.hypot(dx, dy)
-                    if dist < 8.0:
-                        if dist <= 0.001:
-                            dx, dy = 1.0, 0.0
-                            dist = 1.0
+                    if dist < 1.2:
+                        push = (1.5 - dist) if dist > 0.001 else 1.5
+                        angle = (i * 1.57 + j * 0.785)
+                        nx = (dx / dist) if dist > 0.001 else math.cos(angle)
+                        ny = (dy / dist) if dist > 0.001 else math.sin(angle)
+                        v1.x += nx * (push * 0.6)
+                        v1.y += ny * (push * 0.6)
+                        v2.x -= nx * (push * 0.6)
+                        v2.y -= ny * (push * 0.6)
+                    elif getattr(v1, "task", "") == "SLEEPING" and getattr(v2, "task", "") == "SLEEPING" and dist < 8.0:
                         push = (8.0 - dist) * 0.5
-                        v1.x -= (dx / dist) * push
-                        v1.y -= (dy / dist) * push
-                        v2.x += (dx / dist) * push
-                        v2.y += (dy / dist) * push
+                        v1.x += (dx / dist) * push
+                        v1.y += (dy / dist) * push
+                        v2.x -= (dx / dist) * push
+                        v2.y -= (dy / dist) * push
 
         old_vil_pos = [(v.x, v.y) for v in all_vils]
         old_serv_pos = [(s.x, s.y) for s in all_servants] if all_servants else []

@@ -629,6 +629,22 @@ class AreaPermit:
     def contains_tile(self, gx, gy):
         return (gx, gy) in self.tiles
 
+    def add_tiles(self, new_tiles):
+        """Expands permit by adding new tiles (like expanding Farm or Cemetery)."""
+        if isinstance(new_tiles, (tuple, list)) and len(new_tiles) == 2 and isinstance(new_tiles[0], int):
+            new_tiles = {tuple(new_tiles)}
+        else:
+            new_tiles = set(tuple(t) for t in new_tiles)
+        self.tiles.update(new_tiles)
+        self._recalculate_bounds()
+        if self.permit_type == "cemetery":
+            from game.systems.cemetery_system import CemeterySystem
+            CemeterySystem.ensure_cemetery_graves(self)
+
+    def expand_tiles(self, new_tiles):
+        """Alias for add_tiles."""
+        self.add_tiles(new_tiles)
+
     def contains_all_tiles(self, tiles):
         return set(tiles).issubset(self.tiles)
 
@@ -798,7 +814,7 @@ class PermitManager:
                 return False, "Cannot delete permit: Area still occupied!"
         return False, "Permit not found"
 
-    def assign_worker_to_permit(self, permit_id, villager_id):
+    def assign_worker_to_permit(self, permit_id, villager_id, villager_manager=None):
         p = next((p for p in self.permits if p.id == permit_id), None)
         if not p:
             return False, "Permit not found"
@@ -806,45 +822,98 @@ class PermitManager:
             p.assigned_workers = []
         if villager_id in p.assigned_workers:
             return False, "Worker already assigned"
-        if getattr(p, "permit_type", "") == "church" and len(p.assigned_workers) >= 1:
-            return False, "Church can have exactly one Priest assigned"
-        # Tidak ada batas maksimal - jika slot penuh, otomatis bertambah sesuai keinginan pemain (kecuali Church)
         if len(p.assigned_workers) >= getattr(p, "max_workers", 2):
-            if getattr(p, "permit_type", "") == "church":
-                return False, "Church can have exactly one Priest assigned"
             p.max_workers = len(p.assigned_workers) + 1
         p.assigned_workers.append(villager_id)
+
+        target_job = "Farmer"
+        if p.permit_type == "church":
+            target_job = "Priest"
+        elif p.permit_type == "cemetery":
+            target_job = "Gravedigger"
+        else:
+            for j_id, j_cfg in DEDICATED_JOBS.items():
+                if j_cfg.get("workplace_permit") == p.permit_type:
+                    target_job = j_id
+                    break
+
+        if villager_manager:
+            all_v = villager_manager.get_all_villagers()
+            v = next((x for x in all_v if str(x.id) == str(villager_id)), None)
+            if v:
+                v.set_job(target_job)
+
         return True, "Worker assigned"
 
-    def unassign_worker_from_permit(self, permit_id, villager_id):
+    def unassign_worker_from_permit(self, permit_id, villager_id, villager_manager=None):
         p = next((p for p in self.permits if p.id == permit_id), None)
         if p and hasattr(p, "assigned_workers") and villager_id in p.assigned_workers:
             p.assigned_workers.remove(villager_id)
+            if villager_manager:
+                all_v = villager_manager.get_all_villagers()
+                v = next((x for x in all_v if str(x.id) == str(villager_id)), None)
+                if v:
+                    v.set_job("Unassigned")
             return True, "Worker removed"
         return False, "Worker not assigned to this permit"
 
     def change_max_workers(self, permit_id, delta, villager_manager=None):
         p = next((p for p in self.permits if p.id == permit_id), None)
         if p:
-            current_max = getattr(p, "max_workers", 2)
-            # Bebas semau pemain, tanpa limit atas (hanya batas minimal 0)
+            current_max = getattr(p, "max_workers", 2 if p.permit_type == "farm" else 1)
             new_max = max(0, current_max + delta)
             p.max_workers = new_max
             if not hasattr(p, "assigned_workers"):
                 p.assigned_workers = []
-            while len(p.assigned_workers) > p.max_workers:
-                p.assigned_workers.pop()
 
-            # Jika kuota bertambah dan ada petani yang menganggur, otomatis tugaskan petani terdekat
-            if delta > 0 and villager_manager and len(p.assigned_workers) < p.max_workers:
+            # 1. Decreasing worker count: release the corresponding worker(s)
+            if delta < 0:
+                if p.permit_type == "church":
+                    from game.systems.church_system import ChurchSystem
+                    ChurchSystem.release_priest(self, villager_manager, target_permit=p)
+                else:
+                    while len(p.assigned_workers) > p.max_workers:
+                        popped_id = p.assigned_workers.pop()
+                        if villager_manager:
+                            all_v = villager_manager.get_all_villagers()
+                            v = next((x for x in all_v if str(x.id) == str(popped_id)), None)
+                            if v:
+                                v.set_job("Farmer")
+
+            # 2. Increasing worker count: automatically select closest available household member
+            elif delta > 0 and villager_manager and len(p.assigned_workers) < p.max_workers:
+                target_job = "Farmer"
+                if p.permit_type == "church":
+                    target_job = "Priest"
+                elif p.permit_type == "cemetery":
+                    target_job = "Gravedigger"
+                else:
+                    for j_id, j_cfg in DEDICATED_JOBS.items():
+                        if j_cfg.get("workplace_permit") == p.permit_type:
+                            target_job = j_id
+                            break
+
                 all_vils = villager_manager.get_all_villagers()
-                idle_farmers = [
+                avail_vils = [
                     v for v in all_vils
-                    if v.job == "Farmer" and not any(v.id in getattr(other_p, "assigned_workers", []) for other_p in self.permits)
+                    if getattr(v, "is_alive", True)
+                    and not any(v.id in getattr(other_p, "assigned_workers", []) for other_p in self.permits)
+                    and (getattr(v, "job", "Unassigned") == "Unassigned" or getattr(v, "job", None) == target_job)
                 ]
-                if idle_farmers:
-                    idle_farmers.sort(key=lambda v: math.hypot((p.grid_x + p.tiles_w / 2.0) * TILE_SIZE - v.x, (p.grid_y + p.tiles_h / 2.0) * TILE_SIZE - v.y))
-                    self.assign_worker_to_permit(p.id, idle_farmers[0].id)
+                if not avail_vils:
+                    avail_vils = [
+                        v for v in all_vils
+                        if getattr(v, "is_alive", True)
+                        and not any(v.id in getattr(other_p, "assigned_workers", []) for other_p in self.permits)
+                    ]
+
+                if avail_vils:
+                    p_cx = (p.grid_x + p.tiles_w / 2.0) * TILE_SIZE
+                    p_cy = (p.grid_y + p.tiles_h / 2.0) * TILE_SIZE
+                    avail_vils.sort(key=lambda v: math.hypot(p_cx - v.x, p_cy - v.y))
+                    chosen = avail_vils[0]
+                    chosen.set_job(target_job)
+                    self.assign_worker_to_permit(p.id, chosen.id, villager_manager=villager_manager)
             return True
         return False
 
