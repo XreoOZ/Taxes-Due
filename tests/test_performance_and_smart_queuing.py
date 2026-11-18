@@ -89,7 +89,7 @@ class TestPerformanceAndSmartQueuing(unittest.TestCase):
     def test_doorway_fifo_staggered_queueing(self):
         """
         When multiple AI approach the same narrow doorway entrance:
-        The first enters while trailing AI queue near the doorway in staggered positions and enter one by one.
+        All AI enter smoothly passing through each other without queues, avoidance, or waiting.
         """
         # Place 3 villagers just outside the doorway
         d_out = self.house.get_door_world_outside(TILE_SIZE)
@@ -104,13 +104,11 @@ class TestPerformanceAndSmartQueuing(unittest.TestCase):
         all_ents = [v1, v2, v3]
         dt = 0.05
 
-        # v1 enters the doorway first
+        # All approach the doorway
         b1 = self.fm.furniture[0]
         v1._move_towards((b1.grid_x + 0.5) * TILE_SIZE, (b1.grid_y + 0.5) * TILE_SIZE, dt,
                          arrival_dist=12, all_entities=all_ents, building_manager=self.bm, furniture_manager=self.fm)
-        self.assertEqual(self.house.door_active_user, str(v1.id), "v1 must hold active doorway access")
 
-        # v2 and v3 approach the doorway while v1 is in threshold
         b2 = self.fm.furniture[1]
         v2._move_towards((b2.grid_x + 0.5) * TILE_SIZE, (b2.grid_y + 0.5) * TILE_SIZE, dt,
                          arrival_dist=12, all_entities=all_ents, building_manager=self.bm, furniture_manager=self.fm)
@@ -119,19 +117,12 @@ class TestPerformanceAndSmartQueuing(unittest.TestCase):
         v3._move_towards((b3.grid_x + 0.5) * TILE_SIZE, (b3.grid_y + 0.5) * TILE_SIZE, dt,
                          arrival_dist=12, all_entities=all_ents, building_manager=self.bm, furniture_manager=self.fm)
 
-        # v2 and v3 must queue outside the doorway
-        self.assertTrue(v2.is_waiting_for_path, "v2 must wait for doorway clearance")
-        self.assertTrue(v3.is_waiting_for_path, "v3 must wait for doorway clearance")
-        self.assertIn(str(v2.id), self.house.door_outside_queue, "v2 must be in outside queue")
-        self.assertIn(str(v3.id), self.house.door_outside_queue, "v3 must be in outside queue")
-
-        # As soon as v1 finishes doorway transit:
-        self.house.release_door_passage(v1.id)
-
-        # v2 now re-checks doorway and obtains access:
-        v2._move_towards((b2.grid_x + 0.5) * TILE_SIZE, (b2.grid_y + 0.5) * TILE_SIZE, dt,
-                         arrival_dist=12, all_entities=all_ents, building_manager=self.bm, furniture_manager=self.fm)
-        self.assertEqual(self.house.door_active_user, str(v2.id), "v2 must now hold doorway access (FIFO)")
+        # AI pass freely through without doorway queues or waiting
+        self.assertFalse(v2.is_waiting_for_path, "v2 must not be blocked or waiting")
+        self.assertFalse(v3.is_waiting_for_path, "v3 must not be blocked or waiting")
+        self.assertTrue(v1.is_moving)
+        self.assertTrue(v2.is_moving)
+        self.assertTrue(v3.is_moving)
 
 
 if __name__ == "__main__":

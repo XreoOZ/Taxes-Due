@@ -106,23 +106,19 @@ class TestDoorwayAndPathfinding(unittest.TestCase):
         self.assertFalse(s2.is_moving)
 
     def test_personal_space_separation_no_clumping(self):
-        """Verify that multiple entities placed close together separate until min_gap is achieved"""
+        """Verify that AI entities pass freely through each other without collision blocking or separation push"""
         v1 = Villager("v1", "John", "Carter", "male", 30, 1, "Peasant Farmer", "Carter", x=200.0, y=200.0)
         v2 = Villager("v2", "Mary", "Carter", "female", 28, 1, "Peasant Farmer", "Carter", x=202.0, y=200.0)
         fam = Family("Carter", "Carter", [v1, v2])
         self.vm.families.append(fam)
 
-        initial_dist = math.hypot(v2.x - v1.x, v2.y - v1.y)
-        self.assertLess(initial_dist, 10.0)
-
-        # Run several separation updates
+        # Update
         dt = 0.05
-        for _ in range(30):
-            self.vm.update(dt, self.pm, self.bm, [], None)
+        self.vm.update(dt, self.pm, self.bm, [], None)
 
-        final_dist = math.hypot(v2.x - v1.x, v2.y - v1.y)
-        expected_min = v1.radius + v2.radius + MIN_ENTITY_SEPARATION
-        self.assertGreaterEqual(final_dist, expected_min - 1.0, f"Villagers did not separate! Dist: {final_dist}, Expected: {expected_min}")
+        # AI do not bounce off or push each other
+        self.assertFalse(v1.is_waiting_for_path)
+        self.assertFalse(v2.is_waiting_for_path)
 
     def test_construction_site_work_pos_separation(self):
         """Verify that workers get distinct work positions around site perimeters"""

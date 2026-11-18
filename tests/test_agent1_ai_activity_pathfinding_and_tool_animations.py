@@ -33,6 +33,9 @@ class TestAgent1AIActivityPathfindingAndToolAnimations(unittest.TestCase):
         pygame.init()
         self.bm = BuildingManager()
         self.fm = FurnitureManager()
+        self.pm = None
+        from game.world.permits import PermitManager
+        self.pm = PermitManager()
         self.vm = VillagerManager()
         self.sm = ServantManager()
         self.player = Player(500.0, 500.0)
@@ -55,6 +58,19 @@ class TestAgent1AIActivityPathfindingAndToolAnimations(unittest.TestCase):
         self.assertLess(v2.x, 250.0, "v2 should progress west through v1")
         self.assertFalse(v1.is_waiting_for_path)
         self.assertFalse(v2.is_waiting_for_path)
+
+    def test_01b_villagers_update_loop_pass_through_without_pushing(self):
+        """1b. VillagerManager update loop does not push moving or passing villagers apart."""
+        v1 = Villager("vil_1", "Alice", "Fletcher", "Female", 22, 1, "Daughter", "fam_1", x=200.0, y=200.0)
+        v2 = Villager("vil_2", "Bob", "Fletcher", "Male", 25, 1, "Son", "fam_1", x=205.0, y=200.0)
+        fam = Family("fam_1", "Fletcher", [v1, v2])
+        self.vm.families = [fam]
+
+        # In VillagerManager.update, villagers passing each other are not physically pushed away
+        self.vm.update(0.05, self.pm, self.bm, [v1, v2], None)
+        # Position should not have been shoved away to 54px min_gap
+        dist = math.hypot(v2.x - v1.x, v2.y - v1.y)
+        self.assertLess(dist, 10.0, "Villagers must pass through without collision separation push")
 
     def test_02_ai_navigates_around_landlord_player_without_passing_through(self):
         """2. AI must not pass through the Landlord/player; navigates tangentially around them."""

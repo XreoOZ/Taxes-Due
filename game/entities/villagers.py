@@ -1383,13 +1383,17 @@ class Villager:
                 # Perilaku alternatif: Tidur di lantai rumah secara tersebar pada petak berbeda (64px separation)
                 p = next((p for p in permit_manager.permits if p.id == self.assigned_permit_id), None) if permit_manager else None
                 fam_members = [e for e in all_entities if getattr(e, "family_id", None) == self.family_id] if all_entities else []
+                if not fam_members and getattr(self, "villager_manager", None):
+                    fam_members = [v for v in self.villager_manager.get_all_villagers() if getattr(v, "family_id", None) == self.family_id]
                 m_idx = fam_members.index(self) if self in fam_members else (abs(hash(str(self.id))) % 8)
 
                 if p and p.tiles:
                     sorted_tiles = sorted(list(p.tiles), key=lambda t: (t[1], t[0]))
                     floor_tile = sorted_tiles[m_idx % len(sorted_tiles)]
-                    floor_x = (floor_tile[0] + 0.5) * TILE_SIZE
-                    floor_y = (floor_tile[1] + 0.5) * TILE_SIZE
+                    offset_x = ((m_idx * 17) % 21) - 10.0
+                    offset_y = ((m_idx * 23) % 21) - 10.0
+                    floor_x = (floor_tile[0] + 0.5) * TILE_SIZE + offset_x
+                    floor_y = (floor_tile[1] + 0.5) * TILE_SIZE + offset_y
                 else:
                     # Homeless at Town Center: spread out radially with generous spacing
                     total_m = max(1, len(fam_members) or 6)
@@ -2509,56 +2513,6 @@ class Villager:
         vx = dir_x * move_dist
         vy = dir_y * move_dist
 
-        # Doorway coordination
-        cur_gx = int(math.floor(self.x / TILE_SIZE))
-        cur_gy = int(math.floor(self.y / TILE_SIZE))
-        b_at = building_manager.get_building_at(cur_gx, cur_gy) if building_manager else None
-        if building_manager:
-            for b in getattr(building_manager, "buildings", []):
-                if not getattr(b, "door_pos", None):
-                    continue
-                d_out = b.get_door_world_outside(TILE_SIZE)
-                d_in = b.get_door_world_inside(TILE_SIZE)
-                dist_out = math.hypot(self.x - d_out[0], self.y - d_out[1])
-                dist_in = math.hypot(self.x - d_in[0], self.y - d_in[1])
-                in_threshold = b.is_in_door_threshold(self.x, self.y, TILE_SIZE)
-                near_door = dist_out < 64.0 or dist_in < 64.0 or in_threshold
-
-                if near_door:
-                    tar_gx = int(math.floor(tx / TILE_SIZE))
-                    tar_gy = int(math.floor(ty / TILE_SIZE))
-                    b_tgt = building_manager.get_building_at(tar_gx, tar_gy)
-                    crosses_door = (b_at != b and b_tgt == b) or (b_at == b and b_tgt != b) or \
-                                   (getattr(self, "door_waypoints", None) and any(b.occupies_tile(int(wp[0]//TILE_SIZE), int(wp[1]//TILE_SIZE)) for wp in self.door_waypoints)) or \
-                                   (self.current_path and any(b.occupies_tile(int(wp[0]//TILE_SIZE), int(wp[1]//TILE_SIZE)) for wp in self.current_path[self.path_index:]))
-                    if crosses_door:
-                        if in_threshold:
-                            b.door_active_user = str(self.id)
-                            self.is_waiting_for_path = False
-                        else:
-                            door_phys = building_manager.is_door_occupied(b.door_pos, all_entities, exclude_entity=self, tile_size=TILE_SIZE)
-                            is_outside = (dist_out <= dist_in) and not b.occupies_tile(cur_gx, cur_gy)
-                            can_pass, q_pos = b.request_door_passage(self.id, is_outside, tile_size=TILE_SIZE)
-                            if door_phys or not can_pass:
-                                if q_pos:
-                                    q_dist = math.hypot(self.x - q_pos[0], self.y - q_pos[1])
-                                    if q_dist > 12.0:
-                                        q_dx = (q_pos[0] - self.x) / q_dist
-                                        q_dy = (q_pos[1] - self.y) / q_dist
-                                        self.x += q_dx * self.speed * dt * 0.7
-                                        self.y += q_dy * self.speed * dt * 0.7
-                                        if building_manager:
-                                            self.x, self.y = building_manager.resolve_collision(self.x, self.y, self.radius, TILE_SIZE)
-                                self.is_waiting_for_path = True
-                                self.is_moving = False
-                                return False
-                            else:
-                                b.door_active_user = str(self.id)
-                                self.is_waiting_for_path = False
-                else:
-                    if b.door_active_user == str(self.id):
-                        b.release_door_passage(self.id)
-
         # 3. Player / Landlord Avoidance & Speech Bubble
         if player:
             p_dx = player.x - self.x
@@ -3248,36 +3202,10 @@ class VillagerManager:
         for v in all_vils:
             v.update(dt, permit_manager, building_manager, all_entities, player, stockpile_manager=stockpile_manager, furniture_manager=furniture_manager, day_cycle=day_cycle, schedule_manager=schedule_manager, production_system=production_system, villager_manager=self)
 
-        # Minimum personal space separation (MIN_ENTITY_SEPARATION gap) antar seluruh individu AI
-        # Mencegah AI bertumpuk/bergerombol pada satu titik
-        # AI entities pass freely through each other while moving.
-        # Stationary/sleeping AI gently relax apart so they don't visually overlap on one pixel.
+        # AI entities pass freely through each other.
+        # AI must never pass through the Landlord/player.
         old_vil_pos = [(v.x, v.y) for v in all_vils]
         old_serv_pos = [(s.x, s.y) for s in all_servants] if all_servants else []
-
-        min_gap = MIN_ENTITY_SEPARATION
-        for i in range(len(all_vils)):
-            v1 = all_vils[i]
-            if not getattr(v1, "is_alive", True):
-                continue
-            for j in range(i + 1, len(all_vils)):
-                v2 = all_vils[j]
-                if not getattr(v2, "is_alive", True):
-                    continue
-                dx = v2.x - v1.x
-                dy = v2.y - v1.y
-                dist = math.hypot(dx, dy)
-                min_dist = v1.radius + v2.radius + min_gap
-                if dist < min_dist:
-                    if dist <= 0.001:
-                        dx, dy = 0.1, 0.0
-                        dist = 0.1
-                    overlap = min_dist - dist
-                    nx, ny = dx / dist, dy / dist
-                    v1.x -= nx * overlap * 0.5
-                    v1.y -= ny * overlap * 0.5
-                    v2.x += nx * overlap * 0.5
-                    v2.y += ny * overlap * 0.5
 
         if player:
             min_p_gap = 2.0
