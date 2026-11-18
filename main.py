@@ -82,6 +82,7 @@ def main():
     font_card = pygame.font.SysFont("Segoe UI", 13, bold=True)
     font_btn = pygame.font.SysFont("Segoe UI", 12, bold=True)
     font_badge = pygame.font.SysFont("Segoe UI", 10, bold=True)
+    font_body = pygame.font.SysFont("Segoe UI", 11)
 
     # Inisialisasi Game Objects, Menu, Resources & Building System
     current_state = STATE_MENU
