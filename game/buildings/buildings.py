@@ -347,6 +347,7 @@ class Building:
         # Doorway Bottleneck Access & Smart Queuing
         self.door_active_user = None
         self.door_transit_start = 0.0
+        self.door_transit_elapsed = 0.0
         self.door_outside_queue = []
         self.door_inside_queue = []
 
@@ -430,8 +431,13 @@ class Building:
 
     def update_door_queue(self, dt):
         """Pembersihan timeout otomatis antrean pintu"""
-        if self.door_active_user and (time.time() - self.door_transit_start > 3.0):
-            self.door_active_user = None
+        if self.door_active_user:
+            self.door_transit_elapsed = getattr(self, "door_transit_elapsed", 0.0) + dt
+            if self.door_transit_elapsed > 3.0 or (time.time() - self.door_transit_start > 3.0):
+                self.door_active_user = None
+                self.door_transit_elapsed = 0.0
+        else:
+            self.door_transit_elapsed = 0.0
 
     def _resolve_door(self, door_pos, door_side):
         if door_pos and door_pos in self.tiles:

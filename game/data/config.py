@@ -85,6 +85,24 @@ PATH_RESERVATION_CLEARANCE = 28.0      # Minimum clearance distance between two 
 PATH_WAIT_RECHECK_INTERVAL = 0.25      # Interval in seconds to recheck path availability when waiting
 PATH_RESERVATION_TIMEOUT = 12.0        # Stale reservation safety expiration timeout (seconds)
 
+# AI Collision Sliding & Route Recovery (Agent 1)
+COLLISION_SLIDE_TANGENT_FACTOR = 1.0     # Strength of tangential deflection when encountering colliding AI
+COLLISION_MIN_SEPARATION = 6.0          # Separation buffer between AI collision radii
+COLLISION_SLIDE_SMOOTHING = 0.65        # Smoothing factor for directional slide transitions
+ROUTE_REQUEST_TIMEOUT = 2.0             # Automatic timeout (sim seconds) to recover pending route requests
+ROUTE_MAX_RETRIES = 3                   # Max route retry attempts before fallback
+ROUTE_RETRY_BACKOFF = 0.25              # Initial backoff delay for retrying route requests
+ROUTE_FALLBACK_COOLDOWN = 1.5           # Cooldown before re-attempting an unreachable destination
+
+# Route Request Lifecycle States
+ROUTE_STATE_NONE = "NONE"
+ROUTE_STATE_REQUESTED = "REQUESTED"
+ROUTE_STATE_PROCESSING = "PROCESSING"
+ROUTE_STATE_ASSIGNED = "ASSIGNED"
+ROUTE_STATE_ACTIVE = "ACTIVE"
+ROUTE_STATE_COMPLETED = "COMPLETED"
+ROUTE_STATE_FAILED = "FAILED"
+
 # Villager & Family Settings
 VILLAGER_RADIUS = 20
 VILLAGER_SPEED = 180.0
@@ -550,24 +568,34 @@ BUILDING_TYPES = {
     "wooden_structure": {
         "id": "wooden_structure",
         "name": "Wooden Structure",
+        "category": "Residential & Timber",
+        "category_id": "wooden_structure",
         "desc": "Timber-framed building constructed from logs and wooden planks.",
         "cost_wood": 5,
         "cost_stone": 1,
+        "color": (180, 120, 70),
+        "border_color": (217, 119, 6),
         "required_permit": "housing",
         "allowed_permits": ["housing", "storage", "landlord_private"],
     },
     "stone_structure": {
         "id": "stone_structure",
         "name": "Stone Structure",
+        "category": "Stone Masonry & Manor",
+        "category_id": "stone_structure",
         "desc": "Heavy masonry structure built from carved stones and mortar.",
         "cost_wood": 1,
         "cost_stone": 5,
+        "color": (148, 163, 184),
+        "border_color": (203, 213, 225),
         "required_permit": "housing",
         "allowed_permits": ["housing", "storage", "landlord_private"],
     },
     "well": {
         "id": "well",
         "name": "Well",
+        "category": "Civic & Water Infrastructure",
+        "category_id": "well",
         "desc": "Fresh water well built of masonry and timber. Impenetrable 4-tile solid structure.",
         "cost_wood": 5,
         "cost_stone": 20,
@@ -575,12 +603,16 @@ BUILDING_TYPES = {
         "fixed_tiles_count": 4,
         "is_solid": True,
         "has_door": False,
+        "color": (56, 189, 248),
+        "border_color": (96, 165, 250),
         "required_permit": "any",
         "allowed_permits": ["housing", "storage", "landlord_private"],
     },
     "market": {
         "id": "market",
         "name": "Market",
+        "category": "Commercial & Trade",
+        "category_id": "market",
         "desc": "Medieval marketplace stall for trading food, goods, and currency. Footprint: 3x2 tiles.",
         "cost_wood": 15,
         "cost_stone": 5,
@@ -590,6 +622,8 @@ BUILDING_TYPES = {
         "height_tiles": 2,
         "is_solid": False,
         "has_door": False,
+        "color": (245, 158, 11),
+        "border_color": (251, 191, 36),
         "required_permit": "any",
         "allowed_permits": ["market", "storage", "landlord_private", "housing"],
     }
@@ -598,6 +632,40 @@ BUILDING_TYPES = {
 BUILDING_TYPES["house"] = BUILDING_TYPES["wooden_structure"]
 BUILDING_TYPES["storage"] = BUILDING_TYPES["wooden_structure"]
 BUILDING_TYPES["manor"] = BUILDING_TYPES["stone_structure"]
+
+def get_building_categories():
+    """
+    Returns dynamically discovered building and structure categories from BUILDING_TYPES and FURNITURE_TYPES.
+    Preserves config-driven architecture: zero hardcoding in UI.
+    Automatically incorporates newly registered building and structure types.
+    """
+    categories = {}
+    for b_id, b_cfg in BUILDING_TYPES.items():
+        if b_id in ("house", "storage", "manor"):
+            continue
+        cat_id = b_cfg.get("category_id", b_id)
+        if cat_id not in categories:
+            categories[cat_id] = {
+                "id": cat_id,
+                "name": b_cfg.get("category", b_cfg.get("name", cat_id.capitalize())),
+                "desc": b_cfg.get("desc", ""),
+                "color": b_cfg.get("border_color", (59, 130, 246)),
+                "kind": "structure",
+                "building_types": []
+            }
+        if b_id not in categories[cat_id]["building_types"]:
+            categories[cat_id]["building_types"].append(b_id)
+
+    # Furniture Category
+    categories["furniture"] = {
+        "id": "furniture",
+        "name": "Furniture & Furnishings",
+        "desc": "Household storage chests, beds, and interior living fixtures.",
+        "color": (250, 204, 21),
+        "kind": "furniture",
+        "building_types": list(FURNITURE_TYPES.keys())
+    }
+    return list(categories.values())
 
 # Area Permit Types (Landlord Zoning)
 PERMIT_TYPES = {

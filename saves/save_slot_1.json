@@ -1,185 +1,31 @@
 {
-  "timestamp": "2026-11-18 15:48",
-  "day_number": 30,
-  "time_str": "23:23",
-  "population": 5,
+  "timestamp": "2026-11-18 19:35",
+  "day_number": 7,
+  "time_str": "16:58",
+  "population": 12,
   "resources": {
-    "Wood": 875,
-    "Food": 1000,
-    "Stone": 956,
-    "Water": 1000
+    "Wood": 645,
+    "Food": 980,
+    "Stone": 889,
+    "Water": 1000,
+    "Copper": 1000,
+    "Silver": 1000,
+    "Gold": 1000
   },
   "day_cycle": {
-    "day_number": 30,
-    "time_seconds": 584.9280000000341,
+    "day_number": 7,
+    "time_seconds": 424.1977500000729,
     "day_length_index": 0,
-    "time_str": "23:23"
+    "time_str": "16:58"
   },
   "player": {
-    "x": 604.5068688620825,
-    "y": -54.43313113791868
+    "x": -78.83561700721111,
+    "y": 73.9232684060842
   },
   "permits": [
     {
-      "id": "permit_1",
-      "name": "Starter Housing Lot",
-      "permit_type": "housing",
-      "tiles": [
-        [
-          3,
-          4
-        ],
-        [
-          4,
-          3
-        ],
-        [
-          3,
-          7
-        ],
-        [
-          5,
-          4
-        ],
-        [
-          4,
-          6
-        ],
-        [
-          5,
-          7
-        ],
-        [
-          2,
-          2
-        ],
-        [
-          2,
-          5
-        ],
-        [
-          7,
-          4
-        ],
-        [
-          6,
-          2
-        ],
-        [
-          7,
-          7
-        ],
-        [
-          6,
-          5
-        ],
-        [
-          4,
-          2
-        ],
-        [
-          4,
-          5
-        ],
-        [
-          3,
-          3
-        ],
-        [
-          5,
-          6
-        ],
-        [
-          3,
-          6
-        ],
-        [
-          5,
-          3
-        ],
-        [
-          2,
-          4
-        ],
-        [
-          2,
-          7
-        ],
-        [
-          6,
-          4
-        ],
-        [
-          7,
-          3
-        ],
-        [
-          6,
-          7
-        ],
-        [
-          7,
-          6
-        ],
-        [
-          3,
-          2
-        ],
-        [
-          4,
-          7
-        ],
-        [
-          3,
-          5
-        ],
-        [
-          5,
-          2
-        ],
-        [
-          4,
-          4
-        ],
-        [
-          5,
-          5
-        ],
-        [
-          2,
-          3
-        ],
-        [
-          2,
-          6
-        ],
-        [
-          7,
-          2
-        ],
-        [
-          6,
-          6
-        ],
-        [
-          7,
-          5
-        ],
-        [
-          6,
-          3
-        ]
-      ],
-      "max_workers": 2,
-      "assigned_workers": [],
-      "crop": null,
-      "growth_days": 0.0,
-      "watered_today": false,
-      "tile_crops": {}
-    },
-    {
-      "id": "permit_2",
-      "name": "Starter Storage Lot",
+      "id": "permit_5",
+      "name": "Storage Lot #5",
       "permit_type": "storage",
       "tiles": [
         [
@@ -187,16 +33,8 @@
           -5
         ],
         [
-          2,
-          -2
-        ],
-        [
           4,
           -6
-        ],
-        [
-          3,
-          -2
         ],
         [
           5,
@@ -211,24 +49,12 @@
           -5
         ],
         [
-          5,
-          -2
-        ],
-        [
-          6,
-          -2
-        ],
-        [
           4,
           -5
         ],
         [
           2,
           -4
-        ],
-        [
-          4,
-          -2
         ],
         [
           3,
@@ -291,281 +117,1194 @@
       "tile_crops": {}
     },
     {
-      "id": "permit_3",
-      "name": "Starter Farm Lot",
+      "id": "permit_6",
+      "name": "Housing Lot #6",
+      "permit_type": "housing",
+      "tiles": [
+        [
+          -6,
+          -8
+        ],
+        [
+          -5,
+          -9
+        ],
+        [
+          -6,
+          -5
+        ],
+        [
+          -3,
+          -9
+        ],
+        [
+          0,
+          -7
+        ],
+        [
+          -8,
+          -5
+        ],
+        [
+          -8,
+          -8
+        ],
+        [
+          -7,
+          -7
+        ],
+        [
+          -1,
+          -8
+        ],
+        [
+          -2,
+          -8
+        ],
+        [
+          -4,
+          -8
+        ],
+        [
+          -5,
+          -7
+        ],
+        [
+          -6,
+          -9
+        ],
+        [
+          -3,
+          -7
+        ],
+        [
+          -6,
+          -6
+        ],
+        [
+          0,
+          -8
+        ],
+        [
+          -8,
+          -9
+        ],
+        [
+          -7,
+          -8
+        ],
+        [
+          -8,
+          -6
+        ],
+        [
+          -7,
+          -5
+        ],
+        [
+          -4,
+          -9
+        ],
+        [
+          -2,
+          -9
+        ],
+        [
+          -1,
+          -9
+        ],
+        [
+          -3,
+          -8
+        ],
+        [
+          -6,
+          -7
+        ],
+        [
+          -5,
+          -8
+        ],
+        [
+          0,
+          -9
+        ],
+        [
+          -8,
+          -7
+        ],
+        [
+          -7,
+          -9
+        ],
+        [
+          -7,
+          -6
+        ],
+        [
+          -4,
+          -7
+        ],
+        [
+          -2,
+          -7
+        ],
+        [
+          -1,
+          -7
+        ]
+      ],
+      "max_workers": 2,
+      "assigned_workers": [],
+      "crop": null,
+      "growth_days": 0.0,
+      "watered_today": false,
+      "tile_crops": {}
+    },
+    {
+      "id": "permit_7",
+      "name": "Housing Lot #7",
+      "permit_type": "housing",
+      "tiles": [
+        [
+          -8,
+          -2
+        ],
+        [
+          -8,
+          -1
+        ],
+        [
+          -12,
+          -9
+        ],
+        [
+          -11,
+          -8
+        ],
+        [
+          -12,
+          -6
+        ],
+        [
+          -10,
+          -9
+        ],
+        [
+          -10,
+          -3
+        ],
+        [
+          -11,
+          -5
+        ],
+        [
+          -12,
+          -3
+        ],
+        [
+          -10,
+          -6
+        ],
+        [
+          -11,
+          -2
+        ],
+        [
+          -11,
+          -1
+        ],
+        [
+          -9,
+          -2
+        ],
+        [
+          -9,
+          -1
+        ],
+        [
+          -8,
+          -3
+        ],
+        [
+          -12,
+          -7
+        ],
+        [
+          -12,
+          -4
+        ],
+        [
+          -10,
+          -7
+        ],
+        [
+          -11,
+          -9
+        ],
+        [
+          -11,
+          -3
+        ],
+        [
+          -10,
+          -4
+        ],
+        [
+          -11,
+          -6
+        ],
+        [
+          -12,
+          -2
+        ],
+        [
+          -9,
+          -3
+        ],
+        [
+          -10,
+          -1
+        ],
+        [
+          -12,
+          -5
+        ],
+        [
+          -12,
+          -8
+        ],
+        [
+          -12,
+          -1
+        ],
+        [
+          -10,
+          -5
+        ],
+        [
+          -11,
+          -7
+        ],
+        [
+          -10,
+          -8
+        ],
+        [
+          -10,
+          -2
+        ],
+        [
+          -11,
+          -4
+        ]
+      ],
+      "max_workers": 2,
+      "assigned_workers": [],
+      "crop": null,
+      "growth_days": 0.0,
+      "watered_today": false,
+      "tile_crops": {}
+    },
+    {
+      "id": "permit_8",
+      "name": "Farm Lot #8",
       "permit_type": "farm",
       "tiles": [
         [
-          -1,
-          -3
+          -11,
+          2
         ],
         [
-          0,
-          -7
+          -12,
+          4
         ],
         [
-          0,
-          -2
+          -10,
+          1
         ],
         [
-          -2,
-          -3
+          -11,
+          8
         ],
         [
-          -2,
-          -6
+          -6,
+          4
         ],
         [
-          0,
-          -4
+          -5,
+          3
         ],
         [
-          -1,
-          -6
+          -6,
+          1
         ],
         [
-          -2,
-          -8
+          -3,
+          6
         ],
         [
-          -1,
-          -8
+          -9,
+          2
         ],
         [
-          -2,
-          -5
+          -8,
+          1
         ],
         [
-          -1,
-          -5
+          -9,
+          8
         ],
         [
-          0,
-          -3
+          -7,
+          5
         ],
         [
-          -2,
-          -2
+          -4,
+          4
         ],
         [
-          -2,
-          -1
+          -4,
+          1
         ],
         [
-          -1,
-          -2
+          -11,
+          4
         ],
         [
-          -1,
-          -1
+          -12,
+          6
         ],
         [
-          0,
-          -6
+          -10,
+          3
         ],
         [
-          -1,
-          -4
+          -11,
+          1
         ],
         [
-          -2,
-          -7
+          -6,
+          6
         ],
         [
-          -1,
-          -7
+          -5,
+          5
         ],
         [
-          0,
-          -5
+          -6,
+          3
         ],
         [
-          -2,
-          -4
+          -3,
+          2
         ],
         [
-          0,
-          -8
+          -3,
+          8
         ],
         [
-          0,
-          -1
+          -9,
+          4
+        ],
+        [
+          -8,
+          3
+        ],
+        [
+          -9,
+          1
+        ],
+        [
+          -7,
+          7
+        ],
+        [
+          -4,
+          3
+        ],
+        [
+          -12,
+          2
+        ],
+        [
+          -11,
+          6
+        ],
+        [
+          -12,
+          8
+        ],
+        [
+          -10,
+          5
+        ],
+        [
+          -11,
+          3
+        ],
+        [
+          -5,
+          7
+        ],
+        [
+          -6,
+          5
+        ],
+        [
+          -3,
+          4
+        ],
+        [
+          -5,
+          4
+        ],
+        [
+          -3,
+          1
+        ],
+        [
+          -8,
+          5
+        ],
+        [
+          -9,
+          3
+        ],
+        [
+          -7,
+          6
+        ],
+        [
+          -4,
+          5
+        ],
+        [
+          -12,
+          1
+        ],
+        [
+          -10,
+          7
+        ],
+        [
+          -11,
+          5
+        ],
+        [
+          -6,
+          7
+        ],
+        [
+          -5,
+          6
+        ],
+        [
+          -3,
+          3
+        ],
+        [
+          -8,
+          7
+        ],
+        [
+          -9,
+          5
+        ],
+        [
+          -7,
+          2
+        ],
+        [
+          -8,
+          4
+        ],
+        [
+          -7,
+          8
+        ],
+        [
+          -4,
+          7
+        ],
+        [
+          -12,
+          3
+        ],
+        [
+          -11,
+          7
+        ],
+        [
+          -10,
+          6
+        ],
+        [
+          -5,
+          2
+        ],
+        [
+          -4,
+          8
+        ],
+        [
+          -5,
+          8
+        ],
+        [
+          -3,
+          5
+        ],
+        [
+          -9,
+          7
+        ],
+        [
+          -7,
+          4
+        ],
+        [
+          -8,
+          6
+        ],
+        [
+          -7,
+          1
+        ],
+        [
+          -12,
+          5
+        ],
+        [
+          -10,
+          2
+        ],
+        [
+          -4,
+          6
+        ],
+        [
+          -10,
+          8
+        ],
+        [
+          -6,
+          2
+        ],
+        [
+          -5,
+          1
+        ],
+        [
+          -3,
+          7
+        ],
+        [
+          -6,
+          8
+        ],
+        [
+          -8,
+          2
+        ],
+        [
+          -8,
+          8
+        ],
+        [
+          -9,
+          6
+        ],
+        [
+          -7,
+          3
+        ],
+        [
+          -4,
+          2
+        ],
+        [
+          -12,
+          7
+        ],
+        [
+          -10,
+          4
         ]
       ],
-      "max_workers": 3,
+      "max_workers": 10,
       "assigned_workers": [
+        "vil_10",
+        "vil_5",
+        "vil_6",
+        "vil_7",
+        "vil_8",
+        "vil_9",
         "vil_1",
         "vil_2",
-        "vil_3"
+        "vil_3",
+        "vil_4"
       ],
       "crop": "Potato",
-      "growth_days": 1.1967619202899442,
+      "growth_days": 2.6530973020834145,
       "watered_today": true,
       "tile_crops": {
-        "-2,-3": {
+        "-11,2": {
           "crop": "Potato",
-          "growth_days": 1.7907383333336475,
+          "growth_days": 2.797807500000062,
           "watered_today": true,
           "unwatered_days": 0,
           "is_dead": false
         },
-        "0,-7": {
+        "-12,4": {
           "crop": "Potato",
-          "growth_days": 1.1184666666662635,
+          "growth_days": 2.7525158333334,
           "watered_today": true,
           "unwatered_days": 0,
           "is_dead": false
         },
-        "0,-1": {
+        "-10,1": {
           "crop": "Potato",
-          "growth_days": 2.7749491666673207,
+          "growth_days": 3.3628725000000768,
           "watered_today": true,
           "unwatered_days": 0,
           "is_dead": false
         },
-        "-1,-3": {
-          "crop": null,
-          "growth_days": 0.0,
+        "-11,8": {
+          "crop": "Potato",
+          "growth_days": 2.828021666666741,
+          "watered_today": true,
+          "unwatered_days": 0,
+          "is_dead": false
+        },
+        "-6,4": {
+          "crop": "Potato",
+          "growth_days": 2.6906325000000737,
+          "watered_today": true,
+          "unwatered_days": 0,
+          "is_dead": false
+        },
+        "-5,3": {
+          "crop": "Potato",
+          "growth_days": 2.464689166666777,
+          "watered_today": true,
+          "unwatered_days": 0,
+          "is_dead": false
+        },
+        "-6,1": {
+          "crop": "Potato",
+          "growth_days": 3.032895000000135,
+          "watered_today": true,
+          "unwatered_days": 0,
+          "is_dead": false
+        },
+        "-3,6": {
+          "crop": "Potato",
+          "growth_days": 2.587233333333403,
+          "watered_today": true,
+          "unwatered_days": 0,
+          "is_dead": false
+        },
+        "-9,2": {
+          "crop": "Potato",
+          "growth_days": 2.8275166666667264,
+          "watered_today": true,
+          "unwatered_days": 0,
+          "is_dead": false
+        },
+        "-8,1": {
+          "crop": "Potato",
+          "growth_days": 3.0477000000001486,
+          "watered_today": true,
+          "unwatered_days": 0,
+          "is_dead": false
+        },
+        "-9,8": {
+          "crop": "Potato",
+          "growth_days": 2.682056666666751,
+          "watered_today": true,
+          "unwatered_days": 0,
+          "is_dead": false
+        },
+        "-7,5": {
+          "crop": "Potato",
+          "growth_days": 2.5011250000000596,
+          "watered_today": true,
+          "unwatered_days": 0,
+          "is_dead": false
+        },
+        "-4,4": {
+          "crop": "Potato",
+          "growth_days": 3.0542091666667344,
+          "watered_today": true,
+          "unwatered_days": 0,
+          "is_dead": false
+        },
+        "-4,1": {
+          "crop": "Potato",
+          "growth_days": 3.2300733333334173,
+          "watered_today": true,
+          "unwatered_days": 0,
+          "is_dead": false
+        },
+        "-11,4": {
+          "crop": "Potato",
+          "growth_days": 2.505689166666749,
+          "watered_today": true,
+          "unwatered_days": 0,
+          "is_dead": false
+        },
+        "-12,6": {
+          "crop": "Potato",
+          "growth_days": 2.8275625000001057,
+          "watered_today": true,
+          "unwatered_days": 0,
+          "is_dead": false
+        },
+        "-10,3": {
+          "crop": "Potato",
+          "growth_days": 2.4277308333334138,
+          "watered_today": true,
+          "unwatered_days": 0,
+          "is_dead": false
+        },
+        "-11,1": {
+          "crop": "Potato",
+          "growth_days": 3.249777500000077,
+          "watered_today": true,
+          "unwatered_days": 0,
+          "is_dead": false
+        },
+        "-6,6": {
+          "crop": "Potato",
+          "growth_days": 2.4378275000000627,
+          "watered_today": true,
+          "unwatered_days": 0,
+          "is_dead": false
+        },
+        "-5,5": {
+          "crop": "Potato",
+          "growth_days": 2.4946858333333966,
+          "watered_today": true,
+          "unwatered_days": 0,
+          "is_dead": false
+        },
+        "-6,3": {
+          "crop": "Potato",
+          "growth_days": 2.8677516666667517,
+          "watered_today": true,
+          "unwatered_days": 0,
+          "is_dead": false
+        },
+        "-3,2": {
+          "crop": "Potato",
+          "growth_days": 2.9172666666667992,
+          "watered_today": true,
+          "unwatered_days": 0,
+          "is_dead": false
+        },
+        "-3,8": {
+          "crop": "Potato",
+          "growth_days": 2.433169166666732,
+          "watered_today": true,
+          "unwatered_days": 0,
+          "is_dead": false
+        },
+        "-9,4": {
+          "crop": "Potato",
+          "growth_days": 2.579105833333406,
+          "watered_today": true,
+          "unwatered_days": 0,
+          "is_dead": false
+        },
+        "-8,3": {
+          "crop": "Potato",
+          "growth_days": 2.1334783333333913,
           "watered_today": false,
-          "unwatered_days": 1,
-          "is_dead": true
+          "unwatered_days": 0,
+          "is_dead": false
         },
-        "-2,-6": {
+        "-9,1": {
           "crop": "Potato",
-          "growth_days": 1.7164958333334484,
+          "growth_days": 3.01981583333346,
           "watered_today": true,
           "unwatered_days": 0,
           "is_dead": false
         },
-        "0,-4": {
+        "-7,7": {
           "crop": "Potato",
-          "growth_days": 1.2784966666665802,
+          "growth_days": 2.4122325000000666,
+          "watered_today": false,
+          "unwatered_days": 0,
+          "is_dead": false
+        },
+        "-4,3": {
+          "crop": "Potato",
+          "growth_days": 2.513385833333416,
           "watered_today": true,
           "unwatered_days": 0,
           "is_dead": false
         },
-        "-1,-6": {
+        "-12,2": {
           "crop": "Potato",
-          "growth_days": 1.5533124999998364,
+          "growth_days": 2.873825000000094,
           "watered_today": true,
           "unwatered_days": 0,
           "is_dead": false
         },
-        "-1,-8": {
+        "-11,6": {
           "crop": "Potato",
-          "growth_days": 0.18860333333333143,
+          "growth_days": 2.38296666666676,
           "watered_today": true,
           "unwatered_days": 0,
           "is_dead": false
         },
-        "-2,-8": {
+        "-12,8": {
           "crop": "Potato",
-          "growth_days": 0.3600916666666982,
+          "growth_days": 2.8033783333334052,
           "watered_today": true,
           "unwatered_days": 0,
           "is_dead": false
         },
-        "-2,-5": {
+        "-10,5": {
           "crop": "Potato",
-          "growth_days": 0.6575716666665896,
+          "growth_days": 2.4064425000000638,
           "watered_today": true,
           "unwatered_days": 0,
           "is_dead": false
         },
-        "-1,-5": {
+        "-11,3": {
           "crop": "Potato",
-          "growth_days": 0.29463583333333904,
+          "growth_days": 2.5339400000000794,
           "watered_today": true,
           "unwatered_days": 0,
           "is_dead": false
         },
-        "0,-3": {
+        "-5,7": {
           "crop": "Potato",
-          "growth_days": 1.275194999999855,
+          "growth_days": 2.2630050000000526,
           "watered_today": true,
           "unwatered_days": 0,
           "is_dead": false
         },
-        "-2,-2": {
+        "-6,5": {
           "crop": "Potato",
-          "growth_days": 1.9306391666670417,
+          "growth_days": 2.4546875000000674,
           "watered_today": true,
           "unwatered_days": 0,
           "is_dead": false
         },
-        "-2,-1": {
+        "-3,4": {
           "crop": "Potato",
-          "growth_days": 1.6864308333338305,
+          "growth_days": 2.984187500000155,
           "watered_today": true,
           "unwatered_days": 0,
           "is_dead": false
         },
-        "-1,-2": {
+        "-5,4": {
           "crop": "Potato",
-          "growth_days": 0.7854233333330796,
+          "growth_days": 2.4828725000000675,
           "watered_today": true,
           "unwatered_days": 0,
           "is_dead": false
         },
-        "-1,-1": {
+        "-3,1": {
           "crop": "Potato",
-          "growth_days": 1.7021241666672295,
+          "growth_days": 3.1012783333334055,
           "watered_today": true,
           "unwatered_days": 0,
           "is_dead": false
         },
-        "0,-6": {
+        "-8,5": {
           "crop": "Potato",
-          "growth_days": 0.8242474999997744,
+          "growth_days": 2.648483333333393,
           "watered_today": true,
           "unwatered_days": 0,
           "is_dead": false
         },
-        "-1,-4": {
+        "-9,3": {
           "crop": "Potato",
-          "growth_days": 0.5949174999999648,
+          "growth_days": 2.4144641666667708,
           "watered_today": true,
           "unwatered_days": 0,
           "is_dead": false
         },
-        "-2,-7": {
+        "-7,6": {
           "crop": "Potato",
-          "growth_days": 1.9608066666670456,
+          "growth_days": 2.333143333333419,
+          "watered_today": false,
+          "unwatered_days": 0,
+          "is_dead": false
+        },
+        "-4,5": {
+          "crop": "Potato",
+          "growth_days": 2.803107500000085,
           "watered_today": true,
           "unwatered_days": 0,
           "is_dead": false
         },
-        "-1,-7": {
+        "-12,1": {
           "crop": "Potato",
-          "growth_days": 1.2988291666664362,
+          "growth_days": 3.1618050000000704,
           "watered_today": true,
           "unwatered_days": 0,
           "is_dead": false
         },
-        "0,-5": {
+        "-10,7": {
           "crop": "Potato",
-          "growth_days": 2.273934166667193,
+          "growth_days": 2.6545916666667204,
           "watered_today": true,
           "unwatered_days": 0,
           "is_dead": false
         },
-        "-2,-4": {
+        "-11,5": {
           "crop": "Potato",
-          "growth_days": 0.5031200000000743,
+          "growth_days": 2.4900983333334157,
           "watered_today": true,
           "unwatered_days": 0,
           "is_dead": false
         },
-        "0,-8": {
+        "-6,7": {
           "crop": "Potato",
-          "growth_days": 0.4420058333333996,
+          "growth_days": 2.220174166666692,
           "watered_today": true,
           "unwatered_days": 0,
           "is_dead": false
         },
-        "0,-2": {
+        "-5,6": {
           "crop": "Potato",
-          "growth_days": 0.5144891666667365,
+          "growth_days": 2.257105000000055,
+          "watered_today": true,
+          "unwatered_days": 0,
+          "is_dead": false
+        },
+        "-3,3": {
+          "crop": "Potato",
+          "growth_days": 2.6380808333334174,
+          "watered_today": false,
+          "unwatered_days": 0,
+          "is_dead": false
+        },
+        "-8,7": {
+          "crop": "Potato",
+          "growth_days": 2.3257466666667264,
+          "watered_today": true,
+          "unwatered_days": 0,
+          "is_dead": false
+        },
+        "-9,5": {
+          "crop": "Potato",
+          "growth_days": 2.6758108333334167,
+          "watered_today": true,
+          "unwatered_days": 0,
+          "is_dead": false
+        },
+        "-7,2": {
+          "crop": "Potato",
+          "growth_days": 2.53508500000008,
+          "watered_today": true,
+          "unwatered_days": 0,
+          "is_dead": false
+        },
+        "-8,4": {
+          "crop": "Potato",
+          "growth_days": 2.5185666666667355,
+          "watered_today": true,
+          "unwatered_days": 0,
+          "is_dead": false
+        },
+        "-7,8": {
+          "crop": "Potato",
+          "growth_days": 2.465143333333403,
+          "watered_today": true,
+          "unwatered_days": 0,
+          "is_dead": false
+        },
+        "-4,7": {
+          "crop": "Potato",
+          "growth_days": 2.3270100000000897,
+          "watered_today": false,
+          "unwatered_days": 0,
+          "is_dead": false
+        },
+        "-12,3": {
+          "crop": "Potato",
+          "growth_days": 2.667293333333406,
+          "watered_today": true,
+          "unwatered_days": 0,
+          "is_dead": false
+        },
+        "-11,7": {
+          "crop": "Potato",
+          "growth_days": 2.7442391666667354,
+          "watered_today": true,
+          "unwatered_days": 0,
+          "is_dead": false
+        },
+        "-10,6": {
+          "crop": "Potato",
+          "growth_days": 2.4269425000000715,
+          "watered_today": true,
+          "unwatered_days": 0,
+          "is_dead": false
+        },
+        "-5,2": {
+          "crop": "Potato",
+          "growth_days": 2.5523933333334474,
+          "watered_today": true,
+          "unwatered_days": 0,
+          "is_dead": false
+        },
+        "-4,8": {
+          "crop": "Potato",
+          "growth_days": 2.4608575000000674,
+          "watered_today": true,
+          "unwatered_days": 0,
+          "is_dead": false
+        },
+        "-5,8": {
+          "crop": "Potato",
+          "growth_days": 2.4660500000000822,
+          "watered_today": true,
+          "unwatered_days": 0,
+          "is_dead": false
+        },
+        "-3,5": {
+          "crop": "Potato",
+          "growth_days": 2.932387500000137,
+          "watered_today": true,
+          "unwatered_days": 0,
+          "is_dead": false
+        },
+        "-9,7": {
+          "crop": "Potato",
+          "growth_days": 2.4773316666667604,
+          "watered_today": true,
+          "unwatered_days": 0,
+          "is_dead": false
+        },
+        "-7,4": {
+          "crop": "Potato",
+          "growth_days": 3.0971258333334006,
+          "watered_today": true,
+          "unwatered_days": 0,
+          "is_dead": false
+        },
+        "-8,6": {
+          "crop": "Potato",
+          "growth_days": 2.273996666666792,
+          "watered_today": false,
+          "unwatered_days": 0,
+          "is_dead": false
+        },
+        "-7,1": {
+          "crop": "Potato",
+          "growth_days": 3.3269166666667496,
+          "watered_today": true,
+          "unwatered_days": 0,
+          "is_dead": false
+        },
+        "-12,5": {
+          "crop": "Potato",
+          "growth_days": 2.825650000000079,
+          "watered_today": true,
+          "unwatered_days": 0,
+          "is_dead": false
+        },
+        "-10,2": {
+          "crop": "Potato",
+          "growth_days": 2.5423008333334325,
+          "watered_today": true,
+          "unwatered_days": 0,
+          "is_dead": false
+        },
+        "-4,6": {
+          "crop": "Potato",
+          "growth_days": 2.3844250000000984,
+          "watered_today": true,
+          "unwatered_days": 0,
+          "is_dead": false
+        },
+        "-10,8": {
+          "crop": "Potato",
+          "growth_days": 2.707789166666742,
+          "watered_today": true,
+          "unwatered_days": 0,
+          "is_dead": false
+        },
+        "-6,2": {
+          "crop": "Potato",
+          "growth_days": 2.771029166666734,
+          "watered_today": true,
+          "unwatered_days": 0,
+          "is_dead": false
+        },
+        "-5,1": {
+          "crop": "Potato",
+          "growth_days": 2.931113333333426,
+          "watered_today": true,
+          "unwatered_days": 0,
+          "is_dead": false
+        },
+        "-3,7": {
+          "crop": "Potato",
+          "growth_days": 2.458214166666731,
+          "watered_today": true,
+          "unwatered_days": 0,
+          "is_dead": false
+        },
+        "-6,8": {
+          "crop": "Potato",
+          "growth_days": 2.3520350000001025,
+          "watered_today": true,
+          "unwatered_days": 0,
+          "is_dead": false
+        },
+        "-8,2": {
+          "crop": "Potato",
+          "growth_days": 2.6491841666667515,
+          "watered_today": true,
+          "unwatered_days": 0,
+          "is_dead": false
+        },
+        "-8,8": {
+          "crop": "Potato",
+          "growth_days": 2.5166600000000656,
+          "watered_today": true,
+          "unwatered_days": 0,
+          "is_dead": false
+        },
+        "-9,6": {
+          "crop": "Potato",
+          "growth_days": 2.441155000000061,
+          "watered_today": true,
+          "unwatered_days": 0,
+          "is_dead": false
+        },
+        "-7,3": {
+          "crop": "Potato",
+          "growth_days": 2.7346716666667437,
+          "watered_today": true,
+          "unwatered_days": 0,
+          "is_dead": false
+        },
+        "-4,2": {
+          "crop": "Potato",
+          "growth_days": 2.792155833333402,
+          "watered_today": true,
+          "unwatered_days": 0,
+          "is_dead": false
+        },
+        "-12,7": {
+          "crop": "Potato",
+          "growth_days": 2.819240000000078,
+          "watered_today": true,
+          "unwatered_days": 0,
+          "is_dead": false
+        },
+        "-10,4": {
+          "crop": "Potato",
+          "growth_days": 2.462800000000085,
           "watered_today": true,
           "unwatered_days": 0,
           "is_dead": false
@@ -573,265 +1312,57 @@
       }
     },
     {
-      "id": "permit_4",
-      "name": "Landlord Private Grounds",
-      "permit_type": "landlord_private",
+      "id": "permit_9",
+      "name": "Market Lot #9",
+      "permit_type": "market",
       "tiles": [
         [
-          -6,
-          4
+          -2,
+          -5
+        ],
+        [
+          -1,
+          -5
+        ],
+        [
+          0,
+          -6
         ],
         [
           -5,
-          3
-        ],
-        [
-          -3,
-          9
-        ],
-        [
-          -3,
-          6
-        ],
-        [
-          -9,
-          2
-        ],
-        [
-          -9,
-          8
-        ],
-        [
-          -7,
-          5
+          -6
         ],
         [
           -4,
-          4
+          -6
         ],
         [
-          -10,
-          3
+          -3,
+          -6
         ],
         [
-          -6,
-          6
+          -2,
+          -6
+        ],
+        [
+          -1,
+          -6
+        ],
+        [
+          0,
+          -5
         ],
         [
           -5,
-          5
+          -5
+        ],
+        [
+          -4,
+          -5
         ],
         [
           -3,
-          2
-        ],
-        [
-          -6,
-          3
-        ],
-        [
-          -3,
-          8
-        ],
-        [
-          -9,
-          4
-        ],
-        [
-          -8,
-          3
-        ],
-        [
-          -7,
-          7
-        ],
-        [
-          -8,
-          9
-        ],
-        [
-          -4,
-          3
-        ],
-        [
-          -10,
-          5
-        ],
-        [
-          -5,
-          7
-        ],
-        [
-          -6,
-          5
-        ],
-        [
-          -3,
-          4
-        ],
-        [
-          -5,
-          4
-        ],
-        [
-          -8,
-          5
-        ],
-        [
-          -9,
-          3
-        ],
-        [
-          -7,
-          9
-        ],
-        [
-          -7,
-          6
-        ],
-        [
-          -4,
-          5
-        ],
-        [
-          -10,
-          7
-        ],
-        [
-          -5,
-          9
-        ],
-        [
-          -6,
-          7
-        ],
-        [
-          -5,
-          6
-        ],
-        [
-          -3,
-          3
-        ],
-        [
-          -8,
-          7
-        ],
-        [
-          -9,
-          5
-        ],
-        [
-          -7,
-          2
-        ],
-        [
-          -8,
-          4
-        ],
-        [
-          -7,
-          8
-        ],
-        [
-          -4,
-          7
-        ],
-        [
-          -10,
-          9
-        ],
-        [
-          -10,
-          6
-        ],
-        [
-          -5,
-          2
-        ],
-        [
-          -6,
-          9
-        ],
-        [
-          -5,
-          8
-        ],
-        [
-          -3,
-          5
-        ],
-        [
-          -9,
-          7
-        ],
-        [
-          -7,
-          4
-        ],
-        [
-          -8,
-          6
-        ],
-        [
-          -4,
-          9
-        ],
-        [
-          -4,
-          6
-        ],
-        [
-          -10,
-          2
-        ],
-        [
-          -10,
-          8
-        ],
-        [
-          -6,
-          2
-        ],
-        [
-          -6,
-          8
-        ],
-        [
-          -3,
-          7
-        ],
-        [
-          -8,
-          2
-        ],
-        [
-          -9,
-          9
-        ],
-        [
-          -8,
-          8
-        ],
-        [
-          -9,
-          6
-        ],
-        [
-          -7,
-          3
-        ],
-        [
-          -4,
-          2
-        ],
-        [
-          -4,
-          8
-        ],
-        [
-          -10,
-          4
+          -5
         ]
       ],
       "max_workers": 2,
@@ -847,137 +1378,382 @@
       "building_type": "wooden_structure",
       "tiles": [
         [
-          2,
-          4
+          -6,
+          -8
         ],
         [
-          3,
-          4
+          -5,
+          -9
         ],
         [
-          4,
-          3
+          -6,
+          -5
         ],
         [
-          5,
-          4
+          -3,
+          -9
         ],
         [
-          6,
-          4
+          0,
+          -7
         ],
         [
-          7,
-          3
+          -8,
+          -5
         ],
         [
-          2,
-          2
+          -8,
+          -8
         ],
         [
-          3,
-          2
+          -7,
+          -7
         ],
         [
-          2,
-          5
+          -1,
+          -8
         ],
         [
-          3,
-          5
+          -2,
+          -8
         ],
         [
-          5,
-          2
+          -4,
+          -8
         ],
         [
-          4,
-          4
+          -5,
+          -7
         ],
         [
-          7,
-          4
+          -6,
+          -9
         ],
         [
-          6,
-          2
+          -6,
+          -6
         ],
         [
-          5,
-          5
+          -3,
+          -7
         ],
         [
-          6,
-          5
+          -8,
+          -9
         ],
         [
-          4,
-          2
+          0,
+          -8
         ],
         [
-          2,
-          3
+          -7,
+          -8
         ],
         [
-          4,
-          5
+          -8,
+          -6
         ],
         [
-          3,
-          3
+          -7,
+          -5
         ],
         [
-          7,
-          2
+          -4,
+          -9
         ],
         [
-          5,
-          3
+          -2,
+          -9
         ],
         [
-          7,
-          5
+          -1,
+          -9
         ],
         [
-          6,
-          3
+          -6,
+          -7
+        ],
+        [
+          -3,
+          -8
+        ],
+        [
+          -5,
+          -8
+        ],
+        [
+          0,
+          -9
+        ],
+        [
+          -8,
+          -7
+        ],
+        [
+          -7,
+          -9
+        ],
+        [
+          -7,
+          -6
+        ],
+        [
+          -4,
+          -7
+        ],
+        [
+          -2,
+          -7
+        ],
+        [
+          -1,
+          -7
         ]
       ],
       "door_pos": [
-        3,
-        5
+        -7,
+        -5
       ],
-      "door_side": "bottom"
+      "door_side": "bottom",
+      "owner": "landlord",
+      "inventory": {},
+      "currency": {
+        "Copper": 0,
+        "Silver": 0,
+        "Gold": 0
+      },
+      "prices": {}
+    },
+    {
+      "building_type": "wooden_structure",
+      "tiles": [
+        [
+          -8,
+          -2
+        ],
+        [
+          -8,
+          -1
+        ],
+        [
+          -12,
+          -9
+        ],
+        [
+          -11,
+          -8
+        ],
+        [
+          -12,
+          -6
+        ],
+        [
+          -10,
+          -9
+        ],
+        [
+          -10,
+          -3
+        ],
+        [
+          -11,
+          -5
+        ],
+        [
+          -12,
+          -3
+        ],
+        [
+          -10,
+          -6
+        ],
+        [
+          -11,
+          -2
+        ],
+        [
+          -11,
+          -1
+        ],
+        [
+          -9,
+          -2
+        ],
+        [
+          -9,
+          -1
+        ],
+        [
+          -8,
+          -3
+        ],
+        [
+          -12,
+          -7
+        ],
+        [
+          -12,
+          -4
+        ],
+        [
+          -10,
+          -7
+        ],
+        [
+          -11,
+          -9
+        ],
+        [
+          -11,
+          -3
+        ],
+        [
+          -10,
+          -4
+        ],
+        [
+          -11,
+          -6
+        ],
+        [
+          -12,
+          -2
+        ],
+        [
+          -9,
+          -3
+        ],
+        [
+          -10,
+          -1
+        ],
+        [
+          -12,
+          -5
+        ],
+        [
+          -12,
+          -8
+        ],
+        [
+          -12,
+          -1
+        ],
+        [
+          -10,
+          -5
+        ],
+        [
+          -11,
+          -7
+        ],
+        [
+          -10,
+          -8
+        ],
+        [
+          -10,
+          -2
+        ],
+        [
+          -11,
+          -4
+        ]
+      ],
+      "door_pos": [
+        -8,
+        -2
+      ],
+      "door_side": "right",
+      "owner": "landlord",
+      "inventory": {},
+      "currency": {
+        "Copper": 0,
+        "Silver": 0,
+        "Gold": 0
+      },
+      "prices": {}
     },
     {
       "building_type": "well",
       "tiles": [
         [
-          0,
-          1
+          -6,
+          -3
         ],
         [
-          -1,
-          1
+          -6,
+          -2
         ],
         [
-          0,
-          2
+          -5,
+          -3
         ],
         [
-          -1,
-          2
+          -5,
+          -2
         ]
       ],
       "door_pos": null,
-      "door_side": null
+      "door_side": null,
+      "owner": "landlord",
+      "inventory": {},
+      "currency": {
+        "Copper": 0,
+        "Silver": 0,
+        "Gold": 0
+      },
+      "prices": {}
+    },
+    {
+      "building_type": "market",
+      "tiles": [
+        [
+          -4,
+          -5
+        ],
+        [
+          -5,
+          -6
+        ],
+        [
+          -5,
+          -5
+        ],
+        [
+          -4,
+          -6
+        ],
+        [
+          -3,
+          -6
+        ],
+        [
+          -3,
+          -5
+        ]
+      ],
+      "door_pos": null,
+      "door_side": null,
+      "owner": "landlord",
+      "inventory": {
+        "Potato": 10
+      },
+      "currency": {
+        "Copper": 0,
+        "Silver": 0,
+        "Gold": 0
+      },
+      "prices": {
+        "Potato": 1
+      }
     }
   ],
   "construction_sites": [],
   "stockpile": [
     {
       "resource_type": "Wood",
-      "amount": 875,
+      "amount": 645,
       "grid_x": 2,
       "grid_y": -6,
       "owner_type": "landlord",
@@ -985,7 +1761,7 @@
     },
     {
       "resource_type": "Food",
-      "amount": 1000,
+      "amount": 860,
       "grid_x": 3,
       "grid_y": -6,
       "owner_type": "landlord",
@@ -993,7 +1769,7 @@
     },
     {
       "resource_type": "Stone",
-      "amount": 956,
+      "amount": 889,
       "grid_x": 4,
       "grid_y": -6,
       "owner_type": "landlord",
@@ -1008,24 +1784,24 @@
       "owner_id": null
     },
     {
-      "resource_type": "Hoe",
-      "amount": 7,
+      "resource_type": "Copper",
+      "amount": 1000,
       "grid_x": 6,
       "grid_y": -6,
       "owner_type": "landlord",
       "owner_id": null
     },
     {
-      "resource_type": "Sickle",
-      "amount": 7,
+      "resource_type": "Silver",
+      "amount": 1000,
       "grid_x": 2,
       "grid_y": -5,
       "owner_type": "landlord",
       "owner_id": null
     },
     {
-      "resource_type": "Watering_Can",
-      "amount": 7,
+      "resource_type": "Gold",
+      "amount": 1000,
       "grid_x": 3,
       "grid_y": -5,
       "owner_type": "landlord",
@@ -1034,7 +1810,15 @@
     {
       "resource_type": "Hammer",
       "amount": 5,
-      "grid_x": 4,
+      "grid_x": 2,
+      "grid_y": -4,
+      "owner_type": "landlord",
+      "owner_id": null
+    },
+    {
+      "resource_type": "Food",
+      "amount": 120,
+      "grid_x": -4,
       "grid_y": -5,
       "owner_type": "landlord",
       "owner_id": null
@@ -1043,10 +1827,44 @@
   "furniture": [
     {
       "id": "furn_1",
+      "furniture_type": "household_storage",
+      "gx": 0,
+      "gy": -8,
+      "permit_id": "permit_6",
+      "family_id": "fam_1",
+      "assigned_villager_id": null,
+      "is_dropped": false,
+      "designated_target": null,
+      "carrier_id": null,
+      "condition": 1.0,
+      "inventory": {
+        "Potato": 9,
+        "Water": 6
+      }
+    },
+    {
+      "id": "furn_2",
+      "furniture_type": "household_storage",
+      "gx": -11,
+      "gy": -9,
+      "permit_id": "permit_7",
+      "family_id": "fam_2",
+      "assigned_villager_id": null,
+      "is_dropped": false,
+      "designated_target": null,
+      "carrier_id": null,
+      "condition": 1.0,
+      "inventory": {
+        "Potato": 11,
+        "Water": 7
+      }
+    },
+    {
+      "id": "furn_3",
       "furniture_type": "bed",
-      "gx": 6,
-      "gy": 5,
-      "permit_id": "permit_1",
+      "gx": 0,
+      "gy": -9,
+      "permit_id": "permit_6",
       "family_id": "fam_1",
       "assigned_villager_id": "vil_1",
       "is_dropped": false,
@@ -1056,11 +1874,11 @@
       "inventory": {}
     },
     {
-      "id": "furn_2",
+      "id": "furn_4",
       "furniture_type": "bed",
-      "gx": 7,
-      "gy": 5,
-      "permit_id": "permit_1",
+      "gx": 0,
+      "gy": -7,
+      "permit_id": "permit_6",
       "family_id": "fam_1",
       "assigned_villager_id": "vil_2",
       "is_dropped": false,
@@ -1070,11 +1888,11 @@
       "inventory": {}
     },
     {
-      "id": "furn_3",
+      "id": "furn_5",
       "furniture_type": "bed",
-      "gx": 5,
-      "gy": 5,
-      "permit_id": "permit_1",
+      "gx": -2,
+      "gy": -7,
+      "permit_id": "permit_6",
       "family_id": "fam_1",
       "assigned_villager_id": "vil_3",
       "is_dropped": false,
@@ -1084,27 +1902,109 @@
       "inventory": {}
     },
     {
-      "id": "furn_4",
-      "furniture_type": "household_storage",
-      "gx": 7,
-      "gy": 3,
-      "permit_id": "permit_1",
+      "id": "furn_6",
+      "furniture_type": "bed",
+      "gx": -2,
+      "gy": -9,
+      "permit_id": "permit_6",
       "family_id": "fam_1",
-      "assigned_villager_id": null,
+      "assigned_villager_id": "vil_4",
       "is_dropped": false,
       "designated_target": null,
       "carrier_id": null,
       "condition": 1.0,
-      "inventory": {
-        "Potato": 115
-      }
+      "inventory": {}
+    },
+    {
+      "id": "furn_7",
+      "furniture_type": "bed",
+      "gx": -12,
+      "gy": -7,
+      "permit_id": "permit_7",
+      "family_id": "fam_2",
+      "assigned_villager_id": "vil_7",
+      "is_dropped": false,
+      "designated_target": null,
+      "carrier_id": null,
+      "condition": 1.0,
+      "inventory": {}
+    },
+    {
+      "id": "furn_8",
+      "furniture_type": "bed",
+      "gx": -12,
+      "gy": -9,
+      "permit_id": "permit_7",
+      "family_id": "fam_2",
+      "assigned_villager_id": "vil_8",
+      "is_dropped": false,
+      "designated_target": null,
+      "carrier_id": null,
+      "condition": 1.0,
+      "inventory": {}
+    },
+    {
+      "id": "furn_9",
+      "furniture_type": "bed",
+      "gx": -10,
+      "gy": -9,
+      "permit_id": "permit_7",
+      "family_id": "fam_2",
+      "assigned_villager_id": "vil_5",
+      "is_dropped": false,
+      "designated_target": null,
+      "carrier_id": null,
+      "condition": 1.0,
+      "inventory": {}
+    },
+    {
+      "id": "furn_10",
+      "furniture_type": "bed",
+      "gx": -10,
+      "gy": -7,
+      "permit_id": "permit_7",
+      "family_id": "fam_2",
+      "assigned_villager_id": "vil_9",
+      "is_dropped": false,
+      "designated_target": null,
+      "carrier_id": null,
+      "condition": 1.0,
+      "inventory": {}
+    },
+    {
+      "id": "furn_11",
+      "furniture_type": "bed",
+      "gx": -12,
+      "gy": -5,
+      "permit_id": "permit_7",
+      "family_id": "fam_2",
+      "assigned_villager_id": "vil_6",
+      "is_dropped": false,
+      "designated_target": null,
+      "carrier_id": null,
+      "condition": 1.0,
+      "inventory": {}
+    },
+    {
+      "id": "furn_12",
+      "furniture_type": "bed",
+      "gx": -10,
+      "gy": -5,
+      "permit_id": "permit_7",
+      "family_id": "fam_2",
+      "assigned_villager_id": "vil_10",
+      "is_dropped": false,
+      "designated_target": null,
+      "carrier_id": null,
+      "condition": 1.0,
+      "inventory": {}
     }
   ],
   "families": [
     {
       "id": "fam_1",
-      "surname": "Brewer",
-      "assigned_permit_id": "permit_1",
+      "surname": "Thatcher",
+      "assigned_permit_id": "permit_6",
       "generations_present": [
         2,
         3
@@ -1112,33 +2012,35 @@
       "members": [
         {
           "id": "vil_1",
-          "first_name": "Hugh",
-          "last_name": "Brewer",
+          "first_name": "Thomas",
+          "last_name": "Thatcher",
           "gender": "Male",
-          "age": 43,
+          "age": 47,
           "generation": 2,
           "role": "Father",
           "family_id": "fam_1",
           "job": "Farmer",
-          "x": 482.0,
-          "y": 269.34095848909504,
-          "task": "TILLING",
+          "x": -425.4068205128597,
+          "y": -544.6119425397113,
+          "task": "IDLE",
           "carrying_crop": 0,
           "inventory": {
             "Hoe": 1,
             "Watering_Can": 1,
             "Sickle": 1
           },
-          "active_tool": "Hoe",
-          "has_water": false,
-          "water_day": 28,
+          "active_tool": null,
+          "has_water": true,
+          "water_day": 7,
           "water_charges": 9999,
-          "assigned_bed_id": "furn_1",
+          "assigned_bed_id": "furn_3",
           "carrying_furniture_id": null,
           "watering_timer": 0.0,
           "tilling_timer": 0.0,
-          "hunger": 100.0,
-          "thirst": 100.0,
+          "hunger": 50.16366666670339,
+          "thirst": 50.16758333337005,
+          "hunger_death_timer": null,
+          "thirst_death_timer": null,
           "daily_food_consumed": 1,
           "daily_water_consumed": 1,
           "is_alive": true,
@@ -1148,16 +2050,16 @@
         },
         {
           "id": "vil_2",
-          "first_name": "Agnes",
-          "last_name": "Brewer",
+          "first_name": "Joan",
+          "last_name": "Thatcher",
           "gender": "Female",
-          "age": 50,
+          "age": 44,
           "generation": 2,
           "role": "Mother",
           "family_id": "fam_1",
           "job": "Farmer",
-          "x": 290.87577616949625,
-          "y": 220.0400359772118,
+          "x": -36.40225812859049,
+          "y": -426.19976710353416,
           "task": "IDLE",
           "carrying_crop": 0,
           "inventory": {
@@ -1167,14 +2069,16 @@
           },
           "active_tool": null,
           "has_water": true,
-          "water_day": 30,
+          "water_day": 7,
           "water_charges": 9999,
-          "assigned_bed_id": "furn_2",
+          "assigned_bed_id": "furn_4",
           "carrying_furniture_id": null,
           "watering_timer": 0.0,
           "tilling_timer": 0.0,
-          "hunger": 100.0,
-          "thirst": 100.0,
+          "hunger": 50.16366666670339,
+          "thirst": 50.16758333337005,
+          "hunger_death_timer": null,
+          "thirst_death_timer": null,
           "daily_food_consumed": 1,
           "daily_water_consumed": 1,
           "is_alive": true,
@@ -1184,16 +2088,142 @@
         },
         {
           "id": "vil_3",
-          "first_name": "Alice",
-          "last_name": "Brewer",
+          "first_name": "Arthur",
+          "last_name": "Thatcher",
+          "gender": "Male",
+          "age": 23,
+          "generation": 3,
+          "role": "Adult Son",
+          "family_id": "fam_1",
+          "job": "Farmer",
+          "x": -478.54103622634966,
+          "y": 193.3827037059812,
+          "task": "WATERING",
+          "carrying_crop": 0,
+          "inventory": {
+            "Hoe": 1,
+            "Watering_Can": 1,
+            "Sickle": 1
+          },
+          "active_tool": "Watering_Can",
+          "has_water": true,
+          "water_day": 7,
+          "water_charges": 9999,
+          "assigned_bed_id": "furn_5",
+          "carrying_furniture_id": null,
+          "watering_timer": 6.359499999999972,
+          "tilling_timer": 0.0,
+          "hunger": 36.190000000046375,
+          "thirst": 51.57333333336886,
+          "hunger_death_timer": null,
+          "thirst_death_timer": null,
+          "daily_food_consumed": 1,
+          "daily_water_consumed": 1,
+          "is_alive": true,
+          "status": "ALIVE",
+          "death_reason": null,
+          "death_day": null
+        },
+        {
+          "id": "vil_4",
+          "first_name": "Cecily",
+          "last_name": "Thatcher",
           "gender": "Female",
-          "age": 25,
+          "age": 24,
           "generation": 3,
           "role": "Adult Daughter",
           "family_id": "fam_1",
           "job": "Farmer",
-          "x": 405.4338194208618,
-          "y": 353.61561077006223,
+          "x": -423.03210193491276,
+          "y": 499.0208321579414,
+          "task": "WATERING",
+          "carrying_crop": 0,
+          "inventory": {
+            "Hoe": 1,
+            "Watering_Can": 1,
+            "Sickle": 1
+          },
+          "active_tool": "Watering_Can",
+          "has_water": true,
+          "water_day": 7,
+          "water_charges": 9999,
+          "assigned_bed_id": "furn_6",
+          "carrying_furniture_id": null,
+          "watering_timer": 5.9469999999999645,
+          "tilling_timer": 0.0,
+          "hunger": 35.82666666671333,
+          "thirst": 51.723333333368714,
+          "hunger_death_timer": null,
+          "thirst_death_timer": null,
+          "daily_food_consumed": 1,
+          "daily_water_consumed": 1,
+          "is_alive": true,
+          "status": "ALIVE",
+          "death_reason": null,
+          "death_day": null
+        }
+      ]
+    },
+    {
+      "id": "fam_2",
+      "surname": "Shepherd",
+      "assigned_permit_id": "permit_7",
+      "generations_present": [
+        1,
+        2,
+        3
+      ],
+      "members": [
+        {
+          "id": "vil_7",
+          "first_name": "Henry",
+          "last_name": "Shepherd",
+          "gender": "Male",
+          "age": 64,
+          "generation": 1,
+          "role": "Grandfather",
+          "family_id": "fam_2",
+          "job": "Farmer",
+          "x": -404.3067531907644,
+          "y": 448.3714361653926,
+          "task": "WATERING",
+          "carrying_crop": 0,
+          "inventory": {
+            "Hoe": 1,
+            "Watering_Can": 1,
+            "Sickle": 1
+          },
+          "active_tool": "Watering_Can",
+          "has_water": true,
+          "water_day": 7,
+          "water_charges": 9999,
+          "assigned_bed_id": "furn_7",
+          "carrying_furniture_id": null,
+          "watering_timer": 0.0,
+          "tilling_timer": 0.0,
+          "hunger": 50.433416666703074,
+          "thirst": 50.437416666703065,
+          "hunger_death_timer": null,
+          "thirst_death_timer": null,
+          "daily_food_consumed": 1,
+          "daily_water_consumed": 1,
+          "is_alive": true,
+          "status": "ALIVE",
+          "death_reason": null,
+          "death_day": null
+        },
+        {
+          "id": "vil_8",
+          "first_name": "Alice",
+          "last_name": "Shepherd",
+          "gender": "Female",
+          "age": 71,
+          "generation": 1,
+          "role": "Grandmother",
+          "family_id": "fam_2",
+          "job": "Farmer",
+          "x": -486.38671953591734,
+          "y": -162,
           "task": "IDLE",
           "carrying_crop": 0,
           "inventory": {
@@ -1203,14 +2233,168 @@
           },
           "active_tool": null,
           "has_water": true,
-          "water_day": 30,
+          "water_day": 7,
           "water_charges": 9999,
-          "assigned_bed_id": "furn_3",
+          "assigned_bed_id": "furn_8",
           "carrying_furniture_id": null,
           "watering_timer": 0.0,
           "tilling_timer": 0.0,
-          "hunger": 100.0,
-          "thirst": 100.0,
+          "hunger": 33.28866666671559,
+          "thirst": 50.16366666670339,
+          "hunger_death_timer": null,
+          "thirst_death_timer": null,
+          "daily_food_consumed": 1,
+          "daily_water_consumed": 1,
+          "is_alive": true,
+          "status": "ALIVE",
+          "death_reason": null,
+          "death_day": null
+        },
+        {
+          "id": "vil_5",
+          "first_name": "Hugh",
+          "last_name": "Shepherd",
+          "gender": "Male",
+          "age": 48,
+          "generation": 2,
+          "role": "Father",
+          "family_id": "fam_2",
+          "job": "Farmer",
+          "x": -467.8654623674298,
+          "y": 446.6854453105254,
+          "task": "WATERING",
+          "carrying_crop": 0,
+          "inventory": {
+            "Hoe": 1,
+            "Watering_Can": 1,
+            "Sickle": 1
+          },
+          "active_tool": "Watering_Can",
+          "has_water": true,
+          "water_day": 7,
+          "water_charges": 9999,
+          "assigned_bed_id": "furn_9",
+          "carrying_furniture_id": null,
+          "watering_timer": 0.0,
+          "tilling_timer": 0.0,
+          "hunger": 30.19100000004972,
+          "thirst": 30.194333333383053,
+          "hunger_death_timer": null,
+          "thirst_death_timer": null,
+          "daily_food_consumed": 1,
+          "daily_water_consumed": 1,
+          "is_alive": true,
+          "status": "ALIVE",
+          "death_reason": null,
+          "death_day": null
+        },
+        {
+          "id": "vil_6",
+          "first_name": "Cecily",
+          "last_name": "Shepherd",
+          "gender": "Female",
+          "age": 46,
+          "generation": 2,
+          "role": "Mother",
+          "family_id": "fam_2",
+          "job": "Farmer",
+          "x": -487.72340491150766,
+          "y": 396.469291356682,
+          "task": "WATERING",
+          "carrying_crop": 0,
+          "inventory": {
+            "Hoe": 1,
+            "Watering_Can": 1,
+            "Sickle": 1
+          },
+          "active_tool": "Watering_Can",
+          "has_water": true,
+          "water_day": 7,
+          "water_charges": 9999,
+          "assigned_bed_id": "furn_11",
+          "carrying_furniture_id": null,
+          "watering_timer": 4.215999999999998,
+          "tilling_timer": 0.0,
+          "hunger": 35.85000000004665,
+          "thirst": 51.53200000003556,
+          "hunger_death_timer": null,
+          "thirst_death_timer": null,
+          "daily_food_consumed": 1,
+          "daily_water_consumed": 1,
+          "is_alive": true,
+          "status": "ALIVE",
+          "death_reason": null,
+          "death_day": null
+        },
+        {
+          "id": "vil_9",
+          "first_name": "John",
+          "last_name": "Shepherd",
+          "gender": "Male",
+          "age": 22,
+          "generation": 3,
+          "role": "Adult Son",
+          "family_id": "fam_2",
+          "job": "Farmer",
+          "x": -735.0001298901155,
+          "y": -64.7932077884258,
+          "task": "IDLE",
+          "carrying_crop": 0,
+          "inventory": {
+            "Hoe": 1,
+            "Watering_Can": 1,
+            "Sickle": 1
+          },
+          "active_tool": null,
+          "has_water": true,
+          "water_day": 7,
+          "water_charges": 9999,
+          "assigned_bed_id": "furn_10",
+          "carrying_furniture_id": null,
+          "watering_timer": 0.0,
+          "tilling_timer": 0.0,
+          "hunger": 30.568666666716485,
+          "thirst": 50.389166666703105,
+          "hunger_death_timer": null,
+          "thirst_death_timer": null,
+          "daily_food_consumed": 1,
+          "daily_water_consumed": 1,
+          "is_alive": true,
+          "status": "ALIVE",
+          "death_reason": null,
+          "death_day": null
+        },
+        {
+          "id": "vil_10",
+          "first_name": "Robert",
+          "last_name": "Shepherd",
+          "gender": "Male",
+          "age": 18,
+          "generation": 3,
+          "role": "Adult Son",
+          "family_id": "fam_2",
+          "job": "Farmer",
+          "x": -481.11130724269213,
+          "y": 247.32149964084198,
+          "task": "WATERING",
+          "carrying_crop": 0,
+          "inventory": {
+            "Hoe": 1,
+            "Watering_Can": 1,
+            "Sickle": 1
+          },
+          "active_tool": "Watering_Can",
+          "has_water": true,
+          "water_day": 7,
+          "water_charges": 9999,
+          "assigned_bed_id": "furn_12",
+          "carrying_furniture_id": null,
+          "watering_timer": 0.0,
+          "tilling_timer": 0.0,
+          "hunger": 30.798750000049893,
+          "thirst": 50.97400000003602,
+          "hunger_death_timer": null,
+          "thirst_death_timer": null,
           "daily_food_consumed": 1,
           "daily_water_consumed": 1,
           "is_alive": true,
@@ -1225,8 +2409,8 @@
     {
       "id": "servant_1",
       "name": "Servant Alden",
-      "x": 556.9648903805777,
-      "y": -26.541368657967794,
+      "x": 340.2829299811151,
+      "y": 29.63135067736947,
       "work_priorities": {
         "Building": 1,
         "Hauling": 1,
@@ -1239,8 +2423,8 @@
     {
       "id": "servant_2",
       "name": "Servant Barnaby",
-      "x": 642.3880280870892,
-      "y": -87.67756188608593,
+      "x": 151.59464705072315,
+      "y": 42.34150021288424,
       "work_priorities": {
         "Building": 1,
         "Hauling": 1,
@@ -1258,25 +2442,25 @@
       "SLEEP",
       "SLEEP",
       "SLEEP",
+      "LEISURE",
+      "LEISURE",
+      "WORK",
+      "WORK",
+      "WORK",
+      "WORK",
+      "WORK",
+      "WORK",
+      "WORK",
+      "WORK",
+      "WORK",
+      "WORK",
+      "WORK",
+      "WORK",
+      "WORK",
+      "LEISURE",
+      "LEISURE",
       "SLEEP",
-      "WORK",
-      "WORK",
-      "WORK",
-      "WORK",
-      "WORK",
-      "WORK",
-      "WORK",
-      "WORK",
-      "WORK",
-      "WORK",
-      "WORK",
-      "WORK",
-      "WORK",
-      "WORK",
-      "WORK",
-      "WORK",
-      "WORK",
-      "WORK"
+      "SLEEP"
     ],
     "Builder": [
       "SLEEP",
@@ -1408,5 +2592,6 @@
       "SLEEP",
       "SLEEP"
     ]
-  }
+  },
+  "production_records": {}
 }

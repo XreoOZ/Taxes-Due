@@ -123,6 +123,8 @@ def main():
     building_drag_start = None
     building_erase_start = None
     planning_furniture_type = None
+    session_planned_furniture = []
+    selected_planned_furniture = None
     selected_furniture = None
     moving_furniture = None
     selected_entity = None
@@ -142,6 +144,7 @@ def main():
         nonlocal player, resources, building_manager, permit_manager, stockpile_manager
         nonlocal servant_manager, villager_manager, furniture_manager, day_cycle, schedule_manager
         nonlocal planning_mode, planning_permit_type, planning_building_type, planning_furniture_type
+        nonlocal session_planned_furniture, selected_planned_furniture
         nonlocal editing_permit_id, original_permit_tiles, selected_furniture, moving_furniture, selected_entity
 
 
@@ -171,6 +174,8 @@ def main():
         planning_permit_type = None
         planning_building_type = None
         planning_furniture_type = None
+        session_planned_furniture.clear()
+        selected_planned_furniture = None
         editing_permit_id = None
         selected_furniture = None
         moving_furniture = None
@@ -218,6 +223,8 @@ def main():
                             raport_ui.close()
                             market_modal.close()
                             planning_mode = "NONE"
+                            session_planned_furniture.clear()
+                            selected_planned_furniture = None
                             selected_furniture = None
                             moving_furniture = None
                             camera.target_x = player.x
@@ -265,6 +272,8 @@ def main():
                                 raport_ui.close()
                                 market_modal.close()
                                 planning_mode = "NONE"
+                                session_planned_furniture.clear()
+                                selected_planned_furniture = None
                                 selected_furniture = None
                                 moving_furniture = None
                                 camera.target_x = player.x
@@ -526,33 +535,91 @@ def main():
                             building_erase_start = None
 
                 # -------------------------------------------------------------
-                # 3. FURNITURE PLANNING MODE
+                # 3. FURNITURE PLANNING MODE (Continuous Placement Session)
                 # -------------------------------------------------------------
                 elif planning_mode == "FURNITURE":
                     f_cfg = FURNITURE_TYPES.get(planning_furniture_type, FURNITURE_TYPES["household_storage"])
                     target_permit = permit_manager.get_permit_at(m_gx, m_gy)
                     b_at = building_manager.get_building_at(m_gx, m_gy)
-                    can_afford = (resources.get("Wood", 0) >= f_cfg.get("cost_wood", 0))
-                    is_occupied = (furniture_manager.get_furniture_at(m_gx, m_gy) is not None)
+                    is_occupied_existing = (furniture_manager.get_furniture_at(m_gx, m_gy) is not None)
                     is_inside_house = (b_at is not None and not getattr(b_at, "is_solid", False) and getattr(b_at, "building_type", "") != "well" and (m_gx, m_gy) != getattr(b_at, "door_pos", None))
-                    is_valid_place = (target_permit is not None or is_inside_house) and can_afford and not is_occupied
+                    planned_coords = {(pf["gx"], pf["gy"]) for pf in session_planned_furniture}
+                    is_occupied_planned = (m_gx, m_gy) in planned_coords
+                    is_valid_place = (target_permit is not None or is_inside_house) and not is_occupied_existing and not is_occupied_planned
+
+                    cost_w = len(session_planned_furniture) * f_cfg.get("cost_wood", 10)
+                    cost_s = len(session_planned_furniture) * f_cfg.get("cost_stone", 0)
+                    can_afford_build = (resources.get("Wood", 0) >= cost_w and resources.get("Stone", 0) >= cost_s)
+                    is_valid_build = len(session_planned_furniture) > 0 and can_afford_build
 
                     if event.type == pygame.KEYDOWN:
-                        if event.key == pygame.K_ESCAPE or event.key == pygame.K_BACKSPACE:
+                        if event.key == pygame.K_ESCAPE:
+                            session_planned_furniture.clear()
+                            selected_planned_furniture = None
                             planning_mode = "NONE"
                             planning_furniture_type = None
-                    elif event.type == pygame.MOUSEBUTTONDOWN:
-                        if btn_cancel_rect.collidepoint(event.pos) or event.button == 3:
-                            planning_mode = "NONE"
-                            planning_furniture_type = None
-                        elif event.button == 1:
-                            if is_valid_place:
-                                f_obj, msg = furniture_manager.add_furniture(
-                                    planning_furniture_type, m_gx, m_gy,
-                                    permit_manager, villager_manager, resources
-                                )
+                        elif event.key in (pygame.K_BACKSPACE, pygame.K_DELETE):
+                            if selected_planned_furniture is not None:
+                                session_planned_furniture = [pf for pf in session_planned_furniture if (pf["gx"], pf["gy"]) != selected_planned_furniture]
+                                selected_planned_furniture = None
+                            else:
+                                session_planned_furniture.clear()
+                        elif event.key in (pygame.K_RETURN, pygame.K_KP_ENTER):
+                            if is_valid_build:
+                                for pf in session_planned_furniture:
+                                    furniture_manager.add_furniture(
+                                        pf["type"], pf["gx"], pf["gy"],
+                                        permit_manager, villager_manager, resources,
+                                        building_manager=building_manager
+                                    )
+                                session_planned_furniture.clear()
+                                selected_planned_furniture = None
                                 planning_mode = "NONE"
                                 planning_furniture_type = None
+
+                    elif event.type == pygame.MOUSEBUTTONDOWN:
+                        if btn_confirm_rect.collidepoint(event.pos):
+                            if is_valid_build:
+                                for pf in session_planned_furniture:
+                                    furniture_manager.add_furniture(
+                                        pf["type"], pf["gx"], pf["gy"],
+                                        permit_manager, villager_manager, resources,
+                                        building_manager=building_manager
+                                    )
+                                session_planned_furniture.clear()
+                                selected_planned_furniture = None
+                                planning_mode = "NONE"
+                                planning_furniture_type = None
+                        elif btn_clear_rect.collidepoint(event.pos):
+                            session_planned_furniture.clear()
+                            selected_planned_furniture = None
+                        elif btn_cancel_rect.collidepoint(event.pos):
+                            session_planned_furniture.clear()
+                            selected_planned_furniture = None
+                            planning_mode = "NONE"
+                            planning_furniture_type = None
+                        elif event.button == 3:
+                            if is_occupied_planned:
+                                session_planned_furniture = [pf for pf in session_planned_furniture if (pf["gx"], pf["gy"]) != (m_gx, m_gy)]
+                                if selected_planned_furniture == (m_gx, m_gy):
+                                    selected_planned_furniture = None
+                            elif len(session_planned_furniture) == 0:
+                                planning_mode = "NONE"
+                                planning_furniture_type = None
+                                selected_planned_furniture = None
+                        elif event.button == 1:
+                            if is_occupied_planned:
+                                if selected_planned_furniture == (m_gx, m_gy):
+                                    selected_planned_furniture = None
+                                else:
+                                    selected_planned_furniture = (m_gx, m_gy)
+                            elif is_valid_place:
+                                session_planned_furniture.append({
+                                    "gx": m_gx,
+                                    "gy": m_gy,
+                                    "type": planning_furniture_type
+                                })
+                                selected_planned_furniture = None
 
                 # -------------------------------------------------------------
                 # 3.5. MOVE FURNITURE PLANNING MODE
@@ -592,7 +659,15 @@ def main():
                 # -------------------------------------------------------------
                 elif raport_ui.is_open:
                     if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
-                        raport_ui.is_open = False
+                        if raport_ui.is_text_input_active():
+                            raport_ui.handle_event(event, building_manager, permit_manager, resources, servant_manager, villager_manager, schedule_manager=schedule_manager, day_cycle=day_cycle, stockpile_manager=stockpile_manager, furniture_manager=furniture_manager, production_system=production_system)
+                        else:
+                            raport_ui.close()
+                    elif event.type == pygame.KEYDOWN and event.key == pygame.K_r:
+                        if not raport_ui.is_text_input_active():
+                            raport_ui.close()
+                        else:
+                            raport_ui.handle_event(event, building_manager, permit_manager, resources, servant_manager, villager_manager, schedule_manager=schedule_manager, day_cycle=day_cycle, stockpile_manager=stockpile_manager, furniture_manager=furniture_manager, production_system=production_system)
                     else:
                         action = raport_ui.handle_event(event, building_manager, permit_manager, resources, servant_manager, villager_manager, schedule_manager=schedule_manager, day_cycle=day_cycle, stockpile_manager=stockpile_manager, furniture_manager=furniture_manager, production_system=production_system)
                         if action == "open_market_profile" and getattr(raport_ui, "selected_market_building", None):
@@ -609,11 +684,26 @@ def main():
                             planning_mode = "FURNITURE"
                             planning_furniture_type = raport_ui.selected_furniture_type
                             raport_ui.selected_furniture_type = None
+                            session_planned_furniture.clear()
+                            selected_planned_furniture = None
                         elif raport_ui.placing_permit_type is not None:
                             planning_mode = "PERMIT"
                             planning_permit_type = raport_ui.placing_permit_type
                             raport_ui.placing_permit_type = None
                             planning_permit_tiles.clear()
+                        elif action == "move_furniture" and getattr(raport_ui, "moving_furniture", None):
+                            planning_mode = "MOVE_FURNITURE"
+                            moving_furniture = raport_ui.moving_furniture
+                            raport_ui.moving_furniture = None
+                        elif action == "destroy_furniture" and getattr(raport_ui, "destroying_furniture_id", None):
+                            furniture_manager.destroy_furniture(
+                                raport_ui.destroying_furniture_id,
+                                stockpile_manager=stockpile_manager,
+                                resources=resources,
+                                villager_manager=villager_manager,
+                                servant_manager=servant_manager
+                            )
+                            raport_ui.destroying_furniture_id = None
                         elif action and action.startswith("edit_permit_"):
                             pid = action.replace("edit_permit_", "")
                             target_p = next((p for p in permit_manager.permits if p.id == pid), None)
@@ -638,8 +728,12 @@ def main():
                 # 5. NORMAL GAMEPLAY
                 # -------------------------------------------------------------
                 else:
-                    if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
-                        settings_modal.open(is_ingame=True)
+                    if event.type == pygame.KEYDOWN:
+                        if event.key == pygame.K_ESCAPE:
+                            settings_modal.open(is_ingame=True)
+                        elif event.key == pygame.K_r:
+                            if not raport_ui.is_text_input_active():
+                                raport_ui.open()
                     elif event.type == pygame.MOUSEWHEEL:
                         camera.handle_zoom(event.y)
                     elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
@@ -661,11 +755,26 @@ def main():
                             planning_mode = "FURNITURE"
                             planning_furniture_type = raport_ui.selected_furniture_type
                             raport_ui.selected_furniture_type = None
+                            session_planned_furniture.clear()
+                            selected_planned_furniture = None
                         elif raport_ui.placing_permit_type is not None:
                             planning_mode = "PERMIT"
                             planning_permit_type = raport_ui.placing_permit_type
                             raport_ui.placing_permit_type = None
                             planning_permit_tiles.clear()
+                        elif action == "move_furniture" and getattr(raport_ui, "moving_furniture", None):
+                            planning_mode = "MOVE_FURNITURE"
+                            moving_furniture = raport_ui.moving_furniture
+                            raport_ui.moving_furniture = None
+                        elif action == "destroy_furniture" and getattr(raport_ui, "destroying_furniture_id", None):
+                            furniture_manager.destroy_furniture(
+                                raport_ui.destroying_furniture_id,
+                                stockpile_manager=stockpile_manager,
+                                resources=resources,
+                                villager_manager=villager_manager,
+                                servant_manager=servant_manager
+                            )
+                            raport_ui.destroying_furniture_id = None
                         elif action and action.startswith("edit_permit_"):
                             pid = action.replace("edit_permit_", "")
                             target_p = next((p for p in permit_manager.permits if p.id == pid), None)
@@ -1151,23 +1260,45 @@ def main():
             elif planning_mode == "FURNITURE":
                 f_cfg = FURNITURE_TYPES.get(planning_furniture_type, FURNITURE_TYPES["household_storage"])
                 scaled_t = int(TILE_SIZE * camera.zoom)
+                planned_coords = {(pf["gx"], pf["gy"]) for pf in session_planned_furniture}
+
+                # 1. Render all planned unbuilt furniture objects in the current session
+                for pf in session_planned_furniture:
+                    psx, psy = camera.world_to_screen(pf["gx"] * TILE_SIZE, pf["gy"] * TILE_SIZE)
+                    if -scaled_t <= psx <= screen.get_width() and -scaled_t <= psy <= screen.get_height():
+                        p_surf = pygame.Surface((scaled_t, scaled_t), pygame.SRCALPHA)
+                        is_sel = (selected_planned_furniture == (pf["gx"], pf["gy"]))
+                        p_tint = (250, 204, 21, 140) if is_sel else (34, 197, 94, 120)
+                        p_surf.fill(p_tint)
+                        screen.blit(p_surf, (psx, psy))
+                        p_border_c = (250, 204, 21) if is_sel else (34, 197, 94)
+                        pygame.draw.rect(screen, p_border_c, (psx, psy, scaled_t, scaled_t), width=3 if is_sel else 2, border_radius=4)
+
+                        lbl = font_badge.render("PLAN", True, (255, 255, 255))
+                        screen.blit(lbl, (psx + 4, psy + 4))
+
+                # 2. Ghost Preview at Mouse Tile (if not already planned)
                 fsx, fsy = camera.world_to_screen(m_gx * TILE_SIZE, m_gy * TILE_SIZE)
-
                 target_permit = permit_manager.get_permit_at(m_gx, m_gy)
-                can_afford = (resources.get("Wood", 0) >= f_cfg.get("cost_wood", 0))
-                is_occupied = (furniture_manager.get_furniture_at(m_gx, m_gy) is not None)
-                is_valid_place = (target_permit is not None) and can_afford and not is_occupied
+                b_at = building_manager.get_building_at(m_gx, m_gy)
+                is_occupied_existing = (furniture_manager.get_furniture_at(m_gx, m_gy) is not None)
+                is_occupied_planned = (m_gx, m_gy) in planned_coords
+                is_inside_house = (b_at is not None and not getattr(b_at, "is_solid", False) and getattr(b_at, "building_type", "") != "well" and (m_gx, m_gy) != getattr(b_at, "door_pos", None))
+                is_valid_place = (target_permit is not None or is_inside_house) and not is_occupied_existing and not is_occupied_planned
 
-                # Ghost Preview at Mouse Tile
-                f_surf = pygame.Surface((scaled_t, scaled_t), pygame.SRCALPHA)
-                tile_tint = (34, 197, 94, 120) if is_valid_place else (239, 68, 68, 120)
-                f_surf.fill(tile_tint)
-                screen.blit(f_surf, (fsx, fsy))
-                pygame.draw.rect(screen, (34, 197, 94) if is_valid_place else (239, 68, 68), (fsx, fsy, scaled_t, scaled_t), width=2)
+                if not is_occupied_planned:
+                    f_surf = pygame.Surface((scaled_t, scaled_t), pygame.SRCALPHA)
+                    tile_tint = (34, 197, 94, 100) if is_valid_place else (239, 68, 68, 100)
+                    f_surf.fill(tile_tint)
+                    screen.blit(f_surf, (fsx, fsy))
+                    pygame.draw.rect(screen, (34, 197, 94) if is_valid_place else (239, 68, 68), (fsx, fsy, scaled_t, scaled_t), width=2)
+                else:
+                    # Hovering an already planned tile: show distinct highlight
+                    pygame.draw.rect(screen, (239, 68, 68), (fsx, fsy, scaled_t, scaled_t), width=2)
 
-                # Floating Bottom Bar
+                # 3. Floating Bottom Bar
                 bar_w = 640
-                bar_h = 86
+                bar_h = 96
                 bar_x = (screen.get_width() - bar_w) // 2
                 bar_y = screen.get_height() - bar_h - 14
 
@@ -1176,27 +1307,58 @@ def main():
                 pygame.draw.rect(bar_surf, (71, 85, 105), (0, 0, bar_w, bar_h), width=2, border_radius=10)
                 screen.blit(bar_surf, (bar_x, bar_y))
 
-                info_txt = f"Place {f_cfg['name']} | Cost: {f_cfg['cost_wood']} Wood"
+                planned_count = len(session_planned_furniture)
+                cost_w = planned_count * f_cfg.get("cost_wood", 10)
+                cost_s = planned_count * f_cfg.get("cost_stone", 0)
+                can_afford_all = (resources.get("Wood", 0) >= cost_w and resources.get("Stone", 0) >= cost_s)
+                is_valid_build = (planned_count > 0) and can_afford_all
+
+                info_txt = f"Place {f_cfg['name']} | Planned: {planned_count} | Total Cost: {cost_w} Wood (Available: {resources.get('Wood', 0)})"
                 screen.blit(font_card.render(info_txt, True, (250, 204, 21)), (bar_x + 16, bar_y + 10))
 
-                if not target_permit:
+                if is_occupied_planned:
+                    stat_msg = "Planned furniture selected! (Right-Click or Del to remove from session)"
+                    stat_col = (250, 204, 21)
+                elif not (target_permit or is_inside_house):
                     stat_msg = "Cannot place: Must be placed inside an issued Permit lot or tenant house!"
-                elif is_occupied:
-                    stat_msg = "Cannot place: Tile already has furniture!"
-                elif not can_afford:
-                    stat_msg = f"Cannot place: Need {f_cfg['cost_wood']} Wood!"
+                    stat_col = (239, 68, 68)
+                elif is_occupied_existing:
+                    stat_msg = "Cannot place: Tile already has built furniture!"
+                    stat_col = (239, 68, 68)
+                elif planned_count > 0 and not can_afford_all:
+                    stat_msg = f"Cannot build: Insufficient materials! Need {cost_w} Wood."
+                    stat_col = (239, 68, 68)
                 else:
-                    owner_family = next((fam for fam in villager_manager.families if fam.assigned_permit_id == target_permit.id), None)
-                    fam_str = f"Will belong to The {owner_family.surname} Family" if owner_family else "Unassigned lot"
-                    stat_msg = f"Ready to place! (Left-Click to build, {fam_str})"
+                    owner_family = None
+                    if target_permit:
+                        owner_family = next((fam for fam in villager_manager.families if fam.assigned_permit_id == target_permit.id), None)
+                    fam_str = f"The {owner_family.surname} Family" if owner_family else "Tenant house / lot"
+                    stat_msg = f"Ready to place! (Left-Click to place, Right-Click to erase. {fam_str})"
+                    stat_col = (34, 197, 94)
 
-                stat_col = (34, 197, 94) if is_valid_place else (239, 68, 68)
                 screen.blit(font_hud.render(stat_msg, True, stat_col), (bar_x + 16, bar_y + 32))
 
-                btn_cancel_rect.x = bar_x + bar_w - 126
-                btn_cancel_rect.y = bar_y + 25
+                # Buttons
+                btn_y = bar_y + 52
+                btn_confirm_rect.x = bar_x + 16
+                btn_confirm_rect.y = btn_y
+                btn_clear_rect.x = bar_x + 180
+                btn_clear_rect.y = btn_y
+                btn_cancel_rect.x = bar_x + 280
+                btn_cancel_rect.y = btn_y
+
+                # Confirm Build Button
+                c_col = (16, 185, 129) if is_valid_build else (71, 85, 105)
+                pygame.draw.rect(screen, c_col, btn_confirm_rect, border_radius=6)
+                screen.blit(font_btn.render("BUILD", True, (255, 255, 255)), (btn_confirm_rect.x + 46, btn_confirm_rect.y + 8))
+
+                # Clear Button
+                pygame.draw.rect(screen, (71, 85, 105), btn_clear_rect, border_radius=6)
+                screen.blit(font_btn.render("CLEAR", True, (255, 255, 255)), (btn_clear_rect.x + 22, btn_clear_rect.y + 8))
+
+                # Cancel Button
                 pygame.draw.rect(screen, (220, 38, 38), btn_cancel_rect, border_radius=6)
-                screen.blit(font_btn.render("CANCEL", True, (255, 255, 255)), (btn_cancel_rect.x + 28, btn_cancel_rect.y + 8))
+                screen.blit(font_btn.render("CANCEL", True, (255, 255, 255)), (btn_cancel_rect.x + 24, btn_cancel_rect.y + 8))
 
             # -------------------------------------------------------------
             # 7.6. OVERLAYS: MOVE FURNITURE PLANNING MODE

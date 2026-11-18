@@ -577,6 +577,109 @@ class TestAgent2HouseholdFoodPurchasingAndPermitsUI(unittest.TestCase):
             if "brewery_zone" in PERMIT_TYPES:
                 del PERMIT_TYPES["brewery_zone"]
 
+    def test_17_building_categories_dynamic_discovery(self):
+        """17. Dynamically discover building & structure categories from config with zero hardcoding."""
+        from game.data.config import get_building_categories
+        cats = get_building_categories()
+        cat_ids = [c["id"] for c in cats]
+        self.assertIn("wooden_structure", cat_ids)
+        self.assertIn("stone_structure", cat_ids)
+        self.assertIn("well", cat_ids)
+        self.assertIn("market", cat_ids)
+        self.assertIn("furniture", cat_ids)
+
+        for c in cats:
+            self.assertIn("name", c)
+            self.assertIn("desc", c)
+            self.assertIn("building_types", c)
+            self.assertIn("color", c)
+
+    def test_18_building_tab_screen1_lists_categories_and_badges(self):
+        """18. Screen 1 of Buildings tab lists all categories with built counts and quick deeds bar."""
+        ui = RaportUI()
+        ui._init_fonts()
+        ui.is_open = True
+        ui.active_tab = 0
+        ui.selected_building_category = None
+
+        # Add a wooden building
+        b1 = Building("wooden_structure", {(1, 1), (1, 2), (2, 1), (2, 2)})
+        self.building_manager.buildings.append(b1)
+
+        surf = pygame.Surface((1280, 720))
+        ui._draw_building_tab(surf, 210, 110, self.building_manager, self.permit_manager, self.resources, furniture_manager=self.furniture_manager, villager_manager=self.villager_manager)
+
+        # All categories present
+        self.assertIn("wooden_structure", ui.building_category_btn_rects)
+        self.assertIn("stone_structure", ui.building_category_btn_rects)
+        self.assertIn("well", ui.building_category_btn_rects)
+        self.assertIn("market", ui.building_category_btn_rects)
+        self.assertIn("furniture", ui.building_category_btn_rects)
+
+        # Quick build buttons present
+        self.assertIn("wooden_structure", ui.building_select_rects)
+        self.assertIn("stone_structure", ui.building_select_rects)
+        self.assertIn("well", ui.building_select_rects)
+        self.assertIn("market", ui.building_select_rects)
+
+    def test_19_building_tab_screen2_filtered_category_view_and_back(self):
+        """19. Selecting category opens Screen 2 with filtered list, category deeds, and Back button returns to Screen 1."""
+        ui = RaportUI()
+        ui._init_fonts()
+        ui.is_open = True
+        ui.active_tab = 0
+        ui.selected_building_category = None
+
+        surf = pygame.Surface((1280, 720))
+        ui._draw_building_tab(surf, 210, 110, self.building_manager, self.permit_manager, self.resources, furniture_manager=self.furniture_manager, villager_manager=self.villager_manager)
+
+        # Click on "Residential & Timber" category card
+        card_rect = ui.building_category_btn_rects["wooden_structure"]
+        ev_click = pygame.event.Event(pygame.MOUSEBUTTONDOWN, {"button": 1, "pos": card_rect.center})
+        action = ui.handle_event(ev_click, self.building_manager, self.permit_manager, self.resources)
+        self.assertEqual(action, "select_building_category_wooden_structure")
+        self.assertEqual(ui.selected_building_category, "wooden_structure")
+
+        # Now render Screen 2
+        ui._draw_building_tab(surf, 210, 110, self.building_manager, self.permit_manager, self.resources, furniture_manager=self.furniture_manager, villager_manager=self.villager_manager)
+        self.assertIsNotNone(ui.building_category_back_btn_rect)
+
+        # Back button returns to Screen 1
+        ev_back = pygame.event.Event(pygame.MOUSEBUTTONDOWN, {"button": 1, "pos": ui.building_category_back_btn_rect.center})
+        act_back = ui.handle_event(ev_back, self.building_manager, self.permit_manager, self.resources)
+        self.assertEqual(act_back, "building_category_back")
+        self.assertIsNone(ui.selected_building_category)
+
+    def test_20_building_tab_no_duplicate_permits_list(self):
+        """20. Ensure Buildings tab does NOT render duplicate 'Issued Area Permits' list."""
+        ui = RaportUI()
+        ui._init_fonts()
+        ui.is_open = True
+        ui.active_tab = 0
+
+        surf = pygame.Surface((1280, 720))
+        ui._draw_building_tab(surf, 210, 110, self.building_manager, self.permit_manager, self.resources, furniture_manager=self.furniture_manager, villager_manager=self.villager_manager)
+
+        # Permit edit/delete buttons must NOT exist in Buildings tab
+        self.assertEqual(len(getattr(ui, "delete_permit_btn_rects", {})), 0)
+        self.assertEqual(len(getattr(ui, "edit_permit_btn_rects", {})), 0)
+
+    def test_21_modal_title_and_hud_button_no_raport_desa(self):
+        """21. Title bar is strictly 'TOWN LEDGER' and HUD button is 'Town Ledger' without 'RAPORT DESA'."""
+        ui = RaportUI()
+        ui._init_fonts()
+        surf = pygame.Surface((1280, 720))
+        ui.draw(surf, self.building_manager, self.permit_manager, self.resources, furniture_manager=self.furniture_manager, villager_manager=self.villager_manager)
+
+        # Rendered text verification: Town Ledger button
+        self.assertEqual(ui.btn_left_rect.width, 116)
+        # Verify no "RAPORT DESA" anywhere in user facing code
+        with open("game/ui/ui_raport.py", "r", encoding="utf-8") as f:
+            content = f.read()
+        self.assertNotIn("RAPORT DESA", content)
+        self.assertIn('"TOWN LEDGER"', content)
+        self.assertIn('"Town Ledger"', content)
+
 
 if __name__ == "__main__":
     unittest.main()

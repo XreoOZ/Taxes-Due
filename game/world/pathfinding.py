@@ -19,7 +19,21 @@ from game.config import (
     PATH_MAX_ASTAR_ITERATIONS,
     PATH_RESERVATION_CLEARANCE,
     PATH_WAIT_RECHECK_INTERVAL,
-    PATH_RESERVATION_TIMEOUT
+    PATH_RESERVATION_TIMEOUT,
+    COLLISION_SLIDE_TANGENT_FACTOR,
+    COLLISION_MIN_SEPARATION,
+    COLLISION_SLIDE_SMOOTHING,
+    ROUTE_REQUEST_TIMEOUT,
+    ROUTE_MAX_RETRIES,
+    ROUTE_RETRY_BACKOFF,
+    ROUTE_FALLBACK_COOLDOWN,
+    ROUTE_STATE_NONE,
+    ROUTE_STATE_REQUESTED,
+    ROUTE_STATE_PROCESSING,
+    ROUTE_STATE_ASSIGNED,
+    ROUTE_STATE_ACTIVE,
+    ROUTE_STATE_COMPLETED,
+    ROUTE_STATE_FAILED
 )
 
 def get_tiles_along_segment(p1, p2, tile_size=TILE_SIZE):
@@ -387,6 +401,106 @@ class Pathfinder:
         return simplified
 
 
+def calculate_collision_slide(entity, dir_x, dir_y, all_entities, building_manager=None, furniture_manager=None, tile_size=TILE_SIZE):
+    """
+    Menghitung vektor arah gerak baru dengan penyesuaian luncur tangensial (collision sliding)
+    saat berpapasan dengan satu atau lebih entitas AI lain.
+    Memungkinkan AI saling meluncur melewati satu sama lain tanpa terhenti (anti-deadlock).
+    """
+    if not all_entities or (abs(dir_x) < 0.0001 and abs(dir_y) < 0.0001):
+        return dir_x, dir_y, False
+
+    colliding_count = 0
+    slide_acc_x = 0.0
+    slide_acc_y = 0.0
+    my_rad = getattr(entity, "radius", 20.0)
+
+    def is_space_walkable(tx, ty):
+        step_dist = max(14.0, my_rad)
+        cx = entity.x + tx * step_dist
+        cy = entity.y + ty * step_dist
+        cur_gx = int(math.floor(entity.x / tile_size))
+        cur_gy = int(math.floor(entity.y / tile_size))
+        tar_gx = int(math.floor(cx / tile_size))
+        tar_gy = int(math.floor(cy / tile_size))
+        if building_manager:
+            b_cur = building_manager.get_building_at(cur_gx, cur_gy)
+            b_tar = building_manager.get_building_at(tar_gx, tar_gy)
+            if b_tar and (getattr(b_tar, "is_solid", False) or getattr(b_tar, "building_type", "") == "well"):
+                return False
+            if b_cur != b_tar:
+                return False
+        if furniture_manager and hasattr(furniture_manager, "get_occupied_tiles"):
+            if (tar_gx, tar_gy) in furniture_manager.get_occupied_tiles():
+                return False
+        return True
+
+    # Entitas lain yang diperiksa:
+    for other in all_entities:
+        if other is entity:
+            continue
+        if not getattr(other, "is_alive", True):
+            continue
+
+        ox = other.x - entity.x
+        oy = other.y - entity.y
+        o_dist = math.hypot(ox, oy)
+        other_rad = getattr(other, "radius", 20.0)
+        min_sep = my_rad + other_rad + COLLISION_MIN_SEPARATION
+
+        if 0.001 < o_dist < min_sep:
+            nx = ox / o_dist
+            ny = oy / o_dist
+            dot = dir_x * nx + dir_y * ny
+
+            # Hanya sesuaikan arah jika sedang mengarah ke entitas tersebut atau berjarak sangat rapat
+            if dot > 0.05 or o_dist < (my_rad + other_rad + 2.0):
+                cand1 = (-ny, nx)
+                cand2 = (ny, -nx)
+
+                w1 = is_space_walkable(cand1[0], cand1[1])
+                w2 = is_space_walkable(cand2[0], cand2[1])
+
+                align1 = dir_x * cand1[0] + dir_y * cand1[1]
+                align2 = dir_x * cand2[0] + dir_y * cand2[1]
+
+                right_x = -dir_y
+                right_y = dir_x
+                r_dot1 = cand1[0] * right_x + cand1[1] * right_y
+                r_dot2 = cand2[0] * right_x + cand2[1] * right_y
+
+                if w1 and not w2:
+                    chosen = cand1
+                elif w2 and not w1:
+                    chosen = cand2
+                else:
+                    if dot > 0.65:
+                        chosen = cand1 if r_dot1 >= r_dot2 else cand2
+                    else:
+                        chosen = cand1 if align1 >= align2 else cand2
+
+                weight = (1.0 - (o_dist / min_sep)) * max(0.3, dot if dot > 0 else 0.3)
+                slide_acc_x += chosen[0] * weight
+                slide_acc_y += chosen[1] * weight
+                colliding_count += 1
+
+    if colliding_count > 0:
+        eff_x = dir_x + slide_acc_x * COLLISION_SLIDE_TANGENT_FACTOR
+        eff_y = dir_y + slide_acc_y * COLLISION_SLIDE_TANGENT_FACTOR
+        eff_len = math.hypot(eff_x, eff_y)
+        if eff_len > 0.001:
+            eff_x /= eff_len
+            eff_y /= eff_len
+            smooth_x = dir_x * (1.0 - COLLISION_SLIDE_SMOOTHING) + eff_x * COLLISION_SLIDE_SMOOTHING
+            smooth_y = dir_y * (1.0 - COLLISION_SLIDE_SMOOTHING) + eff_y * COLLISION_SLIDE_SMOOTHING
+            s_len = math.hypot(smooth_x, smooth_y)
+            if s_len > 0.001:
+                return smooth_x / s_len, smooth_y / s_len, True
+            return eff_x, eff_y, True
+
+    return dir_x, dir_y, False
+
+
 class PathReservation:
     """
     Menyimpan data reservasi rute aktif untuk satu entitas AI.
@@ -475,8 +589,8 @@ class GlobalPathRegistry:
         stale_eids = [eid for eid, res in self.reservations.items() if (now - res.last_update) > timeout]
         for eid in stale_eids:
             self.release_reservation(eid)
-        # Bersihkan juga antrean menunggu yang basi (> 2.0s)
-        self.waiting_queue = [w for w in self.waiting_queue if (now - w[2]) < 2.0]
+        # Bersihkan juga antrean menunggu yang basi (> ROUTE_REQUEST_TIMEOUT)
+        self.waiting_queue = [w for w in self.waiting_queue if (now - w[2]) < ROUTE_REQUEST_TIMEOUT]
 
     def get_all_reserved_tiles(self, exclude_entity=None):
         """Mengembalikan gabungan set seluruh petak grid yang direservasi oleh AI lain"""
@@ -590,10 +704,11 @@ class GlobalPathRegistry:
         self.waiting_queue = [w for w in self.waiting_queue if w[0] != eid_str]
 
         # Prioritas antrean menunggu: jika ada entitas lain yang mendahului dalam antrean menuju petak sama
-        if exclusive_target and self.waiting_queue:
-            head_eid, head_target, _ = self.waiting_queue[0]
-            if head_eid != eid_str and head_target == target_tile:
-                return False, [("QUEUE_PRIORITY", head_eid)]
+        if exclusive_target and target_tile and self.waiting_queue:
+            for w in self.waiting_queue:
+                w_eid, w_target, _ = w
+                if w_eid != eid_str and w_target == target_tile:
+                    return False, [("QUEUE_PRIORITY", w_eid)]
 
         conflicts = self.find_conflicts(eid_str, waypoints, current_pos, target_tile, building_manager=building_manager, exclusive_target=exclusive_target)
         if conflicts:
@@ -630,6 +745,11 @@ class GlobalPathRegistry:
                 self.release_claim(eid_str, res.target_tile)
         else:
             self.release_claim(eid_str)
+        self.waiting_queue = [w for w in self.waiting_queue if w[0] != eid_str]
+
+    def cancel_waiting(self, entity_id):
+        """Membatalkan antrean menunggu rute untuk entitas tertentu saat timeout atau recovery"""
+        eid_str = str(entity_id)
         self.waiting_queue = [w for w in self.waiting_queue if w[0] != eid_str]
 
     def register_waiting(self, entity_id, target_tile=None):

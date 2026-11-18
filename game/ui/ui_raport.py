@@ -18,6 +18,7 @@ from game.config import (
     COLOR_TEXT_MAIN,
     COLOR_TEXT_MUTED,
     BUILDING_TYPES,
+    get_building_categories,
     PERMIT_TYPES,
     get_permit_categories,
     CROP_TYPES,
@@ -152,8 +153,8 @@ class RaportUI:
         self.market_profile_btn_rects = {}
         self.selected_market_building = None
 
-        # Left Raport Button
-        self.btn_left_rect = pygame.Rect(16, 200, 110, 42)
+        # Left HUD Button (Town Ledger)
+        self.btn_left_rect = pygame.Rect(16, 200, 116, 42)
 
         # Tabs
         self.tabs = [
@@ -167,6 +168,16 @@ class RaportUI:
             {"id": "tax", "title": "Taxes", "wip": True},
             {"id": "planning", "title": "Roadmap", "wip": True},
         ]
+
+        # Building Category Navigation State
+        self.selected_building_category = None  # None = Root Category View; cat_id = Category Filtered View
+        self.building_category_btn_rects = {}
+        self.building_category_back_btn_rect = None
+        self.quick_build_btn_rects = {}
+        self.furniture_move_btn_rects = {}
+        self.furniture_destroy_btn_rects = {}
+        self.moving_furniture = None
+        self.destroying_furniture_id = None
 
         # Permit Category Navigation State (Agent 2)
         self.selected_permit_category = None  # None = Category View; string cat_id = Category Permit Details View
@@ -299,6 +310,7 @@ class RaportUI:
     def close(self):
         """Tutup modal Raport UI dan reset seluruh status dialog internalnya"""
         self.is_open = False
+        self.selected_building_category = None
         self.selected_permit_category = None
         self.show_build_menu = False
         self.show_structures_menu = False
@@ -533,6 +545,7 @@ class RaportUI:
         for i, tr in enumerate(self.tab_rects):
             if tr.collidepoint(mouse_pos):
                 self.active_tab = i
+                self.selected_building_category = None
                 self.selected_permit_category = None
                 self.show_build_menu = False
                 self.selected_family_id = None
@@ -546,6 +559,21 @@ class RaportUI:
 
         # 4. Tab 0: Building Management
         if self.active_tab == 0:
+            # Check Back button when viewing a specific building category
+            if self.building_category_back_btn_rect and self.building_category_back_btn_rect.collidepoint(mouse_pos):
+                self.selected_building_category = None
+                return "building_category_back"
+
+            # Check Category Selection buttons on Root Categories Screen
+            if self.selected_building_category is None:
+                for cat_id, rect in list(self.building_category_btn_rects.items()):
+                    if rect.collidepoint(mouse_pos):
+                        if cat_id == "furniture_quick":
+                            self.selected_building_category = "furniture"
+                            return "select_building_category_furniture"
+                        self.selected_building_category = cat_id
+                        return f"select_building_category_{cat_id}"
+
             # Check Market Profile buttons
             for b, rect in list(getattr(self, "market_profile_btn_rects", {}).items()):
                 if rect.collidepoint(mouse_pos):
@@ -561,43 +589,49 @@ class RaportUI:
                     self.is_open = False
                     return "destroy_building"
 
-            # Toggle Structures Menu
-            if self.structures_btn_rect and self.structures_btn_rect.collidepoint(mouse_pos):
-                self.show_structures_menu = not self.show_structures_menu
-                self.show_furniture_menu = False
-                return "toggle_structures_menu"
+            # Check Building Construction buttons (from category view or quick build)
+            for b_type, rect in list(self.building_select_rects.items()):
+                if rect.collidepoint(mouse_pos):
+                    b_cfg = BUILDING_TYPES.get(b_type, {})
+                    has_permit = permit_manager.has_permit_type(b_type)
+                    if has_permit:
+                        self.selected_building_type = b_type
+                        self.selected_furniture_type = None
+                        self.placing_permit_type = None
+                        self.show_structures_menu = False
+                        self.is_open = False
+                        return f"start_drag_building_{b_type}"
+                    else:
+                        return f"need_permit_{b_type}"
 
-            # Toggle Furniture Menu
-            if self.furniture_btn_rect and self.furniture_btn_rect.collidepoint(mouse_pos):
-                self.show_furniture_menu = not self.show_furniture_menu
-                self.show_structures_menu = False
-                return "toggle_furniture_menu"
+            # Check Furniture Placement buttons
+            for f_type, rect in list(self.furniture_select_rects.items()):
+                if rect.collidepoint(mouse_pos):
+                    f_cfg = FURNITURE_TYPES.get(f_type, {})
+                    can_afford = (resources.get("Wood", 0) >= f_cfg.get("cost_wood", 0))
+                    if can_afford:
+                        self.selected_furniture_type = f_type
+                        self.selected_building_type = None
+                        self.placing_permit_type = None
+                        self.show_furniture_menu = False
+                        self.is_open = False
+                        return f"start_place_furniture_{f_type}"
+                    else:
+                        return f"low_wood_{f_type}"
 
-            if self.show_structures_menu:
-                for b_type, rect in self.building_select_rects.items():
-                    if rect.collidepoint(mouse_pos):
-                        b_cfg = BUILDING_TYPES[b_type]
-                        has_permit = permit_manager.has_permit_type(b_type)
+            # Check Furniture Move buttons
+            for f, rect in list(getattr(self, "furniture_move_btn_rects", {}).items()):
+                if rect.collidepoint(mouse_pos):
+                    self.moving_furniture = f
+                    self.is_open = False
+                    return "move_furniture"
 
-                        if has_permit:
-                            self.selected_building_type = b_type
-                            self.selected_furniture_type = None
-                            self.placing_permit_type = None
-                            self.show_structures_menu = False
-                            self.is_open = False
-                            return f"start_drag_building_{b_type}"
-
-            if self.show_furniture_menu:
-                for f_type, rect in self.furniture_select_rects.items():
-                    if rect.collidepoint(mouse_pos):
-                        f_cfg = FURNITURE_TYPES[f_type]
-                        if not f_cfg.get("wip", False) and resources.get("Wood", 0) >= f_cfg.get("cost_wood", 0):
-                            self.selected_furniture_type = f_type
-                            self.selected_building_type = None
-                            self.placing_permit_type = None
-                            self.show_furniture_menu = False
-                            self.is_open = False
-                            return f"start_place_furniture_{f_type}"
+            # Check Furniture Destroy buttons
+            for f, rect in list(getattr(self, "furniture_destroy_btn_rects", {}).items()):
+                if rect.collidepoint(mouse_pos):
+                    self.destroying_furniture_id = f.id
+                    self.is_open = False
+                    return "destroy_furniture"
 
         # 5. Tab 1: Area Permit Management
         elif self.active_tab == 1:
@@ -923,7 +957,7 @@ class RaportUI:
         pygame.draw.rect(surface, btn_bg, self.btn_left_rect, border_radius=6)
         pygame.draw.rect(surface, COLOR_RAPORT_BTN_BORDER, self.btn_left_rect, width=2, border_radius=6)
 
-        btn_txt = self.font_btn.render("Raport", True, COLOR_TEXT_MAIN)
+        btn_txt = self.font_btn.render("Town Ledger", True, COLOR_TEXT_MAIN)
         txt_rect = btn_txt.get_rect(center=self.btn_left_rect.center)
         surface.blit(btn_txt, txt_rect)
 
@@ -944,7 +978,7 @@ class RaportUI:
         surface.blit(modal_surf, (mx, my))
 
         # Title
-        title_surf = self.font_title.render("TOWN LEDGER (RAPORT DESA)", True, COLOR_TEXT_TITLE)
+        title_surf = self.font_title.render("TOWN LEDGER", True, COLOR_TEXT_TITLE)
         surface.blit(title_surf, (mx + 20, my + 16))
 
         # Close (X)
@@ -993,7 +1027,7 @@ class RaportUI:
 
         content_y = tab_y + tab_h + 16
         if self.active_tab == 0:
-            self._draw_building_tab(surface, mx, content_y, building_manager, permit_manager, resources)
+            self._draw_building_tab(surface, mx, content_y, building_manager, permit_manager, resources, furniture_manager=furniture_manager, villager_manager=villager_manager)
         elif self.active_tab == 1:
             self._draw_permit_tab(surface, mx, content_y, permit_manager, building_manager)
         elif self.active_tab == 2:
@@ -1011,194 +1045,325 @@ class RaportUI:
         elif self.active_tab == 8:
             self._draw_planning_tab(surface, mx, content_y)
 
-    def _draw_building_tab(self, surface, mx, cy, building_manager, permit_manager, resources):
-        empty_areas, occupied_areas = permit_manager.get_permits_status(building_manager)
+    def _draw_building_tab(self, surface, mx, cy, building_manager, permit_manager, resources, furniture_manager=None, villager_manager=None):
+        """
+        Category-based Building Organization UI (Town Ledger)
+        Screen 1: Lists dynamically discovered building categories with built count badges & quick construction deeds.
+        Screen 2: When category is selected, displays only buildings/furniture belonging to that category with Back button & empty state.
+        Zero hardcoded categories or building lists.
+        """
+        categories = get_building_categories()
+        m_pos = pygame.mouse.get_pos()
 
-        # 1. Built Buildings, Sites & Demolition Tasks
-        demos = getattr(building_manager, "demolition_sites", [])
-        total_b = len(building_manager.buildings) + len(building_manager.construction_sites) + len(demos)
-        b_title = self.font_sub.render(f" Buildings and Construction Sites ({total_b}):", True, COLOR_TEXT_TITLE)
-        surface.blit(b_title, (mx + 24, cy))
-
-        y_cur = cy + 22
+        self.building_category_back_btn_rect = None
+        self.building_category_btn_rects = {}
         self.destroy_building_btn_rects = {}
         self.market_profile_btn_rects.clear()
-
-        if not building_manager.buildings and not building_manager.construction_sites and not demos:
-            none_surf = self.font_body.render("- No buildings constructed yet.", True, COLOR_TEXT_MUTED)
-            surface.blit(none_surf, (mx + 36, y_cur))
-            list_end_y = cy + 42
-        else:
-            # Demolition Sites
-            for d in demos:
-                pct = int((d.progress / d.duration) * 100)
-                txt = f"[Demolishing] {d.name} ({pct}% | Salvaging +{d.refund_wood}W, +{d.refund_stone}S)"
-                surface.blit(self.font_body.render(txt, True, (239, 68, 68)), (mx + 36, y_cur))
-                y_cur += 24
-
-            # Construction Sites
-            for s in building_manager.construction_sites:
-                txt = f"[Building] {s.name} ({s.total_delivered()}/{s.total_required()} Materials)"
-                surface.blit(self.font_body.render(txt, True, (245, 158, 11)), (mx + 36, y_cur))
-                y_cur += 24
-
-            # Completed Buildings (Clickable & Destructible with 50% Refund)
-            for b in building_manager.buildings:
-                is_focused = (self.selected_building_inspect == b)
-                door_side_str = b.door_side.capitalize() if hasattr(b, "door_side") and b.door_side else "Standard"
-                b_cfg = BUILDING_TYPES.get(b.building_type, BUILDING_TYPES["wooden_structure"])
-                cost_w = b_cfg.get("cost_wood", COST_PER_BLOCK_WOOD)
-                cost_s = b_cfg.get("cost_stone", COST_PER_BLOCK_STONE)
-                ref_w = int(len(b.tiles) * cost_w * DEMOLITION_REFUND_RATIO)
-                ref_s = int(len(b.tiles) * cost_s * DEMOLITION_REFUND_RATIO)
-
-                row_rect = pygame.Rect(mx + 30, y_cur - 2, self.modal_w - 60, 24)
-                if is_focused:
-                    pygame.draw.rect(surface, (30, 58, 138, 120), row_rect, border_radius=4)
-                    pygame.draw.rect(surface, (59, 130, 246), row_rect, width=1, border_radius=4)
-
-                txt = f"{b.name} ({len(b.tiles)} tiles | Door: {door_side_str}) — Refund: +{ref_w}W, +{ref_s}S"
-                surface.blit(self.font_body.render(txt, True, (255, 255, 255) if is_focused else COLOR_TEXT_MAIN), (mx + 36, y_cur + 2))
-
-                # Market Profile Button
-                if getattr(b, "building_type", "") == "market":
-                    prof_btn = pygame.Rect(row_rect.right - 180, y_cur - 1, 84, 22)
-                    self.market_profile_btn_rects[b] = prof_btn
-                    prof_hover = prof_btn.collidepoint(pygame.mouse.get_pos())
-                    pygame.draw.rect(surface, (245, 158, 11) if prof_hover else (180, 83, 9), prof_btn, border_radius=4)
-                    p_lbl = self.font_badge.render("Profile", True, (255, 255, 255))
-                    surface.blit(p_lbl, (prof_btn.x + (prof_btn.w - p_lbl.get_width()) // 2, prof_btn.y + 4))
-
-                # Destroy Button
-                dest_btn = pygame.Rect(row_rect.right - 90, y_cur - 1, 86, 22)
-                self.destroy_building_btn_rects[b] = dest_btn
-                dest_hover = dest_btn.collidepoint(pygame.mouse.get_pos())
-                pygame.draw.rect(surface, (220, 38, 38) if dest_hover else (153, 27, 27), dest_btn, border_radius=4)
-                d_lbl = self.font_badge.render("Destroy", True, (255, 255, 255))
-                surface.blit(d_lbl, (dest_btn.x + (dest_btn.w - d_lbl.get_width()) // 2, dest_btn.y + 4))
-
-                y_cur += 26
-
-            list_end_y = y_cur + 8
-
-        # 2. Area Permits
-        e_title = self.font_sub.render(f" Issued Area Permits ({len(permit_manager.permits)} Total Lots):", True, (245, 158, 11))
-        surface.blit(e_title, (mx + 24, list_end_y))
-
-        if not permit_manager.permits:
-            none_surf = self.font_body.render("- No Area permits issued! (Go to Area Permits tab to drag & issue one).", True, (239, 68, 68))
-            surface.blit(none_surf, (mx + 36, list_end_y + 20))
-        else:
-            y_cur = list_end_y + 20
-            for p in permit_manager.permits:
-                buildings_on_p = [b for b in building_manager.buildings if p.overlaps_building(b)] + [s for s in building_manager.construction_sites if p.overlaps_building(s)]
-                prefix = "[Private] " if p.permit_type == "landlord_private" else ""
-                status_desc = f"{len(buildings_on_p)} building(s) on lot" if buildings_on_p else "Ready (Empty lot)"
-                txt = f"• {prefix}{p.name} ({p.tiles_w}x{p.tiles_h} {p.permit_type.capitalize()}) — {status_desc}"
-                surface.blit(self.font_body.render(txt, True, (226, 232, 240)), (mx + 36, y_cur))
-                y_cur += 20
-
-        # 3. Build & Furniture Action Buttons
-        btn_y = self.modal_h + (cy - 120) - 20
-        self.structures_btn_rect = pygame.Rect(mx + 24, btn_y, 140, 36)
-        self.furniture_btn_rect = pygame.Rect(mx + 174, btn_y, 140, 36)
-        self.build_btn_rect = self.structures_btn_rect
-
-        # Structures Button
-        s_hover = self.structures_btn_rect.collidepoint(pygame.mouse.get_pos())
-        s_col = (37, 99, 235) if (s_hover or self.show_structures_menu) else (30, 41, 59)
-        pygame.draw.rect(surface, s_col, self.structures_btn_rect, border_radius=6)
-        pygame.draw.rect(surface, (96, 165, 250), self.structures_btn_rect, width=2, border_radius=6)
-        s_label = self.font_btn.render("Structures", True, (255, 255, 255))
-        surface.blit(s_label, (self.structures_btn_rect.x + (self.structures_btn_rect.w - s_label.get_width()) // 2, self.structures_btn_rect.y + 8))
-
-        # Furniture Button
-        f_hover = self.furniture_btn_rect.collidepoint(pygame.mouse.get_pos())
-        f_col = (202, 138, 4) if (f_hover or self.show_furniture_menu) else (30, 41, 59)
-        pygame.draw.rect(surface, f_col, self.furniture_btn_rect, border_radius=6)
-        pygame.draw.rect(surface, (250, 204, 21), self.furniture_btn_rect, width=2, border_radius=6)
-        f_label = self.font_btn.render("Furniture", True, (255, 255, 255))
-        surface.blit(f_label, (self.furniture_btn_rect.x + (self.furniture_btn_rect.w - f_label.get_width()) // 2, self.furniture_btn_rect.y + 8))
-
-        # Building Structures Menu (Wooden Structure vs Stone Structure vs Well vs Market)
         self.building_select_rects = {}
-        if self.show_structures_menu:
-            structures = [
-                ("wooden_structure", BUILDING_TYPES["wooden_structure"]),
-                ("stone_structure", BUILDING_TYPES["stone_structure"]),
-                ("well", BUILDING_TYPES["well"]),
-                ("market", BUILDING_TYPES["market"])
-            ]
-            tpl_x = self.structures_btn_rect.x
-            tpl_w = 480
-            tpl_h = 16 + len(structures) * 58
-            tpl_y = max(10, self.structures_btn_rect.y - tpl_h - 10)
-
-            pygame.draw.rect(surface, (30, 41, 59), (tpl_x, tpl_y, tpl_w, tpl_h), border_radius=8)
-            pygame.draw.rect(surface, (71, 85, 105), (tpl_x, tpl_y, tpl_w, tpl_h), width=1, border_radius=8)
-
-            row_y = tpl_y + 12
-            for b_id, b_cfg in structures:
-                has_permit = permit_manager.has_permit_type(b_id)
-
-                t_title = self.font_sub.render(b_cfg['name'], True, COLOR_TEXT_TITLE)
-                surface.blit(t_title, (tpl_x + 14, row_y))
-
-                if b_cfg.get("fixed_cost"):
-                    c_text = f"{b_cfg['cost_wood']} Wood + {b_cfg['cost_stone']} Stone ({b_cfg.get('fixed_tiles_count', 4)} Tiles)"
-                else:
-                    c_text = f"{b_cfg['cost_wood']} Wood + {b_cfg['cost_stone']} Stone / tile"
-                c_surf = self.font_body.render(c_text, True, (234, 179, 8))
-                surface.blit(c_surf, (tpl_x + 14, row_y + 20))
-
-                rect = pygame.Rect(tpl_x + 345, row_y + 4, 120, 28)
-                self.building_select_rects[b_id] = rect
-
-                if not has_permit:
-                    btn_col = (71, 85, 105)
-                    btn_text = "NEED PERMIT"
-                else:
-                    btn_col = (16, 185, 129)
-                    btn_text = "SELECT (Place)" if b_cfg.get("fixed_tiles_count") else "SELECT (Drag)"
-
-                pygame.draw.rect(surface, btn_col, rect, border_radius=4)
-                b_txt = self.font_badge.render(btn_text, True, (255, 255, 255))
-                surface.blit(b_txt, (rect.x + (rect.w - b_txt.get_width()) // 2, rect.y + 7))
-
-                row_y += 56
-
-        # Furniture Placement Menu (Household Storage, Beds & Furnishings)
         self.furniture_select_rects = {}
-        if self.show_furniture_menu:
-            tpl_x = self.furniture_btn_rect.x
-            num_f = len(FURNITURE_TYPES)
-            tpl_h = 24 + num_f * 58
-            tpl_y = max(30, self.furniture_btn_rect.y - tpl_h - 10)
-            tpl_w = 480
+        self.furniture_move_btn_rects = {}
+        self.furniture_destroy_btn_rects = {}
 
-            pygame.draw.rect(surface, (30, 41, 59), (tpl_x, tpl_y, tpl_w, tpl_h), border_radius=8)
-            pygame.draw.rect(surface, (250, 204, 21), (tpl_x, tpl_y, tpl_w, tpl_h), width=1, border_radius=8)
+        if self.selected_building_category is None:
+            # -----------------------------------------------------------------
+            # SCREEN 1: Building & Structure Categories Selection Screen
+            # -----------------------------------------------------------------
+            demos = getattr(building_manager, "demolition_sites", [])
+            total_structures = len(building_manager.buildings) + len(building_manager.construction_sites) + len(demos)
+            if furniture_manager and hasattr(furniture_manager, "furniture"):
+                total_structures += len(furniture_manager.furniture)
 
-            row_y = tpl_y + 12
-            for f_id, f_cfg in FURNITURE_TYPES.items():
-                t_title = self.font_sub.render(f_cfg['name'], True, COLOR_TEXT_TITLE)
-                surface.blit(t_title, (tpl_x + 14, row_y))
+            b_title = self.font_sub.render(f" Buildings & Structure Categories ({len(categories)} categories, {total_structures} total structures):", True, COLOR_TEXT_TITLE)
+            surface.blit(b_title, (mx + 24, cy))
 
-                c_surf = self.font_body.render(f"Cost: {f_cfg['cost_wood']} Wood — {f_cfg['desc']}", True, (234, 179, 8))
-                surface.blit(c_surf, (tpl_x + 14, row_y + 20))
+            sub_txt = self.font_body.render("Select a category below to inspect structures, manage demolition, or quick-construct deeds:", True, COLOR_TEXT_MUTED)
+            surface.blit(sub_txt, (mx + 28, cy + 22))
 
-                rect = pygame.Rect(tpl_x + 345, row_y + 4, 120, 28)
-                self.furniture_select_rects[f_id] = rect
+            card_y = cy + 44
+            for cat in categories:
+                cat_id = cat["id"]
+                cat_name = cat["name"]
+                cat_desc = cat["desc"]
+                cat_col = cat.get("color", (59, 130, 246))
 
-                can_afford = (resources.get("Wood", 0) >= f_cfg.get("cost_wood", 0))
-                btn_col = (16, 185, 129) if can_afford else (71, 85, 105)
-                btn_text = "SELECT (Place)" if can_afford else "LOW WOOD"
+                if cat.get("kind") == "furniture":
+                    cat_items = [f for f in getattr(furniture_manager, "furniture", []) if f.furniture_type in cat["building_types"]] if furniture_manager else []
+                else:
+                    b_types = cat["building_types"]
+                    b_built = [b for b in building_manager.buildings if getattr(b, "building_type", "") in b_types]
+                    b_sites = [s for s in building_manager.construction_sites if getattr(s, "building_type", "") in b_types]
+                    b_demos = [d for d in demos if getattr(d, "building_type", "") in b_types or getattr(getattr(d, "building", None), "building_type", "") in b_types]
+                    cat_items = b_built + b_sites + b_demos
 
-                pygame.draw.rect(surface, btn_col, rect, border_radius=4)
-                b_txt = self.font_badge.render(btn_text, True, (255, 255, 255))
-                surface.blit(b_txt, (rect.x + (rect.w - b_txt.get_width()) // 2, rect.y + 7))
+                item_count = len(cat_items)
 
-                row_y += 58
+                card_rect = pygame.Rect(mx + 24, card_y, self.modal_w - 48, 36)
+                self.building_category_btn_rects[cat_id] = card_rect
+
+                is_hov = card_rect.collidepoint(m_pos)
+                bg_col = (30, 41, 59) if is_hov else (15, 23, 42)
+                border_col = (56, 189, 248) if is_hov else (51, 65, 85)
+
+                pygame.draw.rect(surface, bg_col, card_rect, border_radius=6)
+                pygame.draw.rect(surface, border_col, card_rect, width=1, border_radius=6)
+
+                # Left color accent bar
+                accent_rect = pygame.Rect(card_rect.x, card_rect.y, 5, card_rect.height)
+                pygame.draw.rect(surface, cat_col, accent_rect, border_top_left_radius=6, border_bottom_left_radius=6)
+
+                # Category title & description
+                t_surf = self.font_sub.render(cat_name, True, (241, 245, 249) if is_hov else (226, 232, 240))
+                surface.blit(t_surf, (card_rect.x + 16, card_rect.y + 9))
+
+                desc_surf = self.font_body.render(f"— {cat_desc}", True, COLOR_TEXT_MUTED)
+                surface.blit(desc_surf, (card_rect.x + 22 + t_surf.get_width(), card_rect.y + 10))
+
+                # Right badges: item count and "View Structures →"
+                badge_w = 80
+                badge_rect = pygame.Rect(card_rect.right - badge_w - 12, card_rect.y + 7, badge_w, 22)
+                badge_bg = (22, 101, 52) if item_count > 0 else (51, 65, 85)
+                badge_border = (74, 222, 128) if item_count > 0 else (100, 116, 139)
+                pygame.draw.rect(surface, badge_bg, badge_rect, border_radius=4)
+                pygame.draw.rect(surface, badge_border, badge_rect, width=1, border_radius=4)
+
+                lbl_text = f"{item_count} Built" if item_count != 1 else "1 Built"
+                cnt_txt = self.font_badge.render(lbl_text, True, (255, 255, 255))
+                surface.blit(cnt_txt, (badge_rect.centerx - cnt_txt.get_width() // 2, badge_rect.centery - cnt_txt.get_height() // 2))
+
+                arrow_lbl = self.font_badge.render("View →", True, (56, 189, 248) if is_hov else (148, 163, 184))
+                surface.blit(arrow_lbl, (badge_rect.x - arrow_lbl.get_width() - 10, card_rect.y + 11))
+
+                card_y += 42
+
+            # Bottom: Quick Construction Deeds Bar
+            btn_y = cy + 270
+            inst_txt = self.font_sub.render("Construct New Buildings & Furnishings (Select to Place on Map):", True, (56, 189, 248))
+            surface.blit(inst_txt, (mx + 24, btn_y))
+
+            total_avail_w = self.modal_w - 48
+            btn_gap = 8
+            btn_w = (total_avail_w - (4 * btn_gap)) // 5
+
+            wood_btn = pygame.Rect(mx + 24 + 0 * (btn_w + btn_gap), btn_y + 26, btn_w, 36)
+            stone_btn = pygame.Rect(mx + 24 + 1 * (btn_w + btn_gap), btn_y + 26, btn_w, 36)
+            well_btn = pygame.Rect(mx + 24 + 2 * (btn_w + btn_gap), btn_y + 26, btn_w, 36)
+            market_btn = pygame.Rect(mx + 24 + 3 * (btn_w + btn_gap), btn_y + 26, btn_w, 36)
+            furn_btn = pygame.Rect(mx + 24 + 4 * (btn_w + btn_gap), btn_y + 26, btn_w, 36)
+
+            self.building_select_rects["wooden_structure"] = wood_btn
+            self.building_select_rects["stone_structure"] = stone_btn
+            self.building_select_rects["well"] = well_btn
+            self.building_select_rects["market"] = market_btn
+            self.building_category_btn_rects["furniture_quick"] = furn_btn
+
+            # 1. Wooden Structure
+            w_has = permit_manager.has_permit_type("wooden_structure")
+            w_hov = wood_btn.collidepoint(m_pos)
+            pygame.draw.rect(surface, (180, 83, 9) if w_has else (71, 85, 105), wood_btn, border_radius=6)
+            pygame.draw.rect(surface, (251, 191, 36) if (w_hov and w_has) else (217, 119, 6), wood_btn, width=1, border_radius=6)
+            w_lbl = self.font_btn.render("+ Wooden House", True, (255, 255, 255))
+            surface.blit(w_lbl, (wood_btn.centerx - w_lbl.get_width() // 2, wood_btn.centery - w_lbl.get_height() // 2))
+
+            # 2. Stone Structure
+            s_has = permit_manager.has_permit_type("stone_structure")
+            s_hov = stone_btn.collidepoint(m_pos)
+            pygame.draw.rect(surface, (71, 85, 105) if s_has else (51, 65, 85), stone_btn, border_radius=6)
+            pygame.draw.rect(surface, (203, 213, 225) if (s_hov and s_has) else (148, 163, 184), stone_btn, width=1, border_radius=6)
+            s_lbl = self.font_btn.render("+ Stone House", True, (255, 255, 255))
+            surface.blit(s_lbl, (stone_btn.centerx - s_lbl.get_width() // 2, stone_btn.centery - s_lbl.get_height() // 2))
+
+            # 3. Water Well
+            wl_has = permit_manager.has_permit_type("well")
+            wl_hov = well_btn.collidepoint(m_pos)
+            pygame.draw.rect(surface, (14, 116, 144) if wl_has else (71, 85, 105), well_btn, border_radius=6)
+            pygame.draw.rect(surface, (56, 189, 248) if (wl_hov and wl_has) else (6, 182, 212), well_btn, width=1, border_radius=6)
+            wl_lbl = self.font_btn.render("+ Water Well", True, (255, 255, 255))
+            surface.blit(wl_lbl, (well_btn.centerx - wl_lbl.get_width() // 2, well_btn.centery - wl_lbl.get_height() // 2))
+
+            # 4. Market
+            m_has = permit_manager.has_permit_type("market")
+            m_hov = market_btn.collidepoint(m_pos)
+            pygame.draw.rect(surface, (217, 119, 6) if m_has else (71, 85, 105), market_btn, border_radius=6)
+            pygame.draw.rect(surface, (253, 230, 138) if (m_hov and m_has) else (245, 158, 11), market_btn, width=1, border_radius=6)
+            m_lbl = self.font_btn.render("+ Market Stall", True, (255, 255, 255))
+            surface.blit(m_lbl, (market_btn.centerx - m_lbl.get_width() // 2, market_btn.centery - m_lbl.get_height() // 2))
+
+            # 5. Furniture Quick
+            f_hov = furn_btn.collidepoint(m_pos)
+            pygame.draw.rect(surface, (202, 138, 4) if f_hov else (161, 98, 7), furn_btn, border_radius=6)
+            pygame.draw.rect(surface, (250, 204, 21), furn_btn, width=1, border_radius=6)
+            f_lbl = self.font_btn.render("+ Furnishings", True, (255, 255, 255))
+            surface.blit(f_lbl, (furn_btn.centerx - f_lbl.get_width() // 2, furn_btn.centery - f_lbl.get_height() // 2))
+
+        else:
+            # -----------------------------------------------------------------
+            # SCREEN 2: Category Details & Filtered Structures View
+            # -----------------------------------------------------------------
+            current_cat = next((c for c in categories if c["id"] == self.selected_building_category), None)
+            if not current_cat:
+                self.selected_building_category = None
+                return
+
+            cat_name = current_cat["name"]
+            cat_desc = current_cat["desc"]
+            cat_types = current_cat["building_types"]
+            demos = getattr(building_manager, "demolition_sites", [])
+
+            if current_cat.get("kind") == "furniture":
+                cat_items = [f for f in getattr(furniture_manager, "furniture", []) if f.furniture_type in cat_types] if furniture_manager else []
+                b_built, b_sites, b_demos = [], [], []
+            else:
+                b_built = [b for b in building_manager.buildings if getattr(b, "building_type", "") in cat_types]
+                b_sites = [s for s in building_manager.construction_sites if getattr(s, "building_type", "") in cat_types]
+                b_demos = [d for d in demos if getattr(d, "building_type", "") in cat_types or getattr(getattr(d, "building", None), "building_type", "") in cat_types]
+                cat_items = b_built + b_sites + b_demos
+
+            # 1. Back button to return to categories view
+            back_btn = pygame.Rect(mx + 24, cy, 160, 26)
+            self.building_category_back_btn_rect = back_btn
+            b_hov = back_btn.collidepoint(m_pos)
+            pygame.draw.rect(surface, (30, 58, 138) if b_hov else (30, 41, 59), back_btn, border_radius=4)
+            pygame.draw.rect(surface, (96, 165, 250) if b_hov else (71, 85, 105), back_btn, width=1, border_radius=4)
+            b_lbl = self.font_badge.render("← Back to Categories", True, (255, 255, 255))
+            surface.blit(b_lbl, (back_btn.centerx - b_lbl.get_width() // 2, back_btn.centery - b_lbl.get_height() // 2))
+
+            # 2. Section Title
+            b_title = self.font_sub.render(f"Category: {cat_name} ({len(cat_items)} structures)", True, COLOR_TEXT_TITLE)
+            surface.blit(b_title, (back_btn.right + 14, cy + 3))
+
+            # 3. Subtitle / Description
+            sub_txt = self.font_body.render(f"• {cat_desc}", True, COLOR_TEXT_MUTED)
+            surface.blit(sub_txt, (mx + 28, cy + 32))
+
+            y_cur = cy + 54
+
+            # 4. Filtered List or Empty State
+            if not cat_items:
+                empty_box = pygame.Rect(mx + 24, y_cur, self.modal_w - 48, 54)
+                pygame.draw.rect(surface, (15, 23, 42, 200), empty_box, border_radius=6)
+                pygame.draw.rect(surface, (51, 65, 85), empty_box, width=1, border_radius=6)
+                msg1 = f"• No structures built under '{cat_name}' yet."
+                msg2 = "Click the button below to construct or place a new structure for this category on the estate map."
+                surface.blit(self.font_body.render(msg1, True, (203, 213, 225)), (empty_box.x + 16, empty_box.y + 10))
+                surface.blit(self.font_body.render(msg2, True, COLOR_TEXT_MUTED), (empty_box.x + 16, empty_box.y + 30))
+                y_cur = empty_box.bottom + 16
+            else:
+                if current_cat.get("kind") == "furniture":
+                    for f in cat_items:
+                        owner_fam = villager_manager.get_family_by_id(f.family_id) if (villager_manager and f.family_id) else None
+                        fam_str = f"The {owner_fam.surname} Family" if owner_fam else "Town / Unassigned"
+
+                        row_rect = pygame.Rect(mx + 30, y_cur - 2, self.modal_w - 60, 24)
+                        txt = f"• {f.name} at ({f.grid_x}, {f.grid_y}) — Owner: {fam_str} | Status: [{f.status}]"
+                        surface.blit(self.font_body.render(txt, True, COLOR_TEXT_MAIN), (mx + 36, y_cur + 2))
+
+                        # Move button
+                        mv_btn = pygame.Rect(row_rect.right - 180, y_cur - 1, 84, 22)
+                        self.furniture_move_btn_rects[f] = mv_btn
+                        mv_hov = mv_btn.collidepoint(m_pos)
+                        pygame.draw.rect(surface, (37, 99, 235) if mv_hov else (29, 78, 216), mv_btn, border_radius=4)
+                        m_lbl = self.font_badge.render("Move", True, (255, 255, 255))
+                        surface.blit(m_lbl, (mv_btn.centerx - m_lbl.get_width() // 2, mv_btn.centery - m_lbl.get_height() // 2))
+
+                        # Destroy button
+                        dest_btn = pygame.Rect(row_rect.right - 90, y_cur - 1, 86, 22)
+                        self.furniture_destroy_btn_rects[f] = dest_btn
+                        dest_hov = dest_btn.collidepoint(m_pos)
+                        pygame.draw.rect(surface, (220, 38, 38) if dest_hov else (153, 27, 27), dest_btn, border_radius=4)
+                        d_lbl = self.font_badge.render("Destroy", True, (255, 255, 255))
+                        surface.blit(d_lbl, (dest_btn.x + (dest_btn.w - d_lbl.get_width()) // 2, dest_btn.y + 4))
+
+                        y_cur += 26
+                else:
+                    # Demolition Sites
+                    for d in b_demos:
+                        pct = int((d.progress / d.duration) * 100)
+                        txt = f"[Demolishing] {d.name} ({pct}% | Salvaging +{d.refund_wood}W, +{d.refund_stone}S)"
+                        surface.blit(self.font_body.render(txt, True, (239, 68, 68)), (mx + 36, y_cur))
+                        y_cur += 24
+
+                    # Construction Sites
+                    for s in b_sites:
+                        txt = f"[Building] {s.name} ({s.total_delivered()}/{s.total_required()} Materials)"
+                        surface.blit(self.font_body.render(txt, True, (245, 158, 11)), (mx + 36, y_cur))
+                        y_cur += 24
+
+                    # Completed Buildings
+                    for b in b_built:
+                        is_focused = (self.selected_building_inspect == b)
+                        door_side_str = b.door_side.capitalize() if hasattr(b, "door_side") and b.door_side else "Standard"
+                        b_cfg = BUILDING_TYPES.get(b.building_type, BUILDING_TYPES["wooden_structure"])
+                        cost_w = b_cfg.get("cost_wood", COST_PER_BLOCK_WOOD)
+                        cost_s = b_cfg.get("cost_stone", COST_PER_BLOCK_STONE)
+                        ref_w = int(len(b.tiles) * cost_w * DEMOLITION_REFUND_RATIO)
+                        ref_s = int(len(b.tiles) * cost_s * DEMOLITION_REFUND_RATIO)
+
+                        row_rect = pygame.Rect(mx + 30, y_cur - 2, self.modal_w - 60, 24)
+                        if is_focused:
+                            pygame.draw.rect(surface, (30, 58, 138, 120), row_rect, border_radius=4)
+                            pygame.draw.rect(surface, (59, 130, 246), row_rect, width=1, border_radius=4)
+
+                        txt = f"{b.name} ({len(b.tiles)} tiles | Door: {door_side_str}) — Refund: +{ref_w}W, +{ref_s}S"
+                        surface.blit(self.font_body.render(txt, True, (255, 255, 255) if is_focused else COLOR_TEXT_MAIN), (mx + 36, y_cur + 2))
+
+                        # Market Profile Button
+                        if getattr(b, "building_type", "") == "market":
+                            prof_btn = pygame.Rect(row_rect.right - 180, y_cur - 1, 84, 22)
+                            self.market_profile_btn_rects[b] = prof_btn
+                            prof_hover = prof_btn.collidepoint(m_pos)
+                            pygame.draw.rect(surface, (245, 158, 11) if prof_hover else (180, 83, 9), prof_btn, border_radius=4)
+                            p_lbl = self.font_badge.render("Profile", True, (255, 255, 255))
+                            surface.blit(p_lbl, (prof_btn.x + (prof_btn.w - p_lbl.get_width()) // 2, prof_btn.y + 4))
+
+                        # Destroy Button
+                        dest_btn = pygame.Rect(row_rect.right - 90, y_cur - 1, 86, 22)
+                        self.destroy_building_btn_rects[b] = dest_btn
+                        dest_hover = dest_btn.collidepoint(m_pos)
+                        pygame.draw.rect(surface, (220, 38, 38) if dest_hover else (153, 27, 27), dest_btn, border_radius=4)
+                        d_lbl = self.font_badge.render("Destroy", True, (255, 255, 255))
+                        surface.blit(d_lbl, (dest_btn.x + (dest_btn.w - d_lbl.get_width()) // 2, dest_btn.y + 4))
+
+                        y_cur += 26
+
+            # 5. Bottom Action: Construct Button(s) for this specific category
+            btn_y = max(y_cur + 20, cy + 220)
+            inst_txt = self.font_sub.render(f"Construct / Place {cat_name} (Select to Place on Map):", True, (56, 189, 248))
+            surface.blit(inst_txt, (mx + 24, btn_y))
+
+            if current_cat.get("kind") == "furniture":
+                avail_w = self.modal_w - 48
+                f_keys = list(FURNITURE_TYPES.keys())
+                f_btn_w = (avail_w - ((len(f_keys) - 1) * 8)) // max(1, len(f_keys))
+                for idx, f_id in enumerate(f_keys):
+                    f_cfg = FURNITURE_TYPES[f_id]
+                    can_afford = (resources.get("Wood", 0) >= f_cfg.get("cost_wood", 0))
+                    f_btn = pygame.Rect(mx + 24 + idx * (f_btn_w + 8), btn_y + 26, f_btn_w, 36)
+                    self.furniture_select_rects[f_id] = f_btn
+                    hov = f_btn.collidepoint(m_pos)
+                    b_col = (16, 185, 129) if can_afford else (71, 85, 105)
+                    pygame.draw.rect(surface, (34, 197, 94) if (hov and can_afford) else b_col, f_btn, border_radius=6)
+                    lbl_txt = f"+ Place {f_cfg['name']} ({f_cfg['cost_wood']} Wood)"
+                    lbl = self.font_btn.render(lbl_txt, True, (255, 255, 255))
+                    surface.blit(lbl, (f_btn.centerx - lbl.get_width() // 2, f_btn.centery - lbl.get_height() // 2))
+            else:
+                for idx, b_id in enumerate(cat_types):
+                    b_cfg = BUILDING_TYPES.get(b_id, {})
+                    has_permit = permit_manager.has_permit_type(b_id)
+                    fixed = b_cfg.get("fixed_cost", False)
+                    if fixed:
+                        cost_str = f"({b_cfg.get('cost_wood', 0)} Wood + {b_cfg.get('cost_stone', 0)} Stone)"
+                    else:
+                        cost_str = f"({b_cfg.get('cost_wood', 0)} Wood + {b_cfg.get('cost_stone', 0)} Stone / tile)"
+
+                    b_btn = pygame.Rect(mx + 24, btn_y + 26, min(480, self.modal_w - 48), 36)
+                    self.building_select_rects[b_id] = b_btn
+                    hov = b_btn.collidepoint(m_pos)
+                    b_col = (16, 185, 129) if has_permit else (71, 85, 105)
+                    pygame.draw.rect(surface, (34, 197, 94) if (hov and has_permit) else b_col, b_btn, border_radius=6)
+                    status_note = "" if has_permit else " [NEED PERMIT]"
+                    lbl_txt = f"+ Construct {b_cfg.get('name', b_id.replace('_', ' ').title())} {cost_str}{status_note}"
+                    lbl = self.font_btn.render(lbl_txt, True, (255, 255, 255))
+                    surface.blit(lbl, (b_btn.centerx - lbl.get_width() // 2, b_btn.centery - lbl.get_height() // 2))
 
     def _draw_permit_row(self, surface, p, mx, y_cur, empty_areas):
         """Helper to render a single permit row with all interactive controls (Agent 2)"""

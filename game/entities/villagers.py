@@ -58,9 +58,23 @@ from game.config import (
     COLOR_CORPSE_OUTLINE,
     is_food_item,
     is_water_item,
-    get_item_category
+    get_item_category,
+    COLLISION_SLIDE_TANGENT_FACTOR,
+    COLLISION_MIN_SEPARATION,
+    COLLISION_SLIDE_SMOOTHING,
+    ROUTE_REQUEST_TIMEOUT,
+    ROUTE_MAX_RETRIES,
+    ROUTE_RETRY_BACKOFF,
+    ROUTE_FALLBACK_COOLDOWN,
+    ROUTE_STATE_NONE,
+    ROUTE_STATE_REQUESTED,
+    ROUTE_STATE_PROCESSING,
+    ROUTE_STATE_ASSIGNED,
+    ROUTE_STATE_ACTIVE,
+    ROUTE_STATE_COMPLETED,
+    ROUTE_STATE_FAILED
 )
-from game.world.pathfinding import GlobalPathRegistry
+from game.world.pathfinding import GlobalPathRegistry, calculate_collision_slide
 from game.systems.market_interface import request_market_food_purchase
 from game.systems.job_tool_system import (
     get_job_required_tools,
@@ -114,6 +128,9 @@ class Villager:
         self.is_waiting_for_path = False
         self.stuck_timer = 0.0
         self.stuck_blocked_tiles = {}
+        self.route_state = ROUTE_STATE_NONE
+        self.route_request_timer = 0.0
+        self.route_retry_count = 0
 
         # Work Tasks & Farming Routine
         self.task = "IDLE"  # "IDLE" | "TILLING" | "FETCHING_WATER" | "WATERING" | "HARVESTING" | "HAULING_HOME"
@@ -1528,15 +1545,59 @@ class Villager:
     def _move_towards(self, tx, ty, dt, arrival_dist=10, all_entities=None, player=None, building_manager=None, furniture_manager=None, exclusive_target=False):
         reg = GlobalPathRegistry.get_instance()
 
-        # 0. Penanganan Antrean Menunggu Jalur (Waiting for Route Clearance)
-        if self.wait_timer > 0.0:
-            self.wait_timer -= dt
-            self.is_moving = False
-            # Jika jalur atau petak target sudah dibebaskan lebih awal, batalkan jeda tunggu
-            if not reg.is_path_blocked_for(self.id, (self.x, self.y), (tx, ty)):
-                self.wait_timer = 0.0
+        # 0. Penanganan Antrean Menunggu Jalur (Waiting for Route Clearance) & Route Lifecycle Recovery
+        if not hasattr(self, "route_state"):
+            self.route_state = ROUTE_STATE_NONE
+        if not hasattr(self, "route_request_timer"):
+            self.route_request_timer = 0.0
+        if not hasattr(self, "route_retry_count"):
+            self.route_retry_count = 0
+
+        # Jika rute ke target ini sudah FAILED (tidak dapat dijangkau setelah max retries), tetap FAILED sampai target diubah
+        if getattr(self, "route_state", None) == ROUTE_STATE_FAILED:
+            if self.path_target and math.hypot(tx - self.path_target[0], ty - self.path_target[1]) > 18.0:
+                self.route_state = ROUTE_STATE_NONE
+                self.route_retry_count = 0
+                self.route_request_timer = 0.0
             else:
+                self.is_moving = False
+                self.is_waiting_for_path = False
                 return False
+
+        if getattr(self, "repath_cooldown", 0.0) > 0.0:
+            self.repath_cooldown -= dt
+
+        if self.wait_timer > 0.0 or getattr(self, "is_waiting_for_path", False):
+            self.route_request_timer += dt
+            if self.wait_timer > 0.0:
+                self.wait_timer -= dt
+                self.is_moving = False
+
+            if self.route_request_timer >= ROUTE_REQUEST_TIMEOUT:
+                # AUTOMATIC ROUTE RECOVERY TIMEOUT TRIGGERED!
+                reg.cancel_waiting(self.id)
+                reg.release_reservation(self.id)
+                if hasattr(self, "stuck_blocked_tiles"):
+                    self.stuck_blocked_tiles.clear()
+                self.wait_timer = 0.0
+                self.is_waiting_for_path = False
+                self.route_request_timer = 0.0
+                self.route_retry_count += 1
+
+                if self.route_retry_count > ROUTE_MAX_RETRIES:
+                    self.route_state = ROUTE_STATE_FAILED
+                    self.is_moving = False
+                    self.repath_cooldown = ROUTE_FALLBACK_COOLDOWN
+                    self.route_retry_count = 0
+                    return False
+                else:
+                    self.route_state = ROUTE_STATE_REQUESTED
+                    self.repath_cooldown = 0.0
+            elif self.wait_timer > 0.0:
+                if not reg.is_path_blocked_for(self.id, (self.x, self.y), (tx, ty)):
+                    self.wait_timer = 0.0
+                else:
+                    return False
 
         if getattr(self, "repath_cooldown", 0.0) > 0.0:
             self.repath_cooldown -= dt
@@ -1593,6 +1654,17 @@ class Villager:
 
             if building_manager:
                 cand_path = building_manager.find_path((self.x, self.y), (tx, ty), TILE_SIZE, furniture_manager=furniture_manager, avoid_tiles=avoid_set)
+                if not cand_path and furniture_manager and hasattr(furniture_manager, "get_furniture_at") and furniture_manager.get_furniture_at(tgt_gx, tgt_gy):
+                    # Coba petak pendekatan adjacent jika target tepat sedang diduduki perabotan
+                    for (adx, ady) in ((0, 1), (1, 0), (0, -1), (-1, 0)):
+                        adj_gx = tgt_gx + adx
+                        adj_gy = tgt_gy + ady
+                        adj_tx = (adj_gx + 0.5) * TILE_SIZE
+                        adj_ty = (adj_gy + 0.5) * TILE_SIZE
+                        adj_cand = building_manager.find_path((self.x, self.y), (adj_tx, adj_ty), TILE_SIZE, furniture_manager=furniture_manager, avoid_tiles=avoid_set)
+                        if adj_cand:
+                            cand_path = adj_cand
+                            break
             else:
                 cand_path = [(tx, ty)]
 
@@ -1605,6 +1677,9 @@ class Villager:
                     self.is_waiting_for_path = False
                     self.wait_timer = 0.0
                     self.repath_cooldown = 0.0
+                    self.route_state = ROUTE_STATE_ASSIGNED
+                    self.route_request_timer = 0.0
+                    self.route_retry_count = 0
                 else:
                     # Ada konflik celah pintu / target yang sedang dipakai AI lain -> Masuk antrean menunggu
                     self.current_path = []
@@ -1624,14 +1699,11 @@ class Villager:
                 self.current_path = []
                 self.path_index = 0
                 self.is_moving = False
+                self.is_waiting_for_path = True
+                self.wait_timer = PATH_WAIT_RECHECK_INTERVAL
                 if exclusive_target:
-                    self.is_waiting_for_path = True
-                    self.wait_timer = PATH_WAIT_RECHECK_INTERVAL
                     reg.register_waiting(self.id, self.path_target_tile)
-                else:
-                    self.is_waiting_for_path = False
-                    self.wait_timer = 0.4
-                self.repath_cooldown = 0.4
+                self.repath_cooldown = 0.2
                 return False
 
         # 2. Prioritas Target Bersama:
@@ -1680,6 +1752,9 @@ class Villager:
                 self.path_index = 0
                 self.path_target = None
                 self.is_waiting_for_path = False
+                self.route_state = ROUTE_STATE_COMPLETED
+                self.route_request_timer = 0.0
+                self.route_retry_count = 0
                 reg.release_reservation(self.id)
                 if building_manager:
                     for b in getattr(building_manager, "buildings", []):
@@ -1693,6 +1768,9 @@ class Villager:
                     self.path_index = 0
                     self.path_target = None
                     self.is_waiting_for_path = False
+                    self.route_state = ROUTE_STATE_COMPLETED
+                    self.route_request_timer = 0.0
+                    self.route_retry_count = 0
                     reg.release_reservation(self.id)
                     if building_manager:
                         for b in getattr(building_manager, "buildings", []):
@@ -1707,6 +1785,7 @@ class Villager:
             return False
 
         self.is_moving = True
+        self.route_state = ROUTE_STATE_ACTIVE
         dir_x = wp_dx / dist_to_wp
         dir_y = wp_dy / dist_to_wp
 
@@ -1749,24 +1828,15 @@ class Villager:
                     if b.door_active_user == str(self.id):
                         b.release_door_passage(self.id)
 
-        # 6. Menghindari Tabrakan Antar Karakter (Yielding Right of Way tanpa terdorong ke tembok)
-        if all_entities:
-            for other in all_entities:
-                if other == self:
-                    continue
-                ox = other.x - self.x
-                oy = other.y - self.y
-                o_dist = math.hypot(ox, oy)
-                min_sep = (self.radius + getattr(other, "radius", 20.0) + 6.0)
-                if 0.0 < o_dist < min_sep:
-                    dot = dir_x * (ox / o_dist) + dir_y * (oy / o_dist)
-                    if dot > 0.65:
-                        other_seq = getattr(other, "path_seq", float('inf'))
-                        if other_seq < self.path_seq:
-                            # Entitas lain memiliki hak jalan (jalur garisnya muncul lebih dulu) -> mengalah sejenak
-                            self.yield_timer = 0.25
-                            self.is_moving = False
-                            return False
+        # 6. Collision Sliding: Smooth tangential sliding past other AI (No deadlock, no stuck)
+        slide_dir_x, slide_dir_y, did_slide = calculate_collision_slide(
+            self, dir_x, dir_y, all_entities,
+            building_manager=building_manager,
+            furniture_manager=furniture_manager,
+            tile_size=TILE_SIZE
+        )
+        move_dir_x = slide_dir_x if did_slide else dir_x
+        move_dir_y = slide_dir_y if did_slide else dir_y
 
         # 7. Pergerakan Fisik dengan Substepping & Resolusi Benturan Dinding
         old_x, old_y = self.x, self.y
@@ -1777,8 +1847,8 @@ class Villager:
 
         for _ in range(num_steps):
             old_step_x, old_step_y = self.x, self.y
-            self.x += dir_x * self.speed * sub_dt
-            self.y += dir_y * self.speed * sub_dt
+            self.x += move_dir_x * self.speed * sub_dt
+            self.y += move_dir_y * self.speed * sub_dt
             if building_manager:
                 self.x, self.y = building_manager.resolve_collision(self.x, self.y, self.radius, TILE_SIZE, old_x=old_step_x, old_y=old_step_y)
 
@@ -1786,7 +1856,8 @@ class Villager:
         actual_moved = math.hypot(self.x - old_x, self.y - old_y)
         expected_moved = self.speed * dt * 0.20
 
-        if actual_moved < expected_moved and dist_to_wp > tol:
+        # Jika sedang meluncur melewati AI lain, jangan anggap macet pada dinding
+        if actual_moved < expected_moved and dist_to_wp > tol and not did_slide:
             self.stuck_timer += dt
             if self.stuck_timer >= STUCK_THRESHOLD_SECONDS:
                 cur_gx = int(math.floor(self.x / TILE_SIZE))
@@ -1832,7 +1903,7 @@ class Villager:
         else:
             self.stuck_timer = max(0.0, self.stuck_timer - dt * 2.0)
 
-        self.facing_angle = math.atan2(dir_y, dir_x)
+        self.facing_angle = math.atan2(move_dir_y, move_dir_x)
         self.walk_cycle += dt * 10.0
         return False
 
@@ -2322,6 +2393,15 @@ class VillagerManager:
                     v2.x += nx * push
                     v2.y += ny * push
 
+                    # Tangential slip: jika salah satu atau kedua AI bergerak, dorong juga ke samping agar saling menyelinap
+                    if getattr(v1, "is_moving", False) or getattr(v2, "is_moving", False):
+                        tx, ty = -ny, nx
+                        slip = overlap * 0.25
+                        v1.x += tx * slip
+                        v1.y += ty * slip
+                        v2.x -= tx * slip
+                        v2.y -= ty * slip
+
             # Personal space separation with servants
             if all_servants:
                 for s in all_servants:
@@ -2340,6 +2420,14 @@ class VillagerManager:
                         v1.y -= ny * push
                         s.x += nx * push
                         s.y += ny * push
+
+                        if getattr(v1, "is_moving", False) or getattr(s, "is_moving", False):
+                            tx, ty = -ny, nx
+                            slip = overlap * 0.25
+                            v1.x += tx * slip
+                            v1.y += ty * slip
+                            s.x -= tx * slip
+                            s.y -= ty * slip
 
             # Villager vs Player solid separation
             if player:
