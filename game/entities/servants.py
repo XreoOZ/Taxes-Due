@@ -23,7 +23,9 @@ from game.config import (
     PATH_WAYPOINT_TOLERANCE,
     STUCK_THRESHOLD_SECONDS,
     STUCK_AVOIDANCE_DURATION,
-    PATH_WAIT_RECHECK_INTERVAL
+    PATH_WAIT_RECHECK_INTERVAL,
+    is_food_item,
+    is_water_item
 )
 from game.world.pathfinding import GlobalPathRegistry
 from game.systems.job_tool_system import (
@@ -471,6 +473,28 @@ class Servant:
                 self.repath_cooldown = 0.0
                 self._reset_task()
 
+    def _is_matching_grant_item(self, stack_res_type, requested_item):
+        """Generic matching between landlord stockpile stack and requested grant item."""
+        if not stack_res_type or not requested_item:
+            return False
+        if stack_res_type == requested_item:
+            return True
+        s_low = str(stack_res_type).strip().lower()
+        r_low = str(requested_item).strip().lower()
+        if s_low == r_low:
+            return True
+        try:
+            from game.systems.household_inventory import canonical_item_name
+            if canonical_item_name(stack_res_type) == canonical_item_name(requested_item):
+                return True
+        except ImportError:
+            pass
+        # FOOD category matching: generic Food stack can fulfill Potato, Bread, etc., or vice versa
+        if is_food_item(stack_res_type) and is_food_item(requested_item):
+            if s_low in ("food", "any_food") or r_low in ("food", "any_food"):
+                return True
+        return False
+
     def _evaluate_and_assign_priority_task(self, building_manager, permit_manager, stockpile_manager, resources, player, all_servants=None, furniture_manager=None, villager_manager=None, servant_manager=None):
         """RimWorld-style Priority Scan: 1 (Highest) down to 4 (Lowest)"""
         # Royal Decree: Hauling Granted Items from Landlord Storage to Villager Households
@@ -481,10 +505,19 @@ class Servant:
                     item_type = order["item_type"]
                     # Find stack in Landlord's stockpile with available capacity
                     storage_stack = None
+                    # Pass 1: exact match
                     for s in stockpile_manager.stacks:
-                        if s.resource_type == item_type and getattr(s, "owner_type", "landlord") == "landlord" and getattr(s, "available_amount", s.amount) > 0:
-                            storage_stack = s
-                            break
+                        if getattr(s, "owner_type", "landlord") == "landlord" and getattr(s, "available_amount", s.amount) > 0:
+                            if s.resource_type == item_type or str(s.resource_type).lower() == str(item_type).lower():
+                                storage_stack = s
+                                break
+                    # Pass 2: canonical or generic category match (e.g. starter Food stack for Potato)
+                    if not storage_stack:
+                        for s in stockpile_manager.stacks:
+                            if getattr(s, "owner_type", "landlord") == "landlord" and getattr(s, "available_amount", s.amount) > 0:
+                                if self._is_matching_grant_item(s.resource_type, item_type):
+                                    storage_stack = s
+                                    break
                     if storage_stack:
                         # Determine family destination
                         fam_id = order["family_id"]

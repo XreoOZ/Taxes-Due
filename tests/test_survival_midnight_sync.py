@@ -83,10 +83,12 @@ class TestSurvivalMidnightSync(unittest.TestCase):
         self.assertGreaterEqual(v.hunger, 95.0)
         self.assertGreaterEqual(v.thirst, 95.0)
 
-    def test_03_consumes_food_but_not_water_dies_of_dehydration(self):
-        """3. AI consumes food but not water, then dies at midnight."""
+    def test_03_consumes_food_but_not_water_survives_midnight(self):
+        """3. AI consumes food but not water: survives midnight because death triggers only at 0% + 24h countdown."""
         fam = Family("fam_3", "Baker")
         v = Villager("vil_3", "Tom", "Baker", "Male", 20, 3, "Adult Son", "fam_3")
+        v.hunger = 50.0
+        v.thirst = 50.0
         fam.members = [v]
         self.vm.families = [fam]
 
@@ -95,15 +97,17 @@ class TestSurvivalMidnightSync(unittest.TestCase):
 
         self.vm.daily_midnight_update(day_number=1)
 
-        self.assertFalse(v.is_alive)
-        self.assertEqual(v.status, "DECEASED")
-        self.assertEqual(v.death_reason, "Dehydration")
-        self.assertEqual(v.task, "DECEASED")
+        self.assertTrue(v.is_alive)
+        self.assertEqual(v.status, "ALIVE")
+        self.assertEqual(v.daily_food_consumed, 0)
+        self.assertEqual(v.daily_water_consumed, 0)
 
-    def test_04_consumes_water_but_not_food_dies_of_starvation(self):
-        """4. AI consumes water but not food, then dies at midnight."""
+    def test_04_consumes_water_but_not_food_survives_midnight(self):
+        """4. AI consumes water but not food: survives midnight because death triggers only at 0% + 24h countdown."""
         fam = Family("fam_4", "Cook")
         v = Villager("vil_4", "Alice", "Cook", "Female", 22, 3, "Adult Daughter", "fam_4")
+        v.hunger = 50.0
+        v.thirst = 50.0
         fam.members = [v]
         self.vm.families = [fam]
 
@@ -112,15 +116,17 @@ class TestSurvivalMidnightSync(unittest.TestCase):
 
         self.vm.daily_midnight_update(day_number=1)
 
-        self.assertFalse(v.is_alive)
-        self.assertEqual(v.status, "DECEASED")
-        self.assertEqual(v.death_reason, "Starvation")
-        self.assertEqual(v.task, "DECEASED")
+        self.assertTrue(v.is_alive)
+        self.assertEqual(v.status, "ALIVE")
+        self.assertEqual(v.daily_food_consumed, 0)
+        self.assertEqual(v.daily_water_consumed, 0)
 
-    def test_05_consumes_neither_dies_of_starvation_and_dehydration(self):
-        """5. AI consumes neither, then dies at midnight."""
+    def test_05_consumes_neither_survives_midnight(self):
+        """5. AI consumes neither: survives midnight because death triggers only at 0% + 24h countdown."""
         fam = Family("fam_5", "Taylor")
         v = Villager("vil_5", "Robert", "Taylor", "Male", 40, 2, "Father", "fam_5")
+        v.hunger = 50.0
+        v.thirst = 50.0
         fam.members = [v]
         self.vm.families = [fam]
 
@@ -129,10 +135,10 @@ class TestSurvivalMidnightSync(unittest.TestCase):
 
         self.vm.daily_midnight_update(day_number=1)
 
-        self.assertFalse(v.is_alive)
-        self.assertEqual(v.status, "DECEASED")
-        self.assertEqual(v.death_reason, "Starvation & Dehydration")
-        self.assertEqual(v.task, "DECEASED")
+        self.assertTrue(v.is_alive)
+        self.assertEqual(v.status, "ALIVE")
+        self.assertEqual(v.daily_food_consumed, 0)
+        self.assertEqual(v.daily_water_consumed, 0)
 
     def test_06_daily_records_reset_correctly_after_survival_validation(self):
         """6. Daily records reset correctly after survival validation."""
@@ -169,9 +175,10 @@ class TestSurvivalMidnightSync(unittest.TestCase):
         # (records remain 0 from reset)
         self.vm.daily_midnight_update(day_number=2)
 
-        # AI dies at midnight of Day 2 because records were not inherited
-        self.assertFalse(v.is_alive)
-        self.assertEqual(v.status, "DECEASED")
+        # AI survives Day 2 midnight because midnight does not trigger death
+        self.assertTrue(v.is_alive)
+        self.assertEqual(v.status, "ALIVE")
+        self.assertEqual(v.daily_food_consumed, 0)
 
     def test_08_midnight_processing_executes_only_once_per_day(self):
         """8. Midnight processing executes only once per day."""
@@ -219,20 +226,21 @@ class TestSurvivalMidnightSync(unittest.TestCase):
 
         self.vm.daily_midnight_update(day_number=1)
 
+        # All individuals survive midnight because midnight never triggers death
         self.assertTrue(v1.is_alive)
         self.assertEqual(v1.status, "ALIVE")
+        self.assertEqual(v1.daily_food_consumed, 0)
 
-        self.assertFalse(v2.is_alive)
-        self.assertEqual(v2.status, "DECEASED")
-        self.assertEqual(v2.death_reason, "Dehydration")
+        self.assertTrue(v2.is_alive)
+        self.assertEqual(v2.status, "ALIVE")
+        self.assertEqual(v2.daily_water_consumed, 0)
 
-        self.assertFalse(v3.is_alive)
-        self.assertEqual(v3.status, "DECEASED")
-        self.assertEqual(v3.death_reason, "Starvation & Dehydration")
+        self.assertTrue(v3.is_alive)
+        self.assertEqual(v3.status, "ALIVE")
+        self.assertEqual(v3.daily_food_consumed, 0)
 
-        # Excluded from living members
-        self.assertEqual(len(fam.living_members), 1)
-        self.assertEqual(fam.living_members[0].id, "v9_1")
+        # All 3 remain living members
+        self.assertEqual(len(fam.living_members), 3)
 
     def test_10_save_load_preserves_daily_consumption_records_accurately(self):
         """10. Save/load does not corrupt daily consumption records."""

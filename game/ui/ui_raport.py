@@ -19,6 +19,7 @@ from game.config import (
     COLOR_TEXT_MUTED,
     BUILDING_TYPES,
     PERMIT_TYPES,
+    get_permit_categories,
     CROP_TYPES,
     WORK_TYPES,
     PRIORITY_COLORS,
@@ -31,7 +32,8 @@ from game.config import (
     RAPORT_MODAL_HEIGHT,
     DEMOLITION_REFUND_RATIO,
     SCHEDULE_TYPES,
-    DEFAULT_JOB_SCHEDULE
+    DEFAULT_JOB_SCHEDULE,
+    is_food_item
 )
 from game.data.planning import (
     PLANNING_FEATURES,
@@ -44,7 +46,8 @@ from game.data.planning import (
 from game.systems.production_distribution import ProductionDistributionSystem
 from game.systems.household_inventory import (
     get_household_possessions,
-    sort_possession_items
+    sort_possession_items,
+    canonical_item_name
 )
 
 GRANTABLE_ITEMS = [
@@ -164,6 +167,11 @@ class RaportUI:
             {"id": "tax", "title": "Taxes", "wip": True},
             {"id": "planning", "title": "Roadmap", "wip": True},
         ]
+
+        # Permit Category Navigation State (Agent 2)
+        self.selected_permit_category = None  # None = Category View; string cat_id = Category Permit Details View
+        self.permit_category_btn_rects = {}
+        self.permit_category_back_btn_rect = None
 
         # Planning & Roadmap UI State
         self.planning_filter_status = "ALL"
@@ -291,6 +299,7 @@ class RaportUI:
     def close(self):
         """Tutup modal Raport UI dan reset seluruh status dialog internalnya"""
         self.is_open = False
+        self.selected_permit_category = None
         self.show_build_menu = False
         self.show_structures_menu = False
         self.show_furniture_menu = False
@@ -324,12 +333,18 @@ class RaportUI:
             for s in getattr(sm, "stacks", []):
                 if getattr(s, "owner_type", "landlord") == "landlord" and getattr(s, "amount", 0) > 0:
                     rt = s.resource_type
-                    if rt in ("Food", "Potato", "potato"):
-                        stock["Potato"] += s.amount
-                    elif rt in stock:
+                    if rt in stock:
                         stock[rt] += s.amount
+                    elif is_food_item(rt):
+                        stock["Potato"] += s.amount
+                        if rt not in stock:
+                            stock[rt] = s.amount
                     else:
-                        stock[rt] = stock.get(rt, 0) + s.amount
+                        c_name = canonical_item_name(rt)
+                        if c_name in stock:
+                            stock[c_name] += s.amount
+                        else:
+                            stock[rt] = stock.get(rt, 0) + s.amount
         if resources:
             for k in ("Wood", "Stone", "Food", "Copper", "Silver", "Gold"):
                 target_k = "Potato" if k == "Food" else k
@@ -337,9 +352,15 @@ class RaportUI:
                     stock[target_k] = resources[k]
         return stock
 
+    def is_text_input_active(self):
+        """Mengembalikan True jika player sedang mengetik di input/text field dalam UI Raport"""
+        return bool(self.is_open and self.show_grant_dialog and self.active_grant_input_item is not None)
+
     def toggle(self):
-        self.is_open = not self.is_open
-        self.show_build_menu = False
+        if self.is_open:
+            self.close()
+        else:
+            self.open()
 
     def handle_event(self, event, building_manager, permit_manager, resources, servant_manager=None, villager_manager=None, schedule_manager=None, day_cycle=None, stockpile_manager=None, furniture_manager=None, production_system=None):
         if stockpile_manager is not None:
@@ -347,7 +368,7 @@ class RaportUI:
         sm = stockpile_manager or self.cached_stockpile_manager
 
         if event.type == pygame.KEYDOWN:
-            if self.show_grant_dialog and self.active_grant_input_item:
+            if self.is_text_input_active():
                 if event.key == pygame.K_BACKSPACE:
                     self.grant_input_text = self.grant_input_text[:-1]
                     val = int(self.grant_input_text) if self.grant_input_text else 0
@@ -366,6 +387,10 @@ class RaportUI:
                     self.grant_input_text = str(val)
                     self.grant_amounts[self.active_grant_input_item] = val
                     return "grant_input_edit"
+                return None
+            if event.key == pygame.K_r:
+                self.toggle()
+                return "toggle_raport"
             return None
 
         # Mousewheel Scrolling (e.g. Grant Supplies modal list)
@@ -508,6 +533,7 @@ class RaportUI:
         for i, tr in enumerate(self.tab_rects):
             if tr.collidepoint(mouse_pos):
                 self.active_tab = i
+                self.selected_permit_category = None
                 self.show_build_menu = False
                 self.selected_family_id = None
                 self.show_household_possession = False
@@ -575,6 +601,18 @@ class RaportUI:
 
         # 5. Tab 1: Area Permit Management
         elif self.active_tab == 1:
+            # Check Back button when viewing a specific permit category (Agent 2)
+            if self.permit_category_back_btn_rect and self.permit_category_back_btn_rect.collidepoint(mouse_pos):
+                self.selected_permit_category = None
+                return "permit_category_back"
+
+            # Check Category Selection buttons on Root Categories Screen (Agent 2)
+            if self.selected_permit_category is None:
+                for cat_id, rect in list(self.permit_category_btn_rects.items()):
+                    if rect.collidepoint(mouse_pos):
+                        self.selected_permit_category = cat_id
+                        return f"select_permit_category_{cat_id}"
+
             # Worker count +/- and Auto buttons
             for pid, rect in list(self.worker_dec_btn_rects.items()):
                 if rect.collidepoint(mouse_pos):
@@ -1162,190 +1200,320 @@ class RaportUI:
 
                 row_y += 58
 
+    def _draw_permit_row(self, surface, p, mx, y_cur, empty_areas):
+        """Helper to render a single permit row with all interactive controls (Agent 2)"""
+        is_empty = p in empty_areas
+        is_focused = (self.selected_permit_inspect_id == p.id)
+
+        row_rect = pygame.Rect(mx + 30, y_cur - 2, self.modal_w - 60, 24)
+        if is_focused:
+            pygame.draw.rect(surface, (30, 58, 138, 140), row_rect, border_radius=4)
+            pygame.draw.rect(surface, (59, 130, 246), row_rect, width=1, border_radius=4)
+
+        status_str = "Empty" if is_empty else "Occupied"
+        col = (245, 158, 11) if is_empty else (16, 185, 129)
+        prefix = "[Private] " if p.permit_type == "landlord_private" else ""
+
+        if p.permit_type == "farm":
+            if getattr(p, "crop", None):
+                w_tag = "Watered" if getattr(p, "watered_today", False) else "Dry"
+                crop_str = f"{p.crop} (Day {getattr(p, 'growth_days', 0.0):.0f}/10 | {w_tag})"
+            else:
+                crop_str = "Unplanted"
+            col = (34, 197, 94)
+            txt = f"• {p.name} [{len(p.tiles)}t Farm] — {crop_str}"
+            surface.blit(self.font_body.render(txt, True, col), (mx + 36, y_cur + 2))
+
+            # Right side buttons
+            right_cursor = row_rect.right
+
+            # Delete button if empty
+            if is_empty:
+                del_btn = pygame.Rect(right_cursor - 84, y_cur - 1, 82, 22)
+                self.delete_permit_btn_rects[p.id] = del_btn
+                del_hover = del_btn.collidepoint(pygame.mouse.get_pos())
+                pygame.draw.rect(surface, (220, 38, 38) if del_hover else (153, 27, 27), del_btn, border_radius=4)
+                del_lbl = self.font_badge.render("Delete", True, (255, 255, 255))
+                surface.blit(del_lbl, (del_btn.x + (del_btn.w - del_lbl.get_width()) // 2, del_btn.y + 4))
+                right_cursor -= 88
+
+            # Edit Lot button
+            edit_btn = pygame.Rect(right_cursor - 64, y_cur - 1, 60, 22)
+            self.edit_permit_btn_rects[p.id] = edit_btn
+            edit_hov = edit_btn.collidepoint(pygame.mouse.get_pos())
+            pygame.draw.rect(surface, (202, 138, 4) if edit_hov else (161, 98, 7), edit_btn, border_radius=4)
+            pygame.draw.rect(surface, (250, 204, 21), edit_btn, width=1, border_radius=4)
+            edit_lbl = self.font_badge.render("Edit", True, (255, 255, 255))
+            surface.blit(edit_lbl, (edit_btn.x + (edit_btn.w - edit_lbl.get_width()) // 2, edit_btn.y + 4))
+            right_cursor -= 68
+
+            # Plant button for Farm permit
+            plant_btn = pygame.Rect(right_cursor - 82, y_cur - 1, 78, 22)
+            self.open_plant_btn_rects[p.id] = plant_btn
+            plant_hover = plant_btn.collidepoint(pygame.mouse.get_pos())
+            pygame.draw.rect(surface, (22, 101, 52) if plant_hover else (20, 83, 45), plant_btn, border_radius=4)
+            pygame.draw.rect(surface, (74, 222, 128), plant_btn, width=1, border_radius=4)
+            p_label = f"{p.crop}" if getattr(p, "crop", None) else "Plant"
+            p_surf = self.font_badge.render(p_label, True, (255, 255, 255))
+            surface.blit(p_surf, (plant_btn.x + (plant_btn.w - p_surf.get_width()) // 2, plant_btn.y + 4))
+            right_cursor -= 86
+
+            # Worker Controls: [⚡ Auto] [+] {count/max} [-]
+            auto_btn = pygame.Rect(right_cursor - 28, y_cur - 1, 26, 22)
+            self.worker_auto_btn_rects[p.id] = auto_btn
+            a_hov = auto_btn.collidepoint(pygame.mouse.get_pos())
+            pygame.draw.rect(surface, (16, 185, 129) if a_hov else (5, 150, 105), auto_btn, border_radius=3)
+            a_txt = self.font_badge.render("Auto", True, (255, 255, 255))
+            surface.blit(a_txt, (auto_btn.x + 6, auto_btn.y + 4))
+            right_cursor -= 32
+
+            inc_btn = pygame.Rect(right_cursor - 20, y_cur - 1, 18, 22)
+            self.worker_inc_btn_rects[p.id] = inc_btn
+            inc_hov = inc_btn.collidepoint(pygame.mouse.get_pos())
+            pygame.draw.rect(surface, (37, 99, 235) if inc_hov else (30, 58, 138), inc_btn, border_radius=3)
+            surface.blit(self.font_badge.render("+", True, (255, 255, 255)), (inc_btn.x + 5, inc_btn.y + 3))
+            right_cursor -= 24
+
+            w_count = len(getattr(p, 'assigned_workers', set()))
+            w_max = getattr(p, 'max_workers', 2)
+            cnt_str = f"{w_count}/{w_max} Workers"
+            cnt_surf = self.font_badge.render(cnt_str, True, (241, 245, 249))
+            surface.blit(cnt_surf, (right_cursor - cnt_surf.get_width() - 4, y_cur + 3))
+            right_cursor -= (cnt_surf.get_width() + 8)
+
+            dec_btn = pygame.Rect(right_cursor - 20, y_cur - 1, 18, 22)
+            self.worker_dec_btn_rects[p.id] = dec_btn
+            dec_hov = dec_btn.collidepoint(pygame.mouse.get_pos())
+            pygame.draw.rect(surface, (71, 85, 105) if dec_hov else (51, 65, 85), dec_btn, border_radius=3)
+            surface.blit(self.font_badge.render("-", True, (255, 255, 255)), (dec_btn.x + 6, dec_btn.y + 3))
+
+        else:
+            txt = f"• {prefix}{p.name} [{len(p.tiles)} tiles {p.permit_type.capitalize()}] — {status_str}"
+            surface.blit(self.font_body.render(txt, True, col), (mx + 36, y_cur + 2))
+
+            right_cursor = row_rect.right
+            # Delete button for empty permits
+            if is_empty:
+                del_btn = pygame.Rect(right_cursor - 84, y_cur - 1, 82, 22)
+                self.delete_permit_btn_rects[p.id] = del_btn
+                del_hover = del_btn.collidepoint(pygame.mouse.get_pos())
+                pygame.draw.rect(surface, (220, 38, 38) if del_hover else (153, 27, 27), del_btn, border_radius=4)
+                del_lbl = self.font_badge.render("Delete", True, (255, 255, 255))
+                surface.blit(del_lbl, (del_btn.x + (del_btn.w - del_lbl.get_width()) // 2, del_btn.y + 4))
+                right_cursor -= 88
+
+            # Edit Lot button
+            edit_btn = pygame.Rect(right_cursor - 64, y_cur - 1, 60, 22)
+            self.edit_permit_btn_rects[p.id] = edit_btn
+            edit_hov = edit_btn.collidepoint(pygame.mouse.get_pos())
+            pygame.draw.rect(surface, (202, 138, 4) if edit_hov else (161, 98, 7), edit_btn, border_radius=4)
+            pygame.draw.rect(surface, (250, 204, 21), edit_btn, width=1, border_radius=4)
+            edit_lbl = self.font_badge.render("Edit", True, (255, 255, 255))
+            surface.blit(edit_lbl, (edit_btn.x + (edit_btn.w - edit_lbl.get_width()) // 2, edit_btn.y + 4))
+
     def _draw_permit_tab(self, surface, mx, cy, permit_manager, building_manager):
+        """
+        Category-based Permit Organization UI (Agent 2)
+        Screen 1: Lists dynamically discovered permit categories with lot count badges.
+        Screen 2: When category is selected, displays only permits belonging to that category with Back button & empty state.
+        Zero hardcoded categories or permit lists.
+        """
+        categories = get_permit_categories()
         empty_areas, occupied_areas = permit_manager.get_permits_status(building_manager)
+        m_pos = pygame.mouse.get_pos()
 
-        p_title = self.font_sub.render(f" Landlord Area Permits ({len(permit_manager.permits)} total lots):", True, COLOR_TEXT_TITLE)
-        surface.blit(p_title, (mx + 24, cy))
-
-        y_cur = cy + 22
+        self.permit_category_back_btn_rect = None
+        self.permit_category_btn_rects = {}
         self.delete_permit_btn_rects = {}
         self.edit_permit_btn_rects = {}
         self.open_plant_btn_rects = {}
         self.worker_dec_btn_rects = {}
         self.worker_inc_btn_rects = {}
         self.worker_auto_btn_rects = {}
-
-        for p in permit_manager.permits:
-            is_empty = p in empty_areas
-            is_focused = (self.selected_permit_inspect_id == p.id)
-
-            row_rect = pygame.Rect(mx + 30, y_cur - 2, self.modal_w - 60, 24)
-            if is_focused:
-                pygame.draw.rect(surface, (30, 58, 138, 140), row_rect, border_radius=4)
-                pygame.draw.rect(surface, (59, 130, 246), row_rect, width=1, border_radius=4)
-
-            status_str = "Empty" if is_empty else "Occupied"
-            col = (245, 158, 11) if is_empty else (16, 185, 129)
-            prefix = "[Private] " if p.permit_type == "landlord_private" else ""
-
-            if p.permit_type == "farm":
-                if getattr(p, "crop", None):
-                    w_tag = "Watered" if getattr(p, "watered_today", False) else "Dry"
-                    crop_str = f"{p.crop} (Day {getattr(p, 'growth_days', 0.0):.0f}/10 | {w_tag})"
-                else:
-                    crop_str = "Unplanted"
-                col = (34, 197, 94)
-                txt = f"• {p.name} [{len(p.tiles)}t Farm] — {crop_str}"
-                surface.blit(self.font_body.render(txt, True, col), (mx + 36, y_cur + 2))
-
-                # Right side buttons
-                right_cursor = row_rect.right
-
-                # Delete button if empty
-                if is_empty:
-                    del_btn = pygame.Rect(right_cursor - 84, y_cur - 1, 82, 22)
-                    self.delete_permit_btn_rects[p.id] = del_btn
-                    del_hover = del_btn.collidepoint(pygame.mouse.get_pos())
-                    pygame.draw.rect(surface, (220, 38, 38) if del_hover else (153, 27, 27), del_btn, border_radius=4)
-                    del_lbl = self.font_badge.render("Delete", True, (255, 255, 255))
-                    surface.blit(del_lbl, (del_btn.x + (del_btn.w - del_lbl.get_width()) // 2, del_btn.y + 4))
-                    right_cursor -= 88
-
-                # Edit Lot button
-                edit_btn = pygame.Rect(right_cursor - 64, y_cur - 1, 60, 22)
-                self.edit_permit_btn_rects[p.id] = edit_btn
-                edit_hov = edit_btn.collidepoint(pygame.mouse.get_pos())
-                pygame.draw.rect(surface, (202, 138, 4) if edit_hov else (161, 98, 7), edit_btn, border_radius=4)
-                pygame.draw.rect(surface, (250, 204, 21), edit_btn, width=1, border_radius=4)
-                edit_lbl = self.font_badge.render("Edit", True, (255, 255, 255))
-                surface.blit(edit_lbl, (edit_btn.x + (edit_btn.w - edit_lbl.get_width()) // 2, edit_btn.y + 4))
-                right_cursor -= 68
-
-                # Plant button for Farm permit
-                plant_btn = pygame.Rect(right_cursor - 82, y_cur - 1, 78, 22)
-                self.open_plant_btn_rects[p.id] = plant_btn
-                plant_hover = plant_btn.collidepoint(pygame.mouse.get_pos())
-                pygame.draw.rect(surface, (22, 101, 52) if plant_hover else (20, 83, 45), plant_btn, border_radius=4)
-                pygame.draw.rect(surface, (74, 222, 128), plant_btn, width=1, border_radius=4)
-                p_label = f"{p.crop}" if getattr(p, "crop", None) else "Plant"
-                p_surf = self.font_badge.render(p_label, True, (255, 255, 255))
-                surface.blit(p_surf, (plant_btn.x + (plant_btn.w - p_surf.get_width()) // 2, plant_btn.y + 4))
-                right_cursor -= 86
-
-                # Worker Controls: [⚡ Auto] [+] {count/max} [-]
-                auto_btn = pygame.Rect(right_cursor - 28, y_cur - 1, 26, 22)
-                self.worker_auto_btn_rects[p.id] = auto_btn
-                a_hov = auto_btn.collidepoint(pygame.mouse.get_pos())
-                pygame.draw.rect(surface, (16, 185, 129) if a_hov else (5, 150, 105), auto_btn, border_radius=3)
-                a_txt = self.font_badge.render("Auto", True, (255, 255, 255))
-                surface.blit(a_txt, (auto_btn.x + 6, auto_btn.y + 4))
-                right_cursor -= 32
-
-                inc_btn = pygame.Rect(right_cursor - 20, y_cur - 1, 18, 22)
-                self.worker_inc_btn_rects[p.id] = inc_btn
-                inc_hov = inc_btn.collidepoint(pygame.mouse.get_pos())
-                pygame.draw.rect(surface, (37, 99, 235) if inc_hov else (30, 58, 138), inc_btn, border_radius=3)
-                surface.blit(self.font_badge.render("+", True, (255, 255, 255)), (inc_btn.x + 5, inc_btn.y + 3))
-                right_cursor -= 24
-
-                w_count = len(getattr(p, 'assigned_workers', set()))
-                w_max = getattr(p, 'max_workers', 2)
-                cnt_str = f"{w_count}/{w_max} Workers"
-                cnt_surf = self.font_badge.render(cnt_str, True, (241, 245, 249))
-                surface.blit(cnt_surf, (right_cursor - cnt_surf.get_width() - 4, y_cur + 3))
-                right_cursor -= (cnt_surf.get_width() + 8)
-
-                dec_btn = pygame.Rect(right_cursor - 20, y_cur - 1, 18, 22)
-                self.worker_dec_btn_rects[p.id] = dec_btn
-                dec_hov = dec_btn.collidepoint(pygame.mouse.get_pos())
-                pygame.draw.rect(surface, (71, 85, 105) if dec_hov else (51, 65, 85), dec_btn, border_radius=3)
-                surface.blit(self.font_badge.render("-", True, (255, 255, 255)), (dec_btn.x + 6, dec_btn.y + 3))
-
-            else:
-                txt = f"• {prefix}{p.name} [{len(p.tiles)} tiles {p.permit_type.capitalize()}] — {status_str}"
-                surface.blit(self.font_body.render(txt, True, col), (mx + 36, y_cur + 2))
-
-                right_cursor = row_rect.right
-                # Delete button for empty permits
-                if is_empty:
-                    del_btn = pygame.Rect(right_cursor - 84, y_cur - 1, 82, 22)
-                    self.delete_permit_btn_rects[p.id] = del_btn
-                    del_hover = del_btn.collidepoint(pygame.mouse.get_pos())
-                    pygame.draw.rect(surface, (220, 38, 38) if del_hover else (153, 27, 27), del_btn, border_radius=4)
-                    del_lbl = self.font_badge.render("Delete", True, (255, 255, 255))
-                    surface.blit(del_lbl, (del_btn.x + (del_btn.w - del_lbl.get_width()) // 2, del_btn.y + 4))
-                    right_cursor -= 88
-
-                # Edit Lot button
-                edit_btn = pygame.Rect(right_cursor - 64, y_cur - 1, 60, 22)
-                self.edit_permit_btn_rects[p.id] = edit_btn
-                edit_hov = edit_btn.collidepoint(pygame.mouse.get_pos())
-                pygame.draw.rect(surface, (202, 138, 4) if edit_hov else (161, 98, 7), edit_btn, border_radius=4)
-                pygame.draw.rect(surface, (250, 204, 21), edit_btn, width=1, border_radius=4)
-                edit_lbl = self.font_badge.render("Edit", True, (255, 255, 255))
-                surface.blit(edit_lbl, (edit_btn.x + (edit_btn.w - edit_lbl.get_width()) // 2, edit_btn.y + 4))
-
-            y_cur += 26
-
-        btn_y = cy + 200
-        inst_txt = self.font_sub.render("Issue New Landlord Permits (Select, then Click & Drag on Map to Size):", True, (56, 189, 248))
-        surface.blit(inst_txt, (mx + 24, btn_y))
-
         self.permit_btn_rects = {}
-        
-        # 5 Permit Buttons: Housing, Storage, Market, Farm, Landlord Private Area
-        m_pos = pygame.mouse.get_pos()
-        total_avail_w = self.modal_w - 48
-        btn_gap = 8
-        btn_w = (total_avail_w - (4 * btn_gap)) // 5
-        
-        housing_btn = pygame.Rect(mx + 24 + 0 * (btn_w + btn_gap), btn_y + 26, btn_w, 36)
-        storage_btn = pygame.Rect(mx + 24 + 1 * (btn_w + btn_gap), btn_y + 26, btn_w, 36)
-        market_btn = pygame.Rect(mx + 24 + 2 * (btn_w + btn_gap), btn_y + 26, btn_w, 36)
-        farm_btn = pygame.Rect(mx + 24 + 3 * (btn_w + btn_gap), btn_y + 26, btn_w, 36)
-        private_btn = pygame.Rect(mx + 24 + 4 * (btn_w + btn_gap), btn_y + 26, btn_w, 36)
 
-        self.permit_btn_rects["housing"] = housing_btn
-        self.permit_btn_rects["storage"] = storage_btn
-        self.permit_btn_rects["market"] = market_btn
-        self.permit_btn_rects["farm"] = farm_btn
-        self.permit_btn_rects["landlord_private"] = private_btn
+        if self.selected_permit_category is None:
+            # -----------------------------------------------------------------
+            # SCREEN 1: Permit Categories Selection Screen
+            # -----------------------------------------------------------------
+            p_title = self.font_sub.render(f" Landlord Permit Categories ({len(categories)} categories, {len(permit_manager.permits)} total lots):", True, COLOR_TEXT_TITLE)
+            surface.blit(p_title, (mx + 24, cy))
 
-        # 1. Housing Permit Button
-        h_hov = housing_btn.collidepoint(m_pos)
-        pygame.draw.rect(surface, (59, 130, 246) if h_hov else (37, 99, 235), housing_btn, border_radius=6)
-        pygame.draw.rect(surface, (147, 197, 253) if h_hov else (96, 165, 250), housing_btn, width=1, border_radius=6)
-        h_lbl = self.font_btn.render("+ Housing Permit", True, (255, 255, 255))
-        surface.blit(h_lbl, (housing_btn.centerx - h_lbl.get_width() // 2, housing_btn.centery - h_lbl.get_height() // 2))
+            sub_txt = self.font_body.render("Select a category below to inspect and manage designated lots, or quick-issue a permit:", True, COLOR_TEXT_MUTED)
+            surface.blit(sub_txt, (mx + 28, cy + 22))
 
-        # 2. Storage Permit Button
-        s_hov = storage_btn.collidepoint(m_pos)
-        pygame.draw.rect(surface, (234, 179, 8) if s_hov else (202, 138, 4), storage_btn, border_radius=6)
-        pygame.draw.rect(surface, (253, 224, 71) if s_hov else (250, 204, 21), storage_btn, width=1, border_radius=6)
-        s_lbl = self.font_btn.render("+ Storage Permit", True, (255, 255, 255))
-        surface.blit(s_lbl, (storage_btn.centerx - s_lbl.get_width() // 2, storage_btn.centery - s_lbl.get_height() // 2))
+            card_y = cy + 44
+            for cat in categories:
+                cat_id = cat["id"]
+                cat_name = cat["name"]
+                cat_desc = cat["desc"]
+                cat_col = cat.get("color", (59, 130, 246))
+                cat_permits = [p for p in permit_manager.permits if p.permit_type in cat["permit_types"]]
+                lot_count = len(cat_permits)
 
-        # 3. Market Permit Button
-        m_hov = market_btn.collidepoint(m_pos)
-        pygame.draw.rect(surface, (245, 158, 11) if m_hov else (217, 119, 6), market_btn, border_radius=6)
-        pygame.draw.rect(surface, (253, 230, 138) if m_hov else (251, 191, 36), market_btn, width=1, border_radius=6)
-        m_lbl = self.font_btn.render("+ Market Permit", True, (255, 255, 255))
-        surface.blit(m_lbl, (market_btn.centerx - m_lbl.get_width() // 2, market_btn.centery - m_lbl.get_height() // 2))
+                card_rect = pygame.Rect(mx + 24, card_y, self.modal_w - 48, 36)
+                self.permit_category_btn_rects[cat_id] = card_rect
 
-        # 4. Farm Permit Button
-        f_hov = farm_btn.collidepoint(m_pos)
-        pygame.draw.rect(surface, (34, 197, 94) if f_hov else (22, 101, 52), farm_btn, border_radius=6)
-        pygame.draw.rect(surface, (134, 239, 172) if f_hov else (74, 222, 128), farm_btn, width=1, border_radius=6)
-        f_lbl = self.font_btn.render("+ Farm Permit", True, (255, 255, 255))
-        surface.blit(f_lbl, (farm_btn.centerx - f_lbl.get_width() // 2, farm_btn.centery - f_lbl.get_height() // 2))
+                is_hov = card_rect.collidepoint(m_pos)
+                bg_col = (30, 41, 59) if is_hov else (15, 23, 42)
+                border_col = (56, 189, 248) if is_hov else (51, 65, 85)
 
-        # 5. Landlord Private Area Button
-        p_hov = private_btn.collidepoint(m_pos)
-        pygame.draw.rect(surface, (147, 51, 234) if p_hov else (126, 34, 206), private_btn, border_radius=6)
-        pygame.draw.rect(surface, (250, 204, 21) if p_hov else (234, 179, 8), private_btn, width=1, border_radius=6)
-        p_lbl = self.font_btn.render("+ Private Area", True, (255, 255, 255))
-        surface.blit(p_lbl, (private_btn.centerx - p_lbl.get_width() // 2, private_btn.centery - p_lbl.get_height() // 2))
+                pygame.draw.rect(surface, bg_col, card_rect, border_radius=6)
+                pygame.draw.rect(surface, border_col, card_rect, width=1, border_radius=6)
+
+                # Left color accent bar
+                accent_rect = pygame.Rect(card_rect.x, card_rect.y, 5, card_rect.height)
+                pygame.draw.rect(surface, cat_col, accent_rect, border_top_left_radius=6, border_bottom_left_radius=6)
+
+                # Category title & description
+                t_surf = self.font_sub.render(cat_name, True, (241, 245, 249) if is_hov else (226, 232, 240))
+                surface.blit(t_surf, (card_rect.x + 16, card_rect.y + 9))
+
+                desc_surf = self.font_body.render(f"— {cat_desc}", True, COLOR_TEXT_MUTED)
+                surface.blit(desc_surf, (card_rect.x + 22 + t_surf.get_width(), card_rect.y + 10))
+
+                # Right badges: Lot count and "View Lots →"
+                badge_w = 80
+                badge_rect = pygame.Rect(card_rect.right - badge_w - 12, card_rect.y + 7, badge_w, 22)
+                badge_bg = (22, 101, 52) if lot_count > 0 else (51, 65, 85)
+                badge_border = (74, 222, 128) if lot_count > 0 else (100, 116, 139)
+                pygame.draw.rect(surface, badge_bg, badge_rect, border_radius=4)
+                pygame.draw.rect(surface, badge_border, badge_rect, width=1, border_radius=4)
+
+                lbl_text = f"{lot_count} Lots" if lot_count != 1 else "1 Lot"
+                cnt_txt = self.font_badge.render(lbl_text, True, (255, 255, 255))
+                surface.blit(cnt_txt, (badge_rect.centerx - cnt_txt.get_width() // 2, badge_rect.centery - cnt_txt.get_height() // 2))
+
+                arrow_lbl = self.font_badge.render("View →", True, (56, 189, 248) if is_hov else (148, 163, 184))
+                surface.blit(arrow_lbl, (badge_rect.x - arrow_lbl.get_width() - 10, card_rect.y + 11))
+
+                card_y += 42
+
+            # Bottom: Quick Issue New Landlord Permits
+            btn_y = cy + 270
+            inst_txt = self.font_sub.render("Issue New Landlord Permits (Select, then Click & Drag on Map to Size):", True, (56, 189, 248))
+            surface.blit(inst_txt, (mx + 24, btn_y))
+
+            total_avail_w = self.modal_w - 48
+            btn_gap = 8
+            btn_w = (total_avail_w - (4 * btn_gap)) // 5
+
+            housing_btn = pygame.Rect(mx + 24 + 0 * (btn_w + btn_gap), btn_y + 26, btn_w, 36)
+            storage_btn = pygame.Rect(mx + 24 + 1 * (btn_w + btn_gap), btn_y + 26, btn_w, 36)
+            market_btn = pygame.Rect(mx + 24 + 2 * (btn_w + btn_gap), btn_y + 26, btn_w, 36)
+            farm_btn = pygame.Rect(mx + 24 + 3 * (btn_w + btn_gap), btn_y + 26, btn_w, 36)
+            private_btn = pygame.Rect(mx + 24 + 4 * (btn_w + btn_gap), btn_y + 26, btn_w, 36)
+
+            self.permit_btn_rects["housing"] = housing_btn
+            self.permit_btn_rects["storage"] = storage_btn
+            self.permit_btn_rects["market"] = market_btn
+            self.permit_btn_rects["farm"] = farm_btn
+            self.permit_btn_rects["landlord_private"] = private_btn
+
+            # 1. Housing Permit Button
+            h_hov = housing_btn.collidepoint(m_pos)
+            pygame.draw.rect(surface, (59, 130, 246) if h_hov else (37, 99, 235), housing_btn, border_radius=6)
+            pygame.draw.rect(surface, (147, 197, 253) if h_hov else (96, 165, 250), housing_btn, width=1, border_radius=6)
+            h_lbl = self.font_btn.render("+ Housing Permit", True, (255, 255, 255))
+            surface.blit(h_lbl, (housing_btn.centerx - h_lbl.get_width() // 2, housing_btn.centery - h_lbl.get_height() // 2))
+
+            # 2. Storage Permit Button
+            s_hov = storage_btn.collidepoint(m_pos)
+            pygame.draw.rect(surface, (234, 179, 8) if s_hov else (202, 138, 4), storage_btn, border_radius=6)
+            pygame.draw.rect(surface, (253, 224, 71) if s_hov else (250, 204, 21), storage_btn, width=1, border_radius=6)
+            s_lbl = self.font_btn.render("+ Storage Permit", True, (255, 255, 255))
+            surface.blit(s_lbl, (storage_btn.centerx - s_lbl.get_width() // 2, storage_btn.centery - s_lbl.get_height() // 2))
+
+            # 3. Market Permit Button
+            m_hov = market_btn.collidepoint(m_pos)
+            pygame.draw.rect(surface, (245, 158, 11) if m_hov else (217, 119, 6), market_btn, border_radius=6)
+            pygame.draw.rect(surface, (253, 230, 138) if m_hov else (251, 191, 36), market_btn, width=1, border_radius=6)
+            m_lbl = self.font_btn.render("+ Market Permit", True, (255, 255, 255))
+            surface.blit(m_lbl, (market_btn.centerx - m_lbl.get_width() // 2, market_btn.centery - m_lbl.get_height() // 2))
+
+            # 4. Farm Permit Button
+            f_hov = farm_btn.collidepoint(m_pos)
+            pygame.draw.rect(surface, (34, 197, 94) if f_hov else (22, 101, 52), farm_btn, border_radius=6)
+            pygame.draw.rect(surface, (134, 239, 172) if f_hov else (74, 222, 128), farm_btn, width=1, border_radius=6)
+            f_lbl = self.font_btn.render("+ Farm Permit", True, (255, 255, 255))
+            surface.blit(f_lbl, (farm_btn.centerx - f_lbl.get_width() // 2, farm_btn.centery - f_lbl.get_height() // 2))
+
+            # 5. Landlord Private Area Button
+            p_hov = private_btn.collidepoint(m_pos)
+            pygame.draw.rect(surface, (147, 51, 234) if p_hov else (126, 34, 206), private_btn, border_radius=6)
+            pygame.draw.rect(surface, (250, 204, 21) if p_hov else (234, 179, 8), private_btn, width=1, border_radius=6)
+            p_lbl = self.font_btn.render("+ Private Area", True, (255, 255, 255))
+            surface.blit(p_lbl, (private_btn.centerx - p_lbl.get_width() // 2, private_btn.centery - p_lbl.get_height() // 2))
+
+        else:
+            # -----------------------------------------------------------------
+            # SCREEN 2: Category Details & Filtered Permits View
+            # -----------------------------------------------------------------
+            current_cat = next((c for c in categories if c["id"] == self.selected_permit_category), None)
+            if not current_cat:
+                self.selected_permit_category = None
+                return
+
+            cat_name = current_cat["name"]
+            cat_desc = current_cat["desc"]
+            cat_types = current_cat["permit_types"]
+            category_permits = [p for p in permit_manager.permits if p.permit_type in cat_types]
+
+            # 1. Back button to return to category selection screen
+            back_btn = pygame.Rect(mx + 24, cy, 160, 26)
+            self.permit_category_back_btn_rect = back_btn
+            b_hov = back_btn.collidepoint(m_pos)
+            pygame.draw.rect(surface, (30, 58, 138) if b_hov else (30, 41, 59), back_btn, border_radius=4)
+            pygame.draw.rect(surface, (96, 165, 250) if b_hov else (71, 85, 105), back_btn, width=1, border_radius=4)
+            b_lbl = self.font_badge.render("← Back to Categories", True, (255, 255, 255))
+            surface.blit(b_lbl, (back_btn.centerx - b_lbl.get_width() // 2, back_btn.centery - b_lbl.get_height() // 2))
+
+            # 2. Section Title (Displays Category Name as required)
+            p_title = self.font_sub.render(f"Category: {cat_name} ({len(category_permits)} lots)", True, COLOR_TEXT_TITLE)
+            surface.blit(p_title, (back_btn.right + 14, cy + 3))
+
+            # 3. Subtitle / Description
+            sub_txt = self.font_body.render(f"• {cat_desc}", True, COLOR_TEXT_MUTED)
+            surface.blit(sub_txt, (mx + 28, cy + 32))
+
+            y_cur = cy + 54
+
+            # 4. Filtered Permits List or Empty State
+            if not category_permits:
+                empty_box = pygame.Rect(mx + 24, y_cur, self.modal_w - 48, 54)
+                pygame.draw.rect(surface, (15, 23, 42, 200), empty_box, border_radius=6)
+                pygame.draw.rect(surface, (51, 65, 85), empty_box, width=1, border_radius=6)
+                msg1 = f"• No active permits issued under '{cat_name}' yet."
+                msg2 = "Click the button below to issue and drag a new lot for this category on the estate map."
+                surface.blit(self.font_body.render(msg1, True, (203, 213, 225)), (empty_box.x + 16, empty_box.y + 10))
+                surface.blit(self.font_body.render(msg2, True, COLOR_TEXT_MUTED), (empty_box.x + 16, empty_box.y + 30))
+                y_cur = empty_box.bottom + 16
+            else:
+                for p in category_permits:
+                    self._draw_permit_row(surface, p, mx, y_cur, empty_areas)
+                    y_cur += 26
+
+            # 5. Bottom Action: Issue New Permit for this specific category
+            btn_y = max(y_cur + 20, cy + 220)
+            inst_txt = self.font_sub.render(f"Issue New {cat_name} (Select, then Click & Drag on Map to Size):", True, (56, 189, 248))
+            surface.blit(inst_txt, (mx + 24, btn_y))
+
+            avail_w = self.modal_w - 48
+            k = len(cat_types)
+            c_btn_w = min(180, (avail_w - ((k - 1) * 8)) // max(1, k))
+            for idx, p_type in enumerate(cat_types):
+                p_cfg = PERMIT_TYPES.get(p_type, {})
+                p_btn = pygame.Rect(mx + 24 + idx * (c_btn_w + 8), btn_y + 26, c_btn_w, 36)
+                self.permit_btn_rects[p_type] = p_btn
+                hov = p_btn.collidepoint(m_pos)
+                raw_col = p_cfg.get("color", (59, 130, 246, 60))
+                rgb_col = (raw_col[0], raw_col[1], raw_col[2])
+                brd_col = p_cfg.get("border_color", (96, 165, 250))
+                pygame.draw.rect(surface, brd_col if hov else rgb_col, p_btn, border_radius=6)
+                pygame.draw.rect(surface, (255, 255, 255) if hov else brd_col, p_btn, width=1, border_radius=6)
+                b_text = f"+ {p_cfg.get('name', p_type.capitalize())}"
+                lbl = self.font_btn.render(b_text, True, (255, 255, 255))
+                surface.blit(lbl, (p_btn.centerx - lbl.get_width() // 2, p_btn.centery - lbl.get_height() // 2))
 
         # Crop Selection Popup Dialog
         self.crop_select_btn_rects = {}
@@ -2155,8 +2323,17 @@ class RaportUI:
 
         # Living / Deceased Status Badge
         is_alive = getattr(member, "is_alive", True)
+        h_timer = getattr(member, "hunger_death_timer", None)
+        t_timer = getattr(member, "thirst_death_timer", None)
         if is_alive:
-            st_badge = self.font_badge.render("[ALIVE]", True, (34, 197, 94))
+            if h_timer is not None and t_timer is not None:
+                st_badge = self.font_badge.render("[CRITICAL: Starving & Dehydrated]", True, (239, 68, 68))
+            elif h_timer is not None:
+                st_badge = self.font_badge.render(f"[CRITICAL: Starving in {h_timer:.1f}h]", True, (239, 68, 68))
+            elif t_timer is not None:
+                st_badge = self.font_badge.render(f"[CRITICAL: Dehydrated in {t_timer:.1f}h]", True, (239, 68, 68))
+            else:
+                st_badge = self.font_badge.render("[ALIVE]", True, (34, 197, 94))
         else:
             reason = getattr(member, "death_reason", "Starvation")
             st_badge = self.font_badge.render(f"[DECEASED: {reason}]", True, (239, 68, 68))
@@ -2179,27 +2356,29 @@ class RaportUI:
 
         # Hunger Bar
         surface.blit(self.font_badge.render("Hunger:", True, (241, 245, 249)), (dx + 20, dy + 58))
-        h_bar_bg = pygame.Rect(dx + 74, dy + 58, 140, 14)
+        h_bar_bg = pygame.Rect(dx + 74, dy + 58, 120, 14)
         pygame.draw.rect(surface, (30, 41, 59), h_bar_bg, border_radius=4)
-        h_fill_w = max(0, int(140 * (h_val / 100.0)))
+        h_fill_w = max(0, int(120 * (h_val / 100.0)))
         if h_fill_w > 0:
             h_col = (34, 197, 94) if h_val > 50 else ((234, 179, 8) if h_val > 20 else (239, 68, 68))
             pygame.draw.rect(surface, h_col, (dx + 74, dy + 58, h_fill_w, 14), border_radius=4)
         pygame.draw.rect(surface, (71, 85, 105), h_bar_bg, width=1, border_radius=4)
-        h_pct = self.font_badge.render(f"{int(h_val)}%", True, (255, 255, 255))
-        surface.blit(h_pct, (dx + 220, dy + 58))
+        h_txt_str = f"{int(h_val)}%" if h_timer is None else f"{int(h_val)}% ({h_timer:.1f}h)"
+        h_pct = self.font_badge.render(h_txt_str, True, (255, 255, 255) if h_timer is None else (239, 68, 68))
+        surface.blit(h_pct, (dx + 200, dy + 58))
 
         # Thirst Bar
-        surface.blit(self.font_badge.render("Thirst:", True, (241, 245, 249)), (dx + 270, dy + 58))
-        t_bar_bg = pygame.Rect(dx + 316, dy + 58, 140, 14)
+        surface.blit(self.font_badge.render("Thirst:", True, (241, 245, 249)), (dx + 276, dy + 58))
+        t_bar_bg = pygame.Rect(dx + 322, dy + 58, 120, 14)
         pygame.draw.rect(surface, (30, 41, 59), t_bar_bg, border_radius=4)
-        t_fill_w = max(0, int(140 * (t_val / 100.0)))
+        t_fill_w = max(0, int(120 * (t_val / 100.0)))
         if t_fill_w > 0:
             t_col = (56, 189, 248) if t_val > 50 else ((59, 130, 246) if t_val > 20 else (239, 68, 68))
-            pygame.draw.rect(surface, t_col, (dx + 316, dy + 58, t_fill_w, 14), border_radius=4)
+            pygame.draw.rect(surface, t_col, (dx + 322, dy + 58, t_fill_w, 14), border_radius=4)
         pygame.draw.rect(surface, (71, 85, 105), t_bar_bg, width=1, border_radius=4)
-        t_pct = self.font_badge.render(f"{int(t_val)}%", True, (255, 255, 255))
-        surface.blit(t_pct, (dx + 462, dy + 58))
+        t_txt_str = f"{int(t_val)}%" if t_timer is None else f"{int(t_val)}% ({t_timer:.1f}h)"
+        t_pct = self.font_badge.render(t_txt_str, True, (255, 255, 255) if t_timer is None else (239, 68, 68))
+        surface.blit(t_pct, (dx + 448, dy + 58))
 
         # Bed Status & Active tool
         bed_status = f"Assigned Bed:  {member.assigned_bed_id}" if getattr(member, 'assigned_bed_id', None) else " Bed: None (Sleeping on Floor)"
@@ -2434,13 +2613,20 @@ class RaportUI:
         # Responsive Dimensions:
         dlg_w = min(600, max(460, screen_w - 40))
 
+        # Dynamically build grantable items list (Standard items + any extra items currently in landlord stock)
+        grantable = list(GRANTABLE_ITEMS)
+        existing_types = {it["type"] for it in grantable}
+        for st_type, st_qty in stock.items():
+            if st_type not in existing_types and st_qty > 0:
+                grantable.append({"type": st_type, "name": canonical_item_name(st_type)})
+
         # Layout metrics
         header_h = 76
         footer_h = 66
         row_h = 44
         row_gap = 8
         row_step = row_h + row_gap
-        num_items = len(GRANTABLE_ITEMS)
+        num_items = len(grantable)
         total_items_h = num_items * row_step
 
         # Max modal height allowed relative to viewport
@@ -2509,7 +2695,7 @@ class RaportUI:
 
         start_row_y = viewport_y + 4 - self.grant_scroll_y
 
-        for idx, item_data in enumerate(GRANTABLE_ITEMS):
+        for idx, item_data in enumerate(grantable):
             it_type = item_data["type"]
             it_name = item_data["name"]
             avail = stock.get(it_type, 0)

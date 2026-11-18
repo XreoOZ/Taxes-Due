@@ -4,7 +4,7 @@ Physical Stockpile & Ground Item System (RimWorld-style Dropped Items & Hauling)
 
 import math
 import pygame
-from game.config import MAX_STACK_SIZE, MAX_TILE_CAPACITY, RESOURCE_COLORS, DEFAULT_STARTER_TOOLS
+from game.config import MAX_STACK_SIZE, MAX_TILE_CAPACITY, RESOURCE_COLORS, DEFAULT_STARTER_TOOLS, is_food_item, is_water_item
 
 class ResourceStack:
     def __init__(self, resource_type, amount, grid_x, grid_y, owner_type="landlord", owner_id=None):
@@ -186,8 +186,18 @@ class StockpileManager:
         """Menghitung total seluruh resource fisik milik Landlord di stockpile/dunia"""
         totals = {"Wood": 0, "Food": 0, "Stone": 0, "Water": 0, "Copper": 0, "Silver": 0, "Gold": 0}
         for s in self.stacks:
-            if s.resource_type in totals and getattr(s, "owner_type", "landlord") == "landlord":
-                totals[s.resource_type] += s.amount
+            if getattr(s, "owner_type", "landlord") == "landlord":
+                rt = s.resource_type
+                if rt in totals:
+                    totals[rt] += s.amount
+                elif is_food_item(rt):
+                    totals["Food"] += s.amount
+                elif is_water_item(rt):
+                    totals["Water"] += s.amount
+                else:
+                    rt_clean = str(rt).replace(" Coin", "").strip()
+                    if rt_clean in totals:
+                        totals[rt_clean] += s.amount
         return totals
 
     def refresh_stacks(self, resources, permit_manager):

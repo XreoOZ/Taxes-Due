@@ -604,6 +604,8 @@ PERMIT_TYPES = {
     "housing": {
         "id": "housing",
         "name": "Housing Permit",
+        "category": "Housing & Residential",
+        "category_id": "housing",
         "desc": "Official landlord deed for residential settlements.",
         "color": (59, 130, 246, 60),
         "border_color": (96, 165, 250),
@@ -611,6 +613,8 @@ PERMIT_TYPES = {
     "storage": {
         "id": "storage",
         "name": "Storage Permit",
+        "category": "Logistics & Storage",
+        "category_id": "storage",
         "desc": "Official landlord deed for resource storage & stockpiles.",
         "color": (234, 179, 8, 60),
         "border_color": (250, 204, 21),
@@ -618,6 +622,8 @@ PERMIT_TYPES = {
     "market": {
         "id": "market",
         "name": "Market Permit",
+        "category": "Commercial & Trade",
+        "category_id": "market",
         "desc": "Official landlord deed for commercial trade and market stalls.",
         "color": (245, 158, 11, 60),
         "border_color": (251, 191, 36),
@@ -625,6 +631,8 @@ PERMIT_TYPES = {
     "farm": {
         "id": "farm",
         "name": "Farm Permit",
+        "category": "Agriculture & Farming",
+        "category_id": "farm",
         "desc": "Official landlord agricultural deed for cultivating crops.",
         "color": (34, 197, 94, 50),
         "border_color": (74, 222, 128),
@@ -632,11 +640,34 @@ PERMIT_TYPES = {
     "landlord_private": {
         "id": "landlord_private",
         "name": "Landlord Private Area",
+        "category": "Estate & Private Grounds",
+        "category_id": "landlord_private",
         "desc": "Restricted estate grounds. Only Landlord and Servants may enter.",
         "color": (147, 51, 234, 60),
         "border_color": (234, 179, 8),
     }
 }
+
+def get_permit_categories():
+    """
+    Returns dynamically discovered categories from PERMIT_TYPES.
+    Preserves config-driven architecture: zero hardcoding in UI.
+    Automatically incorporates newly registered permit types.
+    """
+    categories = {}
+    for p_id, p_cfg in PERMIT_TYPES.items():
+        cat_id = p_cfg.get("category_id", p_id)
+        if cat_id not in categories:
+            categories[cat_id] = {
+                "id": cat_id,
+                "name": p_cfg.get("category", p_cfg.get("name", cat_id.capitalize())),
+                "desc": p_cfg.get("desc", ""),
+                "color": p_cfg.get("border_color", (59, 130, 246)),
+                "permit_types": []
+            }
+        if p_id not in categories[cat_id]["permit_types"]:
+            categories[cat_id]["permit_types"].append(p_id)
+    return list(categories.values())
 
 # Agricultural Crops System (Cultivated on Farm Permits)
 CROP_TYPES = {
@@ -714,6 +745,7 @@ AI_NEED_MAX = 100.0
 AI_NEED_HUNGER_DECAY_PER_DAY = 100.0   # Decays by 100% per 1 full in-game day (1200 seconds)
 AI_NEED_THIRST_DECAY_PER_DAY = 100.0   # Decays by 100% per 1 full in-game day
 AI_CRITICAL_NEED_THRESHOLD = 20.0      # Critical threshold (<= 20%) triggering task interruption
+AI_DEATH_COUNTDOWN_HOURS = 24.0        # 24 in-game hours before death occurs when a need reaches 0%
 DAILY_FOOD_REQUIREMENT = 1             # 1 food per day per living individual
 DAILY_WATER_REQUIREMENT = 1            # 1 water per day per living individual
 AI_NEED_FOOD_RESTORE = 100.0           # Need restored when consuming food

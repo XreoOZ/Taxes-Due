@@ -168,6 +168,8 @@ def serialize_game_state(day_cycle, resources, player, permit_manager, building_
                     "tilling_timer": getattr(m, "tilling_timer", 0.0),
                     "hunger": getattr(m, "hunger", 100.0),
                     "thirst": getattr(m, "thirst", 100.0),
+                    "hunger_death_timer": getattr(m, "hunger_death_timer", None),
+                    "thirst_death_timer": getattr(m, "thirst_death_timer", None),
                     "daily_food_consumed": getattr(m, "daily_food_consumed", 0),
                     "daily_water_consumed": getattr(m, "daily_water_consumed", 0),
                     "is_alive": getattr(m, "is_alive", True),
@@ -414,6 +416,8 @@ def load_from_slot(slot_id, day_cycle, resources, player, permit_manager, buildi
             v.tilling_timer = m_d.get("tilling_timer", 0.0)
             v.hunger = float(m_d.get("hunger", 100.0))
             v.thirst = float(m_d.get("thirst", 100.0))
+            v.hunger_death_timer = float(m_d["hunger_death_timer"]) if m_d.get("hunger_death_timer") is not None else None
+            v.thirst_death_timer = float(m_d["thirst_death_timer"]) if m_d.get("thirst_death_timer") is not None else None
             if "daily_food_consumed" in m_d:
                 v.daily_food_consumed = int(m_d["daily_food_consumed"])
             else:

@@ -114,6 +114,7 @@ class TestFoodWaterCategorySync(unittest.TestCase):
         self.assertEqual(fam.get_water_stock(self.furniture_manager, self.stockpile_manager), 3)
 
         # Hugh Brewer consumes 1 Potato
+        v1.x, v1.y = chest.get_world_pos()
         v1.hunger = 15.0
         v1.task = "SEEKING_FOOD"
         v1.update(0.1, self.permit_manager, None, [v1], None, furniture_manager=self.furniture_manager, day_cycle=self.day_cycle)
@@ -125,6 +126,7 @@ class TestFoodWaterCategorySync(unittest.TestCase):
         self.assertEqual((food_ok, water_ok, living_tot), (1, 0, 3))
 
         # Hugh Brewer consumes 1 Water
+        v1.x, v1.y = chest.get_world_pos()
         v1.thirst = 10.0
         v1.task = "SEEKING_WATER"
         v1.update(0.1, self.permit_manager, None, [v1], None, furniture_manager=self.furniture_manager, day_cycle=self.day_cycle)
@@ -169,6 +171,7 @@ class TestFoodWaterCategorySync(unittest.TestCase):
 
         self.assertEqual(fam.get_food_stock(self.furniture_manager, self.stockpile_manager), 3)
 
+        v.x, v.y = chest.get_world_pos()
         v.hunger = 15.0
         v.task = "SEEKING_FOOD"
         v.update(0.1, self.permit_manager, None, [v], None, furniture_manager=self.furniture_manager, day_cycle=self.day_cycle)
@@ -220,6 +223,7 @@ class TestFoodWaterCategorySync(unittest.TestCase):
         self.furniture_manager.furnitures.append(chest)
 
         # Villager is hauling 3 units of water collected from well
+        v.x, v.y = chest.get_world_pos()
         v.inventory["Water"] = 3
         v.task = "HAULING_HOUSEHOLD_WATER"
         v.update(0.1, self.permit_manager, None, [v], None, furniture_manager=self.furniture_manager, day_cycle=self.day_cycle)

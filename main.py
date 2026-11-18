@@ -1346,7 +1346,7 @@ def main():
                 # Ring indicator around entity
                 pygame.draw.circle(screen, (56, 189, 248), (esx, esy), er + 6, 2)
 
-                cw, ch = 310, 180
+                cw, ch = 350, 185
                 cx = max(12, min(screen.get_width() - cw - 12, esx - cw // 2))
                 cy = esy - ch - 16
                 if cy < 50:
@@ -1363,19 +1363,35 @@ def main():
                 pygame.draw.rect(card_surf, (56, 189, 248), (0, 0, cw, ch), width=2, border_radius=10)
                 screen.blit(card_surf, (cx, cy))
 
-                # Identity Name & Role
+                # Living / Deceased / Survival Countdown Status Badge
+                is_alive = getattr(selected_entity, "is_alive", True)
+                h_timer = getattr(selected_entity, "hunger_death_timer", None)
+                t_timer = getattr(selected_entity, "thirst_death_timer", None)
+                if not is_alive:
+                    reason = getattr(selected_entity, "death_reason", "Starvation")
+                    st_txt = font_badge.render(f"[DECEASED: {reason}]", True, (239, 68, 68))
+                elif h_timer is not None and t_timer is not None:
+                    st_txt = font_badge.render("[CRITICAL: Starving & Dehydrated]", True, (239, 68, 68))
+                elif h_timer is not None:
+                    st_txt = font_badge.render(f"[CRITICAL: Starving in {h_timer:.1f}h]", True, (239, 68, 68))
+                elif t_timer is not None:
+                    st_txt = font_badge.render(f"[CRITICAL: Dehydrated in {t_timer:.1f}h]", True, (239, 68, 68))
+                else:
+                    st_txt = font_badge.render("[ALIVE]", True, (34, 197, 94))
+
+                # Identity Name & Role (prevent text collision with status badge)
                 name_str = getattr(selected_entity, "full_name", getattr(selected_entity, "name", "Settler"))
                 role_str = getattr(selected_entity, "role", "")
                 title_lbl = f"{name_str} ({role_str})" if role_str else name_str
-                screen.blit(font_card.render(title_lbl[:26], True, (255, 255, 255)), (cx + 14, cy + 10))
-
-                # Living / Deceased Status Badge
-                is_alive = getattr(selected_entity, "is_alive", True)
-                if is_alive:
-                    st_txt = font_badge.render("[ALIVE]", True, (34, 197, 94))
-                else:
-                    reason = getattr(selected_entity, "death_reason", "Starvation")
-                    st_txt = font_badge.render(f"[DECEASED: {reason}]", True, (239, 68, 68))
+                max_title_w = max(40, cw - 36 - st_txt.get_width() - 20)
+                title_surf = font_card.render(title_lbl, True, (255, 255, 255))
+                if title_surf.get_width() > max_title_w:
+                    for i in range(len(title_lbl), 0, -1):
+                        trunc_s = font_card.render(title_lbl[:i] + "...", True, (255, 255, 255))
+                        if trunc_s.get_width() <= max_title_w:
+                            title_surf = trunc_s
+                            break
+                screen.blit(title_surf, (cx + 14, cy + 10))
                 screen.blit(st_txt, (cx + cw - 32 - st_txt.get_width(), cy + 12))
 
                 # Close (X) button
@@ -1403,26 +1419,30 @@ def main():
                 # Hunger Bar
                 h_val = max(0.0, min(100.0, getattr(selected_entity, "hunger", 100.0)))
                 screen.blit(font_badge.render("Hunger:", True, (241, 245, 249)), (cx + 14, cy + 76))
-                h_bg = pygame.Rect(cx + 68, cy + 76, 170, 14)
+                h_bg = pygame.Rect(cx + 68, cy + 76, 150, 14)
                 pygame.draw.rect(screen, (30, 41, 59), h_bg, border_radius=4)
-                h_fill = max(0, int(170 * (h_val / 100.0)))
+                h_fill = max(0, int(150 * (h_val / 100.0)))
                 if h_fill > 0:
                     h_c = (34, 197, 94) if h_val > 50 else ((234, 179, 8) if h_val > 20 else (239, 68, 68))
                     pygame.draw.rect(screen, h_c, (cx + 68, cy + 76, h_fill, 14), border_radius=4)
                 pygame.draw.rect(screen, (71, 85, 105), h_bg, width=1, border_radius=4)
-                screen.blit(font_badge.render(f"{int(h_val)}%", True, (255, 255, 255)), (cx + 246, cy + 76))
+                h_str = f"{int(h_val)}%" if h_timer is None else f"{int(h_val)}% ({h_timer:.1f}h)"
+                h_color = (255, 255, 255) if h_timer is None else (239, 68, 68)
+                screen.blit(font_badge.render(h_str, True, h_color), (cx + 226, cy + 76))
 
                 # Thirst Bar
                 t_val = max(0.0, min(100.0, getattr(selected_entity, "thirst", 100.0)))
                 screen.blit(font_badge.render("Thirst:", True, (241, 245, 249)), (cx + 14, cy + 96))
-                t_bg = pygame.Rect(cx + 68, cy + 96, 170, 14)
+                t_bg = pygame.Rect(cx + 68, cy + 96, 150, 14)
                 pygame.draw.rect(screen, (30, 41, 59), t_bg, border_radius=4)
-                t_fill = max(0, int(170 * (t_val / 100.0)))
+                t_fill = max(0, int(150 * (t_val / 100.0)))
                 if t_fill > 0:
                     t_c = (56, 189, 248) if t_val > 50 else ((59, 130, 246) if t_val > 20 else (239, 68, 68))
                     pygame.draw.rect(screen, t_c, (cx + 68, cy + 96, t_fill, 14), border_radius=4)
                 pygame.draw.rect(screen, (71, 85, 105), t_bg, width=1, border_radius=4)
-                screen.blit(font_badge.render(f"{int(t_val)}%", True, (255, 255, 255)), (cx + 246, cy + 96))
+                t_str = f"{int(t_val)}%" if t_timer is None else f"{int(t_val)}% ({t_timer:.1f}h)"
+                t_color = (255, 255, 255) if t_timer is None else (239, 68, 68)
+                screen.blit(font_badge.render(t_str, True, t_color), (cx + 226, cy + 96))
 
                 # Inventory Information
                 inv_items = []

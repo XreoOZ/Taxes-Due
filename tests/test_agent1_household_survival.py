@@ -235,7 +235,7 @@ class TestAgent1HouseholdSurvival(unittest.TestCase):
         self.assertIsNone(v.previous_task_before_need)
 
     def test_12_and_13_and_14_death_system_at_midnight_and_deceased_stops(self):
-        """12, 13 & 14. Missing daily consumption results in death at 00:00 midnight; deceased AI stops working and remains as corpse."""
+        """12, 13 & 14. Midnight does NOT kill AI; death occurs only when 24h countdown expires at 0% need; deceased AI stops working."""
         fam = Family("fam_survive", "Shepherd")
         v_survivor = Villager("vil_s1", "Hugh", "Shepherd", "Male", 25, 3, "Adult Son", "fam_survive")
         v_starved = Villager("vil_s2", "Beatrice", "Shepherd", "Female", 22, 3, "Adult Daughter", "fam_survive")
@@ -246,21 +246,39 @@ class TestAgent1HouseholdSurvival(unittest.TestCase):
         v_survivor.daily_food_consumed = 1
         v_survivor.daily_water_consumed = 1
 
-        # Beatrice failed to eat today (0 food consumed)
+        # Beatrice failed to eat today (0 food consumed), but hunger is at 50%
+        v_starved.hunger = 50.0
+        v_starved.thirst = 50.0
         v_starved.daily_food_consumed = 0
         v_starved.daily_water_consumed = 1
 
-        # Trigger midnight update
+        # Trigger midnight update: Neither Hugh nor Beatrice die at midnight!
         self.villager_manager.daily_midnight_update(day_number=1)
 
-        # Hugh survived
+        # Hugh survived and daily intake reset
         self.assertTrue(v_survivor.is_alive)
         self.assertEqual(v_survivor.status, "ALIVE")
-        # His daily intake reset for the new day
         self.assertEqual(v_survivor.daily_food_consumed, 0)
         self.assertEqual(v_survivor.daily_water_consumed, 0)
 
-        # Beatrice died of Starvation
+        # Beatrice ALSO survived midnight because hunger > 0%
+        self.assertTrue(v_starved.is_alive)
+        self.assertEqual(v_starved.status, "ALIVE")
+
+        # Now Beatrice hunger reaches 0%: countdown starts
+        v_starved.hunger = 0.0
+        v_starved.thirst = 100.0
+        # 1 update step to initialize the 24h countdown
+        v_starved.update(0.1, self.permit_manager, None, [v_starved], None)
+        self.assertIsNotNone(v_starved.hunger_death_timer)
+        self.assertTrue(v_survivor.is_alive)
+
+        # Fast forward hunger countdown to near expiry while keeping thirst well-hydrated
+        v_starved.hunger_death_timer = 0.0001
+        v_starved.thirst = 100.0
+        v_starved.update(0.1, self.permit_manager, None, [v_starved], None)
+
+        # Now Beatrice died of Starvation after countdown expired
         self.assertFalse(v_starved.is_alive)
         self.assertEqual(v_starved.status, "DECEASED")
         self.assertEqual(v_starved.death_reason, "Starvation")

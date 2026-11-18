@@ -40,6 +40,7 @@ from game.config import (
     AI_NEED_HUNGER_DECAY_PER_DAY,
     AI_NEED_THIRST_DECAY_PER_DAY,
     AI_CRITICAL_NEED_THRESHOLD,
+    AI_DEATH_COUNTDOWN_HOURS,
     DAILY_FOOD_REQUIREMENT,
     DAILY_WATER_REQUIREMENT,
     AI_NEED_FOOD_RESTORE,
@@ -135,6 +136,8 @@ class Villager:
         # Needs & Survival System (Agent 1)
         self.hunger = float(AI_NEED_MAX)
         self.thirst = float(AI_NEED_MAX)
+        self.hunger_death_timer = None  # None when hunger > 0; float remaining in-game hours when hunger <= 0
+        self.thirst_death_timer = None  # None when thirst > 0; float remaining in-game hours when thirst <= 0
         self.daily_food_consumed = 0
         self.daily_water_consumed = 0
         self.is_alive = True
@@ -157,6 +160,8 @@ class Villager:
         self.death_reason = reason
         self.death_day = day
         self.task = "DECEASED"
+        self.hunger_death_timer = None
+        self.thirst_death_timer = None
         self.is_moving = False
         self.current_path = []
         self.path_target = None
@@ -538,6 +543,42 @@ class Villager:
         self.hunger = max(0.0, self.hunger - (AI_NEED_HUNGER_DECAY_PER_DAY / day_sec) * dt)
         self.thirst = max(0.0, self.thirst - (AI_NEED_THIRST_DECAY_PER_DAY / day_sec) * dt)
 
+        # -------------------------------------------------------------
+        # 24-In-Game-Hour Death Countdown (0% Threshold ONLY)
+        # -------------------------------------------------------------
+        in_game_hours_passed = (dt / max(1.0, day_sec)) * 24.0
+
+        # 1. Hunger Death Countdown
+        if self.hunger <= 0.0:
+            if getattr(self, "hunger_death_timer", None) is None:
+                self.hunger_death_timer = float(AI_DEATH_COUNTDOWN_HOURS)
+            self.hunger_death_timer = max(0.0, self.hunger_death_timer - in_game_hours_passed)
+        else:
+            self.hunger_death_timer = None
+
+        # 2. Thirst Death Countdown
+        if self.thirst <= 0.0:
+            if getattr(self, "thirst_death_timer", None) is None:
+                self.thirst_death_timer = float(AI_DEATH_COUNTDOWN_HOURS)
+            self.thirst_death_timer = max(0.0, self.thirst_death_timer - in_game_hours_passed)
+        else:
+            self.thirst_death_timer = None
+
+        # 3. Check for Death upon Unresolved Countdown Expiration (Reaches 0)
+        cur_day = getattr(day_cycle, "day_number", 1) if day_cycle else 1
+        h_expired = (self.hunger_death_timer is not None and self.hunger_death_timer <= 0.0)
+        t_expired = (self.thirst_death_timer is not None and self.thirst_death_timer <= 0.0)
+
+        if h_expired or t_expired:
+            if h_expired and t_expired:
+                reason = "Starvation & Dehydration"
+            elif h_expired:
+                reason = "Starvation"
+            else:
+                reason = "Dehydration"
+            self.die(reason=reason, day=cur_day)
+            return
+
         if market_service is not None:
             self.market_service = market_service
         self.building_manager = building_manager
@@ -596,6 +637,7 @@ class Villager:
                 if self.inventory[inv_food] <= 0:
                     del self.inventory[inv_food]
                 self.hunger = min(AI_NEED_MAX, self.hunger + AI_NEED_FOOD_RESTORE)
+                self.hunger_death_timer = None
                 self.daily_food_consumed += 1
                 self.say(f"Ate {inv_food} from personal inventory!", duration=2.5)
                 self._resume_or_idle_after_need()
@@ -614,6 +656,7 @@ class Villager:
                     taken = chest.take_item(chest_food, 1)
                     if taken > 0:
                         self.hunger = min(AI_NEED_MAX, self.hunger + AI_NEED_FOOD_RESTORE)
+                        self.hunger_death_timer = None
                         self.daily_food_consumed += 1
                         self.say(f"Ate hearty meal of {chest_food} from household chest!", duration=2.5)
                         self._resume_or_idle_after_need()
@@ -639,15 +682,24 @@ class Villager:
                     if ground_food.amount <= 0:
                         stockpile_manager.stacks = [st for st in stockpile_manager.stacks if st != ground_food]
                     self.hunger = min(AI_NEED_MAX, self.hunger + AI_NEED_FOOD_RESTORE)
+                    self.hunger_death_timer = None
                     self.daily_food_consumed += 1
                     self.say(f"Ate {f_name} from family stockpile!", duration=2.5)
                     self._resume_or_idle_after_need()
                 return
 
-            # 4. Hubungi interface pasar AGENT 2 jika makanan di rumah kosong
-            bought, food_name, amt = request_market_food_purchase(self.family_id, self, market_service=getattr(self, "market_service", None))
+            # 4. Hubungi interface pasar AGENT 2 jika makanan di rumah kosong (Agent 2 rule: IF HOUSEHOLD HAS FOOD -> DO NOT BUY)
+            bought, food_name, amt = request_market_food_purchase(
+                self.family_id, self,
+                market_service=getattr(self, "market_service", None),
+                building_manager=building_manager,
+                furniture_manager=furniture_manager,
+                villager_manager=getattr(self, "villager_manager", None),
+                stockpile_manager=stockpile_manager
+            )
             if bought and amt > 0:
                 self.hunger = min(AI_NEED_MAX, self.hunger + AI_NEED_FOOD_RESTORE)
+                self.hunger_death_timer = None
                 self.daily_food_consumed += 1
                 self.say(f"Purchased {food_name or 'Food'} from Market and ate!", duration=2.5)
                 self._resume_or_idle_after_need()
@@ -668,6 +720,7 @@ class Villager:
                 if self.inventory[inv_water] <= 0:
                     del self.inventory[inv_water]
                 self.thirst = min(AI_NEED_MAX, self.thirst + AI_NEED_WATER_RESTORE)
+                self.thirst_death_timer = None
                 self.daily_water_consumed += 1
                 self.say("Drank water from personal supply!", duration=2.5)
                 self._resume_or_idle_after_need()
@@ -685,6 +738,7 @@ class Villager:
                     taken = chest.take_item(chest_water, 1)
                     if taken > 0:
                         self.thirst = min(AI_NEED_MAX, self.thirst + AI_NEED_WATER_RESTORE)
+                        self.thirst_death_timer = None
                         self.daily_water_consumed += 1
                         self.say("Drank fresh water from storage chest!", duration=2.5)
                         self._resume_or_idle_after_need()
@@ -708,6 +762,7 @@ class Villager:
                     if ground_water.amount <= 0:
                         stockpile_manager.stacks = [st for st in stockpile_manager.stacks if st != ground_water]
                     self.thirst = min(AI_NEED_MAX, self.thirst + AI_NEED_WATER_RESTORE)
+                    self.thirst_death_timer = None
                     self.daily_water_consumed += 1
                     self.say("Drank water from family stockpile!", duration=2.5)
                     self._resume_or_idle_after_need()
@@ -725,6 +780,7 @@ class Villager:
                     self.well_draw_timer += dt
                     if self.well_draw_timer >= 0.5:
                         self.thirst = min(AI_NEED_MAX, self.thirst + AI_NEED_WATER_RESTORE)
+                        self.thirst_death_timer = None
                         self.daily_water_consumed += 1
                         self.say("Drank cold water directly from the well!", duration=2.5)
                         self.well_draw_timer = 0.0
@@ -2312,26 +2368,13 @@ class VillagerManager:
     def daily_midnight_update(self, day_number):
         """
         At 00:00 in-game:
-        - Evaluates daily consumption records for each individual.
-        - If an individual failed to consume at least 1 food or 1 water, they die.
-        - Dead AI receives status DECEASED, stops working, and remains as corpse.
-        - Surviving living members reset daily consumption records for the new day.
+        - Resets daily consumption records for living members (used for daily reports/tracking).
+        - Midnight NEVER triggers death. Deaths only occur when a 24-in-game-hour countdown reaches 0.
         """
         for fam in self.families:
             for m in list(fam.living_members):
-                food_ok = (getattr(m, "daily_food_consumed", 0) >= DAILY_FOOD_REQUIREMENT)
-                water_ok = (getattr(m, "daily_water_consumed", 0) >= DAILY_WATER_REQUIREMENT)
-                if not food_ok or not water_ok:
-                    if not food_ok and not water_ok:
-                        reason = "Starvation & Dehydration"
-                    elif not food_ok:
-                        reason = "Starvation"
-                    else:
-                        reason = "Dehydration"
-                    m.die(reason=reason, day=day_number)
-                else:
-                    m.daily_food_consumed = 0
-                    m.daily_water_consumed = 0
+                m.daily_food_consumed = 0
+                m.daily_water_consumed = 0
 
     def draw(self, surface, camera):
         self._ensure_font()
