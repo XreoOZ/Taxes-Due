@@ -35,9 +35,29 @@ from game.config import (
     PATH_WAYPOINT_TOLERANCE,
     STUCK_THRESHOLD_SECONDS,
     STUCK_AVOIDANCE_DURATION,
-    PATH_WAIT_RECHECK_INTERVAL
+    PATH_WAIT_RECHECK_INTERVAL,
+    AI_NEED_MAX,
+    AI_NEED_HUNGER_DECAY_PER_DAY,
+    AI_NEED_THIRST_DECAY_PER_DAY,
+    AI_CRITICAL_NEED_THRESHOLD,
+    DAILY_FOOD_REQUIREMENT,
+    DAILY_WATER_REQUIREMENT,
+    AI_NEED_FOOD_RESTORE,
+    AI_NEED_WATER_RESTORE,
+    HOUSEHOLD_WATER_MAX_COLLECTORS,
+    COLOR_NEED_HUNGER_HIGH,
+    COLOR_NEED_HUNGER_MED,
+    COLOR_NEED_HUNGER_LOW,
+    COLOR_NEED_THIRST_HIGH,
+    COLOR_NEED_THIRST_MED,
+    COLOR_NEED_THIRST_LOW,
+    COLOR_STATUS_ALIVE,
+    COLOR_STATUS_DECEASED,
+    COLOR_CORPSE_BODY,
+    COLOR_CORPSE_OUTLINE
 )
 from game.world.pathfinding import GlobalPathRegistry
+from game.systems.market_interface import request_market_food_purchase
 from game.systems.job_tool_system import (
     get_job_required_tools,
     get_missing_tools_for_worker,
@@ -109,9 +129,61 @@ class Villager:
         self.carrying_amount = 0
         self.target_loose_stack = None
 
+        # Needs & Survival System (Agent 1)
+        self.hunger = float(AI_NEED_MAX)
+        self.thirst = float(AI_NEED_MAX)
+        self.daily_food_consumed = 0
+        self.daily_water_consumed = 0
+        self.is_alive = True
+        self.status = "ALIVE"          # "ALIVE" | "DECEASED"
+        self.death_reason = None       # None | "Starvation" | "Dehydration"
+        self.death_day = None
+        self.previous_task_before_need = None
+        self.need_seek_cooldown = 0.0
+        self.market_service = None
+        self.water_collect_amount = 0
+
     @property
     def full_name(self):
         return f"{self.first_name} {self.last_name}"
+
+    def die(self, reason="Starvation", day=1):
+        """Transition this villager to the DECEASED state (corpse)."""
+        self.is_alive = False
+        self.status = "DECEASED"
+        self.death_reason = reason
+        self.death_day = day
+        self.task = "DECEASED"
+        self.is_moving = False
+        self.current_path = []
+        self.path_target = None
+        self.path_target_tile = None
+        self.active_tool = None
+        self.yield_timer = 0.0
+        self.wait_timer = 0.0
+        self.is_waiting_for_path = False
+
+        # Release any path reservation
+        reg = GlobalPathRegistry.get_instance()
+        reg.release_reservation(self.id)
+
+        # Release work tile reservation if holding one
+        self.current_work_tile = None
+
+        # Drop carried furniture if applicable
+        if getattr(self, "carrying_furniture", None):
+            self.carrying_furniture.carrier_id = None
+            self.carrying_furniture = None
+
+        # Speech bubble showing demise
+        self.say(f"Alas... ({reason})", duration=4.0)
+
+    def _resume_or_idle_after_need(self):
+        """Safely cleans up after fulfilling a critical need."""
+        self.task = "IDLE"
+        self.previous_task_before_need = None
+        self.need_seek_cooldown = 0.0
+
 
     def say(self, text, duration=3.0):
         self.speech_text = text
@@ -442,11 +514,31 @@ class Villager:
         """Alias untuk receive_granted_item"""
         self.receive_granted_item(item_name, amount)
 
-    def update(self, dt, permit_manager, building_manager, all_entities, player, stockpile_manager=None, furniture_manager=None, day_cycle=None, schedule_manager=None):
+    def update(self, dt, permit_manager, building_manager, all_entities, player, stockpile_manager=None, furniture_manager=None, day_cycle=None, schedule_manager=None, production_system=None, villager_manager=None, market_service=None):
+        # Guard: Deceased AI stops performing all jobs and activities
+        if not getattr(self, "is_alive", True):
+            self.task = "DECEASED"
+            self.is_moving = False
+            self.current_path = []
+            return
+
         if self.speech_timer > 0:
             self.speech_timer -= dt
             if self.speech_timer <= 0:
                 self.speech_text = None
+
+        if getattr(self, "need_seek_cooldown", 0.0) > 0.0:
+            self.need_seek_cooldown = max(0.0, self.need_seek_cooldown - dt)
+
+        # Decay Hunger and Thirst according to in-game day cycle
+        day_sec = day_cycle.day_length_seconds if day_cycle else 1200.0
+        self.hunger = max(0.0, self.hunger - (AI_NEED_HUNGER_DECAY_PER_DAY / day_sec) * dt)
+        self.thirst = max(0.0, self.thirst - (AI_NEED_THIRST_DECAY_PER_DAY / day_sec) * dt)
+
+        if market_service is not None:
+            self.market_service = market_service
+        self.building_manager = building_manager
+        self.furniture_manager = furniture_manager
 
         # Evaluasi Jadwal 24-Jam (Work, Leisure, Sleep, Anything)
         cur_hour = getattr(day_cycle, "current_hour", 8.0) if day_cycle else 8.0
@@ -459,6 +551,160 @@ class Villager:
                 sched_activity = "WORK"
             else:
                 sched_activity = "LEISURE"
+
+        # -------------------------------------------------------------
+        # Rutinitas Kebutuhan Pokok: Critical Needs (<= 20%) & Evening Dinner
+        # -------------------------------------------------------------
+        is_crit_hunger = (self.hunger <= AI_CRITICAL_NEED_THRESHOLD)
+        is_crit_thirst = (self.thirst <= AI_CRITICAL_NEED_THRESHOLD)
+        is_dinner = (sched_activity == "LEISURE" and cur_hour >= 18.0)
+        wants_food = (self.daily_food_consumed < DAILY_FOOD_REQUIREMENT and (is_crit_hunger or is_dinner))
+        wants_water = (self.daily_water_consumed < DAILY_WATER_REQUIREMENT and (is_crit_thirst or is_dinner))
+
+        # Critical interruption: Interupsi pekerjaan apa pun jika lapar atau haus mencapai <= 20%
+        if (is_crit_hunger or is_crit_thirst):
+            if self.task not in ("SEEKING_FOOD", "SEEKING_WATER") and self.need_seek_cooldown <= 0.0:
+                if is_crit_hunger or is_crit_thirst or (sched_activity in ("LEISURE", "ANY") and self.task in ("IDLE", "LEISURE", "STROLLING")):
+                    # Lepaskan reservasi pekerjaan jika sedang bekerja
+                    if self.current_work_tile and permit_manager:
+                        assigned_farm = next((p for p in permit_manager.permits if p.permit_type == "farm" and hasattr(p, "assigned_workers") and self.id in p.assigned_workers), None)
+                        if assigned_farm:
+                            assigned_farm.release_worker_reservations(self.id)
+                        self.current_work_tile = None
+                    reg = GlobalPathRegistry.get_instance()
+                    reg.release_reservation(self.id)
+                    self.current_path = []
+                    self.is_waiting_for_path = False
+                    if not getattr(self, "previous_task_before_need", None):
+                        self.previous_task_before_need = self.task
+
+                    if is_crit_thirst or (self.thirst <= self.hunger):
+                        self.task = "SEEKING_WATER"
+                    else:
+                        self.task = "SEEKING_FOOD"
+
+        # Eksekusi Pencarian Makanan (SEEKING_FOOD)
+        if self.task == "SEEKING_FOOD":
+            self.active_tool = None
+            # 1. Dari inventory pribadi
+            inv_food = next((it for it in ("Potato", "Food", "Bread") if self.inventory.get(it, 0) > 0), None)
+            if inv_food:
+                self.inventory[inv_food] -= 1
+                if self.inventory[inv_food] <= 0:
+                    del self.inventory[inv_food]
+                self.hunger = min(AI_NEED_MAX, self.hunger + AI_NEED_FOOD_RESTORE)
+                self.daily_food_consumed += 1
+                self.say("Ate food from personal inventory!", duration=2.5)
+                self._resume_or_idle_after_need()
+                return
+
+            # 2. Dari peti penyimpanan keluarga
+            chest = furniture_manager.get_storage_for_family(self.family_id) if furniture_manager else None
+            chest_food = None
+            if chest and hasattr(chest, "inventory"):
+                chest_food = next((it for it in ("Potato", "Food", "Bread") if chest.inventory.get(it, 0) > 0), None)
+
+            if chest and chest_food:
+                cx, cy = chest.get_world_pos(TILE_SIZE)
+                arrived = self._move_towards(cx, cy, dt, arrival_dist=CHEST_INTERACTION_RADIUS, all_entities=all_entities, player=player, building_manager=building_manager, furniture_manager=furniture_manager, exclusive_target=False)
+                if arrived:
+                    taken = chest.take_item(chest_food, 1)
+                    if taken > 0:
+                        self.hunger = min(AI_NEED_MAX, self.hunger + AI_NEED_FOOD_RESTORE)
+                        self.daily_food_consumed += 1
+                        self.say("Ate hearty meal from household chest!", duration=2.5)
+                        self._resume_or_idle_after_need()
+                return
+
+            # 3. Dari tumpukan di tanah milik keluarga
+            ground_food = None
+            if stockpile_manager:
+                fam_str = str(self.family_id)
+                for s in getattr(stockpile_manager, "stacks", []):
+                    if getattr(s, "owner_type", None) == "villager" and str(getattr(s, "owner_id", "")) == fam_str:
+                        if s.resource_type in ("Potato", "Food", "Bread") and s.amount > 0:
+                            ground_food = s
+                            break
+
+            if ground_food:
+                gx_pos = (ground_food.grid_x + 0.5) * TILE_SIZE
+                gy_pos = (ground_food.grid_y + 0.5) * TILE_SIZE
+                arrived = self._move_towards(gx_pos, gy_pos, dt, arrival_dist=LOOSE_ITEM_ARRIVAL_DIST, all_entities=all_entities, player=player, building_manager=building_manager, furniture_manager=furniture_manager, exclusive_target=False)
+                if arrived:
+                    ground_food.amount -= 1
+                    if ground_food.amount <= 0:
+                        stockpile_manager.stacks = [st for st in stockpile_manager.stacks if st != ground_food]
+                    self.hunger = min(AI_NEED_MAX, self.hunger + AI_NEED_FOOD_RESTORE)
+                    self.daily_food_consumed += 1
+                    self.say("Ate food from family stockpile!", duration=2.5)
+                    self._resume_or_idle_after_need()
+                return
+
+            # 4. Hubungi interface pasar AGENT 2 jika makanan di rumah kosong
+            bought, food_name, amt = request_market_food_purchase(self.family_id, self, market_service=getattr(self, "market_service", None))
+            if bought and amt > 0:
+                self.hunger = min(AI_NEED_MAX, self.hunger + AI_NEED_FOOD_RESTORE)
+                self.daily_food_consumed += 1
+                self.say(f"Purchased {food_name or 'Food'} from Market and ate!", duration=2.5)
+                self._resume_or_idle_after_need()
+                return
+            else:
+                self.need_seek_cooldown = 4.0
+                self.say("No food at home and market has none!", duration=2.5)
+                self.task = "IDLE"
+                return
+
+        # Eksekusi Pencarian Air Minum (SEEKING_WATER)
+        if self.task == "SEEKING_WATER":
+            self.active_tool = None
+            # 1. Dari inventory pribadi
+            if self.inventory.get("Water", 0) > 0:
+                self.inventory["Water"] -= 1
+                if self.inventory["Water"] <= 0:
+                    del self.inventory["Water"]
+                self.thirst = min(AI_NEED_MAX, self.thirst + AI_NEED_WATER_RESTORE)
+                self.daily_water_consumed += 1
+                self.say("Drank water from personal supply!", duration=2.5)
+                self._resume_or_idle_after_need()
+                return
+
+            # 2. Dari peti penyimpanan keluarga
+            chest = furniture_manager.get_storage_for_family(self.family_id) if furniture_manager else None
+            if chest and hasattr(chest, "inventory") and chest.inventory.get("Water", 0) > 0:
+                cx, cy = chest.get_world_pos(TILE_SIZE)
+                arrived = self._move_towards(cx, cy, dt, arrival_dist=CHEST_INTERACTION_RADIUS, all_entities=all_entities, player=player, building_manager=building_manager, furniture_manager=furniture_manager, exclusive_target=False)
+                if arrived:
+                    taken = chest.take_item("Water", 1)
+                    if taken > 0:
+                        self.thirst = min(AI_NEED_MAX, self.thirst + AI_NEED_WATER_RESTORE)
+                        self.daily_water_consumed += 1
+                        self.say("Drank fresh water from storage chest!", duration=2.5)
+                        self._resume_or_idle_after_need()
+                return
+
+            # 3. Dari sumur desa (jika air di rumah habis, ambil minum di sumur)
+            well = self._find_nearest_well(building_manager)
+            if well:
+                try:
+                    approach_pt = well.get_approach_point(self.x, self.y, worker_id=self.id, all_entities=all_entities, tile_size=TILE_SIZE, bm=building_manager)
+                except TypeError:
+                    approach_pt = well.get_approach_point((self.x, self.y), TILE_SIZE, building_manager)
+                arrived = self._move_towards(approach_pt[0], approach_pt[1], dt, arrival_dist=24, all_entities=all_entities, player=player, building_manager=building_manager, furniture_manager=furniture_manager, exclusive_target=False)
+                if arrived:
+                    self.well_draw_timer += dt
+                    if self.well_draw_timer >= 0.5:
+                        self.thirst = min(AI_NEED_MAX, self.thirst + AI_NEED_WATER_RESTORE)
+                        self.daily_water_consumed += 1
+                        self.say("Drank cold water directly from the well!", duration=2.5)
+                        self.well_draw_timer = 0.0
+                        self._resume_or_idle_after_need()
+                return
+            else:
+                self.need_seek_cooldown = 4.0
+                self.say("No water available! I am dying of thirst!", duration=2.5)
+                self.task = "IDLE"
+                return
+
 
         # -------------------------------------------------------------
         # Rutinitas 1: Tidur Malam (SLEEP)
@@ -657,6 +903,48 @@ class Villager:
                     return
 
         # -------------------------------------------------------------
+        # Rutinitas 1.65: Household Water Production & Storage Execution (Agent 1)
+        # -------------------------------------------------------------
+        if sched_activity != "SLEEP" and furniture_manager:
+            # A. Jika sedang mengangkut air hasil timba menuju peti keluarga (HAULING_HOUSEHOLD_WATER)
+            if self.task == "HAULING_HOUSEHOLD_WATER":
+                chest = furniture_manager.get_storage_for_family(self.family_id)
+                if chest:
+                    cx, cy = chest.get_world_pos(TILE_SIZE)
+                    arrived = self._move_towards(cx, cy, dt, arrival_dist=CHEST_INTERACTION_RADIUS, all_entities=all_entities, player=player, building_manager=building_manager, furniture_manager=furniture_manager, exclusive_target=False)
+                    if arrived:
+                        amt = self.inventory.get("Water", 0)
+                        if amt > 0:
+                            chest.store_item("Water", amt)
+                            del self.inventory["Water"]
+                        self.say("Stored fresh water in household chest!", duration=2.5)
+                        self.task = "IDLE"
+                else:
+                    self.task = "IDLE"
+                return
+
+            # B. Jika sedang menimba air di sumur untuk kebutuhan rumah tangga (COLLECTING_HOUSEHOLD_WATER)
+            if self.task == "COLLECTING_HOUSEHOLD_WATER":
+                well = self._find_nearest_well(building_manager)
+                if well:
+                    try:
+                        approach_pt = well.get_approach_point(self.x, self.y, worker_id=self.id, all_entities=all_entities, tile_size=TILE_SIZE, bm=building_manager)
+                    except TypeError:
+                        approach_pt = well.get_approach_point((self.x, self.y), TILE_SIZE, building_manager)
+                    arrived = self._move_towards(approach_pt[0], approach_pt[1], dt, arrival_dist=24, all_entities=all_entities, player=player, building_manager=building_manager, furniture_manager=furniture_manager, exclusive_target=False)
+                    if arrived:
+                        self.well_draw_timer += dt
+                        if self.well_draw_timer >= 1.0:
+                            draw_amt = getattr(self, "water_collect_amount", 1) or 1
+                            self.inventory["Water"] = self.inventory.get("Water", 0) + draw_amt
+                            self.task = "HAULING_HOUSEHOLD_WATER"
+                            self.well_draw_timer = 0.0
+                            self.say(f"Drew {draw_amt}x water, hauling home to storage!", duration=2.0)
+                else:
+                    self.task = "IDLE"
+                return
+
+        # -------------------------------------------------------------
         # Rutinitas 1.7: Generic Work Tool Management & Job Workflow
         # -------------------------------------------------------------
         # A. Kembalikan HANYA alat kerja yang tidak lagi relevan (misal setelah berganti job) atau alat berlebih
@@ -824,10 +1112,51 @@ class Villager:
                                     self.current_work_tile = None
                                     GlobalPathRegistry.get_instance().release_reservation(self.id)
                                     if yield_amt > 0:
-                                        self.carrying_crop = yield_amt
-                                        self.inventory["Potato"] = self.inventory.get("Potato", 0) + yield_amt
-                                        self.active_tool = None
-                                        self.say(f"Reaped {yield_amt} ripe potatoes with sickle!", duration=2.2)
+                                        from game.systems.production_distribution import ProductionDistributionSystem
+                                        ps = production_system or ProductionDistributionSystem.get_instance()
+                                        workplace_id = getattr(assigned_farm, "id", "farm")
+                                        participating_workers = getattr(assigned_farm, "assigned_workers", [self.id])
+                                        if not participating_workers:
+                                            participating_workers = [self.id]
+
+                                        crop_name = getattr(assigned_farm, "crop", "Potato") or "Potato"
+                                        dist_res = ps.distribute_production(
+                                            resource_name=crop_name,
+                                            amount=yield_amt,
+                                            participating_workers=participating_workers,
+                                            furniture_manager=furniture_manager,
+                                            stockpile_manager=stockpile_manager,
+                                            permit_manager=permit_manager,
+                                            villager_manager=villager_manager,
+                                            workplace_id=workplace_id,
+                                            day_number=day_cycle.day_number if day_cycle else 1,
+                                            auto_deposit=False
+                                        )
+
+                                        distribution = dist_res.get("distribution", {})
+                                        my_fam_str = str(self.family_id)
+                                        my_share = distribution.get(my_fam_str, 0)
+
+                                        # Auto-deposit shares for other participating households directly into their household chests
+                                        for other_fam_id, other_qty in distribution.items():
+                                            if other_fam_id != my_fam_str and other_qty > 0:
+                                                ps.deposit_to_household_storage(
+                                                    other_fam_id, crop_name, other_qty,
+                                                    furniture_manager=furniture_manager,
+                                                    stockpile_manager=stockpile_manager,
+                                                    permit_manager=permit_manager,
+                                                    villager_manager=villager_manager
+                                                )
+
+                                        # Harvester carries own household's share home
+                                        self.carrying_crop = my_share
+                                        if my_share > 0:
+                                            self.inventory[crop_name] = self.inventory.get(crop_name, 0) + my_share
+                                            self.active_tool = None
+                                            self.say(f"Reaped {yield_amt} ripe {crop_name.lower()}s with sickle!", duration=2.2)
+                                        else:
+                                            self.active_tool = None
+                                            self.say(f"Harvested {yield_amt} for co-workers!", duration=2.0)
                                 return
 
                     # B. Nyangkul & Menanam Benih menggunakan CANGKUL (Hoe)
@@ -913,7 +1242,10 @@ class Villager:
                                 if well:
                                     # Hitung titik pendekatan terdistribusi di perimeter Well
                                     if hasattr(well, "get_approach_point"):
-                                        approach_pt = well.get_approach_point(self.x, self.y, worker_id=self.id, all_entities=all_entities, tile_size=TILE_SIZE, bm=building_manager)
+                                        try:
+                                            approach_pt = well.get_approach_point(self.x, self.y, worker_id=self.id, all_entities=all_entities, tile_size=TILE_SIZE, bm=building_manager)
+                                        except TypeError:
+                                            approach_pt = well.get_approach_point((self.x, self.y), TILE_SIZE, building_manager)
                                     else:
                                         approach_pt = well.get_center_world(TILE_SIZE)
 
@@ -1008,6 +1340,32 @@ class Villager:
         # -------------------------------------------------------------
         self.task = "IDLE"
         self.active_tool = None
+
+        # Evaluasi Kebutuhan Air Rumah Tangga (Household Water Shortage Check)
+        if sched_activity in ("LEISURE", "ANY") and furniture_manager:
+            chest = furniture_manager.get_storage_for_family(self.family_id)
+            well = self._find_nearest_well(building_manager)
+            if chest and well and self.hunger > AI_CRITICAL_NEED_THRESHOLD and self.thirst > AI_CRITICAL_NEED_THRESHOLD:
+                fam_str = str(self.family_id)
+                all_family_members = [e for e in all_entities if str(getattr(e, "family_id", "")) == fam_str and getattr(e, "is_alive", True)]
+                living_count = len(all_family_members)
+                if living_count > 0:
+                    required_water = living_count * DAILY_WATER_REQUIREMENT
+                    current_stock = chest.inventory.get("Water", 0)
+                    if stockpile_manager:
+                        for s in getattr(stockpile_manager, "stacks", []):
+                            if getattr(s, "owner_type", None) == "villager" and str(getattr(s, "owner_id", "")) == fam_str and s.resource_type == "Water":
+                                current_stock += getattr(s, "amount", 0)
+                    shortage = required_water - current_stock
+                    if shortage > 0:
+                        active_collectors = sum(1 for m in all_family_members if getattr(m, "task", "") in ("COLLECTING_HOUSEHOLD_WATER", "HAULING_HOUSEHOLD_WATER"))
+                        if active_collectors < min(HOUSEHOLD_WATER_MAX_COLLECTORS, shortage):
+                            self.task = "COLLECTING_HOUSEHOLD_WATER"
+                            self.water_collect_amount = min(VILLAGER_CARRY_CAPACITY, shortage)
+                            self.well_draw_timer = 0.0
+                            self.say("Collecting water for our household needs!", duration=2.5)
+                            return
+
         self.idle_wander_timer -= dt
         if self.idle_wander_timer <= 0:
             self.idle_wander_timer = random.uniform(4.0, 8.0)
@@ -1057,7 +1415,8 @@ class Villager:
                 ]
                 self.say(random.choice(phrases), duration=2.5)
 
-        self._move_towards(self.idle_target[0], self.idle_target[1], dt, arrival_dist=16, all_entities=all_entities, player=player, building_manager=building_manager, furniture_manager=furniture_manager)
+        self.is_waiting_for_path = False
+        self._move_towards(self.idle_target[0], self.idle_target[1], dt, arrival_dist=16, all_entities=all_entities, player=player, building_manager=building_manager, furniture_manager=furniture_manager, exclusive_target=False)
 
     def _move_towards(self, tx, ty, dt, arrival_dist=10, all_entities=None, player=None, building_manager=None, furniture_manager=None, exclusive_target=False):
         reg = GlobalPathRegistry.get_instance()
@@ -1108,10 +1467,10 @@ class Villager:
             if furniture_manager and hasattr(furniture_manager, "get_occupied_tiles"):
                 avoid_set.update(furniture_manager.get_occupied_tiles(exclude_tile=self.path_target_tile))
 
-            # Hindari petak yang ditempati oleh entitas lain yang sedang tidur atau diam di tempat
+            # Hindari HANYA entitas lain yang sedang tidur di ranjang (rintangan fisik padat)
             if all_entities:
                 for other in all_entities:
-                    if other != self and (getattr(other, "task", "") == "SLEEPING" or not getattr(other, "is_moving", False)):
+                    if other != self and getattr(other, "task", "") == "SLEEPING":
                         avoid_set.add((int(math.floor(other.x / TILE_SIZE)), int(math.floor(other.y / TILE_SIZE))))
 
             cur_gx = int(math.floor(self.x / TILE_SIZE))
@@ -1144,21 +1503,28 @@ class Villager:
                     self.current_path = []
                     self.path_index = 0
                     self.is_moving = False
-                    self.is_waiting_for_path = True
-                    self.wait_timer = PATH_WAIT_RECHECK_INTERVAL
-                    if exclusive_target:
+                    has_blocker = any(c[1] in ("DOORWAY_CONFLICT", "DOORWAY_THRESHOLD_JAM", "TARGET_CONFLICT", "QUEUE_PRIORITY") for c in res_or_conf) if isinstance(res_or_conf, list) else False
+                    if exclusive_target or has_blocker:
+                        self.is_waiting_for_path = True
+                        self.wait_timer = PATH_WAIT_RECHECK_INTERVAL
                         reg.register_waiting(self.id, self.path_target_tile)
+                    else:
+                        self.is_waiting_for_path = False
+                        self.wait_timer = 0.3
                     return False
             else:
                 # Tidak ada jalur alternatif bebas rintangan
                 self.current_path = []
                 self.path_index = 0
                 self.is_moving = False
-                self.is_waiting_for_path = True
-                self.wait_timer = PATH_WAIT_RECHECK_INTERVAL
-                self.repath_cooldown = 0.4
                 if exclusive_target:
+                    self.is_waiting_for_path = True
+                    self.wait_timer = PATH_WAIT_RECHECK_INTERVAL
                     reg.register_waiting(self.id, self.path_target_tile)
+                else:
+                    self.is_waiting_for_path = False
+                    self.wait_timer = 0.4
+                self.repath_cooldown = 0.4
                 return False
 
         # 2. Prioritas Target Bersama:
@@ -1366,6 +1732,33 @@ class Villager:
     def draw(self, surface, camera, font_bubble):
         sx, sy = camera.world_to_screen(self.x, self.y)
         r = max(4, int(self.radius * camera.zoom))
+
+        if not getattr(self, "is_alive", True):
+            # Render Deceased Corpse (Fallen pose, desaturated grey)
+            shadow_w = int(r * 2.2)
+            shadow_h = max(2, int(r * 0.9))
+            shadow_surf = pygame.Surface((shadow_w, shadow_h), pygame.SRCALPHA)
+            pygame.draw.ellipse(shadow_surf, COLOR_SHADOW, (0, 0, shadow_w, shadow_h))
+            surface.blit(shadow_surf, (sx - shadow_w // 2, sy + int(r * 0.2)))
+
+            corpse_w = int(r * 2.0)
+            corpse_h = max(3, int(r * 1.1))
+            corpse_rect = pygame.Rect(sx - corpse_w // 2, sy - corpse_h // 2, corpse_w, corpse_h)
+            pygame.draw.ellipse(surface, COLOR_CORPSE_BODY, corpse_rect)
+            outline_w = max(1, int(2 * camera.zoom))
+            pygame.draw.ellipse(surface, COLOR_CORPSE_OUTLINE, corpse_rect, outline_w)
+
+            eye_x = sx + int(corpse_w * 0.25)
+            eye_y = sy - 2
+            eye_size = max(2, int(3 * camera.zoom))
+            pygame.draw.line(surface, (255, 255, 255), (eye_x - eye_size, eye_y - eye_size), (eye_x + eye_size, eye_y + eye_size), 1)
+            pygame.draw.line(surface, (255, 255, 255), (eye_x - eye_size, eye_y + eye_size), (eye_x + eye_size, eye_y - eye_size), 1)
+
+            if font_bubble:
+                rip_surf = font_bubble.render(f"[RIP] {self.first_name}", True, (203, 213, 225))
+                surface.blit(rip_surf, (sx - rip_surf.get_width() // 2, sy - corpse_h - 10))
+            return
+
         bob = math.sin(self.walk_cycle) * (2.2 * camera.zoom) if self.is_moving else 0.0
         char_y = sy + int(bob)
 
@@ -1502,6 +1895,66 @@ class Family:
     @property
     def member_count(self):
         return len(self.members)
+
+    @property
+    def living_members(self):
+        return [m for m in self.members if getattr(m, "is_alive", True)]
+
+    @property
+    def living_member_count(self):
+        return len(self.living_members)
+
+    @property
+    def daily_food_required(self):
+        return self.living_member_count * DAILY_FOOD_REQUIREMENT
+
+    @property
+    def daily_water_required(self):
+        return self.living_member_count * DAILY_WATER_REQUIREMENT
+
+    def get_primary_needs_progress(self):
+        """
+        Returns (food_fulfilled_count, water_fulfilled_count, living_total)
+        Food: y/x | Water: z/x
+        Where:
+        - x = number of living individuals in that household
+        - y = living individuals who fulfilled daily food requirement
+        - z = living individuals who fulfilled daily water requirement
+        """
+        living = self.living_members
+        x = len(living)
+        y = sum(1 for m in living if getattr(m, "daily_food_consumed", 0) >= DAILY_FOOD_REQUIREMENT)
+        z = sum(1 for m in living if getattr(m, "daily_water_consumed", 0) >= DAILY_WATER_REQUIREMENT)
+        return y, z, x
+
+    def get_food_stock(self, furniture_manager=None, stockpile_manager=None):
+        total = 0
+        fam_str = str(self.id)
+        if furniture_manager:
+            chest = furniture_manager.get_storage_for_family(fam_str)
+            if chest and hasattr(chest, "inventory"):
+                for it in ("Potato", "Food", "Bread"):
+                    total += chest.inventory.get(it, 0)
+        if stockpile_manager:
+            for s in getattr(stockpile_manager, "stacks", []):
+                if getattr(s, "owner_type", None) == "villager" and str(getattr(s, "owner_id", "")) == fam_str:
+                    if s.resource_type in ("Potato", "Food", "Bread"):
+                        total += getattr(s, "amount", 0)
+        return total
+
+    def get_water_stock(self, furniture_manager=None, stockpile_manager=None):
+        total = 0
+        fam_str = str(self.id)
+        if furniture_manager:
+            chest = furniture_manager.get_storage_for_family(fam_str)
+            if chest and hasattr(chest, "inventory"):
+                total += chest.inventory.get("Water", 0)
+        if stockpile_manager:
+            for s in getattr(stockpile_manager, "stacks", []):
+                if getattr(s, "owner_type", None) == "villager" and str(getattr(s, "owner_id", "")) == fam_str:
+                    if s.resource_type == "Water":
+                        total += getattr(s, "amount", 0)
+        return total
 
     @property
     def generations_present(self):
@@ -1680,7 +2133,7 @@ class VillagerManager:
             return True
         return False
 
-    def update(self, dt, permit_manager, building_manager, all_servants, player, stockpile_manager=None, furniture_manager=None, day_cycle=None, schedule_manager=None):
+    def update(self, dt, permit_manager, building_manager, all_servants, player, stockpile_manager=None, furniture_manager=None, day_cycle=None, schedule_manager=None, production_system=None):
         if furniture_manager and hasattr(furniture_manager, "set_managers"):
             furniture_manager.set_managers(building_manager=building_manager, permit_manager=permit_manager, villager_manager=self)
         all_vils = self.get_all_villagers()
@@ -1689,7 +2142,7 @@ class VillagerManager:
             all_entities.extend(all_servants)
 
         for v in all_vils:
-            v.update(dt, permit_manager, building_manager, all_entities, player, stockpile_manager=stockpile_manager, furniture_manager=furniture_manager, day_cycle=day_cycle, schedule_manager=schedule_manager)
+            v.update(dt, permit_manager, building_manager, all_entities, player, stockpile_manager=stockpile_manager, furniture_manager=furniture_manager, day_cycle=day_cycle, schedule_manager=schedule_manager, production_system=production_system, villager_manager=self)
 
         # Minimum personal space separation (MIN_ENTITY_SEPARATION gap) antar seluruh individu AI
         # Mencegah AI bertumpuk/bergerombol pada satu titik
@@ -1699,8 +2152,12 @@ class VillagerManager:
 
         for i in range(len(all_vils)):
             v1 = all_vils[i]
+            if not getattr(v1, "is_alive", True):
+                continue
             for j in range(i + 1, len(all_vils)):
                 v2 = all_vils[j]
+                if not getattr(v2, "is_alive", True):
+                    continue
                 dx = v2.x - v1.x
                 dy = v2.y - v1.y
                 dist = math.hypot(dx, dy)
@@ -1763,7 +2220,32 @@ class VillagerManager:
                     ox, oy = old_serv_pos[idx]
                     s.x, s.y = building_manager.resolve_collision(s.x, s.y, s.radius, TILE_SIZE, old_x=ox, old_y=oy)
 
+    def daily_midnight_update(self, day_number):
+        """
+        At 00:00 in-game:
+        - Evaluates daily consumption records for each individual.
+        - If an individual failed to consume at least 1 food or 1 water, they die.
+        - Dead AI receives status DECEASED, stops working, and remains as corpse.
+        - Surviving living members reset daily consumption records for the new day.
+        """
+        for fam in self.families:
+            for m in list(fam.living_members):
+                food_ok = (getattr(m, "daily_food_consumed", 0) >= DAILY_FOOD_REQUIREMENT)
+                water_ok = (getattr(m, "daily_water_consumed", 0) >= DAILY_WATER_REQUIREMENT)
+                if not food_ok or not water_ok:
+                    if not food_ok and not water_ok:
+                        reason = "Starvation & Dehydration"
+                    elif not food_ok:
+                        reason = "Starvation"
+                    else:
+                        reason = "Dehydration"
+                    m.die(reason=reason, day=day_number)
+                else:
+                    m.daily_food_consumed = 0
+                    m.daily_water_consumed = 0
+
     def draw(self, surface, camera):
         self._ensure_font()
         for v in self.get_all_villagers():
             v.draw(surface, camera, self.font_bubble)
+

@@ -51,6 +51,8 @@ from game.servants import ServantManager
 from game.villagers import VillagerManager
 from game.furniture import FurnitureManager
 from game.ui_raport import RaportUI
+from game.ui.market_modal import MarketProfileModal
+from game.systems.production_distribution import ProductionDistributionSystem
 from game.speed_control import SpeedController
 from game.day_cycle import DayCycleSystem
 from game.settings import SettingsModal
@@ -88,6 +90,8 @@ def main():
     world = World(tile_size=TILE_SIZE)
     resource_hud = ResourceHUD()
     raport_ui = RaportUI()
+    market_modal = MarketProfileModal()
+    production_system = ProductionDistributionSystem.get_instance()
     speed_controller = SpeedController()
     settings_modal = SettingsModal()
     save_modal = SaveLoadModal()
@@ -120,11 +124,15 @@ def main():
     planning_furniture_type = None
     selected_furniture = None
     moving_furniture = None
+    selected_entity = None
 
     furn_menu_rect = pygame.Rect(0, 0, 270, 140)
     btn_furn_move_rect = pygame.Rect(0, 0, 112, 30)
     btn_furn_destroy_rect = pygame.Rect(0, 0, 112, 30)
     btn_furn_close_rect = pygame.Rect(0, 0, 22, 22)
+
+    entity_card_rect = pygame.Rect(0, 0, 310, 180)
+    btn_entity_close_rect = pygame.Rect(0, 0, 22, 22)
 
     show_debug_paths = True
     btn_path_toggle_rect = pygame.Rect(0, 0, PATH_TOGGLE_BTN_WIDTH, PATH_TOGGLE_BTN_HEIGHT)
@@ -133,7 +141,8 @@ def main():
         nonlocal player, resources, building_manager, permit_manager, stockpile_manager
         nonlocal servant_manager, villager_manager, furniture_manager, day_cycle, schedule_manager
         nonlocal planning_mode, planning_permit_type, planning_building_type, planning_furniture_type
-        nonlocal editing_permit_id, original_permit_tiles, selected_furniture, moving_furniture
+        nonlocal editing_permit_id, original_permit_tiles, selected_furniture, moving_furniture, selected_entity
+
 
         player = Player(0.0, 0.0)
         camera.x = 0.0
@@ -154,6 +163,7 @@ def main():
             day_cycle.set_day_length_index(day_length_index)
         schedule_manager = ScheduleManager()
         raport_ui.close()
+        market_modal.close()
         settings_modal.close()
         save_modal.close()
         planning_mode = "NONE"
@@ -205,6 +215,7 @@ def main():
                             save_modal.close()
                             settings_modal.close()
                             raport_ui.close()
+                            market_modal.close()
                             planning_mode = "NONE"
                             selected_furniture = None
                             moving_furniture = None
@@ -251,6 +262,7 @@ def main():
                                 save_modal.close()
                                 settings_modal.close()
                                 raport_ui.close()
+                                market_modal.close()
                                 planning_mode = "NONE"
                                 selected_furniture = None
                                 moving_furniture = None
@@ -471,6 +483,13 @@ def main():
                                 planned_door_side = None
                                 building_drag_start = None
                                 continue
+                            elif planning_building_type == "market":
+                                # Tempatkan footprint 3x2 secara instan pada tile mouse (Footprint pasar persis 3x2)
+                                planning_building_tiles = {(m_gx + c, m_gy + r) for c in range(3) for r in range(2)}
+                                planned_door_tile = None
+                                planned_door_side = None
+                                building_drag_start = None
+                                continue
                             building_drag_start = (m_gx, m_gy)
                         elif event.button == 3:
                             building_erase_start = (m_gx, m_gy)
@@ -574,8 +593,11 @@ def main():
                     if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
                         raport_ui.is_open = False
                     else:
-                        action = raport_ui.handle_event(event, building_manager, permit_manager, resources, servant_manager, villager_manager, schedule_manager=schedule_manager, day_cycle=day_cycle, stockpile_manager=stockpile_manager, furniture_manager=furniture_manager)
-                        if raport_ui.selected_building_type is not None:
+                        action = raport_ui.handle_event(event, building_manager, permit_manager, resources, servant_manager, villager_manager, schedule_manager=schedule_manager, day_cycle=day_cycle, stockpile_manager=stockpile_manager, furniture_manager=furniture_manager, production_system=production_system)
+                        if action == "open_market_profile" and getattr(raport_ui, "selected_market_building", None):
+                            market_modal.open(raport_ui.selected_market_building)
+                            continue
+                        elif raport_ui.selected_building_type is not None:
                             planning_mode = "BUILDING"
                             planning_building_type = raport_ui.selected_building_type
                             raport_ui.selected_building_type = None
@@ -603,6 +625,15 @@ def main():
                                 permit_erase_start = None
 
                 # -------------------------------------------------------------
+                # 4.5. MARKET PROFILE MODAL OPEN
+                # -------------------------------------------------------------
+                elif market_modal.is_open:
+                    if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+                        market_modal.close()
+                    else:
+                        market_modal.handle_event(event, resources, stockpile_manager)
+
+                # -------------------------------------------------------------
                 # 5. NORMAL GAMEPLAY
                 # -------------------------------------------------------------
                 else:
@@ -611,8 +642,11 @@ def main():
                     elif event.type == pygame.MOUSEWHEEL:
                         camera.handle_zoom(event.y)
                     elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-                        action = raport_ui.handle_event(event, building_manager, permit_manager, resources, servant_manager, villager_manager, schedule_manager=schedule_manager, day_cycle=day_cycle, stockpile_manager=stockpile_manager, furniture_manager=furniture_manager)
+                        action = raport_ui.handle_event(event, building_manager, permit_manager, resources, servant_manager, villager_manager, schedule_manager=schedule_manager, day_cycle=day_cycle, stockpile_manager=stockpile_manager, furniture_manager=furniture_manager, production_system=production_system)
                         if action == "toggle_raport":
+                            continue
+                        if action == "open_market_profile" and getattr(raport_ui, "selected_market_building", None):
+                            market_modal.open(raport_ui.selected_market_building)
                             continue
 
                         if raport_ui.selected_building_type is not None:
@@ -663,10 +697,39 @@ def main():
                                     selected_furniture = None
                                     continue
 
+                            # 0A2. Cek apakah pemain mengklik tombol close pada kartu profil entitas
+                            if selected_entity is not None and btn_entity_close_rect and btn_entity_close_rect.collidepoint(event.pos):
+                                selected_entity = None
+                                continue
+
+                            # 0A3. Cek apakah pemain mengklik entitas AI di peta (Villager / Servant)
+                            clicked_ai = None
+                            if villager_manager:
+                                for v in villager_manager.get_all_villagers():
+                                    dist_v = math.hypot(v.x - m_wx, v.y - m_wy)
+                                    if dist_v <= max(v.radius + 8, 28):
+                                        clicked_ai = v
+                                        break
+                            if not clicked_ai and servant_manager:
+                                for s in servant_manager.servants:
+                                    dist_s = math.hypot(s.x - m_wx, s.y - m_wy)
+                                    if dist_s <= max(s.radius + 8, 28):
+                                        clicked_ai = s
+                                        break
+
+                            if clicked_ai:
+                                selected_entity = clicked_ai
+                                selected_furniture = None
+                                continue
+                            else:
+                                if selected_entity is not None and entity_card_rect and not entity_card_rect.collidepoint(event.pos):
+                                    selected_entity = None
+
                             # 0B. Cek apakah pemain mengklik furniture fisik di peta (INSTALLED maupun UNINSTALLED)
                             clicked_f = furniture_manager.get_furniture_at(m_gx, m_gy)
                             if clicked_f:
                                 selected_furniture = clicked_f
+                                selected_entity = None
                                 continue
                             else:
                                 if selected_furniture is not None and furn_menu_rect and not furn_menu_rect.collidepoint(event.pos):
@@ -676,6 +739,8 @@ def main():
                             clicked_stack = stockpile_manager.get_stack_at(m_gx, m_gy) if stockpile_manager else None
                             if clicked_stack:
                                 selected_furniture = None
+                                selected_entity = None
+
                                 if clicked_stack.owner_type == "villager":
                                     owner_family = next((fam for fam in villager_manager.families if str(fam.id) == str(clicked_stack.owner_id)), None)
                                     assigned_worker = None
@@ -705,15 +770,21 @@ def main():
                             clicked_b = building_manager.get_building_at(m_gx, m_gy)
                             if clicked_b:
                                 selected_furniture = None
-                                raport_ui.is_open = True
-                                raport_ui.active_tab = 0  # Tab Buildings
-                                raport_ui.selected_building_inspect = clicked_b
+                                selected_entity = None
+                                if getattr(clicked_b, "building_type", "") == "market":
+                                    market_modal.open(clicked_b)
+                                    raport_ui.close()
+                                else:
+                                    raport_ui.is_open = True
+                                    raport_ui.active_tab = 0  # Tab Buildings
+                                    raport_ui.selected_building_inspect = clicked_b
                                 continue
 
                             # 2. Cek apakah pemain mengklik surat tanah / permit di peta (empty atau occupied)
                             clicked_p = permit_manager.get_permit_at(m_gx, m_gy)
                             if clicked_p:
                                 selected_furniture = None
+                                selected_entity = None
                                 raport_ui.is_open = True
                                 raport_ui.active_tab = 1  # Tab Area Permits
                                 raport_ui.selected_permit_inspect_id = clicked_p.id
@@ -729,6 +800,7 @@ def main():
             if days_passed > 0:
                 for p in permit_manager.permits:
                     p.reset_daily_watering()
+                villager_manager.daily_midnight_update(day_cycle.day_number)
 
             day_dt = game_dt / max(1.0, day_cycle.day_length_seconds)
             for p in permit_manager.permits:
@@ -737,7 +809,7 @@ def main():
             # Substep physics/entities so high speed multiplier (Fast 2x, Very Fast 4x) never tunnels through walls
             MAX_PHYSICS_SUB_DT = 0.02  # Maximum 20ms per physics integration step
             sub_time = game_dt
-            is_modal_open = raport_ui.is_open or settings_modal.is_open or save_modal.is_open
+            is_modal_open = raport_ui.is_open or settings_modal.is_open or save_modal.is_open or market_modal.is_open
             keys = pygame.key.get_pressed() if not is_modal_open else None
 
             while sub_time > 0.0:
@@ -746,7 +818,7 @@ def main():
                     player.handle_input(keys, step_dt, building_manager, TILE_SIZE)
                 building_manager.update(step_dt)
                 servant_manager.update(step_dt, building_manager, permit_manager, stockpile_manager, resources, player, furniture_manager=furniture_manager, villager_manager=villager_manager)
-                villager_manager.update(step_dt, permit_manager, building_manager, servant_manager.servants, player, stockpile_manager=stockpile_manager, furniture_manager=furniture_manager, day_cycle=day_cycle, schedule_manager=schedule_manager)
+                villager_manager.update(step_dt, permit_manager, building_manager, servant_manager.servants, player, stockpile_manager=stockpile_manager, furniture_manager=furniture_manager, day_cycle=day_cycle, schedule_manager=schedule_manager, production_system=production_system)
                 sub_time -= step_dt
 
             camera.follow(player)
@@ -972,12 +1044,14 @@ def main():
                     d_lbl = font_badge.render(f"DOOR ({planned_door_side.upper()})", True, (0, 0, 0))
                     screen.blit(d_lbl, (door_box.centerx - d_lbl.get_width() // 2, door_box.centery - d_lbl.get_height() // 2))
 
-                # C. Well Hover Preview (when 0 tiles selected)
-                if planning_building_type == "well" and not planning_building_tiles and not building_drag_start:
-                    well_box = {(m_gx, m_gy), (m_gx + 1, m_gy), (m_gx, m_gy + 1), (m_gx + 1, m_gy + 1)}
-                    can_fit, _ = permit_manager.find_matching_permit_for_tiles("well", well_box, building_manager, furniture_manager=furniture_manager)
+                # C. Well & Market Hover Preview (when 0 tiles selected)
+                if planning_building_type in ("well", "market") and not planning_building_tiles and not building_drag_start:
+                    w_w = b_cfg.get("width_tiles", 2)
+                    w_h = b_cfg.get("height_tiles", 2)
+                    preview_box = {(m_gx + c, m_gy + r) for c in range(w_w) for r in range(w_h)}
+                    can_fit, _ = permit_manager.find_matching_permit_for_tiles(planning_building_type, preview_box, building_manager, furniture_manager=furniture_manager)
                     fit_tint = (34, 197, 94, 100) if can_fit else (239, 68, 68, 100)
-                    for (gx, gy) in well_box:
+                    for (gx, gy) in preview_box:
                         sx, sy = camera.world_to_screen(gx * TILE_SIZE, gy * TILE_SIZE)
                         t_surf = pygame.Surface((scaled_t, scaled_t), pygame.SRCALPHA)
                         t_surf.fill(fit_tint)
@@ -1017,8 +1091,9 @@ def main():
 
                 can_afford = building_manager.can_afford(planning_building_type, resources, len(planning_building_tiles))
                 is_valid_tile_count = (len(planning_building_tiles) == b_cfg["fixed_tiles_count"]) if b_cfg.get("fixed_tiles_count") else (len(planning_building_tiles) > 0)
+                dim_str = f"({b_cfg.get('width_tiles', 2)}x{b_cfg.get('height_tiles', 2)})" if b_cfg.get("fixed_tiles_count") else ""
                 if b_cfg.get("fixed_tiles_count") and len(planning_building_tiles) > 0 and len(planning_building_tiles) != b_cfg["fixed_tiles_count"]:
-                    status_msg = f"Must be exactly {b_cfg['fixed_tiles_count']} tiles (2x2)"
+                    status_msg = f"Must be exactly {b_cfg['fixed_tiles_count']} tiles {dim_str}"
                 is_valid = (matching_permit is not None) and can_afford and is_valid_tile_count
 
                 bar_w = 700
@@ -1032,14 +1107,14 @@ def main():
                 screen.blit(bar_surf, (bar_x, bar_y))
 
                 # Header & Cost
-                tiles_label = f"Fixed: {b_cfg['fixed_tiles_count']} Tiles (2x2)" if b_cfg.get("fixed_tiles_count") else f"Tiles: {len(planning_building_tiles)}"
+                tiles_label = f"Fixed: {b_cfg['fixed_tiles_count']} Tiles {dim_str}" if b_cfg.get("fixed_tiles_count") else f"Tiles: {len(planning_building_tiles)}"
                 info_txt = f"Design {b_cfg['name']} | {tiles_label} | Cost: {cost_w} Wood, {cost_s} Stone"
                 screen.blit(font_card.render(info_txt, True, (56, 189, 248)), (bar_x + 16, bar_y + 10))
 
                 # Status & Door info
                 if not b_cfg.get("has_door", True):
-                    door_str = "Solid Structure (Impenetrable)"
-                    help_str = "(Click to place 2x2 Well)" if planning_building_type == "well" else "(Drag to place)"
+                    door_str = "Solid Structure (Impenetrable)" if b_cfg.get("is_solid", False) else "Open-air Market Stall"
+                    help_str = f"(Click to place {dim_str} {b_cfg['name']})" if b_cfg.get("fixed_tiles_count") else "(Drag to place)"
                 else:
                     door_str = f"Door: {planned_door_tile} [{planned_door_side}]" if planned_door_tile else "Click any exterior wall tile to place Door"
                     help_str = "(Drag to expand, Right-Click to erase)"
@@ -1260,6 +1335,116 @@ def main():
                 des_txt = font_btn.render("Destroy", True, (255, 255, 255))
                 screen.blit(des_txt, (btn_furn_destroy_rect.centerx - des_txt.get_width() // 2, btn_furn_destroy_rect.centery - des_txt.get_height() // 2))
 
+            # -------------------------------------------------------------
+            # 7.8. OVERLAYS: SELECTED INDIVIDUAL AI PROFILE POPUP (Agent 1)
+            # -------------------------------------------------------------
+            if selected_entity is not None and planning_mode == "NONE" and not raport_ui.is_open:
+                esx, esy = camera.world_to_screen(selected_entity.x, selected_entity.y)
+                er = max(6, int(getattr(selected_entity, "radius", 20) * camera.zoom))
+
+                # Ring indicator around entity
+                pygame.draw.circle(screen, (56, 189, 248), (esx, esy), er + 6, 2)
+
+                cw, ch = 310, 180
+                cx = max(12, min(screen.get_width() - cw - 12, esx - cw // 2))
+                cy = esy - ch - 16
+                if cy < 50:
+                    cy = esy + er + 16
+                cy = max(50, min(screen.get_height() - ch - 12, cy))
+
+                entity_card_rect.x = cx
+                entity_card_rect.y = cy
+                entity_card_rect.w = cw
+                entity_card_rect.h = ch
+
+                card_surf = pygame.Surface((cw, ch), pygame.SRCALPHA)
+                pygame.draw.rect(card_surf, (15, 23, 42, 245), (0, 0, cw, ch), border_radius=10)
+                pygame.draw.rect(card_surf, (56, 189, 248), (0, 0, cw, ch), width=2, border_radius=10)
+                screen.blit(card_surf, (cx, cy))
+
+                # Identity Name & Role
+                name_str = getattr(selected_entity, "full_name", getattr(selected_entity, "name", "Settler"))
+                role_str = getattr(selected_entity, "role", "")
+                title_lbl = f"{name_str} ({role_str})" if role_str else name_str
+                screen.blit(font_card.render(title_lbl[:26], True, (255, 255, 255)), (cx + 14, cy + 10))
+
+                # Living / Deceased Status Badge
+                is_alive = getattr(selected_entity, "is_alive", True)
+                if is_alive:
+                    st_txt = font_badge.render("[ALIVE]", True, (34, 197, 94))
+                else:
+                    reason = getattr(selected_entity, "death_reason", "Starvation")
+                    st_txt = font_badge.render(f"[DECEASED: {reason}]", True, (239, 68, 68))
+                screen.blit(st_txt, (cx + cw - 32 - st_txt.get_width(), cy + 12))
+
+                # Close (X) button
+                btn_entity_close_rect.x = cx + cw - 26
+                btn_entity_close_rect.y = cy + 10
+                c_hov = btn_entity_close_rect.collidepoint(m_pos)
+                pygame.draw.rect(screen, (220, 38, 38) if c_hov else (30, 41, 59), btn_entity_close_rect, border_radius=4)
+                x_lbl = font_badge.render("X", True, (255, 255, 255))
+                screen.blit(x_lbl, (btn_entity_close_rect.centerx - x_lbl.get_width() // 2, btn_entity_close_rect.centery - x_lbl.get_height() // 2))
+
+                # Household Affiliation
+                fam_id = getattr(selected_entity, "family_id", None)
+                if fam_id and villager_manager:
+                    fam_obj = villager_manager.get_family_by_id(fam_id)
+                    household_name = f"The {fam_obj.surname} Family" if fam_obj else str(fam_id)
+                else:
+                    household_name = getattr(selected_entity, "household_name", "Crown Estate Household")
+                screen.blit(font_hud.render(f"Household: {household_name}", True, (56, 189, 248)), (cx + 14, cy + 34))
+
+                # Current Activity / Job
+                job_name = getattr(selected_entity, "job", "Worker")
+                task_name = getattr(selected_entity, "task", getattr(selected_entity, "state", "IDLE"))
+                screen.blit(font_body.render(f"Profession: {job_name}  |  Activity: {task_name}", True, (226, 232, 240)), (cx + 14, cy + 54))
+
+                # Hunger Bar
+                h_val = max(0.0, min(100.0, getattr(selected_entity, "hunger", 100.0)))
+                screen.blit(font_badge.render("Hunger:", True, (241, 245, 249)), (cx + 14, cy + 76))
+                h_bg = pygame.Rect(cx + 68, cy + 76, 170, 14)
+                pygame.draw.rect(screen, (30, 41, 59), h_bg, border_radius=4)
+                h_fill = max(0, int(170 * (h_val / 100.0)))
+                if h_fill > 0:
+                    h_c = (34, 197, 94) if h_val > 50 else ((234, 179, 8) if h_val > 20 else (239, 68, 68))
+                    pygame.draw.rect(screen, h_c, (cx + 68, cy + 76, h_fill, 14), border_radius=4)
+                pygame.draw.rect(screen, (71, 85, 105), h_bg, width=1, border_radius=4)
+                screen.blit(font_badge.render(f"{int(h_val)}%", True, (255, 255, 255)), (cx + 246, cy + 76))
+
+                # Thirst Bar
+                t_val = max(0.0, min(100.0, getattr(selected_entity, "thirst", 100.0)))
+                screen.blit(font_badge.render("Thirst:", True, (241, 245, 249)), (cx + 14, cy + 96))
+                t_bg = pygame.Rect(cx + 68, cy + 96, 170, 14)
+                pygame.draw.rect(screen, (30, 41, 59), t_bg, border_radius=4)
+                t_fill = max(0, int(170 * (t_val / 100.0)))
+                if t_fill > 0:
+                    t_c = (56, 189, 248) if t_val > 50 else ((59, 130, 246) if t_val > 20 else (239, 68, 68))
+                    pygame.draw.rect(screen, t_c, (cx + 68, cy + 96, t_fill, 14), border_radius=4)
+                pygame.draw.rect(screen, (71, 85, 105), t_bg, width=1, border_radius=4)
+                screen.blit(font_badge.render(f"{int(t_val)}%", True, (255, 255, 255)), (cx + 246, cy + 96))
+
+                # Inventory Information
+                inv_items = []
+                for it, c in getattr(selected_entity, "inventory", {}).items():
+                    if c > 0:
+                        inv_items.append(f"{c}x {it}")
+                carried_crop = getattr(selected_entity, "carrying_crop", 0)
+                if carried_crop > 0:
+                    inv_items.append(f"{carried_crop}x Harvest")
+                carried_res = getattr(selected_entity, "carried_res", None)
+                if carried_res and getattr(selected_entity, "carried_amount", 0) > 0:
+                    inv_items.append(f"{selected_entity.carried_amount}x {carried_res}")
+
+                inv_summary = ", ".join(inv_items) if inv_items else "Empty (Hands free)"
+                screen.blit(font_badge.render(f"Inventory: {inv_summary[:36]}", True, (148, 163, 184)), (cx + 14, cy + 120))
+
+                # Bed / Tool info
+                assigned_bed = getattr(selected_entity, "assigned_bed_id", None)
+                bed_str = f"Bed: {assigned_bed}" if assigned_bed else "Bed: Floor"
+                tool_str = f"Tool: {getattr(selected_entity, 'active_tool', None) or 'None'}"
+                screen.blit(font_badge.render(f"{bed_str}  •  {tool_str}", True, (100, 116, 139)), (cx + 14, cy + 142))
+
+
             # 8. Clock & Calendar HUD (Top Left)
             day_cycle.draw_hud(screen)
 
@@ -1290,7 +1475,10 @@ def main():
             screen.blit(btn_surf, txt_rect)
 
             # 11. Left Raport Button & Modal
-            raport_ui.draw(screen, building_manager, permit_manager, resources, servant_manager, villager_manager, schedule_manager=schedule_manager, day_cycle=day_cycle, furniture_manager=furniture_manager, stockpile_manager=stockpile_manager)
+            raport_ui.draw(screen, building_manager, permit_manager, resources, servant_manager, villager_manager, schedule_manager=schedule_manager, day_cycle=day_cycle, furniture_manager=furniture_manager, stockpile_manager=stockpile_manager, production_system=production_system)
+
+            # 11.5. Market Profile Modal Dialog (AGENT 2)
+            market_modal.draw(screen, resources, stockpile_manager)
 
             # 12. Speed Control HUD (Bottom Right)
             speed_controller.draw(screen)

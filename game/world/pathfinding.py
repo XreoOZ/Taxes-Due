@@ -108,37 +108,40 @@ class Pathfinder:
     def __init__(self, building_manager=None):
         self.building_manager = building_manager
 
-    def is_segment_clear(self, p1, p2, building_manager=None, radius=PATH_SEGMENT_COLLISION_RADIUS, tile_size=TILE_SIZE):
+    def is_segment_clear(self, p1, p2, building_manager=None, radius=PATH_SEGMENT_COLLISION_RADIUS, tile_size=TILE_SIZE, furniture_manager=None, exclude_tile=None):
         """
-        Memvalidasi segmen garis antara p1=(x1, y1) dan p2=(x2, y2) terhadap seluruh rect dinding.
+        Memvalidasi segmen garis antara p1=(x1, y1) dan p2=(x2, y2) terhadap seluruh rect dinding dan perabotan.
         Mengembalikan True jika segmen bebas benturan, False jika menabrak dinding atau rintangan.
         """
         if p1 == p2:
             return True
         bm = building_manager or self.building_manager
-        if not bm:
-            return True
-
-        all_walls = bm.get_all_wall_rects(tile_size)
-        if not all_walls:
-            return True
-
         x1, y1 = p1
         x2, y2 = p2
         margin = max(0.0, radius - 4.0)
 
-        # Abaikan benturan jika segmen berada tepat di koridor celah kusen pintu bangunan
-        is_door_transit = any(
-            b.is_in_door_threshold(x1, y1, tile_size) and b.is_in_door_threshold(x2, y2, tile_size)
-            for b in getattr(bm, "buildings", []) if getattr(b, "door_pos", None)
-        )
-        if is_door_transit:
-            return True
+        if bm:
+            all_walls = bm.get_all_wall_rects(tile_size)
+            if all_walls:
+                # Abaikan benturan jika segmen berada tepat di koridor celah kusen pintu bangunan
+                is_door_transit = any(
+                    b.is_in_door_threshold(x1, y1, tile_size) and b.is_in_door_threshold(x2, y2, tile_size)
+                    for b in getattr(bm, "buildings", []) if getattr(b, "door_pos", None)
+                )
+                if not is_door_transit:
+                    for wr in all_walls:
+                        inflated = wr.inflate(margin * 2, margin * 2) if margin > 0 else wr
+                        if inflated.clipline(x1, y1, x2, y2):
+                            return False
 
-        for wr in all_walls:
-            inflated = wr.inflate(margin * 2, margin * 2) if margin > 0 else wr
-            if inflated.clipline(x1, y1, x2, y2):
-                return False
+        # Validasi perabotan (Bed, Chest) terpasang - rute tidak boleh memotong menembus ranjang
+        if furniture_manager and hasattr(furniture_manager, "get_furniture_rects"):
+            furn_rects = furniture_manager.get_furniture_rects(tile_size=tile_size, exclude_tile=exclude_tile)
+            for fr in furn_rects:
+                if fr.collidepoint(x1, y1) or fr.collidepoint(x2, y2):
+                    continue
+                if fr.clipline(x1, y1, x2, y2):
+                    return False
 
         return True
 
@@ -341,14 +344,11 @@ class Pathfinder:
                 raw_waypoints.append((tx, ty))
 
         # Haluskan waypoint kolinear dengan validasi segment collision
-        return self._simplify_waypoints(raw_waypoints, bm=bm, tile_size=tile_size)
+        return self._simplify_waypoints(raw_waypoints, bm=bm, tile_size=tile_size, furniture_manager=furniture_manager, exclude_tile=target_tile)
 
-    def _simplify_waypoints(self, waypoints, bm=None, tile_size=TILE_SIZE):
-        """Menyederhanakan waypoint yang berada pada satu garis lurus dengan validasi bebas tabrakan"""
+    def _simplify_waypoints(self, waypoints, bm=None, tile_size=TILE_SIZE, furniture_manager=None, exclude_tile=None):
+        """Menyederhanakan waypoint yang berada pada satu garis lurus dengan validasi bebas tabrakan dinding & perabotan"""
         if len(waypoints) <= 2:
-            if len(waypoints) == 2 and bm:
-                if not self.is_segment_clear(waypoints[0], waypoints[1], bm, tile_size=tile_size):
-                    return [waypoints[0]]
             return list(waypoints)
 
         simplified = [waypoints[0]]
@@ -372,14 +372,14 @@ class Pathfinder:
             is_collinear_y = (abs(dy1) < 0.1 and abs(dy2) < 0.1 and (dx1 * dx2 > 0))
 
             if is_collinear_x or is_collinear_y:
-                # Validasi apakah garis langsung p_prev ke p_next bebas benturan dinding
-                if self.is_segment_clear(p_prev, p_next, bm, tile_size=tile_size):
+                # Validasi apakah garis langsung p_prev ke p_next bebas benturan dinding & perabotan
+                if self.is_segment_clear(p_prev, p_next, bm, tile_size=tile_size, furniture_manager=furniture_manager, exclude_tile=exclude_tile):
                     continue
 
             simplified.append(p_curr)
 
         # Pastikan segmen langsung ke waypoints[-1] bebas benturan
-        if bm and not self.is_segment_clear(simplified[-1], waypoints[-1], bm, tile_size=tile_size):
+        if bm and not self.is_segment_clear(simplified[-1], waypoints[-1], bm, tile_size=tile_size, furniture_manager=furniture_manager, exclude_tile=exclude_tile):
             if len(waypoints) >= 2 and waypoints[-2] != simplified[-1]:
                 simplified.append(waypoints[-2])
 
@@ -475,6 +475,8 @@ class GlobalPathRegistry:
         stale_eids = [eid for eid, res in self.reservations.items() if (now - res.last_update) > timeout]
         for eid in stale_eids:
             self.release_reservation(eid)
+        # Bersihkan juga antrean menunggu yang basi (> 2.0s)
+        self.waiting_queue = [w for w in self.waiting_queue if (now - w[2]) < 2.0]
 
     def get_all_reserved_tiles(self, exclude_entity=None):
         """Mengembalikan gabungan set seluruh petak grid yang direservasi oleh AI lain"""
@@ -584,6 +586,9 @@ class GlobalPathRegistry:
         eid_str = str(entity_id)
         self.clean_stale_reservations()
 
+        # Bersihkan entri lama milik diri sendiri dari antrean sebelum mengevaluasi antrean
+        self.waiting_queue = [w for w in self.waiting_queue if w[0] != eid_str]
+
         # Prioritas antrean menunggu: jika ada entitas lain yang mendahului dalam antrean menuju petak sama
         if exclusive_target and self.waiting_queue:
             head_eid, head_target, _ = self.waiting_queue[0]
@@ -625,6 +630,7 @@ class GlobalPathRegistry:
                 self.release_claim(eid_str, res.target_tile)
         else:
             self.release_claim(eid_str)
+        self.waiting_queue = [w for w in self.waiting_queue if w[0] != eid_str]
 
     def register_waiting(self, entity_id, target_tile=None):
         """Mendaftarkan entitas ke antrean menunggu dengan timestamp kedatangan (FIFO)"""
@@ -714,9 +720,13 @@ def draw_ai_paths(surface, camera, villagers=None, servants=None, show_lines=Tru
         waypoints = getattr(actor, "current_path", None)
         path_idx = getattr(actor, "path_index", 0)
         is_waiting = getattr(actor, "is_waiting_for_path", False)
+        is_idle = (getattr(actor, "state", "") == "IDLE" or
+                   getattr(actor, "task", "") in ("IDLE", "LEISURE") or
+                   not getattr(actor, "is_alive", True))
 
         # Jika sedang menunggu jalur dibebaskan oleh AI lain, tampilkan tag [WAITING ROUTE]
-        if is_waiting and (not waypoints or path_idx >= len(waypoints)):
+        # Hanya untuk pekerja aktif yang sedang menunggu rute, bukan karakter santai/idle
+        if is_waiting and not is_idle and (not waypoints or path_idx >= len(waypoints)):
             screen_pos = camera.world_to_screen(actor.x, actor.y)
             wait_tag = f"{getattr(actor, 'first_name', 'Servant')} [WAITING ROUTE]"
             tag_surf = font_tag.render(wait_tag, True, (255, 230, 120))

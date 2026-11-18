@@ -1,7 +1,7 @@
 {
-  "timestamp": "2026-11-18 14:11",
-  "day_number": 12,
-  "time_str": "15:30",
+  "timestamp": "2026-11-18 15:48",
+  "day_number": 30,
+  "time_str": "23:23",
   "population": 5,
   "resources": {
     "Wood": 875,
@@ -10,14 +10,14 @@
     "Water": 1000
   },
   "day_cycle": {
-    "day_number": 12,
-    "time_seconds": 387.59300000001195,
+    "day_number": 30,
+    "time_seconds": 584.9280000000341,
     "day_length_index": 0,
-    "time_str": "15:30"
+    "time_str": "23:23"
   },
   "player": {
-    "x": 210.2020014856732,
-    "y": -117.75999999999989
+    "x": 604.5068688620825,
+    "y": -54.43313113791868
   },
   "permits": [
     {
@@ -399,174 +399,174 @@
         "vil_3"
       ],
       "crop": "Potato",
-      "growth_days": 0.002902118055555552,
+      "growth_days": 1.1967619202899442,
       "watered_today": true,
       "tile_crops": {
         "-2,-3": {
           "crop": "Potato",
-          "growth_days": 0.0,
-          "watered_today": false,
+          "growth_days": 1.7907383333336475,
+          "watered_today": true,
           "unwatered_days": 0,
           "is_dead": false
         },
         "0,-7": {
           "crop": "Potato",
-          "growth_days": 0.0,
-          "watered_today": false,
+          "growth_days": 1.1184666666662635,
+          "watered_today": true,
           "unwatered_days": 0,
           "is_dead": false
         },
         "0,-1": {
           "crop": "Potato",
-          "growth_days": 0.0,
-          "watered_today": false,
+          "growth_days": 2.7749491666673207,
+          "watered_today": true,
           "unwatered_days": 0,
           "is_dead": false
         },
         "-1,-3": {
-          "crop": "Potato",
+          "crop": null,
           "growth_days": 0.0,
           "watered_today": false,
-          "unwatered_days": 0,
-          "is_dead": false
+          "unwatered_days": 1,
+          "is_dead": true
         },
         "-2,-6": {
           "crop": "Potato",
-          "growth_days": 0.0,
-          "watered_today": false,
+          "growth_days": 1.7164958333334484,
+          "watered_today": true,
           "unwatered_days": 0,
           "is_dead": false
         },
         "0,-4": {
           "crop": "Potato",
-          "growth_days": 0.0,
-          "watered_today": false,
+          "growth_days": 1.2784966666665802,
+          "watered_today": true,
           "unwatered_days": 0,
           "is_dead": false
         },
         "-1,-6": {
           "crop": "Potato",
-          "growth_days": 0.0,
-          "watered_today": false,
+          "growth_days": 1.5533124999998364,
+          "watered_today": true,
           "unwatered_days": 0,
           "is_dead": false
         },
         "-1,-8": {
           "crop": "Potato",
-          "growth_days": 0.0,
-          "watered_today": false,
+          "growth_days": 0.18860333333333143,
+          "watered_today": true,
           "unwatered_days": 0,
           "is_dead": false
         },
         "-2,-8": {
           "crop": "Potato",
-          "growth_days": 0.0,
-          "watered_today": false,
+          "growth_days": 0.3600916666666982,
+          "watered_today": true,
           "unwatered_days": 0,
           "is_dead": false
         },
         "-2,-5": {
           "crop": "Potato",
-          "growth_days": 0.0,
-          "watered_today": false,
+          "growth_days": 0.6575716666665896,
+          "watered_today": true,
           "unwatered_days": 0,
           "is_dead": false
         },
         "-1,-5": {
           "crop": "Potato",
-          "growth_days": 0.0,
-          "watered_today": false,
+          "growth_days": 0.29463583333333904,
+          "watered_today": true,
           "unwatered_days": 0,
           "is_dead": false
         },
         "0,-3": {
           "crop": "Potato",
-          "growth_days": 0.0,
-          "watered_today": false,
+          "growth_days": 1.275194999999855,
+          "watered_today": true,
           "unwatered_days": 0,
           "is_dead": false
         },
         "-2,-2": {
           "crop": "Potato",
-          "growth_days": 0.001944166666666667,
+          "growth_days": 1.9306391666670417,
           "watered_today": true,
           "unwatered_days": 0,
           "is_dead": false
         },
         "-2,-1": {
           "crop": "Potato",
-          "growth_days": 0.023159999999999993,
+          "growth_days": 1.6864308333338305,
           "watered_today": true,
           "unwatered_days": 0,
           "is_dead": false
         },
         "-1,-2": {
           "crop": "Potato",
-          "growth_days": 0.0,
-          "watered_today": false,
+          "growth_days": 0.7854233333330796,
+          "watered_today": true,
           "unwatered_days": 0,
           "is_dead": false
         },
         "-1,-1": {
           "crop": "Potato",
-          "growth_days": 0.04454666666666658,
+          "growth_days": 1.7021241666672295,
           "watered_today": true,
           "unwatered_days": 0,
           "is_dead": false
         },
         "0,-6": {
           "crop": "Potato",
-          "growth_days": 0.0,
-          "watered_today": false,
+          "growth_days": 0.8242474999997744,
+          "watered_today": true,
           "unwatered_days": 0,
           "is_dead": false
         },
         "-1,-4": {
           "crop": "Potato",
-          "growth_days": 0.0,
-          "watered_today": false,
+          "growth_days": 0.5949174999999648,
+          "watered_today": true,
           "unwatered_days": 0,
           "is_dead": false
         },
         "-2,-7": {
           "crop": "Potato",
-          "growth_days": 0.0,
-          "watered_today": false,
+          "growth_days": 1.9608066666670456,
+          "watered_today": true,
           "unwatered_days": 0,
           "is_dead": false
         },
         "-1,-7": {
           "crop": "Potato",
-          "growth_days": 0.0,
-          "watered_today": false,
+          "growth_days": 1.2988291666664362,
+          "watered_today": true,
           "unwatered_days": 0,
           "is_dead": false
         },
         "0,-5": {
           "crop": "Potato",
-          "growth_days": 0.0,
-          "watered_today": false,
+          "growth_days": 2.273934166667193,
+          "watered_today": true,
           "unwatered_days": 0,
           "is_dead": false
         },
         "-2,-4": {
           "crop": "Potato",
-          "growth_days": 0.0,
-          "watered_today": false,
+          "growth_days": 0.5031200000000743,
+          "watered_today": true,
           "unwatered_days": 0,
           "is_dead": false
         },
         "0,-8": {
           "crop": "Potato",
-          "growth_days": 0.0,
-          "watered_today": false,
+          "growth_days": 0.4420058333333996,
+          "watered_today": true,
           "unwatered_days": 0,
           "is_dead": false
         },
         "0,-2": {
           "crop": "Potato",
-          "growth_days": 0.0,
-          "watered_today": false,
+          "growth_days": 0.5144891666667365,
+          "watered_today": true,
           "unwatered_days": 0,
           "is_dead": false
         }
@@ -1095,7 +1095,9 @@
       "designated_target": null,
       "carrier_id": null,
       "condition": 1.0,
-      "inventory": {}
+      "inventory": {
+        "Potato": 115
+      }
     }
   ],
   "families": [
@@ -1118,22 +1120,22 @@
           "role": "Father",
           "family_id": "fam_1",
           "job": "Farmer",
-          "x": -50.289453816563274,
-          "y": -90.15185718702307,
-          "task": "WATERING",
+          "x": 482.0,
+          "y": 269.34095848909504,
+          "task": "TILLING",
           "carrying_crop": 0,
           "inventory": {
             "Hoe": 1,
             "Watering_Can": 1,
             "Sickle": 1
           },
-          "active_tool": "Watering_Can",
-          "has_water": true,
-          "water_day": 12,
+          "active_tool": "Hoe",
+          "has_water": false,
+          "water_day": 28,
           "water_charges": 9999,
           "assigned_bed_id": "furn_1",
           "carrying_furniture_id": null,
-          "watering_timer": 0.9290000000000003,
+          "watering_timer": 0.0,
           "tilling_timer": 0.0
         },
         {
@@ -1146,19 +1148,19 @@
           "role": "Mother",
           "family_id": "fam_1",
           "job": "Farmer",
-          "x": -94.2537100919468,
-          "y": -370.15643256781607,
-          "task": "FETCHING_WATER",
+          "x": 290.87577616949625,
+          "y": 220.0400359772118,
+          "task": "IDLE",
           "carrying_crop": 0,
           "inventory": {
             "Hoe": 1,
             "Watering_Can": 1,
             "Sickle": 1
           },
-          "active_tool": "Watering_Can",
-          "has_water": false,
-          "water_day": -1,
-          "water_charges": 0,
+          "active_tool": null,
+          "has_water": true,
+          "water_day": 30,
+          "water_charges": 9999,
           "assigned_bed_id": "furn_2",
           "carrying_furniture_id": null,
           "watering_timer": 0.0,
@@ -1174,19 +1176,19 @@
           "role": "Adult Daughter",
           "family_id": "fam_1",
           "job": "Farmer",
-          "x": -159.25738713348954,
-          "y": 85.22945322177944,
-          "task": "FETCHING_WATER",
+          "x": 405.4338194208618,
+          "y": 353.61561077006223,
+          "task": "IDLE",
           "carrying_crop": 0,
           "inventory": {
             "Hoe": 1,
             "Watering_Can": 1,
             "Sickle": 1
           },
-          "active_tool": "Watering_Can",
-          "has_water": false,
-          "water_day": -1,
-          "water_charges": 0,
+          "active_tool": null,
+          "has_water": true,
+          "water_day": 30,
+          "water_charges": 9999,
           "assigned_bed_id": "furn_3",
           "carrying_furniture_id": null,
           "watering_timer": 0.0,
@@ -1199,8 +1201,8 @@
     {
       "id": "servant_1",
       "name": "Servant Alden",
-      "x": 277.4813136043561,
-      "y": -45.31592586225792,
+      "x": 556.9648903805777,
+      "y": -26.541368657967794,
       "work_priorities": {
         "Building": 1,
         "Hauling": 1,
@@ -1213,8 +1215,8 @@
     {
       "id": "servant_2",
       "name": "Servant Barnaby",
-      "x": 147.35645308623637,
-      "y": -48.524432525465414,
+      "x": 642.3880280870892,
+      "y": -87.67756188608593,
       "work_priorities": {
         "Building": 1,
         "Hauling": 1,

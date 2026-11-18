@@ -248,9 +248,24 @@ DEFAULT_RESOURCES = {
     "Food": 1000,
     "Stone": 1000,
     "Water": 1000,
+    "Copper": 1000,
+    "Silver": 1000,
+    "Gold": 1000,
 }
 MAX_STACK_SIZE = 100
 MAX_TILE_CAPACITY = 1000  # Up to 10 stacks of 100 per tile (kotak)
+
+# Currency & Economy System Settings (Config-Driven, Zero Hardcode)
+DENOMINATION_CAP = 1000
+CURRENCY_DENOMINATIONS = ["Copper", "Silver", "Gold"]
+EXCHANGE_RATES = {
+    "Copper": 1,       # 1 Copper = 1 Copper (base monetary unit)
+    "Silver": 10,      # 1 Silver = 10 Copper
+    "Gold": 100,       # 1 Gold = 100 Copper = 10 Silver
+}
+DEFAULT_ITEM_PRICES = {
+    "Potato": 3,       # 1 Potato = 3 Copper (Configurable default price)
+}
 
 RESOURCE_COLORS = {
     "Wood": (180, 120, 70),     # Wood brown
@@ -260,7 +275,13 @@ RESOURCE_COLORS = {
     "Potato": (194, 120, 60),   # Russet brown potato
     "Hoe": (202, 138, 4),       # Iron & wood hoe
     "Sickle": (168, 85, 247),   # Curved steel sickle
-    "Watering_Can": (180, 105, 55) # Medieval copper/clay sprinkler pot
+    "Watering_Can": (180, 105, 55), # Medieval copper/clay sprinkler pot
+    "Copper": (184, 115, 51),   # Copper coin bronze
+    "Silver": (203, 213, 225),  # Silver coin shine
+    "Gold": (250, 204, 21),     # Gold coin luster
+    "Copper Coin": (184, 115, 51),
+    "Silver Coin": (203, 213, 225),
+    "Gold Coin": (250, 204, 21),
 }
 
 TOOL_TYPES = {
@@ -365,10 +386,12 @@ COLOR_MODAL_BORDER = (71, 85, 105)
 COLOR_TAB_ACTIVE = (37, 99, 235)
 COLOR_TAB_INACTIVE = (30, 41, 59)
 COLOR_BADGE_WIP = (245, 158, 11)
+COLOR_BADGE_PARTIAL = (234, 179, 8)
+COLOR_BADGE_IMPLEMENTED = (34, 197, 94)
 
 # Modal Dimensions
-RAPORT_MODAL_WIDTH = 760
-RAPORT_MODAL_HEIGHT = 490
+RAPORT_MODAL_WIDTH = 860
+RAPORT_MODAL_HEIGHT = 500
 SETTINGS_MODAL_WIDTH = 640
 SETTINGS_MODAL_HEIGHT = 440
 
@@ -459,6 +482,21 @@ BUILDING_TYPES = {
         "has_door": False,
         "required_permit": "any",
         "allowed_permits": ["housing", "storage", "landlord_private"],
+    },
+    "market": {
+        "id": "market",
+        "name": "Market",
+        "desc": "Medieval marketplace stall for trading food, goods, and currency. Footprint: 3x2 tiles.",
+        "cost_wood": 15,
+        "cost_stone": 5,
+        "fixed_cost": True,
+        "fixed_tiles_count": 6,
+        "width_tiles": 3,
+        "height_tiles": 2,
+        "is_solid": False,
+        "has_door": False,
+        "required_permit": "any",
+        "allowed_permits": ["market", "storage", "landlord_private", "housing"],
     }
 }
 # Backward compatibility aliases
@@ -481,6 +519,13 @@ PERMIT_TYPES = {
         "desc": "Official landlord deed for resource storage & stockpiles.",
         "color": (234, 179, 8, 60),
         "border_color": (250, 204, 21),
+    },
+    "market": {
+        "id": "market",
+        "name": "Market Permit",
+        "desc": "Official landlord deed for commercial trade and market stalls.",
+        "color": (245, 158, 11, 60),
+        "border_color": (251, 191, 36),
     },
     "farm": {
         "id": "farm",
@@ -505,12 +550,14 @@ CROP_TYPES = {
         "name": "Potato",
         "icon": "🥔",
         "wip": False,
-        "desc": "Hearty staple tuber crop. High yield & fast growth.",
+        "desc": "Hearty staple tuber crop. Produces exactly 2 potatoes per tile every 10 days.",
         "growth_days": 10.0,
         "sprout_day": 2.0,
         "leaf_day": 4.0,
         "harvest_day": 10.0,
-        "yield_chance_2": 0.20
+        "yield_per_tile": 2,
+        "yield": 2,
+        "yield_chance_2": 0.0
     },
     "wheat": {
         "id": "wheat",
@@ -564,3 +611,29 @@ FURNITURE_TYPES = {
         "color_pillow": (241, 245, 249)
     }
 }
+
+# =====================================================================
+# Needs, Survival & Household Consumption System (Agent 1)
+# =====================================================================
+AI_NEED_MAX = 100.0
+AI_NEED_HUNGER_DECAY_PER_DAY = 100.0   # Decays by 100% per 1 full in-game day (1200 seconds)
+AI_NEED_THIRST_DECAY_PER_DAY = 100.0   # Decays by 100% per 1 full in-game day
+AI_CRITICAL_NEED_THRESHOLD = 20.0      # Critical threshold (<= 20%) triggering task interruption
+DAILY_FOOD_REQUIREMENT = 1             # 1 food per day per living individual
+DAILY_WATER_REQUIREMENT = 1            # 1 water per day per living individual
+AI_NEED_FOOD_RESTORE = 100.0           # Need restored when consuming food
+AI_NEED_WATER_RESTORE = 100.0          # Need restored when drinking water
+HOUSEHOLD_WATER_MAX_COLLECTORS = 2     # Maximum concurrent household members hauling water
+
+# Visual Colors for Needs & Corpse States
+COLOR_NEED_HUNGER_HIGH = (34, 197, 94)    # Green (Fulfilling)
+COLOR_NEED_HUNGER_MED = (234, 179, 8)     # Yellow (Moderate)
+COLOR_NEED_HUNGER_LOW = (239, 68, 68)     # Red (Critical Starvation)
+COLOR_NEED_THIRST_HIGH = (56, 189, 248)   # Cyan / Sky Blue (Hydrated)
+COLOR_NEED_THIRST_MED = (59, 130, 246)    # Blue (Moderate)
+COLOR_NEED_THIRST_LOW = (239, 68, 68)     # Red (Critical Dehydration)
+COLOR_STATUS_ALIVE = (34, 197, 94)
+COLOR_STATUS_DECEASED = (148, 163, 184)
+COLOR_CORPSE_BODY = (100, 116, 139)       # Desaturated slate gray for deceased villagers
+COLOR_CORPSE_OUTLINE = (51, 65, 85)
+

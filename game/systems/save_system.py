@@ -81,7 +81,11 @@ def serialize_game_state(day_cycle, resources, player, permit_manager, building_
             "building_type": b.building_type,
             "tiles": [[gx, gy] for gx, gy in b.tiles],
             "door_pos": list(b.door_pos) if b.door_pos else None,
-            "door_side": getattr(b, "door_side", "bottom")
+            "door_side": getattr(b, "door_side", "bottom"),
+            "owner": getattr(b, "owner", "landlord"),
+            "inventory": dict(getattr(b, "inventory", {})),
+            "currency": dict(getattr(b, "currency", {})),
+            "prices": dict(getattr(b, "prices", {}))
         })
 
     sites_data = []
@@ -161,7 +165,15 @@ def serialize_game_state(day_cycle, resources, player, permit_manager, building_
                     "assigned_bed_id": getattr(m, "assigned_bed_id", None),
                     "carrying_furniture_id": getattr(m.carrying_furniture, "id", None) if getattr(m, "carrying_furniture", None) else None,
                     "watering_timer": getattr(m, "watering_timer", 0.0),
-                    "tilling_timer": getattr(m, "tilling_timer", 0.0)
+                    "tilling_timer": getattr(m, "tilling_timer", 0.0),
+                    "hunger": getattr(m, "hunger", 100.0),
+                    "thirst": getattr(m, "thirst", 100.0),
+                    "daily_food_consumed": getattr(m, "daily_food_consumed", 0),
+                    "daily_water_consumed": getattr(m, "daily_water_consumed", 0),
+                    "is_alive": getattr(m, "is_alive", True),
+                    "status": getattr(m, "status", "ALIVE"),
+                    "death_reason": getattr(m, "death_reason", None),
+                    "death_day": getattr(m, "death_day", None)
                 } for m in fam.members
             ]
         })
@@ -186,6 +198,17 @@ def serialize_game_state(day_cycle, resources, player, permit_manager, building_
     all_vils = villager_manager.get_all_villagers()
     total_pop = len(all_vils) + len(servant_manager.servants)
 
+    # 10. Production Distribution Records
+    from game.systems.production_distribution import ProductionDistributionSystem
+    ps = ProductionDistributionSystem.get_instance()
+    serialized_prod = {}
+    for fam_id, rec in ps.household_records.items():
+        serialized_prod[str(fam_id)] = {
+            "total_produced": dict(rec.get("total_produced", {})),
+            "workplaces": list(rec.get("workplaces", [])),
+            "history": list(rec.get("history", []))
+        }
+
     return {
         "timestamp": time.strftime("%Y-%m-%d %H:%M"),
         "day_number": day_cycle.day_number,
@@ -201,7 +224,8 @@ def serialize_game_state(day_cycle, resources, player, permit_manager, building_
         "furniture": furniture_data,
         "families": families_data,
         "servants": servants_data,
-        "schedules": schedules_data
+        "schedules": schedules_data,
+        "production_records": serialized_prod
     }
 
 def save_to_slot(slot_id, day_cycle, resources, player, permit_manager, building_manager, stockpile_manager, furniture_manager, villager_manager, servant_manager, schedule_manager):
@@ -304,6 +328,14 @@ def load_from_slot(slot_id, day_cycle, resources, player, permit_manager, buildi
         tiles = {(t[0], t[1]) for t in b_d.get("tiles", [])}
         door_pos = tuple(b_d["door_pos"]) if b_d.get("door_pos") else None
         b = Building(b_d["building_type"], tiles, door_pos=door_pos, door_side=b_d.get("door_side", "bottom"))
+        if "owner" in b_d:
+            b.owner = b_d["owner"]
+        if "inventory" in b_d:
+            b.inventory = dict(b_d["inventory"])
+        if "currency" in b_d:
+            b.currency = dict(b_d["currency"])
+        if "prices" in b_d:
+            b.prices = dict(b_d["prices"])
         building_manager.buildings.append(b)
 
     building_manager.construction_sites.clear()
@@ -347,6 +379,8 @@ def load_from_slot(slot_id, day_cycle, resources, player, permit_manager, buildi
         f.carrier_id = f_d.get("carrier_id", None)
         f.condition = f_d.get("condition", 1.0)
         furniture_manager.furnitures.append(f)
+    if hasattr(furniture_manager, "invalidate_cache"):
+        furniture_manager.invalidate_cache()
 
     # 8. Villagers & Families
     villager_manager.families.clear()
@@ -378,6 +412,14 @@ def load_from_slot(slot_id, day_cycle, resources, player, permit_manager, buildi
             v.assigned_bed_id = m_d.get("assigned_bed_id", None)
             v.watering_timer = m_d.get("watering_timer", 0.0)
             v.tilling_timer = m_d.get("tilling_timer", 0.0)
+            v.hunger = float(m_d.get("hunger", 100.0))
+            v.thirst = float(m_d.get("thirst", 100.0))
+            v.daily_food_consumed = int(m_d.get("daily_food_consumed", 0))
+            v.daily_water_consumed = int(m_d.get("daily_water_consumed", 0))
+            v.is_alive = bool(m_d.get("is_alive", True))
+            v.status = str(m_d.get("status", "ALIVE"))
+            v.death_reason = m_d.get("death_reason", None)
+            v.death_day = m_d.get("death_day", None)
             v.assigned_permit_id = fam.assigned_permit_id
             
             # Reconnect carrying furniture if applicable
@@ -420,6 +462,19 @@ def load_from_slot(slot_id, day_cycle, resources, player, permit_manager, buildi
     if schedule_manager and "schedules" in data:
         for job_id, sched in data["schedules"].items():
             schedule_manager.job_schedules[job_id] = list(sched)
+
+    # 10.5. Production Distribution Records
+    if "production_records" in data:
+        from game.systems.production_distribution import ProductionDistributionSystem
+        ps = ProductionDistributionSystem.get_instance()
+        restored = {}
+        for fam_id, rec in data["production_records"].items():
+            restored[str(fam_id)] = {
+                "total_produced": dict(rec.get("total_produced", {})),
+                "workplaces": set(rec.get("workplaces", [])),
+                "history": list(rec.get("history", []))
+            }
+        ps.household_records = restored
 
     # 11. Recalculate ID counters to prevent future ID collisions
     max_p = max([int(p.id.split("_")[-1]) for p in permit_manager.permits if "_" in p.id and p.id.split("_")[-1].isdigit()] + [0])

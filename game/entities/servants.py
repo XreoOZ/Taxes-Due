@@ -80,6 +80,16 @@ class Servant:
         self.carried_amount = 0
         self.carrying_furniture = None
 
+        # Needs & Survival Profile (Agent 1)
+        self.hunger = 100.0
+        self.thirst = 100.0
+        self.is_alive = True
+        self.status = "ALIVE"
+        self.daily_food_consumed = 1
+        self.daily_water_consumed = 1
+        self.role = "Royal Servant"
+        self.family_id = "Landlord Manor"
+
         # Dialogue / Speech Bubble
         self.speech_text = None
         self.speech_timer = 0.0
@@ -718,6 +728,7 @@ class Servant:
                 ty += 40.0 if offset_y >= 0 else -40.0
             self.idle_target = (tx, ty)
 
+        self.is_waiting_for_path = False
         self._move_towards(self.idle_target[0], self.idle_target[1], dt, arrival_dist=20, all_servants=all_servants, player=player, building_manager=building_manager, all_entities=all_entities, furniture_manager=furniture_manager, exclusive_target=False)
 
     def _move_towards(self, tx, ty, dt, arrival_dist=10, all_servants=None, player=None, building_manager=None, all_entities=None, furniture_manager=None, exclusive_target=False):
@@ -768,10 +779,10 @@ class Servant:
             if furniture_manager and hasattr(furniture_manager, "get_occupied_tiles"):
                 avoid_set.update(furniture_manager.get_occupied_tiles(exclude_tile=self.path_target_tile))
 
-            # Hindari petak yang ditempati oleh entitas lain yang sedang tidur atau diam di tempat
+            # Hindari HANYA entitas yang sedang tidur pulas di ranjang (rintangan fisik padat)
             check_ents = all_entities or all_servants or []
             for other in check_ents:
-                if other != self and (getattr(other, "task", "") == "SLEEPING" or not getattr(other, "is_moving", False)):
+                if other != self and getattr(other, "task", "") == "SLEEPING":
                     avoid_set.add((int(math.floor(other.x / TILE_SIZE)), int(math.floor(other.y / TILE_SIZE))))
 
             cur_gx = int(math.floor(self.x / TILE_SIZE))
@@ -803,20 +814,27 @@ class Servant:
                     self.current_path = []
                     self.path_index = 0
                     self.is_moving = False
-                    self.is_waiting_for_path = True
-                    self.wait_timer = PATH_WAIT_RECHECK_INTERVAL
-                    if exclusive_target:
+                    has_blocker = any(c[1] in ("DOORWAY_CONFLICT", "DOORWAY_THRESHOLD_JAM", "TARGET_CONFLICT", "QUEUE_PRIORITY") for c in res_or_conf) if isinstance(res_or_conf, list) else False
+                    if exclusive_target or has_blocker:
+                        self.is_waiting_for_path = True
+                        self.wait_timer = PATH_WAIT_RECHECK_INTERVAL
                         reg.register_waiting(self.id, self.path_target_tile)
+                    else:
+                        self.is_waiting_for_path = False
+                        self.wait_timer = 0.3
                     return False
             else:
                 self.current_path = []
                 self.path_index = 0
                 self.is_moving = False
-                self.is_waiting_for_path = True
-                self.wait_timer = PATH_WAIT_RECHECK_INTERVAL
-                self.repath_cooldown = 0.4
                 if exclusive_target:
+                    self.is_waiting_for_path = True
+                    self.wait_timer = PATH_WAIT_RECHECK_INTERVAL
                     reg.register_waiting(self.id, self.path_target_tile)
+                else:
+                    self.is_waiting_for_path = False
+                    self.wait_timer = 0.4
+                self.repath_cooldown = 0.4
                 return False
 
         # 2. Prioritas Target Bersama:

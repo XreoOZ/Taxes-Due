@@ -32,6 +32,10 @@ _LEGACY_MODULE_MAP = {
     'game.save_modal': 'game.ui.save_modal',
     'game.pathfinding': 'game.world.pathfinding',
     'game.job_tool_system': 'game.systems.job_tool_system',
+    'game.currency': 'game.systems.currency',
+    'game.market_service': 'game.systems.market_service',
+    'game.market_modal': 'game.ui.market_modal',
+    'game.market_interface': 'game.systems.market_service',
 }
 
 class _LegacyImportFinder:

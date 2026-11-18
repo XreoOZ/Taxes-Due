@@ -152,12 +152,15 @@ class AreaPermit:
         if (gx, gy) in self.tile_crops:
             tc = self.tile_crops[(gx, gy)]
             if tc.get("crop") and not tc["is_dead"] and tc["growth_days"] >= 10.0:
+                crop_key = str(tc.get("crop") or "potato").lower()
+                crop_cfg = CROP_TYPES.get(crop_key, CROP_TYPES.get("potato", {}))
+                yield_val = int(crop_cfg.get("yield_per_tile", crop_cfg.get("yield", 2)))
                 # Reset tile to untilled state for next cultivation cycle
                 tc["crop"] = None
                 tc["growth_days"] = 0.0
                 tc["watered_today"] = False
                 tc["unwatered_days"] = 0
-                return 5  # Yield 5 potatoes per tile
+                return yield_val
         return 0
 
     def update_growth(self, day_dt):

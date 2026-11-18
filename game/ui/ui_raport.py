@@ -12,6 +12,8 @@ from game.config import (
     COLOR_TAB_ACTIVE,
     COLOR_TAB_INACTIVE,
     COLOR_BADGE_WIP,
+    COLOR_BADGE_PARTIAL,
+    COLOR_BADGE_IMPLEMENTED,
     COLOR_TEXT_TITLE,
     COLOR_TEXT_MAIN,
     COLOR_TEXT_MUTED,
@@ -31,6 +33,15 @@ from game.config import (
     SCHEDULE_TYPES,
     DEFAULT_JOB_SCHEDULE
 )
+from game.data.planning import (
+    PLANNING_FEATURES,
+    get_all_planning_features,
+    get_features_by_status,
+    STATUS_IMPLEMENTED,
+    STATUS_PARTIAL,
+    STATUS_PLANNED
+)
+from game.systems.production_distribution import ProductionDistributionSystem
 
 GRANTABLE_ITEMS = [
     {"type": "Hoe", "name": "Hoe"},
@@ -39,12 +50,24 @@ GRANTABLE_ITEMS = [
     {"type": "Potato", "name": "Potato"},
     {"type": "Wood", "name": "Wood"},
     {"type": "Stone", "name": "Stone"},
+    {"type": "Copper", "name": "Copper Coin"},
+    {"type": "Silver", "name": "Silver Coin"},
+    {"type": "Gold", "name": "Gold Coin"},
 ]
 
 def draw_item_icon(surface, item_name, cx, cy, size=12):
     """Draws crisp medieval procedural vector icons for items without relying on OS emoji fonts"""
     name_low = str(item_name).lower()
-    if "potato" in name_low or "spud" in name_low:
+    if "gold" in name_low:
+        pygame.draw.circle(surface, (250, 204, 21), (cx, cy), 6)
+        pygame.draw.circle(surface, (161, 98, 7), (cx, cy), 6, 1)
+    elif "silver" in name_low:
+        pygame.draw.circle(surface, (203, 213, 225), (cx, cy), 6)
+        pygame.draw.circle(surface, (100, 116, 139), (cx, cy), 6, 1)
+    elif "coin" in name_low or "copper" in name_low:
+        pygame.draw.circle(surface, (184, 115, 51), (cx, cy), 6)
+        pygame.draw.circle(surface, (120, 53, 15), (cx, cy), 6, 1)
+    elif "potato" in name_low or "spud" in name_low:
         r = pygame.Rect(cx - size, cy - int(size * 0.7), size * 2, int(size * 1.4))
         pygame.draw.ellipse(surface, (180, 115, 60), r)
         pygame.draw.ellipse(surface, (120, 70, 30), r, 1)
@@ -110,6 +133,8 @@ class RaportUI:
         # Inspection & Focused entity tracking
         self.selected_permit_inspect_id = None
         self.selected_building_inspect = None
+        self.market_profile_btn_rects = {}
+        self.selected_market_building = None
 
         # Left Raport Button
         self.btn_left_rect = pygame.Rect(16, 200, 110, 42)
@@ -117,12 +142,23 @@ class RaportUI:
         # Tabs
         self.tabs = [
             {"id": "building", "title": "Buildings", "wip": False},
-            {"id": "permit", "title": "Area Permits", "wip": False},
+            {"id": "permit", "title": "Permits", "wip": False},
             {"id": "priority", "title": "Priority", "wip": False},
             {"id": "schedule", "title": "Schedule", "wip": False},
             {"id": "villagers", "title": "Household", "wip": False},
             {"id": "workers", "title": "Workers", "wip": False},
+            {"id": "production", "title": "Production", "wip": False},
+            {"id": "tax", "title": "Taxes", "wip": True},
+            {"id": "planning", "title": "Roadmap", "wip": True},
         ]
+
+        # Planning & Roadmap UI State
+        self.planning_filter_status = "ALL"
+        self.planning_page = 0
+        self.planning_items_per_page = 4
+        self.planning_filter_rects = {}
+        self.planning_prev_btn_rect = None
+        self.planning_next_btn_rect = None
 
         # Schedule State
         self.selected_schedule_job_id = None
@@ -253,6 +289,9 @@ class RaportUI:
             "Potato": 0,
             "Wood": 0,
             "Stone": 0,
+            "Copper": 0,
+            "Silver": 0,
+            "Gold": 0,
         }
         sm = stockpile_manager or self.cached_stockpile_manager
         if sm:
@@ -266,7 +305,7 @@ class RaportUI:
                     else:
                         stock[rt] = stock.get(rt, 0) + s.amount
         if resources:
-            for k in ("Wood", "Stone", "Food"):
+            for k in ("Wood", "Stone", "Food", "Copper", "Silver", "Gold"):
                 target_k = "Potato" if k == "Food" else k
                 if resources.get(k, 0) > stock.get(target_k, 0):
                     stock[target_k] = resources[k]
@@ -276,7 +315,7 @@ class RaportUI:
         self.is_open = not self.is_open
         self.show_build_menu = False
 
-    def handle_event(self, event, building_manager, permit_manager, resources, servant_manager=None, villager_manager=None, schedule_manager=None, day_cycle=None, stockpile_manager=None, furniture_manager=None):
+    def handle_event(self, event, building_manager, permit_manager, resources, servant_manager=None, villager_manager=None, schedule_manager=None, day_cycle=None, stockpile_manager=None, furniture_manager=None, production_system=None):
         if stockpile_manager is not None:
             self.cached_stockpile_manager = stockpile_manager
         sm = stockpile_manager or self.cached_stockpile_manager
@@ -337,6 +376,13 @@ class RaportUI:
 
         # 4. Tab 0: Building Management
         if self.active_tab == 0:
+            # Check Market Profile buttons
+            for b, rect in list(getattr(self, "market_profile_btn_rects", {}).items()):
+                if rect.collidepoint(mouse_pos):
+                    self.selected_market_building = b
+                    self.is_open = False
+                    return "open_market_profile"
+
             # Check Destroy Building buttons
             for b, rect in list(self.destroy_building_btn_rects.items()):
                 if rect.collidepoint(mouse_pos):
@@ -707,9 +753,26 @@ class RaportUI:
                                     permit_manager.assign_worker_to_permit(avail_permits[0].id, worker.id)
                         return f"assign_worker_{v_id}"
 
+        # 9. Tab 8: Planning & Roadmap Tab
+        elif self.active_tab == 8:
+            for status_key, r in list(self.planning_filter_rects.items()):
+                if r.collidepoint(mouse_pos):
+                    self.planning_filter_status = status_key
+                    self.planning_page = 0
+                    return f"planning_filter_{status_key}"
+
+            if self.planning_prev_btn_rect and self.planning_prev_btn_rect.collidepoint(mouse_pos):
+                if self.planning_page > 0:
+                    self.planning_page -= 1
+                    return "planning_page_prev"
+
+            if self.planning_next_btn_rect and self.planning_next_btn_rect.collidepoint(mouse_pos):
+                self.planning_page += 1
+                return "planning_page_next"
+
         return None
 
-    def draw(self, surface, building_manager, permit_manager, resources, servant_manager=None, villager_manager=None, schedule_manager=None, day_cycle=None, furniture_manager=None, stockpile_manager=None):
+    def draw(self, surface, building_manager, permit_manager, resources, servant_manager=None, villager_manager=None, schedule_manager=None, day_cycle=None, furniture_manager=None, stockpile_manager=None, production_system=None):
         self._init_fonts()
         screen_w, screen_h = surface.get_size()
 
@@ -775,13 +838,17 @@ class RaportUI:
 
             txt_c = (255, 255, 255) if is_active else COLOR_TEXT_MUTED
             t_surf = self.font_tab.render(tab["title"], True, txt_c)
-            surface.blit(t_surf, (tab_x + 8, tab_y + 8))
 
             if tab["wip"]:
-                wip_rect = pygame.Rect(tab_x + tab_w - 36, tab_y + 8, 28, 16)
+                wip_w = 26
+                wip_h = 14
+                wip_rect = pygame.Rect(tab_x + tab_w - wip_w - 4, tab_y + (tab_h - wip_h) // 2, wip_w, wip_h)
                 pygame.draw.rect(surface, COLOR_BADGE_WIP, wip_rect, border_radius=3)
                 w_txt = self.font_badge.render("WIP", True, (0, 0, 0))
-                surface.blit(w_txt, (wip_rect.x + 4, wip_rect.y + 1))
+                surface.blit(w_txt, (wip_rect.centerx - w_txt.get_width() // 2, wip_rect.centery - w_txt.get_height() // 2))
+                surface.blit(t_surf, (tab_x + 5, tab_y + (tab_h - t_surf.get_height()) // 2))
+            else:
+                surface.blit(t_surf, (tab_x + (tab_w - t_surf.get_width()) // 2, tab_y + (tab_h - t_surf.get_height()) // 2))
 
             tab_x += tab_w + tab_spacing
 
@@ -797,9 +864,15 @@ class RaportUI:
         elif self.active_tab == 3:
             self._draw_schedule_tab(surface, mx, content_y, schedule_manager=schedule_manager, day_cycle=day_cycle)
         elif self.active_tab == 4:
-            self._draw_villagers_tab(surface, mx, content_y, villager_manager, permit_manager, building_manager, furniture_manager=furniture_manager, stockpile_manager=stockpile_manager, resources=resources, servant_manager=servant_manager)
+            self._draw_villagers_tab(surface, mx, content_y, villager_manager, permit_manager, building_manager, furniture_manager=furniture_manager, stockpile_manager=stockpile_manager, resources=resources, servant_manager=servant_manager, production_system=production_system)
         elif self.active_tab == 5:
             self._draw_workers_tab(surface, mx, content_y, villager_manager, permit_manager)
+        elif self.active_tab == 6:
+            self._draw_production_tab(surface, mx, content_y, villager_manager, permit_manager, furniture_manager=furniture_manager, stockpile_manager=stockpile_manager, production_system=production_system)
+        elif self.active_tab == 7:
+            self._draw_tax_tab(surface, mx, content_y, villager_manager, permit_manager, furniture_manager=furniture_manager, production_system=production_system)
+        elif self.active_tab == 8:
+            self._draw_planning_tab(surface, mx, content_y)
 
     def _draw_building_tab(self, surface, mx, cy, building_manager, permit_manager, resources):
         empty_areas, occupied_areas = permit_manager.get_permits_status(building_manager)
@@ -812,6 +885,7 @@ class RaportUI:
 
         y_cur = cy + 22
         self.destroy_building_btn_rects = {}
+        self.market_profile_btn_rects.clear()
 
         if not building_manager.buildings and not building_manager.construction_sites and not demos:
             none_surf = self.font_body.render("- No buildings constructed yet.", True, COLOR_TEXT_MUTED)
@@ -848,6 +922,15 @@ class RaportUI:
 
                 txt = f"{b.name} ({len(b.tiles)} tiles | Door: {door_side_str}) — Refund: +{ref_w}W, +{ref_s}S"
                 surface.blit(self.font_body.render(txt, True, (255, 255, 255) if is_focused else COLOR_TEXT_MAIN), (mx + 36, y_cur + 2))
+
+                # Market Profile Button
+                if getattr(b, "building_type", "") == "market":
+                    prof_btn = pygame.Rect(row_rect.right - 180, y_cur - 1, 84, 22)
+                    self.market_profile_btn_rects[b] = prof_btn
+                    prof_hover = prof_btn.collidepoint(pygame.mouse.get_pos())
+                    pygame.draw.rect(surface, (245, 158, 11) if prof_hover else (180, 83, 9), prof_btn, border_radius=4)
+                    p_lbl = self.font_badge.render("Profile", True, (255, 255, 255))
+                    surface.blit(p_lbl, (prof_btn.x + (prof_btn.w - p_lbl.get_width()) // 2, prof_btn.y + 4))
 
                 # Destroy Button
                 dest_btn = pygame.Rect(row_rect.right - 90, y_cur - 1, 86, 22)
@@ -900,22 +983,22 @@ class RaportUI:
         f_label = self.font_btn.render("Furniture", True, (255, 255, 255))
         surface.blit(f_label, (self.furniture_btn_rect.x + (self.furniture_btn_rect.w - f_label.get_width()) // 2, self.furniture_btn_rect.y + 8))
 
-        # Building Structures Menu (Wooden Structure vs Stone Structure vs Well)
+        # Building Structures Menu (Wooden Structure vs Stone Structure vs Well vs Market)
         self.building_select_rects = {}
         if self.show_structures_menu:
-            tpl_x = self.structures_btn_rect.x
-            tpl_y = self.structures_btn_rect.y - 200
-            tpl_w = 480
-            tpl_h = 190
-
-            pygame.draw.rect(surface, (30, 41, 59), (tpl_x, tpl_y, tpl_w, tpl_h), border_radius=8)
-            pygame.draw.rect(surface, (71, 85, 105), (tpl_x, tpl_y, tpl_w, tpl_h), width=1, border_radius=8)
-
             structures = [
                 ("wooden_structure", BUILDING_TYPES["wooden_structure"]),
                 ("stone_structure", BUILDING_TYPES["stone_structure"]),
-                ("well", BUILDING_TYPES["well"])
+                ("well", BUILDING_TYPES["well"]),
+                ("market", BUILDING_TYPES["market"])
             ]
+            tpl_x = self.structures_btn_rect.x
+            tpl_w = 480
+            tpl_h = 16 + len(structures) * 58
+            tpl_y = max(10, self.structures_btn_rect.y - tpl_h - 10)
+
+            pygame.draw.rect(surface, (30, 41, 59), (tpl_x, tpl_y, tpl_w, tpl_h), border_radius=8)
+            pygame.draw.rect(surface, (71, 85, 105), (tpl_x, tpl_y, tpl_w, tpl_h), width=1, border_radius=8)
 
             row_y = tpl_y + 12
             for b_id, b_cfg in structures:
@@ -925,7 +1008,7 @@ class RaportUI:
                 surface.blit(t_title, (tpl_x + 14, row_y))
 
                 if b_cfg.get("fixed_cost"):
-                    c_text = f"{b_cfg['cost_wood']} Wood + {b_cfg['cost_stone']} Stone (4 Tiles Solid)"
+                    c_text = f"{b_cfg['cost_wood']} Wood + {b_cfg['cost_stone']} Stone ({b_cfg.get('fixed_tiles_count', 4)} Tiles)"
                 else:
                     c_text = f"{b_cfg['cost_wood']} Wood + {b_cfg['cost_stone']} Stone / tile"
                 c_surf = self.font_body.render(c_text, True, (234, 179, 8))
@@ -1469,7 +1552,7 @@ class RaportUI:
             note2 = self.font_body.render("• During SLEEP, villagers return to their family household. During LEISURE, they relax near Town Center.", True, COLOR_TEXT_MUTED)
             surface.blit(note2, (mx + 24, note_y + 18))
 
-    def _draw_villagers_tab(self, surface, mx, cy, villager_manager, permit_manager, building_manager, furniture_manager=None, stockpile_manager=None, resources=None, servant_manager=None):
+    def _draw_villagers_tab(self, surface, mx, cy, villager_manager, permit_manager, building_manager, furniture_manager=None, stockpile_manager=None, resources=None, servant_manager=None, production_system=None):
         if villager_manager:
             villager_manager.ensure_unique_family_ids()
         mouse_pos = pygame.mouse.get_pos()
@@ -1523,13 +1606,36 @@ class RaportUI:
                     pygame.draw.circle(surface, emblem_col, (card_rect.x + 24, card_rect.y + card_h // 2), 12)
                     pygame.draw.circle(surface, (15, 23, 42), (card_rect.x + 24, card_rect.y + card_h // 2), 12, 2)
 
-                    # Family Title & Generations
-                    fam_name = self.font_sub.render(f"The {fam.surname} Family  ({fam.member_count} Members)", True, (241, 245, 249))
+                    # Family Title & Living Population
+                    deceased_count = fam.member_count - fam.living_member_count
+                    pop_label = f"{fam.living_member_count} Living" if deceased_count == 0 else f"{fam.living_member_count} Living, {deceased_count} Deceased"
+                    fam_name = self.font_sub.render(f"The {fam.surname} Family  ({pop_label})", True, (241, 245, 249))
                     surface.blit(fam_name, (card_rect.x + 46, card_rect.y + 8))
 
                     # Generation badge
                     gen_txt = self.font_badge.render(f"Generations: {fam.get_generation_label()}", True, (56, 189, 248))
                     surface.blit(gen_txt, (card_rect.x + 46 + fam_name.get_width() + 12, card_rect.y + 10))
+
+                    # Primary Needs Indicator (Agent 1: Food: y/x | Water: z/x)
+                    food_ok, water_ok, living_tot = fam.get_primary_needs_progress()
+                    needs_x = card_rect.right - 290
+                    needs_y = card_rect.y + 18
+
+                    # Food Badge
+                    food_col = (34, 197, 94) if (food_ok >= living_tot and living_tot > 0) else ((245, 158, 11) if food_ok > 0 else (239, 68, 68))
+                    food_badge = pygame.Rect(needs_x, needs_y, 76, 22)
+                    pygame.draw.rect(surface, (15, 23, 42), food_badge, border_radius=4)
+                    pygame.draw.rect(surface, food_col, food_badge, width=1, border_radius=4)
+                    f_txt = self.font_badge.render(f"Food: {food_ok}/{living_tot}", True, food_col)
+                    surface.blit(f_txt, (food_badge.centerx - f_txt.get_width() // 2, food_badge.centery - f_txt.get_height() // 2))
+
+                    # Water Badge
+                    water_col = (56, 189, 248) if (water_ok >= living_tot and living_tot > 0) else ((245, 158, 11) if water_ok > 0 else (239, 68, 68))
+                    water_badge = pygame.Rect(needs_x + 82, needs_y, 76, 22)
+                    pygame.draw.rect(surface, (15, 23, 42), water_badge, border_radius=4)
+                    pygame.draw.rect(surface, water_col, water_badge, width=1, border_radius=4)
+                    w_txt = self.font_badge.render(f"Water: {water_ok}/{living_tot}", True, water_col)
+                    surface.blit(w_txt, (water_badge.centerx - w_txt.get_width() // 2, water_badge.centery - w_txt.get_height() // 2))
 
                     # Dedicated Job & Assigned Deed Status
                     if fam.assigned_permit_id:
@@ -1542,6 +1648,7 @@ class RaportUI:
 
                     sub_line = f"Dedicated Profession: Peasant Farmer   |   {deed_label}"
                     surface.blit(self.font_body.render(sub_line, True, deed_col), (card_rect.x + 46, card_rect.y + 30))
+
 
                     # Action Button: [👥 View Family]
                     view_btn = pygame.Rect(card_rect.right - 120, card_rect.y + 13, 108, 32)
@@ -1733,9 +1840,9 @@ class RaportUI:
             hp_lbl = self.font_badge.render("Household Possession", True, (255, 255, 255))
             surface.blit(hp_lbl, (self.household_possession_btn_rect.centerx - hp_lbl.get_width() // 2, self.household_possession_btn_rect.centery - hp_lbl.get_height() // 2))
 
-            # Land Deed Status Banner
+            # Land Deed & Household Status Banner
             banner_y = cy + 30
-            banner_rect = pygame.Rect(mx + 24, banner_y, self.modal_w - 48, 44)
+            banner_rect = pygame.Rect(mx + 24, banner_y, self.modal_w - 48, 54)
             pygame.draw.rect(surface, (24, 34, 52), banner_rect, border_radius=8)
             pygame.draw.rect(surface, (71, 85, 105), banner_rect, width=1, border_radius=8)
 
@@ -1747,19 +1854,37 @@ class RaportUI:
                 d_txt = "Land Deed: Unassigned — Living at Town Center"
                 d_col = (245, 158, 11)
 
-            surface.blit(self.font_sub.render(d_txt, True, d_col), (banner_rect.x + 14, banner_rect.y + 12))
+            # Row 1: Deed & Population
+            pop_summary = f"{d_txt}   |   Living Population: {fam.living_member_count} Members"
+            surface.blit(self.font_sub.render(pop_summary, True, d_col), (banner_rect.x + 14, banner_rect.y + 5))
+
+            # Row 2: Food & Water Stocks and Daily Requirements (Agent 1)
+            food_stk = fam.get_food_stock(furniture_manager, stockpile_manager)
+            water_stk = fam.get_water_stock(furniture_manager, stockpile_manager)
+            needs_summary = f"Primary Needs: Food Stock {food_stk} (Req: {fam.daily_food_required}/day)   |   Water Stock {water_stk} (Req: {fam.daily_water_required}/day)"
+            surface.blit(self.font_badge.render(needs_summary, True, (241, 245, 249)), (banner_rect.x + 14, banner_rect.y + 22))
+
+            # Row 3: Currency (Agent 2) & Production (Agent 3)
+            ps = production_system or ProductionDistributionSystem.get_instance()
+            p_sum = ps.get_household_production_summary(fam.id)
+            potatoes_earned = p_sum["total_produced"].get("Potato", 0)
+            farm_permits = [p for p in permit_manager.permits if p.permit_type == "farm"] if permit_manager else []
+            assigned_work_count = sum(1 for m in fam.members if any(m.id in getattr(p, "assigned_workers", []) for p in farm_permits))
+            curr_balance = getattr(fam, "currency_balance", getattr(fam, "coins", 0))
+            econ_text = f"Treasury: {curr_balance} Copper Coins   |   Production: x{potatoes_earned} Potatoes Harvested ({assigned_work_count} Farmers in Fields)"
+            surface.blit(self.font_badge.render(econ_text, True, (56, 189, 248)), (banner_rect.x + 14, banner_rect.y + 37))
 
             # Button: [Assign / Change Deed]
             self.assign_permit_btn_rects = {}
             self.revoke_deed_btn_rect = None
-            self.open_assign_lot_btn_rect = pygame.Rect(banner_rect.right - 230, banner_rect.y + 7, 130, 28)
+            self.open_assign_lot_btn_rect = pygame.Rect(banner_rect.right - 230, banner_rect.y + 12, 130, 28)
             a_hover = self.open_assign_lot_btn_rect.collidepoint(mouse_pos)
             pygame.draw.rect(surface, (16, 185, 129) if a_hover else (5, 150, 105), self.open_assign_lot_btn_rect, border_radius=5)
             a_lbl = self.font_badge.render("Assign Deed" if not p_assigned else "Change Deed", True, (255, 255, 255))
             surface.blit(a_lbl, (self.open_assign_lot_btn_rect.centerx - a_lbl.get_width() // 2, self.open_assign_lot_btn_rect.centery - a_lbl.get_height() // 2))
 
             if p_assigned:
-                self.revoke_deed_btn_rect = pygame.Rect(banner_rect.right - 92, banner_rect.y + 7, 84, 28)
+                self.revoke_deed_btn_rect = pygame.Rect(banner_rect.right - 92, banner_rect.y + 12, 84, 28)
                 r_hover = self.revoke_deed_btn_rect.collidepoint(mouse_pos)
                 pygame.draw.rect(surface, (220, 38, 38) if r_hover else (153, 27, 27), self.revoke_deed_btn_rect, border_radius=5)
                 r_lbl = self.font_badge.render("Revoke", True, (255, 255, 255))
@@ -1767,9 +1892,10 @@ class RaportUI:
 
             # Member Roster Grouped by Generation
             self.member_inventory_btn_rects.clear()
-            y_cur = banner_y + 54
+            y_cur = banner_y + 64
             m_header = self.font_sub.render(f"Household Members Roster ({fam.member_count} Members across {fam.get_generation_label()}):", True, COLOR_TEXT_TITLE)
             surface.blit(m_header, (mx + 24, y_cur))
+
 
             y_cur += 22
             gen_names = {1: "Generation 1 (Elders / Grandparents)", 2: "Generation 2 (Core Couple / Parents)", 3: "Generation 3 (Adult Offspring)"}
@@ -1786,7 +1912,20 @@ class RaportUI:
 
                     # Icon & Name
                     m_info = f"{m.full_name}  ({m.role}, Age {m.age}, {m.gender})"
-                    surface.blit(self.font_body.render(m_info, True, (241, 245, 249)), (m_card.x + 12, m_card.y + 6))
+                    name_col = (241, 245, 249) if getattr(m, "is_alive", True) else (148, 163, 184)
+                    surface.blit(self.font_body.render(m_info, True, name_col), (m_card.x + 12, m_card.y + 6))
+
+                    # Needs & Living Status Indicator
+                    if not getattr(m, "is_alive", True):
+                        d_lbl = self.font_badge.render(f"[DECEASED: {getattr(m, 'death_reason', 'Starvation')}]", True, (239, 68, 68))
+                        surface.blit(d_lbl, (m_card.right - 370, m_card.y + 7))
+                    else:
+                        h_val = int(getattr(m, "hunger", 100.0))
+                        t_val = int(getattr(m, "thirst", 100.0))
+                        need_col = (239, 68, 68) if min(h_val, t_val) <= 20 else ((245, 158, 11) if min(h_val, t_val) <= 50 else (148, 163, 184))
+                        n_lbl = self.font_badge.render(f"H: {h_val}% | T: {t_val}%", True, need_col)
+                        surface.blit(n_lbl, (m_card.right - 340, m_card.y + 7))
+
 
                     # Dedicated Job Badge
                     job_cfg = DEDICATED_JOBS.get(getattr(m, "job", "Farmer"), {})
@@ -1882,7 +2021,7 @@ class RaportUI:
         surface.blit(dim_surf, (0, 0))
 
         dlg_w = 540
-        dlg_h = 360
+        dlg_h = 400
         dx = (screen_w - dlg_w) // 2
         dy = (screen_h - dlg_h) // 2
         self.member_inv_bg_rect = pygame.Rect(dx, dy, dlg_w, dlg_h)
@@ -1891,8 +2030,17 @@ class RaportUI:
         pygame.draw.rect(surface, (59, 130, 246), self.member_inv_bg_rect, width=2, border_radius=10)
 
         # Title
-        title_surf = self.font_sub.render(f"Personal Inventory: {member.full_name}", True, (241, 245, 249))
-        surface.blit(title_surf, (dx + 20, dy + 16))
+        title_surf = self.font_sub.render(f"Personal Profile & Inventory: {member.full_name}", True, (241, 245, 249))
+        surface.blit(title_surf, (dx + 20, dy + 14))
+
+        # Living / Deceased Status Badge
+        is_alive = getattr(member, "is_alive", True)
+        if is_alive:
+            st_badge = self.font_badge.render("[ALIVE]", True, (34, 197, 94))
+        else:
+            reason = getattr(member, "death_reason", "Starvation")
+            st_badge = self.font_badge.render(f"[DECEASED: {reason}]", True, (239, 68, 68))
+        surface.blit(st_badge, (dx + dlg_w - 38 - st_badge.get_width(), dy + 16))
 
         # Close [✕] button
         self.close_member_inv_btn_rect = pygame.Rect(dx + dlg_w - 32, dy + 14, 20, 20)
@@ -1902,17 +2050,45 @@ class RaportUI:
         surface.blit(c_txt, (self.close_member_inv_btn_rect.centerx - c_txt.get_width() // 2, self.close_member_inv_btn_rect.centery - c_txt.get_height() // 2))
 
         # Member details banner
-        info_str = f"Role: {member.role}  |  Age: {member.age}  |  Household: The {fam.surname} Family"
-        surface.blit(self.font_body.render(info_str, True, (56, 189, 248)), (dx + 20, dy + 42))
+        info_str = f"Role: {member.role}  |  Age: {member.age}  |  Household: The {fam.surname} Family  |  Job: {getattr(member, 'job', 'Farmer')}"
+        surface.blit(self.font_body.render(info_str, True, (56, 189, 248)), (dx + 20, dy + 38))
+
+        # Needs Status Bars (Hunger & Thirst)
+        h_val = max(0.0, min(100.0, getattr(member, "hunger", 100.0)))
+        t_val = max(0.0, min(100.0, getattr(member, "thirst", 100.0)))
+
+        # Hunger Bar
+        surface.blit(self.font_badge.render("Hunger:", True, (241, 245, 249)), (dx + 20, dy + 58))
+        h_bar_bg = pygame.Rect(dx + 74, dy + 58, 140, 14)
+        pygame.draw.rect(surface, (30, 41, 59), h_bar_bg, border_radius=4)
+        h_fill_w = max(0, int(140 * (h_val / 100.0)))
+        if h_fill_w > 0:
+            h_col = (34, 197, 94) if h_val > 50 else ((234, 179, 8) if h_val > 20 else (239, 68, 68))
+            pygame.draw.rect(surface, h_col, (dx + 74, dy + 58, h_fill_w, 14), border_radius=4)
+        pygame.draw.rect(surface, (71, 85, 105), h_bar_bg, width=1, border_radius=4)
+        h_pct = self.font_badge.render(f"{int(h_val)}%", True, (255, 255, 255))
+        surface.blit(h_pct, (dx + 220, dy + 58))
+
+        # Thirst Bar
+        surface.blit(self.font_badge.render("Thirst:", True, (241, 245, 249)), (dx + 270, dy + 58))
+        t_bar_bg = pygame.Rect(dx + 316, dy + 58, 140, 14)
+        pygame.draw.rect(surface, (30, 41, 59), t_bar_bg, border_radius=4)
+        t_fill_w = max(0, int(140 * (t_val / 100.0)))
+        if t_fill_w > 0:
+            t_col = (56, 189, 248) if t_val > 50 else ((59, 130, 246) if t_val > 20 else (239, 68, 68))
+            pygame.draw.rect(surface, t_col, (dx + 316, dy + 58, t_fill_w, 14), border_radius=4)
+        pygame.draw.rect(surface, (71, 85, 105), t_bar_bg, width=1, border_radius=4)
+        t_pct = self.font_badge.render(f"{int(t_val)}%", True, (255, 255, 255))
+        surface.blit(t_pct, (dx + 462, dy + 58))
 
         # Bed Status & Active tool
         bed_status = f"Assigned Bed:  {member.assigned_bed_id}" if getattr(member, 'assigned_bed_id', None) else " Bed: None (Sleeping on Floor)"
         tool_status = f"Active Tool:  {member.active_tool or 'None'}"
         water_status = "Water: Full" if member.has_water else "Water: Empty"
         status_line = f"{bed_status}  •  {tool_status}  •  {water_status}"
-        surface.blit(self.font_badge.render(status_line, True, (148, 163, 184)), (dx + 20, dy + 62))
+        surface.blit(self.font_badge.render(status_line, True, (148, 163, 184)), (dx + 20, dy + 78))
 
-        pygame.draw.line(surface, (51, 65, 85), (dx + 20, dy + 84), (dx + dlg_w - 20, dy + 84), 1)
+        pygame.draw.line(surface, (51, 65, 85), (dx + 20, dy + 98), (dx + dlg_w - 20, dy + 98), 1)
 
         # Inventory Items Table
         inv = member.inventory
@@ -1926,7 +2102,8 @@ class RaportUI:
 
         has_chest = (furniture_manager.get_storage_for_family(fam.id) is not None) if furniture_manager else False
 
-        y_item = dy + 96
+        y_item = dy + 108
+
         if not items:
             empty_lbl = self.font_body.render("— Personal inventory is currently empty (Hands/Bag free) —", True, (100, 116, 139))
             surface.blit(empty_lbl, (dx + 20, y_item + 20))
@@ -2302,3 +2479,333 @@ class RaportUI:
         pygame.draw.rect(surface, (148, 163, 184), self.grant_cancel_btn_rect, width=1, border_radius=6)
         no_s = self.font_sub.render("Cancel", True, (241, 245, 249))
         surface.blit(no_s, (self.grant_cancel_btn_rect.centerx - no_s.get_width() // 2, self.grant_cancel_btn_rect.centery - no_s.get_height() // 2))
+
+    def _draw_production_tab(self, surface, mx, cy, villager_manager, permit_manager, furniture_manager=None, stockpile_manager=None, production_system=None):
+        """Household Production & Harvest Distribution Overview"""
+        ps = production_system or ProductionDistributionSystem.get_instance()
+        mouse_pos = pygame.mouse.get_pos()
+
+        # Title & Subtitle
+        title = self.font_title.render("HOUSEHOLD PRODUCTION & HARVEST DISTRIBUTION", True, COLOR_TEXT_TITLE)
+        surface.blit(title, (mx + 24, cy - 4))
+
+        formula_txt = "Distribution Formula: Household Share = Participating Household Workers / Total Participating Workers"
+        surface.blit(self.font_body.render(formula_txt, True, (56, 189, 248)), (mx + 24, cy + 22))
+
+        # Top 3 KPI Cards
+        card_w = (self.modal_w - 48 - 16) // 3
+        card_h = 52
+
+        farm_permits = [p for p in permit_manager.permits if p.permit_type == "farm"] if permit_manager else []
+        total_farm_workers = sum(len(getattr(p, "assigned_workers", [])) for p in farm_permits)
+
+        all_families = villager_manager.families if villager_manager else []
+        total_potatoes_distributed = 0
+        for f in all_families:
+            p_sum = ps.get_household_production_summary(f.id)
+            total_potatoes_distributed += p_sum["total_produced"].get("Potato", 0)
+
+        kpis = [
+            ("Cultivated Farm Lots", f"{len(farm_permits)} Active Farms", (34, 197, 94)),
+            ("Participating Farmers", f"{total_farm_workers} Settlers Assigned", (56, 189, 248)),
+            ("Total Crop Output Distributed", f"{total_potatoes_distributed} Potatoes", (245, 158, 11))
+        ]
+
+        for k_idx, (k_label, k_val, k_col) in enumerate(kpis):
+            kx = mx + 24 + k_idx * (card_w + 8)
+            kr = pygame.Rect(kx, cy + 44, card_w, card_h)
+            pygame.draw.rect(surface, (24, 34, 52), kr, border_radius=6)
+            pygame.draw.rect(surface, (51, 65, 85), kr, width=1, border_radius=6)
+            surface.blit(self.font_badge.render(k_label, True, COLOR_TEXT_MUTED), (kr.x + 12, kr.y + 8))
+            surface.blit(self.font_sub.render(k_val, True, k_col), (kr.x + 12, kr.y + 24))
+
+        # Section 1: Active Production Sites & Household Shares
+        y_cur = cy + 104
+        surface.blit(self.font_sub.render("Active Production Sites & Participating Household Shares:", True, (241, 245, 249)), (mx + 24, y_cur))
+        y_cur += 22
+
+        if not farm_permits:
+            empty_r = pygame.Rect(mx + 24, y_cur, self.modal_w - 48, 54)
+            pygame.draw.rect(surface, (24, 34, 52), empty_r, border_radius=6)
+            surface.blit(self.font_body.render("• No farm lots issued yet. Issue Farm Permits in Permits tab to assign workers.", True, COLOR_TEXT_MUTED), (empty_r.x + 16, empty_r.y + 18))
+            y_cur += 64
+        else:
+            for p in farm_permits[:3]:
+                lot_r = pygame.Rect(mx + 24, y_cur, self.modal_w - 48, 48)
+                pygame.draw.rect(surface, (24, 34, 52), lot_r, border_radius=6)
+                pygame.draw.rect(surface, (51, 65, 85), lot_r, width=1, border_radius=6)
+
+                assigned_w = getattr(p, "assigned_workers", [])
+                counts, total_w = ps.get_participating_household_counts(assigned_w, villager_manager)
+                shares = ps.calculate_shares(assigned_w, villager_manager)
+
+                crop_type = getattr(p, "crop", "Potato") or "Potato"
+                yield_txt = "2 Potatoes / tile every 10 days" if crop_type == "Potato" else "Standard Yield"
+                surface.blit(self.font_sub.render(f"🌾 {p.name} ({len(p.tiles)} tiles) — Crop: {crop_type} ({yield_txt})", True, (241, 245, 249)), (lot_r.x + 12, lot_r.y + 6))
+
+                if total_w > 0:
+                    shares_str_parts = []
+                    for h_id, share_ratio in shares.items():
+                        fam_name = h_id
+                        if villager_manager:
+                            f = villager_manager.get_family_by_id(h_id)
+                            if f:
+                                fam_name = f"The {f.surname} Family"
+                        shares_str_parts.append(f"{fam_name}: {counts[h_id]} worker(s) ({share_ratio * 100:.1f}%)")
+                    share_desc = "Shares: " + " | ".join(shares_str_parts)
+                    share_col = (34, 197, 94)
+                else:
+                    share_desc = "No workers currently assigned to this lot."
+                    share_col = (245, 158, 11)
+
+                surface.blit(self.font_body.render(share_desc, True, share_col), (lot_r.x + 12, lot_r.y + 26))
+                y_cur += 54
+
+        # Section 2: Household Income & Storage Deposits Roster
+        surface.blit(self.font_sub.render("Household Income & Storage Balance (Private Household Property):", True, (241, 245, 249)), (mx + 24, y_cur))
+        y_cur += 22
+
+        if not all_families:
+            none_r = pygame.Rect(mx + 24, y_cur, self.modal_w - 48, 44)
+            pygame.draw.rect(surface, (24, 34, 52), none_r, border_radius=6)
+            surface.blit(self.font_body.render("• No households registered in census.", True, COLOR_TEXT_MUTED), (none_r.x + 16, none_r.y + 14))
+        else:
+            for f in all_families[:4]:
+                fam_r = pygame.Rect(mx + 24, y_cur, self.modal_w - 48, 36)
+                pygame.draw.rect(surface, (15, 23, 42), fam_r, border_radius=6)
+                pygame.draw.rect(surface, (51, 65, 85), fam_r, width=1, border_radius=6)
+
+                surface.blit(self.font_sub.render(f"The {f.surname} Family", True, (241, 245, 249)), (fam_r.x + 12, fam_r.y + 8))
+
+                f_workers = [m for m in f.members if any(m.id in getattr(p, "assigned_workers", []) for p in farm_permits)]
+                w_str = f"Active Farmers: {len(f_workers)}"
+                surface.blit(self.font_body.render(w_str, True, (56, 189, 248)), (fam_r.x + 200, fam_r.y + 9))
+
+                p_sum = ps.get_household_production_summary(f.id)
+                pot_harvested = p_sum["total_produced"].get("Potato", 0)
+                harvest_str = f"Gross Harvest Income: x{pot_harvested} Potatoes"
+                surface.blit(self.font_body.render(harvest_str, True, (34, 197, 94)), (fam_r.x + 360, fam_r.y + 9))
+
+                chest_stock = 0
+                if furniture_manager:
+                    c = furniture_manager.get_storage_for_family(f.id)
+                    if c:
+                        chest_stock = c.inventory.get("Potato", 0)
+                chest_str = f"In Household Chest: x{chest_stock}"
+                surface.blit(self.font_body.render(chest_str, True, (245, 158, 11)), (fam_r.x + 620, fam_r.y + 9))
+
+                y_cur += 40
+
+    def _draw_tax_tab(self, surface, mx, cy, villager_manager, permit_manager, furniture_manager=None, production_system=None):
+        """Tax System UI & Reporting Structure (WIP - No Active Deductions)"""
+        ps = production_system or ProductionDistributionSystem.get_instance()
+        mouse_pos = pygame.mouse.get_pos()
+
+        # Title
+        title = self.font_title.render("VILLAGE TAXATION & ROYAL TITHES", True, COLOR_TEXT_TITLE)
+        surface.blit(title, (mx + 24, cy - 4))
+
+        # Prominent WIP Notice Banner
+        notice_r = pygame.Rect(mx + 24, cy + 22, self.modal_w - 48, 44)
+        pygame.draw.rect(surface, (69, 26, 3), notice_r, border_radius=6)
+        pygame.draw.rect(surface, (245, 158, 11), notice_r, width=1, border_radius=6)
+
+        wip_badge = pygame.Rect(notice_r.x + 10, notice_r.y + 12, 46, 20)
+        pygame.draw.rect(surface, COLOR_BADGE_WIP, wip_badge, border_radius=3)
+        w_lbl = self.font_badge.render("WIP", True, (0, 0, 0))
+        surface.blit(w_lbl, (wip_badge.centerx - w_lbl.get_width() // 2, wip_badge.centery - w_lbl.get_height() // 2))
+
+        wip_t1 = self.font_sub.render("Tax Calculation & Collection System is WORK IN PROGRESS (No Deductions Active)", True, (251, 191, 36))
+        wip_t2 = self.font_body.render("Reporting structure only. Village charter decrees households are exempt from deductions during initial settlement.", True, (226, 232, 240))
+        surface.blit(wip_t1, (notice_r.x + 64, notice_r.y + 4))
+        surface.blit(wip_t2, (notice_r.x + 64, notice_r.y + 24))
+
+        # Proposed Taxation Policies Structure (3 cards)
+        y_cur = cy + 74
+        surface.blit(self.font_sub.render("Proposed Village Tax Policies (Future Implementation Framework):", True, (241, 245, 249)), (mx + 24, y_cur))
+        y_cur += 22
+
+        policy_w = (self.modal_w - 48 - 16) // 3
+        policy_h = 76
+        policies = [
+            ("🌾 Agricultural Crop Tithe", "Tithe on peasant potato harvest.", "10% of Harvest", "INACTIVE (WIP)", (34, 197, 94)),
+            ("⚒️ Craft & Artisan Duty", "Tithe on produced tools & wares.", "5% of Craft Output", "INACTIVE (WIP)", (56, 189, 248)),
+            ("🪙 Market Trade Tariff", "Commercial stall transaction tariff.", "2 Coins / Stall", "INACTIVE (WIP)", (245, 158, 11))
+        ]
+
+        for p_idx, (p_title, p_desc, p_rate, p_stat, p_col) in enumerate(policies):
+            px = mx + 24 + p_idx * (policy_w + 8)
+            pr = pygame.Rect(px, y_cur, policy_w, policy_h)
+            pygame.draw.rect(surface, (24, 34, 52), pr, border_radius=6)
+            pygame.draw.rect(surface, (51, 65, 85), pr, width=1, border_radius=6)
+
+            surface.blit(self.font_sub.render(p_title, True, p_col), (pr.x + 10, pr.y + 8))
+            surface.blit(self.font_body.render(p_desc, True, COLOR_TEXT_MUTED), (pr.x + 10, pr.y + 28))
+            surface.blit(self.font_badge.render(f"Rate: {p_rate}", True, (241, 245, 249)), (pr.x + 10, pr.y + 50))
+
+            stat_badge = pygame.Rect(pr.right - 96, pr.y + 50, 88, 18)
+            pygame.draw.rect(surface, (71, 85, 105), stat_badge, border_radius=3)
+            b_txt = self.font_badge.render(p_stat, True, (203, 213, 225))
+            surface.blit(b_txt, (stat_badge.centerx - b_txt.get_width() // 2, stat_badge.centery - b_txt.get_height() // 2))
+
+        y_cur += policy_h + 16
+
+        # Projected Household Assessment Table
+        surface.blit(self.font_sub.render("Projected Household Tax Assessment Table (Zero Active Deductions):", True, (241, 245, 249)), (mx + 24, y_cur))
+        y_cur += 22
+
+        all_families = villager_manager.families if villager_manager else []
+        if not all_families:
+            none_r = pygame.Rect(mx + 24, y_cur, self.modal_w - 48, 44)
+            pygame.draw.rect(surface, (24, 34, 52), none_r, border_radius=6)
+            surface.blit(self.font_body.render("• No households registered in census.", True, COLOR_TEXT_MUTED), (none_r.x + 16, none_r.y + 14))
+        else:
+            for f in all_families[:4]:
+                row_r = pygame.Rect(mx + 24, y_cur, self.modal_w - 48, 36)
+                pygame.draw.rect(surface, (15, 23, 42), row_r, border_radius=6)
+                pygame.draw.rect(surface, (51, 65, 85), row_r, width=1, border_radius=6)
+
+                surface.blit(self.font_sub.render(f"The {f.surname} Family", True, (241, 245, 249)), (row_r.x + 12, row_r.y + 8))
+
+                f_workers = len(f.members)
+                surface.blit(self.font_body.render(f"{f_workers} Members", True, COLOR_TEXT_MUTED), (row_r.x + 200, row_r.y + 10))
+
+                p_sum = ps.get_household_production_summary(f.id)
+                potatoes = p_sum["total_produced"].get("Potato", 0)
+                surface.blit(self.font_body.render(f"Est. Production: {potatoes} Potatoes", True, (56, 189, 248)), (row_r.x + 310, row_r.y + 10))
+
+                surface.blit(self.font_body.render(f"Projected Due: {int(potatoes * 0.10)} Pot.", True, (245, 158, 11)), (row_r.x + 510, row_r.y + 10))
+
+                st_b = pygame.Rect(row_r.right - 180, row_r.y + 6, 168, 22)
+                pygame.draw.rect(surface, (20, 83, 45), st_b, border_radius=4)
+                pygame.draw.rect(surface, (34, 197, 94), st_b, width=1, border_radius=4)
+                st_txt = self.font_badge.render("EXEMPT (WIP - No Deductions)", True, (240, 253, 244))
+                surface.blit(st_txt, (st_b.centerx - st_txt.get_width() // 2, st_b.centery - st_txt.get_height() // 2))
+
+                y_cur += 40
+
+    def _draw_planning_tab(self, surface, mx, cy):
+        """In-game WIP Planning Overview and Roadmap"""
+        mouse_pos = pygame.mouse.get_pos()
+
+        # Title & Subtitle
+        title = self.font_title.render("PROJECT PLANNING & WIP ROADMAP", True, COLOR_TEXT_TITLE)
+        surface.blit(title, (mx + 24, cy - 4))
+
+        sub = self.font_body.render("Public roadmap of implemented, partial, and planned WIP features. Informational overview.", True, COLOR_TEXT_MUTED)
+        surface.blit(sub, (mx + 24, cy + 22))
+
+        # Filter Chips
+        filter_chips = [
+            ("ALL", "All Features", len(PLANNING_FEATURES)),
+            (STATUS_PLANNED, "Planned WIP", len(get_features_by_status(STATUS_PLANNED))),
+            (STATUS_PARTIAL, "Partial WIP", len(get_features_by_status(STATUS_PARTIAL))),
+            (STATUS_IMPLEMENTED, "Implemented", len(get_features_by_status(STATUS_IMPLEMENTED)))
+        ]
+
+        chip_x = mx + 24
+        chip_y = cy + 44
+        self.planning_filter_rects = {}
+
+        for key, label, count in filter_chips:
+            is_sel = (self.planning_filter_status == key)
+            c_text = f"{label} ({count})"
+            c_surf = self.font_badge.render(c_text, True, (255, 255, 255) if is_sel else COLOR_TEXT_MUTED)
+            c_w = c_surf.get_width() + 18
+            c_h = 24
+            cr = pygame.Rect(chip_x, chip_y, c_w, c_h)
+            self.planning_filter_rects[key] = cr
+
+            bg = (37, 99, 235) if is_sel else (30, 41, 59)
+            border_c = (96, 165, 250) if is_sel else (71, 85, 105)
+            pygame.draw.rect(surface, bg, cr, border_radius=12)
+            pygame.draw.rect(surface, border_c, cr, width=1, border_radius=12)
+            surface.blit(c_surf, (cr.centerx - c_surf.get_width() // 2, cr.centery - c_surf.get_height() // 2))
+
+            chip_x += c_w + 8
+
+        # Active items
+        if self.planning_filter_status == "ALL":
+            active_list = PLANNING_FEATURES
+        else:
+            active_list = get_features_by_status(self.planning_filter_status)
+
+        total_items = len(active_list)
+        per_page = self.planning_items_per_page
+        max_page = max(0, (total_items - 1) // per_page)
+        self.planning_page = min(self.planning_page, max_page)
+        start_idx = self.planning_page * per_page
+        page_items = active_list[start_idx:start_idx + per_page]
+
+        # Feature Cards
+        y_cur = cy + 74
+        for f in page_items:
+            f_rect = pygame.Rect(mx + 24, y_cur, self.modal_w - 48, 64)
+            status = f.get("status")
+
+            if status == STATUS_IMPLEMENTED:
+                card_bg = (15, 30, 20)
+                border_col = (34, 197, 94)
+                badge_bg = (20, 83, 45)
+                badge_txt_col = (240, 253, 244)
+                badge_label = "IMPLEMENTED"
+            elif status == STATUS_PARTIAL:
+                card_bg = (35, 28, 12)
+                border_col = COLOR_BADGE_PARTIAL
+                badge_bg = (113, 63, 18)
+                badge_txt_col = (254, 240, 138)
+                badge_label = "PARTIAL (WIP)"
+            else:
+                card_bg = (24, 34, 52)
+                border_col = (71, 85, 105)
+                badge_bg = (51, 65, 85)
+                badge_txt_col = (203, 213, 225)
+                badge_label = "PLANNED WIP"
+
+            pygame.draw.rect(surface, card_bg, f_rect, border_radius=6)
+            pygame.draw.rect(surface, border_col, f_rect, width=1, border_radius=6)
+
+            # Name & Category
+            title_text = f"{f['name']}  ·  [{f.get('category', 'System')}]"
+            surface.blit(self.font_sub.render(title_text, True, (241, 245, 249)), (f_rect.x + 12, f_rect.y + 6))
+
+            # Status Badge
+            b_surf = self.font_badge.render(badge_label, True, badge_txt_col)
+            b_w = b_surf.get_width() + 16
+            b_rect = pygame.Rect(f_rect.right - b_w - 12, f_rect.y + 7, b_w, 20)
+            pygame.draw.rect(surface, badge_bg, b_rect, border_radius=4)
+            pygame.draw.rect(surface, border_col, b_rect, width=1, border_radius=4)
+            surface.blit(b_surf, (b_rect.centerx - b_surf.get_width() // 2, b_rect.centery - b_surf.get_height() // 2))
+
+            # Summary and description
+            desc_text = f"{f.get('summary', '')} — {f.get('description', '')}"
+            if len(desc_text) > 130:
+                desc_text = desc_text[:127] + "..."
+            surface.blit(self.font_body.render(desc_text, True, (203, 213, 225)), (f_rect.x + 12, f_rect.y + 26))
+
+            # Lead Agent tag
+            agent_tag = f"Lead Agent: {f.get('owner_agent', 'Settlement Engine')}"
+            surface.blit(self.font_badge.render(agent_tag, True, (148, 163, 184)), (f_rect.x + 12, f_rect.y + 45))
+
+            y_cur += 70
+
+        # Pagination Controls
+        pag_y = cy + self.modal_h - 100
+        page_info = f"Showing page {self.planning_page + 1} of {max_page + 1}  ({total_items} features)"
+        surface.blit(self.font_body.render(page_info, True, COLOR_TEXT_MUTED), (mx + 24, pag_y + 4))
+
+        self.planning_prev_btn_rect = pygame.Rect(mx + self.modal_w - 190, pag_y, 76, 26)
+        prev_hov = self.planning_prev_btn_rect.collidepoint(mouse_pos)
+        prev_enabled = (self.planning_page > 0)
+        pygame.draw.rect(surface, (51, 65, 85) if (prev_hov and prev_enabled) else (30, 41, 59), self.planning_prev_btn_rect, border_radius=4)
+        pygame.draw.rect(surface, (96, 165, 250) if prev_enabled else (71, 85, 105), self.planning_prev_btn_rect, width=1, border_radius=4)
+        p_txt = self.font_badge.render("< Prev", True, (255, 255, 255) if prev_enabled else COLOR_TEXT_MUTED)
+        surface.blit(p_txt, (self.planning_prev_btn_rect.centerx - p_txt.get_width() // 2, self.planning_prev_btn_rect.centery - p_txt.get_height() // 2))
+
+        self.planning_next_btn_rect = pygame.Rect(mx + self.modal_w - 104, pag_y, 76, 26)
+        next_hov = self.planning_next_btn_rect.collidepoint(mouse_pos)
+        next_enabled = (self.planning_page < max_page)
+        pygame.draw.rect(surface, (51, 65, 85) if (next_hov and next_enabled) else (30, 41, 59), self.planning_next_btn_rect, border_radius=4)
+        pygame.draw.rect(surface, (96, 165, 250) if next_enabled else (71, 85, 105), self.planning_next_btn_rect, width=1, border_radius=4)
+        n_txt = self.font_badge.render("Next >", True, (255, 255, 255) if next_enabled else COLOR_TEXT_MUTED)
+        surface.blit(n_txt, (self.planning_next_btn_rect.centerx - n_txt.get_width() // 2, self.planning_next_btn_rect.centery - n_txt.get_height() // 2))

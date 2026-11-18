@@ -78,8 +78,8 @@ class StockpileManager:
         tile_idx = 0
         total_tiles = len(storage_tiles)
 
-        # 1. Tempatkan resource dasar (Wood, Food, Stone, Water)
-        for res_type in ["Wood", "Food", "Stone", "Water"]:
+        # 1. Tempatkan resource dasar (Wood, Food, Stone, Water, Copper, Silver, Gold)
+        for res_type in ["Wood", "Food", "Stone", "Water", "Copper", "Silver", "Gold"]:
             remaining = initial_resources.get(res_type, 0)
             while remaining > 0 and tile_idx < total_tiles:
                 amount_in_tile = min(remaining, MAX_TILE_CAPACITY)
@@ -184,7 +184,7 @@ class StockpileManager:
 
     def get_total_resources(self):
         """Menghitung total seluruh resource fisik milik Landlord di stockpile/dunia"""
-        totals = {"Wood": 0, "Food": 0, "Stone": 0, "Water": 0}
+        totals = {"Wood": 0, "Food": 0, "Stone": 0, "Water": 0, "Copper": 0, "Silver": 0, "Gold": 0}
         for s in self.stacks:
             if s.resource_type in totals and getattr(s, "owner_type", "landlord") == "landlord":
                 totals[s.resource_type] += s.amount
@@ -299,6 +299,20 @@ class StockpileManager:
                 sp_end_y = center_y - pot_r + 1
                 pygame.draw.line(surface, (160, 90, 45), (center_x - 2, center_y - 2), (sp_end_x, sp_end_y), max(2, int(2 * camera.zoom)))
                 pygame.draw.circle(surface, (217, 149, 44), (sp_end_x, sp_end_y), max(2, int(2.5 * camera.zoom)))
+
+            elif stack.resource_type in ("Copper", "Silver", "Gold", "Copper Coin", "Silver Coin", "Gold Coin"):
+                # Metal currency coins on the ground
+                coin_r = max(4, int(scaled_tile * 0.24))
+                border_col = (120, 53, 15) if "Copper" in stack.resource_type else ((100, 116, 139) if "Silver" in stack.resource_type else (161, 98, 7))
+                if is_large_stack:
+                    pygame.draw.circle(surface, col, (center_x - 3, center_y - 4), coin_r)
+                    pygame.draw.circle(surface, border_col, (center_x - 3, center_y - 4), coin_r, 1)
+                    pygame.draw.circle(surface, col, (center_x + 3, center_y - 2), coin_r)
+                    pygame.draw.circle(surface, border_col, (center_x + 3, center_y - 2), coin_r, 1)
+                pygame.draw.circle(surface, col, (center_x, center_y + 1), coin_r)
+                pygame.draw.circle(surface, border_col, (center_x, center_y + 1), coin_r, max(1, int(1.5 * camera.zoom)))
+                if coin_r >= 6:
+                    pygame.draw.circle(surface, border_col, (center_x, center_y + 1), coin_r - 3, 1)
 
             else:
                 # Generic fallback item

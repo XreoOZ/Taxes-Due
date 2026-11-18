@@ -332,8 +332,25 @@ class FurnitureManager:
                 if f.id == exclude_furniture_id:
                     occupied.discard((int(f.grid_x), int(f.grid_y)))
         if exclude_tile:
-            occupied.discard(exclude_tile)
+            occupied.discard(tuple(exclude_tile))
         return occupied
+
+    def get_furniture_rects(self, tile_size=TILE_SIZE, exclude_furniture_id=None, exclude_tile=None):
+        """
+        Mengembalikan daftar pygame.Rect dari seluruh perabotan yang terpasang (Beds, Chests),
+        digunakan oleh is_segment_clear agar rute tidak memotong menembus ranjang/perabotan lain.
+        """
+        rects = []
+        ex_tile = tuple(exclude_tile) if exclude_tile else None
+        for f in getattr(self, "furnitures", []):
+            if getattr(f, "status", "") == "INSTALLED" and not getattr(f, "is_dropped", False):
+                if exclude_furniture_id and f.id == exclude_furniture_id:
+                    continue
+                fg = (int(f.grid_x), int(f.grid_y))
+                if ex_tile and fg == ex_tile:
+                    continue
+                rects.append(pygame.Rect(fg[0] * tile_size, fg[1] * tile_size, tile_size, tile_size))
+        return rects
 
     def add_furniture(self, f_type, gx, gy, permit_manager, villager_manager, resources=None, building_manager=None):
         cfg = FURNITURE_TYPES.get(f_type, FURNITURE_TYPES.get("household_storage", {}))

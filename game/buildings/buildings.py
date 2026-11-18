@@ -22,7 +22,8 @@ from game.config import (
     COLOR_STONE_WALL_OUTLINE,
     COLOR_STONE_FLOOR,
     COLOR_STONE_FLOOR_ALT,
-    COLOR_STONE_DOOR
+    COLOR_STONE_DOOR,
+    DEFAULT_ITEM_PRICES
 )
 from game.permits import get_exterior_edges_for_tile
 
@@ -35,10 +36,10 @@ class ConstructionSite:
         self.name = f"{self.type_cfg['name']} ({len(self.tiles)} tiles)"
 
         # Door Placement
-        if self.type_cfg.get("has_door", True) is False or self.building_type == "well":
+        if self.type_cfg.get("has_door", True) is False or self.building_type in ("well", "market"):
             self.door_pos = None
             self.door_side = None
-            self.is_solid = True
+            self.is_solid = (self.building_type == "well")
         else:
             self.door_pos, self.door_side = self._resolve_door(door_pos, door_side)
             self.is_solid = False
@@ -194,12 +195,21 @@ class ConstructionSite:
         cy = (dy + 0.5) * tile_size
         return abs(x - cx) < 32.0 and abs(y - cy) < 32.0
 
-    def get_approach_point(self, worker_x, worker_y, worker_id=None, all_entities=None, tile_size=TILE_SIZE, bm=None):
+    def get_approach_point(self, worker_x, worker_y=None, worker_id=None, all_entities=None, tile_size=TILE_SIZE, bm=None):
         """
         Mendapatkan titik pendekatan (approach point) di sekeliling perimeter site/bangunan.
         Mendukung multi-worker parallel: mendistribusikan pekerja ke petak perimeter yang berbeda
         agar tidak bertumpuk atau berebut satu koordinat.
         """
+        if isinstance(worker_x, (tuple, list)):
+            if isinstance(worker_y, (int, float)) and worker_y >= 32:
+                tile_size = int(worker_y)
+            if worker_id is not None and hasattr(worker_id, "get_building_at"):
+                bm = worker_id
+            worker_x, worker_y = float(worker_x[0]), float(worker_x[1])
+        elif worker_y is None:
+            worker_y = worker_x
+
         if not self.tiles:
             return worker_x, worker_y
 
@@ -308,13 +318,27 @@ class Building:
         self.tiles = set(tiles)
         self._recalculate_bounds()
         self.name = f"{self.type_cfg['name']} ({len(self.tiles)} tiles)"
-        if self.type_cfg.get("has_door", True) is False or self.building_type == "well":
+        if self.type_cfg.get("has_door", True) is False or self.building_type in ("well", "market"):
             self.door_pos = None
             self.door_side = None
-            self.is_solid = True
+            self.is_solid = (self.building_type == "well")
         else:
             self.door_pos, self.door_side = self._resolve_door(door_pos, door_side)
             self.is_solid = False
+
+        # Market-specific economy and inventory properties (AGENT 2)
+        if self.building_type == "market":
+            self.owner = "landlord"
+            self.inventory = {"Potato": 100}  # Initial market inventory
+            self.currency = {"Copper": 0, "Silver": 0, "Gold": 0}
+            self.prices = dict(DEFAULT_ITEM_PRICES)  # Potato: 3 Copper
+            self.capacity = float("inf")  # UNLIMITED STORAGE CAPACITY (Not 6 slots)
+        else:
+            self.owner = "landlord"
+            self.inventory = {}
+            self.currency = {"Copper": 0, "Silver": 0, "Gold": 0}
+            self.prices = {}
+            self.capacity = 1000
         self.wall_thickness = 10
         self._cached_oriented_walls = None
         self._cached_wall_rects = None
@@ -504,12 +528,21 @@ class Building:
         cy = (dy + 0.5) * tile_size
         return abs(x - cx) < 32.0 and abs(y - cy) < 32.0
 
-    def get_approach_point(self, worker_x, worker_y, worker_id=None, all_entities=None, tile_size=TILE_SIZE, bm=None):
+    def get_approach_point(self, worker_x, worker_y=None, worker_id=None, all_entities=None, tile_size=TILE_SIZE, bm=None):
         """
         Mendapatkan titik pendekatan (approach point) di sekeliling perimeter site/bangunan.
         Mendukung multi-worker parallel: mendistribusikan pekerja ke petak perimeter yang berbeda
         agar tidak bertumpuk atau berebut satu koordinat.
         """
+        if isinstance(worker_x, (tuple, list)):
+            if isinstance(worker_y, (int, float)) and worker_y >= 32:
+                tile_size = int(worker_y)
+            if worker_id is not None and hasattr(worker_id, "get_building_at"):
+                bm = worker_id
+            worker_x, worker_y = float(worker_x[0]), float(worker_x[1])
+        elif worker_y is None:
+            worker_y = worker_x
+
         if not self.tiles:
             return worker_x, worker_y
 
@@ -557,7 +590,13 @@ class Building:
         if self._cached_oriented_walls is not None and self._cached_tile_size == tile_size:
             return self._cached_oriented_walls
 
-        if getattr(self, "is_solid", False) or self.building_type == "well" or not self.type_cfg.get("has_door", True):
+        if getattr(self, "is_solid", False) or self.building_type in ("well", "market") or not self.type_cfg.get("has_door", True):
+            if self.building_type == "market":
+                # Market is an open-air medieval marketplace stall - workers and customers can walk around freely
+                self._cached_oriented_walls = []
+                self._cached_tile_size = tile_size
+                self._cached_wall_rects = []
+                return []
             walls = [(pygame.Rect(x * tile_size, y * tile_size, tile_size, tile_size), "solid") for x, y in self.tiles]
             self._cached_oriented_walls = walls
             self._cached_tile_size = tile_size
@@ -783,6 +822,8 @@ class BuildingManager:
             for site in completed:
                 self.construction_sites.remove(site)
             self.rebuild_tile_cache()
+            from game.world.pathfinding import GlobalPathRegistry
+            GlobalPathRegistry.get_instance().reset()
 
         for b in self.buildings:
             b.update_door_queue(dt)
@@ -1055,6 +1096,9 @@ class BuildingManager:
         if b.building_type == "well":
             self._draw_well(surface, camera, tile_size, b)
             return
+        if b.building_type == "market":
+            self._draw_market(surface, camera, tile_size, b)
+            return
 
         scaled_tile = max(1, math.ceil(tile_size * camera.zoom))
         wall_thick = max(2, int(8 * camera.zoom))
@@ -1225,3 +1269,187 @@ class BuildingManager:
         min_tile = min(b.tiles, key=lambda t: (t[1], t[0]))
         bx, by = camera.world_to_screen(min_tile[0] * tile_size, min_tile[1] * tile_size)
         surface.blit(lbl, (bx + 6, by + 6))
+
+    def _draw_market(self, surface, camera, tile_size, b):
+        """
+        Render completed medieval market stall (Footprint 3x2, Unlimited Storage).
+        Authentic medieval market aesthetic:
+        - Timber deck & cobblestone foundation plaza
+        - Wooden sales counters, balance scales, wicker produce baskets, sacks, and barrels
+        - Striped burgundy & cream cloth canopy / awning with support timber posts
+        - Carved wooden 'MARKET' merchant sign
+        """
+        self._ensure_font()
+        scaled_tile = max(1, math.ceil(tile_size * camera.zoom))
+        if not b.tiles:
+            return
+
+        min_gx = min(x for x, y in b.tiles)
+        max_gx = max(x for x, y in b.tiles)
+        min_gy = min(y for x, y in b.tiles)
+        max_gy = max(y for x, y in b.tiles)
+
+        span_w = (max_gx - min_gx + 1) * scaled_tile
+        span_h = (max_gy - min_gy + 1) * scaled_tile
+        origin_sx, origin_sy = camera.world_to_screen(min_gx * tile_size, min_gy * tile_size)
+
+        # -------------------------------------------------------------
+        # 1. FOUNDATION: Timber & Cobblestone Marketplace Decking
+        # -------------------------------------------------------------
+        for (gx, gy) in b.tiles:
+            sx, sy = camera.world_to_screen(gx * tile_size, gy * tile_size)
+            deck_col = (195, 150, 105) if (gx + gy) % 2 == 0 else (180, 135, 90)
+            pygame.draw.rect(surface, deck_col, (sx, sy, scaled_tile + 1, scaled_tile + 1))
+            # Plank texture grooves
+            plank_gap = max(3, int(scaled_tile / 4))
+            for p_off in range(plank_gap, scaled_tile, plank_gap):
+                pygame.draw.line(surface, (140, 100, 65), (sx, sy + p_off), (sx + scaled_tile, sy + p_off), 1)
+
+        # Foundation outer timber curb & perimeter
+        for (gx, gy) in b.tiles:
+            sx, sy = camera.world_to_screen(gx * tile_size, gy * tile_size)
+            if (gx, gy - 1) not in b.tiles:
+                pygame.draw.line(surface, (100, 65, 35), (sx, sy), (sx + scaled_tile, sy), 2)
+            if (gx, gy + 1) not in b.tiles:
+                pygame.draw.line(surface, (100, 65, 35), (sx, sy + scaled_tile), (sx + scaled_tile, sy + scaled_tile), 2)
+            if (gx - 1, gy) not in b.tiles:
+                pygame.draw.line(surface, (100, 65, 35), (sx, sy), (sx, sy + scaled_tile), 2)
+            if (gx + 1, gy) not in b.tiles:
+                pygame.draw.line(surface, (100, 65, 35), (sx + scaled_tile, sy), (sx + scaled_tile, sy + scaled_tile), 2)
+
+        # -------------------------------------------------------------
+        # 2. MARKET GOODS & COUNTER FURNISHINGS
+        # -------------------------------------------------------------
+        # Sturdy wooden display counter along the top half
+        counter_y = origin_sy + int(span_h * 0.22)
+        counter_h = max(8, int(span_h * 0.26))
+        counter_margin = max(6, int(span_w * 0.08))
+        counter_w = span_w - counter_margin * 2
+
+        # Counter shadow
+        pygame.draw.rect(surface, (0, 0, 0, 70), (origin_sx + counter_margin + 2, counter_y + 3, counter_w, counter_h), border_radius=3)
+        # Counter top
+        pygame.draw.rect(surface, (139, 90, 43), (origin_sx + counter_margin, counter_y, counter_w, counter_h), border_radius=3)
+        pygame.draw.rect(surface, (90, 55, 20), (origin_sx + counter_margin, counter_y, counter_w, counter_h), width=1, border_radius=3)
+
+        # Scales / Balance on the counter
+        scale_x = origin_sx + counter_margin + int(counter_w * 0.72)
+        scale_y = counter_y + counter_h // 2
+        post_len = max(6, int(counter_h * 0.7))
+        pygame.draw.line(surface, (234, 179, 8), (scale_x, scale_y - post_len), (scale_x, scale_y + 2), max(1, int(2 * camera.zoom)))
+        beam_len = max(8, int(counter_w * 0.12))
+        pygame.draw.line(surface, (234, 179, 8), (scale_x - beam_len, scale_y - post_len), (scale_x + beam_len, scale_y - post_len), max(1, int(2 * camera.zoom)))
+        # Scale pans
+        pan_r = max(2, int(beam_len * 0.45))
+        pygame.draw.arc(surface, (234, 179, 8), (scale_x - beam_len - pan_r, scale_y - post_len + 2, pan_r * 2, pan_r * 2), 0, math.pi, max(1, int(2 * camera.zoom)))
+        pygame.draw.arc(surface, (234, 179, 8), (scale_x + beam_len - pan_r, scale_y - post_len + 2, pan_r * 2, pan_r * 2), 0, math.pi, max(1, int(2 * camera.zoom)))
+
+        # Produce Baskets with Potatoes on the Counter & Floor
+        # Basket 1 (Produce basket)
+        bask_x = origin_sx + counter_margin + int(counter_w * 0.22)
+        bask_y = counter_y + counter_h // 2
+        bw = max(10, int(counter_w * 0.16))
+        bh = max(8, int(counter_h * 0.75))
+        pygame.draw.ellipse(surface, (180, 120, 60), (bask_x - bw // 2, bask_y - bh // 2, bw, bh))
+        pygame.draw.ellipse(surface, (110, 65, 25), (bask_x - bw // 2, bask_y - bh // 2, bw, bh), 1)
+        # Potatoes inside basket
+        pot_r = max(2, int(bw * 0.22))
+        pygame.draw.circle(surface, (194, 120, 60), (bask_x - 2, bask_y - 1), pot_r)
+        pygame.draw.circle(surface, (194, 120, 60), (bask_x + 3, bask_y), pot_r)
+        pygame.draw.circle(surface, (160, 95, 40), (bask_x, bask_y - 2), pot_r)
+
+        # Wooden Barrels & Sacks on the floor
+        barrel_x = origin_sx + counter_margin + 6
+        barrel_y = origin_sy + int(span_h * 0.65)
+        bar_w = max(12, int(span_w * 0.12))
+        bar_h = max(14, int(span_h * 0.24))
+        pygame.draw.ellipse(surface, (150, 95, 45), (barrel_x, barrel_y, bar_w, bar_h))
+        pygame.draw.ellipse(surface, (70, 40, 15), (barrel_x, barrel_y, bar_w, bar_h), 1)
+        # Iron rings on barrel
+        pygame.draw.line(surface, (71, 85, 105), (barrel_x + 2, barrel_y + bar_h // 3), (barrel_x + bar_w - 2, barrel_y + bar_h // 3), max(1, int(1.5 * camera.zoom)))
+        pygame.draw.line(surface, (71, 85, 105), (barrel_x + 2, barrel_y + (bar_h * 2) // 3), (barrel_x + bar_w - 2, barrel_y + (bar_h * 2) // 3), max(1, int(1.5 * camera.zoom)))
+
+        # Sacks of Grain / Tubers
+        sack_x = origin_sx + span_w - counter_margin - bar_w - 8
+        sack_y = origin_sy + int(span_h * 0.62)
+        sk_w = max(14, int(span_w * 0.14))
+        sk_h = max(12, int(span_h * 0.20))
+        pygame.draw.ellipse(surface, (214, 195, 150), (sack_x, sack_y, sk_w, sk_h))
+        pygame.draw.ellipse(surface, (140, 120, 80), (sack_x, sack_y, sk_w, sk_h), 1)
+        # Sack neck tied with string
+        pygame.draw.circle(surface, (180, 155, 110), (sack_x + sk_w // 2, sack_y - 2), max(2, int(sk_w * 0.2)))
+        pygame.draw.line(surface, (120, 75, 25), (sack_x + sk_w // 2 - 3, sack_y), (sack_x + sk_w // 2 + 3, sack_y), 1)
+
+        # -------------------------------------------------------------
+        # 3. FOUR CORNER TIMBER POSTS
+        # -------------------------------------------------------------
+        post_sz = max(4, int(7 * camera.zoom))
+        posts = [
+            (origin_sx + 4, origin_sy + 4),
+            (origin_sx + span_w - post_sz - 4, origin_sy + 4),
+            (origin_sx + 4, origin_sy + span_h - post_sz - 4),
+            (origin_sx + span_w - post_sz - 4, origin_sy + span_h - post_sz - 4),
+        ]
+        for px, py in posts:
+            pygame.draw.rect(surface, (100, 60, 25), (px, py, post_sz, post_sz), border_radius=2)
+            pygame.draw.rect(surface, (50, 25, 10), (px, py, post_sz, post_sz), width=1, border_radius=2)
+
+        # -------------------------------------------------------------
+        # 4. MEDIEVAL STRIPED MERCHANT CANOPY / AWNING
+        # -------------------------------------------------------------
+        # Overhead cloth canopy with bold merchant stripes: Burgundy & Cream
+        canopy_y = origin_sy - max(6, int(10 * camera.zoom))
+        canopy_h = max(16, int(span_h * 0.52))
+        canopy_w = span_w + max(6, int(10 * camera.zoom))
+        canopy_x = origin_sx - (canopy_w - span_w) // 2
+
+        # Canopy cast shadow
+        shadow_rect = pygame.Rect(canopy_x + 4, canopy_y + canopy_h - 2, canopy_w - 8, max(4, int(6 * camera.zoom)))
+        shadow_surf = pygame.Surface((shadow_rect.w, shadow_rect.h), pygame.SRCALPHA)
+        shadow_surf.fill((0, 0, 0, 65))
+        surface.blit(shadow_surf, shadow_rect.topleft)
+
+        # Striped panels
+        num_stripes = 10
+        stripe_w = canopy_w / num_stripes
+        color_red = (185, 28, 28)       # Merchant crimson burgundy
+        color_cream = (245, 240, 224)   # Linen cream
+        valance_r = max(3, int(stripe_w / 2))
+
+        for i in range(num_stripes):
+            st_x = int(canopy_x + i * stripe_w)
+            st_next_x = int(canopy_x + (i + 1) * stripe_w)
+            st_w = st_next_x - st_x
+            st_col = color_red if i % 2 == 0 else color_cream
+
+            # Main canopy stripe slope
+            pygame.draw.rect(surface, st_col, (st_x, canopy_y, st_w, canopy_h))
+            pygame.draw.line(surface, (120, 20, 20) if i % 2 == 0 else (200, 195, 175), (st_x, canopy_y), (st_x, canopy_y + canopy_h), 1)
+
+            # Scalloped valance / fringe at bottom edge
+            scallop_center_x = st_x + st_w // 2
+            pygame.draw.circle(surface, st_col, (scallop_center_x, canopy_y + canopy_h), valance_r)
+            pygame.draw.circle(surface, (120, 20, 20) if i % 2 == 0 else (180, 175, 155), (scallop_center_x, canopy_y + canopy_h), valance_r, 1)
+
+        # Canopy front ridge beam & trim
+        pygame.draw.line(surface, (100, 50, 20), (canopy_x, canopy_y), (canopy_x + canopy_w, canopy_y), max(2, int(2.5 * camera.zoom)))
+        pygame.draw.line(surface, (100, 50, 20), (canopy_x, canopy_y + canopy_h), (canopy_x + canopy_w, canopy_y + canopy_h), max(1, int(1.5 * camera.zoom)))
+
+        # -------------------------------------------------------------
+        # 5. CARVED TIMBER MERCHANT SIGN
+        # -------------------------------------------------------------
+        sign_w = max(60, min(140, int(span_w * 0.48)))
+        sign_h = max(14, int(20 * camera.zoom))
+        sign_x = origin_sx + (span_w - sign_w) // 2
+        sign_y = canopy_y + canopy_h - 4
+
+        # Hanging chains
+        pygame.draw.line(surface, (71, 85, 105), (sign_x + 8, canopy_y + canopy_h - 6), (sign_x + 8, sign_y), 1)
+        pygame.draw.line(surface, (71, 85, 105), (sign_x + sign_w - 8, canopy_y + canopy_h - 6), (sign_x + sign_w - 8, sign_y), 1)
+
+        # Wooden sign plank
+        pygame.draw.rect(surface, (15, 23, 42, 230), (sign_x, sign_y, sign_w, sign_h), border_radius=4)
+        pygame.draw.rect(surface, (250, 204, 21), (sign_x, sign_y, sign_w, sign_h), width=1, border_radius=4)
+
+        sign_txt = self.font.render("MARKET", True, (250, 204, 21))
+        surface.blit(sign_txt, (sign_x + (sign_w - sign_txt.get_width()) // 2, sign_y + (sign_h - sign_txt.get_height()) // 2))
