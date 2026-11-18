@@ -130,10 +130,11 @@ def deposit_irrelevant_tools(worker, furniture_manager, stockpile_manager):
     return deposited
 
 
-def assign_job_worker(job_id, permit_manager, villager_manager):
+def assign_job_worker(job_id, permit_manager, villager_manager, furniture_manager=None):
     """
     Universally assigns a worker to any job in DEDICATED_JOBS.
     1. Selects closest available household member without another dedicated active job.
+       Distance is measured from their household residence so moving households dynamically updates assignments.
     2. Updates their job and title immediately.
     3. If the job has an associated workplace permit, assigns them to that permit.
     Returns (success: bool, villager or error message).
@@ -143,50 +144,37 @@ def assign_job_worker(job_id, permit_manager, villager_manager):
 
     if job_id == "Priest":
         from game.systems.church_system import ChurchSystem
-        return ChurchSystem.assign_priest(permit_manager, villager_manager)
+        return ChurchSystem.assign_priest(permit_manager, villager_manager, furniture_manager=furniture_manager)
     elif job_id == "Gravedigger":
         from game.systems.cemetery_system import CemeterySystem
-        return CemeterySystem.assign_gravedigger(permit_manager, villager_manager)
+        return CemeterySystem.assign_gravedigger(permit_manager, villager_manager, furniture_manager=furniture_manager)
 
     job_cfg = DEDICATED_JOBS.get(job_id, {})
     wp_type = job_cfg.get("workplace_permit")
 
-    all_vils = villager_manager.get_all_villagers() if hasattr(villager_manager, "get_all_villagers") else getattr(villager_manager, "villagers", [])
-    assigned_worker_ids = set()
     target_permit = None
-    if permit_manager and hasattr(permit_manager, "permits"):
+    if permit_manager and hasattr(permit_manager, "permits") and wp_type:
         for p in permit_manager.permits:
-            for wid in getattr(p, "assigned_workers", []):
-                assigned_worker_ids.add(str(wid))
-            if wp_type and getattr(p, "permit_type", "") == wp_type and target_permit is None:
+            if getattr(p, "permit_type", "") == wp_type:
                 target_permit = p
-
-    # Candidates: alive, household member, not assigned to another permit, not holding a dedicated non-farmer job
-    candidates = []
-    for v in all_vils:
-        if not getattr(v, "is_alive", True):
-            continue
-        if not getattr(v, "family_id", None):
-            continue
-        if str(v.id) in assigned_worker_ids:
-            continue
-        if getattr(v, "job", "Farmer") not in ("Farmer", "Peasant", "Unemployed", "Unassigned", None, ""):
-            continue
-        candidates.append(v)
-
-    if not candidates:
-        candidates = [v for v in all_vils if getattr(v, "is_alive", True) and getattr(v, "job", "") != job_id]
-
-    if not candidates:
-        return False, f"No available household member to assign to {job_id}."
+                break
 
     ref_x, ref_y = 0.0, 0.0
     if target_permit and hasattr(target_permit, "grid_x"):
         ref_x = (target_permit.grid_x + target_permit.tiles_w / 2.0) * TILE_SIZE
         ref_y = (target_permit.grid_y + target_permit.tiles_h / 2.0) * TILE_SIZE
 
-    candidates.sort(key=lambda v: math.hypot(ref_x - v.x, ref_y - v.y))
-    chosen = candidates[0]
+    from game.world.permits import find_closest_unassigned_household_worker
+    chosen = find_closest_unassigned_household_worker(
+        ref_x, ref_y,
+        permit_manager=permit_manager,
+        villager_manager=villager_manager,
+        target_job=job_id,
+        furniture_manager=furniture_manager
+    )
+
+    if not chosen:
+        return False, f"No available household member to assign to {job_id}."
 
     chosen.set_job(job_id)
     job_name = job_cfg.get("name", job_id)

@@ -958,6 +958,15 @@ class PermitManager:
             if getattr(p, "permit_type", "") == "church":
                 return False, "Church can have exactly one Priest assigned"
             p.max_workers = len(p.assigned_workers) + 1
+
+        # Remove worker from any other permit first
+        for other_p in self.permits:
+            if other_p.id != permit_id and hasattr(other_p, "assigned_workers"):
+                if villager_id in other_p.assigned_workers:
+                    other_p.assigned_workers.remove(villager_id)
+                elif str(villager_id) in [str(x) for x in other_p.assigned_workers]:
+                    other_p.assigned_workers = [x for x in other_p.assigned_workers if str(x) != str(villager_id)]
+
         p.assigned_workers.append(villager_id)
 
         target_job = "Farmer"
@@ -991,7 +1000,7 @@ class PermitManager:
             return True, "Worker removed"
         return False, "Worker not assigned to this permit"
 
-    def change_max_workers(self, permit_id, delta, villager_manager=None):
+    def change_max_workers(self, permit_id, delta, villager_manager=None, furniture_manager=None):
         p = next((p for p in self.permits if p.id == permit_id), None)
         if p:
             current_max = getattr(p, "max_workers", 2 if p.permit_type == "farm" else 1)
@@ -1005,6 +1014,9 @@ class PermitManager:
                 if p.permit_type == "church":
                     from game.systems.church_system import ChurchSystem
                     ChurchSystem.release_priest(self, villager_manager, target_permit=p)
+                elif p.permit_type == "cemetery":
+                    from game.systems.cemetery_system import CemeterySystem
+                    CemeterySystem.release_gravedigger(self, villager_manager, target_permit=p)
                 else:
                     while len(p.assigned_workers) > p.max_workers:
                         popped_id = p.assigned_workers.pop()
@@ -1027,32 +1039,25 @@ class PermitManager:
                             target_job = j_id
                             break
 
-                all_vils = villager_manager.get_all_villagers()
-                avail_vils = [
-                    v for v in all_vils
-                    if getattr(v, "is_alive", True)
-                    and not any(v.id in getattr(other_p, "assigned_workers", []) for other_p in self.permits)
-                    and (getattr(v, "job", "Unassigned") == "Unassigned" or getattr(v, "job", None) == target_job)
-                ]
-                if not avail_vils:
-                    avail_vils = [
-                        v for v in all_vils
-                        if getattr(v, "is_alive", True)
-                        and not any(v.id in getattr(other_p, "assigned_workers", []) for other_p in self.permits)
-                    ]
+                p_cx = (p.grid_x + p.tiles_w / 2.0) * TILE_SIZE
+                p_cy = (p.grid_y + p.tiles_h / 2.0) * TILE_SIZE
 
-                if avail_vils:
-                    p_cx = (p.grid_x + p.tiles_w / 2.0) * TILE_SIZE
-                    p_cy = (p.grid_y + p.tiles_h / 2.0) * TILE_SIZE
-                    avail_vils.sort(key=lambda v: math.hypot(p_cx - v.x, p_cy - v.y))
-                    chosen = avail_vils[0]
+                chosen = find_closest_unassigned_household_worker(
+                    p_cx, p_cy,
+                    permit_manager=self,
+                    villager_manager=villager_manager,
+                    target_job=target_job,
+                    furniture_manager=furniture_manager,
+                    exclude_worker_ids=p.assigned_workers
+                )
+                if chosen:
                     chosen.set_job(target_job)
                     self.assign_worker_to_permit(p.id, chosen.id, villager_manager=villager_manager)
             return True
         return False
 
-    def auto_sort_workers(self, villager_manager, job_filter=None):
-        """Auto-assigns closest available workers to workplace plots based on distance from home"""
+    def auto_sort_workers(self, villager_manager, job_filter=None, furniture_manager=None):
+        """Auto-assigns closest available workers to workplace plots based on distance from household home"""
         if not villager_manager:
             return 0
         all_villagers = villager_manager.get_all_villagers()
@@ -1065,8 +1070,8 @@ class PermitManager:
             if not job_cfg:
                 continue
             permit_type_needed = job_cfg.get("workplace_permit", "farm")
-            workers = [v for v in all_villagers if v.job == job_id]
-            work_permits = [p for p in self.permits if p.permit_type == permit_type_needed]
+            workers = [v for v in all_villagers if getattr(v, "job", "") == job_id or (job_id == "Farmer" and getattr(v, "job", "") in ("Farmer", "Unassigned", "Peasant", None, ""))]
+            work_permits = [p for p in self.permits if getattr(p, "permit_type", "") == permit_type_needed]
 
             if not work_permits or not workers:
                 continue
@@ -1077,24 +1082,18 @@ class PermitManager:
                     p.assigned_workers = []
                 p.assigned_workers.clear()
 
-            # Calculate distance between worker's home (or current location) and workplace
+            # Calculate distance between worker's household home and workplace
             candidates = []
             for p in work_permits:
                 p_cx = (p.grid_x + p.tiles_w / 2.0) * TILE_SIZE
                 p_cy = (p.grid_y + p.tiles_h / 2.0) * TILE_SIZE
                 for w in workers:
-                    # If worker's family has an assigned housing deed, use home center
-                    home_p = next((hp for hp in self.permits if hp.id == getattr(w, "assigned_permit_id", None)), None)
-                    if home_p:
-                        w_x = (home_p.grid_x + home_p.tiles_w / 2.0) * TILE_SIZE
-                        w_y = (home_p.grid_y + home_p.tiles_h / 2.0) * TILE_SIZE
-                    else:
-                        w_x, w_y = w.x, w.y
+                    w_x, w_y = get_villager_home_position(w, villager_manager, self, furniture_manager)
                     dist = math.hypot(w_x - p_cx, w_y - p_cy)
                     candidates.append((dist, w, p))
 
             # Sort by distance (closest home wins!)
-            candidates.sort(key=lambda c: (c[0], c[1].id))
+            candidates.sort(key=lambda c: (c[0], str(c[1].id)))
             assigned_workers_set = set()
 
             for dist, w, p in candidates:
@@ -1103,6 +1102,8 @@ class PermitManager:
                 if len(p.assigned_workers) < getattr(p, "max_workers", 2):
                     p.assigned_workers.append(w.id)
                     assigned_workers_set.add(w.id)
+                    if getattr(w, "job", "") != job_id:
+                        w.set_job(job_id)
                     total_assigned_overall += 1
 
         return total_assigned_overall

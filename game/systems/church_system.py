@@ -79,9 +79,10 @@ class ChurchSystem:
         return next((v for v in all_vils if getattr(v, "job", "") == "Priest" and getattr(v, "is_alive", True)), None)
 
     @classmethod
-    def assign_priest(cls, permit_manager, villager_manager, target_permit=None):
+    def assign_priest(cls, permit_manager, villager_manager, target_permit=None, furniture_manager=None):
         """
         Assigns the closest available household member without an active job as Priest.
+        Distance is measured from their household residence so moving households dynamically updates assignments.
         Changes their title to Priest and registers them to the church permit.
         Returns (success: bool, villager or error message).
         """
@@ -89,30 +90,6 @@ class ChurchSystem:
             return False, "Villager manager unavailable."
 
         church = target_permit or cls.get_church_permit(permit_manager)
-        all_vils = villager_manager.get_all_villagers() if hasattr(villager_manager, "get_all_villagers") else getattr(villager_manager, "villagers", [])
-
-        # Collect occupied worker IDs across all permits
-        assigned_worker_ids = set()
-        if permit_manager and hasattr(permit_manager, "permits"):
-            for p in permit_manager.permits:
-                for wid in getattr(p, "assigned_workers", []):
-                    assigned_worker_ids.add(str(wid))
-
-        # Eligible candidates: alive, part of a household, not assigned to another permit, not holding a dedicated non-farmer job
-        candidates = []
-        for v in all_vils:
-            if not getattr(v, "is_alive", True):
-                continue
-            if not getattr(v, "family_id", None):
-                continue
-            if str(v.id) in assigned_worker_ids:
-                continue
-            if getattr(v, "job", "Farmer") not in ("Farmer", "Peasant", "Unemployed", None, ""):
-                continue
-            candidates.append(v)
-
-        if not candidates:
-            return False, "No available household member without an active job."
 
         # Reference location: center of church permit or origin
         if church:
@@ -121,11 +98,20 @@ class ChurchSystem:
         else:
             cx, cy = 0.0, 0.0
 
-        candidates.sort(key=lambda v: math.hypot(v.x - cx, v.y - cy))
-        chosen = candidates[0]
+        from game.world.permits import find_closest_unassigned_household_worker
+        chosen = find_closest_unassigned_household_worker(
+            cx, cy,
+            permit_manager=permit_manager,
+            villager_manager=villager_manager,
+            target_job="Priest",
+            furniture_manager=furniture_manager
+        )
+
+        if not chosen:
+            return False, "No available household member without an active job."
 
         # Assign job and title
-        chosen.job = "Priest"
+        chosen.set_job("Priest")
         chosen.title = "Village Priest"
 
         if church:

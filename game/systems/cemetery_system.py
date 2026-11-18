@@ -72,9 +72,10 @@ class CemeterySystem:
         return [v for v in all_vils if getattr(v, "job", "") == "Gravedigger" and getattr(v, "is_alive", True)]
 
     @classmethod
-    def assign_gravedigger(cls, permit_manager, villager_manager, target_permit=None):
+    def assign_gravedigger(cls, permit_manager, villager_manager, target_permit=None, furniture_manager=None):
         """
         Assigns the closest available household member without an active job as Gravedigger.
+        Distance is measured from their household residence so moving households dynamically updates assignments.
         Changes their title to Gravedigger and registers them to the cemetery permit.
         Returns (success: bool, villager or error message).
         """
@@ -82,33 +83,6 @@ class CemeterySystem:
             return False, "Villager manager unavailable."
 
         cemetery = target_permit or cls.get_cemetery_permit(permit_manager)
-        all_vils = villager_manager.get_all_villagers() if hasattr(villager_manager, "get_all_villagers") else getattr(villager_manager, "villagers", [])
-
-        # Collect occupied worker IDs across all permits
-        assigned_worker_ids = set()
-        if permit_manager and hasattr(permit_manager, "permits"):
-            for p in permit_manager.permits:
-                for wid in getattr(p, "assigned_workers", []):
-                    assigned_worker_ids.add(str(wid))
-
-        # Eligible candidates: alive, part of a household, not assigned to another permit, not holding a dedicated non-farmer job
-        candidates = []
-        for v in all_vils:
-            if not getattr(v, "is_alive", True):
-                continue
-            if not getattr(v, "family_id", None):
-                continue
-            if str(v.id) in assigned_worker_ids:
-                continue
-            if getattr(v, "job", "Farmer") not in ("Farmer", "Peasant", "Unemployed", "Unassigned", None, ""):
-                continue
-            candidates.append(v)
-
-        if not candidates:
-            candidates = [v for v in all_vils if getattr(v, "is_alive", True) and getattr(v, "job", "") != "Gravedigger"]
-
-        if not candidates:
-            return False, "No available household member without an active job."
 
         # Reference location: center of cemetery permit or origin
         ref_x, ref_y = 0.0, 0.0
@@ -116,8 +90,17 @@ class CemeterySystem:
             ref_x = (cemetery.grid_x + cemetery.tiles_w / 2.0) * TILE_SIZE
             ref_y = (cemetery.grid_y + cemetery.tiles_h / 2.0) * TILE_SIZE
 
-        candidates.sort(key=lambda v: math.hypot(ref_x - v.x, ref_y - v.y))
-        chosen = candidates[0]
+        from game.world.permits import find_closest_unassigned_household_worker
+        chosen = find_closest_unassigned_household_worker(
+            ref_x, ref_y,
+            permit_manager=permit_manager,
+            villager_manager=villager_manager,
+            target_job="Gravedigger",
+            furniture_manager=furniture_manager
+        )
+
+        if not chosen:
+            return False, "No available household member without an active job."
 
         chosen.set_job("Gravedigger")
         chosen.say("I have taken up the Gravedigger duty.", duration=2.5)

@@ -693,18 +693,18 @@ class RaportUI:
             # Worker count +/- and Auto buttons
             for pid, rect in list(self.worker_dec_btn_rects.items()):
                 if rect.collidepoint(mouse_pos):
-                    permit_manager.change_max_workers(pid, -1, villager_manager)
+                    permit_manager.change_max_workers(pid, -1, villager_manager, furniture_manager=furniture_manager)
                     return f"dec_worker_{pid}"
 
             for pid, rect in list(self.worker_inc_btn_rects.items()):
                 if rect.collidepoint(mouse_pos):
-                    permit_manager.change_max_workers(pid, 1, villager_manager)
+                    permit_manager.change_max_workers(pid, 1, villager_manager, furniture_manager=furniture_manager)
                     return f"inc_worker_{pid}"
 
             for pid, rect in list(self.worker_auto_btn_rects.items()):
                 if rect.collidepoint(mouse_pos):
                     if villager_manager:
-                        permit_manager.auto_sort_workers(villager_manager)
+                        permit_manager.auto_sort_workers(villager_manager, furniture_manager=furniture_manager)
                     return f"auto_worker_{pid}"
 
             # Check crop picker dialog first if open
@@ -1047,11 +1047,13 @@ class RaportUI:
                             if worker:
                                 avail_permits = [p for p in permit_manager.permits if p.permit_type == "farm"]
                                 if avail_permits:
+                                    from game.world.permits import get_villager_home_position
+                                    w_pos = get_villager_home_position(worker, villager_manager, permit_manager, furniture_manager)
                                     avail_permits.sort(key=lambda p: (
                                         0 if len(p.assigned_workers) < p.max_workers else 1,
-                                        math.hypot((p.grid_x + p.tiles_w / 2.0) * TILE_SIZE - worker.x, (p.grid_y + p.tiles_h / 2.0) * TILE_SIZE - worker.y)
+                                        math.hypot((p.grid_x + p.tiles_w / 2.0) * TILE_SIZE - w_pos[0], (p.grid_y + p.tiles_h / 2.0) * TILE_SIZE - w_pos[1])
                                     ))
-                                    permit_manager.assign_worker_to_permit(avail_permits[0].id, worker.id)
+                                    permit_manager.assign_worker_to_permit(avail_permits[0].id, worker.id, villager_manager=villager_manager)
                         return f"assign_worker_{v_id}"
 
             # Check Universal Job Worker +/- button clicks across ALL jobs (both View 1 and View 2)
@@ -1065,7 +1067,7 @@ class RaportUI:
 
             for j_id, rect in list(getattr(self, "job_inc_btn_rects", {}).items()):
                 if rect and rect.collidepoint(mouse_pos):
-                    success, res = assign_job_worker(j_id, permit_manager, villager_manager)
+                    success, res = assign_job_worker(j_id, permit_manager, villager_manager, furniture_manager=furniture_manager)
                     if j_id == "Priest":
                         return "priest_worker_inc"
                     return f"job_worker_inc_{j_id}"
@@ -1073,7 +1075,7 @@ class RaportUI:
             # Check Priest worker +/- button clicks (both View 1 and View 2)
             if self.priest_inc_btn_rect and self.priest_inc_btn_rect.collidepoint(mouse_pos):
                 from game.systems.church_system import ChurchSystem
-                success, res = ChurchSystem.assign_priest(permit_manager, villager_manager)
+                success, res = ChurchSystem.assign_priest(permit_manager, villager_manager, furniture_manager=furniture_manager)
                 return "priest_worker_inc"
             if self.priest_dec_btn_rect and self.priest_dec_btn_rect.collidepoint(mouse_pos):
                 from game.systems.church_system import ChurchSystem
@@ -1084,7 +1086,7 @@ class RaportUI:
             if self.selected_job_id is None:
                 if self.auto_sort_all_btn_rect and self.auto_sort_all_btn_rect.collidepoint(mouse_pos):
                     if villager_manager:
-                        permit_manager.auto_sort_workers(villager_manager)
+                        permit_manager.auto_sort_workers(villager_manager, furniture_manager=furniture_manager)
                     return "auto_sort_all"
 
                 for job_id, rect in self.job_select_btn_rects.items():
