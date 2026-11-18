@@ -1762,6 +1762,17 @@ class Villager:
                         self.say(f"Carrying {amt} potatoes home...", duration=2.0)
                     return
 
+            # Auto-sync job if worker is assigned to a workplace permit
+            if self.job in ("Unassigned", None) and permit_manager:
+                assigned_p = next((p for p in permit_manager.permits if (hasattr(p, "assigned_workers") and self.id in p.assigned_workers) or (hasattr(self, "assigned_permit_id") and p.id == self.assigned_permit_id)), None)
+                if assigned_p:
+                    if assigned_p.permit_type == "farm":
+                        self.set_job("Farmer")
+                    elif assigned_p.permit_type == "church":
+                        self.set_job("Priest")
+                    elif assigned_p.permit_type == "cemetery":
+                        self.set_job("Gravedigger")
+
             # Pekerjaan spesifik: Petani (Farmer)
             if self.job == "Farmer":
                 assigned_farm = next((p for p in permit_manager.permits if p.permit_type == "farm" and hasattr(p, "assigned_workers") and self.id in p.assigned_workers), None)

@@ -19,7 +19,8 @@ from game.data.config import (
     COLOR_TEXT_MAIN,
     COLOR_TEXT_MUTED,
     RESOURCE_COLORS,
-    DENOMINATION_CAP
+    DENOMINATION_CAP,
+    ITEM_CATEGORIES
 )
 from game.systems.currency import (
     to_copper,
@@ -88,6 +89,11 @@ class MarketProfileModal:
         self.alloc_inc_btns = {}
         self.alloc_min_btns = {}
         self.alloc_max_btns = {}
+
+        # Pagination for tradeable goods
+        self.goods_page = 0
+        self.prev_page_btn_rect = None
+        self.next_page_btn_rect = None
 
     def _ensure_fonts(self):
         if self.font_title is None:
@@ -349,6 +355,15 @@ class MarketProfileModal:
                                 stockpile_manager.refresh_stacks(resources, None)
                             return f"stock_withdrawn_{it_name}"
 
+                # Pagination controls for tradeable items
+                if self.prev_page_btn_rect and self.prev_page_btn_rect.collidepoint(mouse_pos):
+                    self.goods_page = max(0, getattr(self, "goods_page", 0) - 1)
+                    return "market_prev_page"
+
+                if self.next_page_btn_rect and self.next_page_btn_rect.collidepoint(mouse_pos):
+                    self.goods_page = getattr(self, "goods_page", 0) + 1
+                    return "market_next_page"
+
         return None
 
     def draw(self, surface, resources=None, stockpile_manager=None, servant_manager=None, villager_manager=None, furniture_manager=None):
@@ -514,27 +529,33 @@ class MarketProfileModal:
         self.stock_dep_btns.clear()
         self.stock_with_btns.clear()
 
-        market_items = []
-        for it in ("Potato", "Wood", "Stone", "Bread"):
-            if it not in market_items:
-                market_items.append(it)
-        for it in DEFAULT_ITEM_PRICES:
-            if it not in market_items:
-                market_items.append(it)
+        self.tradeable_items = []
+        for it, cat in ITEM_CATEGORIES.items():
+            if cat != "CURRENCY" and it[0].isupper() and it not in self.tradeable_items:
+                self.tradeable_items.append(it)
         for it in getattr(mkt, "inventory", {}):
-            if it not in market_items:
-                market_items.append(it)
+            if it not in self.tradeable_items:
+                self.tradeable_items.append(it)
+        tradeable_items = self.tradeable_items
+
+        items_per_page = 5
+        total_pages = max(1, math.ceil(len(tradeable_items) / items_per_page))
+        self.goods_page = max(0, min(getattr(self, "goods_page", 0), total_pages - 1))
+        page_items = tradeable_items[self.goods_page * items_per_page : (self.goods_page + 1) * items_per_page]
 
         row_y = th_y + 28
         row_h = 42
 
-        for it_name in market_items[:5]:
+        for it_name in page_items:
             stock_qty = mkt.inventory.get(it_name, 0)
 
-            # Selling Price: Read dynamic scarcity price (AGENT 3)
+            # Selling Price & Buying Price (AGENT 1 & 2)
             active_price = MarketService.get_item_price(it_name, mkt)
             active_price = max(1, int(active_price))
             d_price = from_copper(active_price)
+
+            buy_price = MarketService.get_buying_price(it_name, mkt)
+            d_buy = from_copper(buy_price)
 
             card_rect = pygame.Rect(mx + 24, row_y, self.modal_w - 48, row_h)
             pygame.draw.rect(surface, (15, 23, 42, 220), card_rect, border_radius=6)
@@ -555,12 +576,11 @@ class MarketProfileModal:
             stock_col = (34, 197, 94) if stock_qty > 0 else ((56, 189, 248) if in_transit > 0 else (239, 68, 68))
             surface.blit(self.font_badge.render(stock_str, True, stock_col), (mx + 160, row_y + 13))
 
-            # Active Selling Price Display
+            # Active Selling & Buying Price Displays (Separate values)
             pr_x = mx + 276
-            pr_y = row_y + 11
-            surface.blit(self.font_sub.render(f"{d_price['Gold']}g", True, (250, 204, 21)), (pr_x, pr_y))
-            surface.blit(self.font_sub.render(f"{d_price['Silver']}s", True, (203, 213, 225)), (pr_x + 36, pr_y))
-            surface.blit(self.font_sub.render(f"{d_price['Copper']}c", True, (217, 119, 6)), (pr_x + 72, pr_y))
+            pr_y = row_y + 5
+            surface.blit(self.font_badge.render(f"Sell: {d_price['Gold']}g {d_price['Silver']}s {d_price['Copper']}c", True, (250, 204, 21)), (pr_x, pr_y))
+            surface.blit(self.font_badge.render(f"Buy:  {d_buy['Gold']}g {d_buy['Silver']}s {d_buy['Copper']}c", True, (148, 163, 184)), (pr_x, pr_y + 15))
 
             # Price Adjustment Buttons (G / S / C)
             btn_y = row_y + 9
@@ -614,6 +634,27 @@ class MarketProfileModal:
             surface.blit(self.font_badge.render("-Withdraw", True, (255, 255, 255)), (btn_with.x + 6, btn_with.y + 5))
 
             row_y += row_h + 4
+
+        # Bottom Pagination Bar
+        page_y = max(row_y + 6, th_y + 28 + (5 * (row_h + 4)))
+        self.prev_page_btn_rect = pygame.Rect(mx + 24, page_y, 90, 24)
+        self.next_page_btn_rect = pygame.Rect(mx + self.modal_w - 114, page_y, 90, 24)
+
+        prev_hov = self.prev_page_btn_rect.collidepoint(m_pos)
+        next_hov = self.next_page_btn_rect.collidepoint(m_pos)
+
+        has_prev = self.goods_page > 0
+        has_next = self.goods_page < total_pages - 1
+
+        pygame.draw.rect(surface, (37, 99, 235) if (prev_hov and has_prev) else ((30, 58, 138) if has_prev else (51, 65, 85)), self.prev_page_btn_rect, border_radius=4)
+        surface.blit(self.font_badge.render("< Prev", True, (255, 255, 255) if has_prev else (148, 163, 184)), (self.prev_page_btn_rect.centerx - 16, self.prev_page_btn_rect.centery - 6))
+
+        pygame.draw.rect(surface, (37, 99, 235) if (next_hov and has_next) else ((30, 58, 138) if has_next else (51, 65, 85)), self.next_page_btn_rect, border_radius=4)
+        surface.blit(self.font_badge.render("Next >", True, (255, 255, 255) if has_next else (148, 163, 184)), (self.next_page_btn_rect.centerx - 16, self.next_page_btn_rect.centery - 6))
+
+        page_str = f"Page {self.goods_page + 1} / {total_pages} ({len(tradeable_items)} Tradeable Items Registered)"
+        p_surf = self.font_badge.render(page_str, True, (203, 213, 225))
+        surface.blit(p_surf, (mx + (self.modal_w - p_surf.get_width()) // 2, page_y + 4))
 
     def _draw_allocation_tab(self, surface, mx, list_y, mkt, assigned_fam, furniture_manager, villager_manager, m_pos):
         """Renders Household Item Allocation Settings (% per item with actual chest ownership)"""

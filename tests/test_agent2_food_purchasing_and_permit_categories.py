@@ -582,8 +582,7 @@ class TestAgent2HouseholdFoodPurchasingAndPermitsUI(unittest.TestCase):
         from game.data.config import get_building_categories
         cats = get_building_categories()
         cat_ids = [c["id"] for c in cats]
-        self.assertIn("wooden_structure", cat_ids)
-        self.assertIn("stone_structure", cat_ids)
+        self.assertIn("structure", cat_ids)
         self.assertIn("well", cat_ids)
         self.assertIn("market", cat_ids)
         self.assertIn("furniture", cat_ids)
@@ -595,7 +594,7 @@ class TestAgent2HouseholdFoodPurchasingAndPermitsUI(unittest.TestCase):
             self.assertIn("color", c)
 
     def test_18_building_tab_screen1_lists_categories_and_badges(self):
-        """18. Screen 1 of Buildings tab lists all categories with built counts and quick deeds bar."""
+        """18. Screen 1 of Buildings tab lists all categories with built counts and structure categories."""
         ui = RaportUI()
         ui._init_fonts()
         ui.is_open = True
@@ -610,17 +609,10 @@ class TestAgent2HouseholdFoodPurchasingAndPermitsUI(unittest.TestCase):
         ui._draw_building_tab(surf, 210, 110, self.building_manager, self.permit_manager, self.resources, furniture_manager=self.furniture_manager, villager_manager=self.villager_manager)
 
         # All categories present
-        self.assertIn("wooden_structure", ui.building_category_btn_rects)
-        self.assertIn("stone_structure", ui.building_category_btn_rects)
+        self.assertIn("structure", ui.building_category_btn_rects)
         self.assertIn("well", ui.building_category_btn_rects)
         self.assertIn("market", ui.building_category_btn_rects)
         self.assertIn("furniture", ui.building_category_btn_rects)
-
-        # Quick build buttons present
-        self.assertIn("wooden_structure", ui.building_select_rects)
-        self.assertIn("stone_structure", ui.building_select_rects)
-        self.assertIn("well", ui.building_select_rects)
-        self.assertIn("market", ui.building_select_rects)
 
     def test_19_building_tab_screen2_filtered_category_view_and_back(self):
         """19. Selecting category opens Screen 2 with filtered list, category deeds, and Back button returns to Screen 1."""
@@ -633,16 +625,18 @@ class TestAgent2HouseholdFoodPurchasingAndPermitsUI(unittest.TestCase):
         surf = pygame.Surface((1280, 720))
         ui._draw_building_tab(surf, 210, 110, self.building_manager, self.permit_manager, self.resources, furniture_manager=self.furniture_manager, villager_manager=self.villager_manager)
 
-        # Click on "Residential & Timber" category card
-        card_rect = ui.building_category_btn_rects["wooden_structure"]
+        # Click on "Structure" category card
+        card_rect = ui.building_category_btn_rects["structure"]
         ev_click = pygame.event.Event(pygame.MOUSEBUTTONDOWN, {"button": 1, "pos": card_rect.center})
         action = ui.handle_event(ev_click, self.building_manager, self.permit_manager, self.resources)
-        self.assertEqual(action, "select_building_category_wooden_structure")
-        self.assertEqual(ui.selected_building_category, "wooden_structure")
+        self.assertEqual(action, "select_building_category_structure")
+        self.assertEqual(ui.selected_building_category, "structure")
 
         # Now render Screen 2
         ui._draw_building_tab(surf, 210, 110, self.building_manager, self.permit_manager, self.resources, furniture_manager=self.furniture_manager, villager_manager=self.villager_manager)
         self.assertIsNotNone(ui.building_category_back_btn_rect)
+        self.assertIn("wooden_structure", ui.building_select_rects)
+        self.assertIn("stone_structure", ui.building_select_rects)
 
         # Back button returns to Screen 1
         ev_back = pygame.event.Event(pygame.MOUSEBUTTONDOWN, {"button": 1, "pos": ui.building_category_back_btn_rect.center})

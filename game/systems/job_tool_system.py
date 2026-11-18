@@ -128,3 +128,119 @@ def deposit_irrelevant_tools(worker, furniture_manager, stockpile_manager):
     if getattr(worker, "active_tool", None) not in getattr(worker, "inventory", {}):
         worker.active_tool = None
     return deposited
+
+
+def assign_job_worker(job_id, permit_manager, villager_manager):
+    """
+    Universally assigns a worker to any job in DEDICATED_JOBS.
+    1. Selects closest available household member without another dedicated active job.
+    2. Updates their job and title immediately.
+    3. If the job has an associated workplace permit, assigns them to that permit.
+    Returns (success: bool, villager or error message).
+    """
+    if not villager_manager:
+        return False, "Villager manager unavailable."
+
+    if job_id == "Priest":
+        from game.systems.church_system import ChurchSystem
+        return ChurchSystem.assign_priest(permit_manager, villager_manager)
+    elif job_id == "Gravedigger":
+        from game.systems.cemetery_system import CemeterySystem
+        return CemeterySystem.assign_gravedigger(permit_manager, villager_manager)
+
+    job_cfg = DEDICATED_JOBS.get(job_id, {})
+    wp_type = job_cfg.get("workplace_permit")
+
+    all_vils = villager_manager.get_all_villagers() if hasattr(villager_manager, "get_all_villagers") else getattr(villager_manager, "villagers", [])
+    assigned_worker_ids = set()
+    target_permit = None
+    if permit_manager and hasattr(permit_manager, "permits"):
+        for p in permit_manager.permits:
+            for wid in getattr(p, "assigned_workers", []):
+                assigned_worker_ids.add(str(wid))
+            if wp_type and getattr(p, "permit_type", "") == wp_type and target_permit is None:
+                target_permit = p
+
+    # Candidates: alive, household member, not assigned to another permit, not holding a dedicated non-farmer job
+    candidates = []
+    for v in all_vils:
+        if not getattr(v, "is_alive", True):
+            continue
+        if not getattr(v, "family_id", None):
+            continue
+        if str(v.id) in assigned_worker_ids:
+            continue
+        if getattr(v, "job", "Farmer") not in ("Farmer", "Peasant", "Unemployed", "Unassigned", None, ""):
+            continue
+        candidates.append(v)
+
+    if not candidates:
+        candidates = [v for v in all_vils if getattr(v, "is_alive", True) and getattr(v, "job", "") != job_id]
+
+    if not candidates:
+        return False, f"No available household member to assign to {job_id}."
+
+    ref_x, ref_y = 0.0, 0.0
+    if target_permit and hasattr(target_permit, "grid_x"):
+        ref_x = (target_permit.grid_x + target_permit.tiles_w / 2.0) * TILE_SIZE
+        ref_y = (target_permit.grid_y + target_permit.tiles_h / 2.0) * TILE_SIZE
+
+    candidates.sort(key=lambda v: math.hypot(ref_x - v.x, ref_y - v.y))
+    chosen = candidates[0]
+
+    chosen.set_job(job_id)
+    job_name = job_cfg.get("name", job_id)
+    chosen.say(f"I am now assigned as {job_name}.", duration=2.5)
+
+    if target_permit and permit_manager:
+        if not hasattr(target_permit, "assigned_workers"):
+            target_permit.assigned_workers = []
+        if str(chosen.id) not in [str(w) for w in target_permit.assigned_workers]:
+            target_permit.assigned_workers.append(chosen.id)
+        target_permit.max_workers = max(getattr(target_permit, "max_workers", 1), len(target_permit.assigned_workers))
+
+    return True, chosen
+
+
+def release_job_worker(job_id, permit_manager, villager_manager):
+    """
+    Universally releases a worker from any job in DEDICATED_JOBS.
+    Restores the worker to normal status (Farmer or Unassigned).
+    Returns (success: bool, villager or error message).
+    """
+    if not villager_manager:
+        return False, "Villager manager unavailable."
+
+    if job_id == "Priest":
+        from game.systems.church_system import ChurchSystem
+        return ChurchSystem.release_priest(permit_manager, villager_manager)
+    elif job_id == "Gravedigger":
+        from game.systems.cemetery_system import CemeterySystem
+        return CemeterySystem.release_gravedigger(permit_manager, villager_manager)
+
+    job_cfg = DEDICATED_JOBS.get(job_id, {})
+    wp_type = job_cfg.get("workplace_permit")
+
+    all_vils = villager_manager.get_all_villagers() if hasattr(villager_manager, "get_all_villagers") else getattr(villager_manager, "villagers", [])
+
+    released_vil = None
+    if wp_type and permit_manager and hasattr(permit_manager, "permits"):
+        for p in permit_manager.permits:
+            if getattr(p, "permit_type", "") == wp_type and getattr(p, "assigned_workers", None):
+                pid = p.assigned_workers.pop()
+                p.max_workers = max(0, getattr(p, "max_workers", 1) - 1)
+                released_vil = next((v for v in all_vils if str(v.id) == str(pid)), None)
+                if released_vil:
+                    break
+
+    if not released_vil:
+        released_vil = next((v for v in all_vils if getattr(v, "job", "") == job_id), None)
+
+    if released_vil:
+        fallback_job = "Unassigned" if job_id == "Farmer" else "Farmer"
+        released_vil.set_job(fallback_job)
+        job_name = job_cfg.get("name", job_id)
+        released_vil.say(f"I have stepped down from being a {job_name}.", duration=2.5)
+        return True, released_vil
+
+    return False, f"No active worker found for {job_id}."

@@ -660,6 +660,136 @@ class AreaPermit:
             return self.overlaps_tiles(building.tiles)
         return self.overlaps_rect(building.grid_x, building.grid_y, building.tiles_w, building.tiles_h)
 
+
+def get_villager_home_position(villager, villager_manager=None, permit_manager=None, furniture_manager=None):
+    """
+    Returns (x, y) coordinates of the villager's household residence in world coordinates.
+    Resolution order:
+    1. Family's assigned housing permit (or villager's assigned permit) center in world coordinates.
+       Always checks the live family.assigned_permit_id from villager_manager first so dynamic household
+       relocation is instantly reflected!
+    2. Furniture: Bed or Storage Chest assigned to this villager or their family.
+    3. Fallback: (villager.x, villager.y).
+    """
+    fam = None
+    if villager_manager and hasattr(villager_manager, "families"):
+        f_id = getattr(villager, "family_id", None)
+        if f_id:
+            fam = next((f for f in villager_manager.families if str(f.id) == str(f_id)), None)
+
+    assigned_pid = getattr(fam, "assigned_permit_id", None) or getattr(villager, "assigned_permit_id", None)
+    if assigned_pid and permit_manager and hasattr(permit_manager, "permits"):
+        p = next((p for p in permit_manager.permits if str(p.id) == str(assigned_pid)), None)
+        if p:
+            if hasattr(p, "tiles") and p.tiles:
+                avg_x = sum(t[0] for t in p.tiles) / float(len(p.tiles))
+                avg_y = sum(t[1] for t in p.tiles) / float(len(p.tiles))
+                return (avg_x + 0.5) * TILE_SIZE, (avg_y + 0.5) * TILE_SIZE
+            else:
+                return (p.grid_x + p.tiles_w / 2.0) * TILE_SIZE, (p.grid_y + p.tiles_h / 2.0) * TILE_SIZE
+
+    # 2. Check assigned furniture (bed or family chest)
+    if furniture_manager:
+        if hasattr(furniture_manager, "get_bed_for_villager"):
+            bed = furniture_manager.get_bed_for_villager(getattr(villager, "id", None))
+            if bed and hasattr(bed, "grid_x"):
+                return (bed.grid_x + 0.5) * TILE_SIZE, (bed.grid_y + 0.5) * TILE_SIZE
+        f_id = getattr(fam, "id", None) or getattr(villager, "family_id", None)
+        if f_id and hasattr(furniture_manager, "get_storage_for_family"):
+            chest = furniture_manager.get_storage_for_family(str(f_id))
+            if chest and hasattr(chest, "grid_x"):
+                return (chest.grid_x + 0.5) * TILE_SIZE, (chest.grid_y + 0.5) * TILE_SIZE
+
+    # 3. Fallback: villager's current live coordinates
+    return getattr(villager, "x", 0.0), getattr(villager, "y", 0.0)
+
+
+def find_closest_unassigned_household_worker(
+    target_x,
+    target_y,
+    permit_manager,
+    villager_manager,
+    target_job="Farmer",
+    furniture_manager=None,
+    exclude_worker_ids=None
+):
+    """
+    Finds and returns the closest unassigned/unemployed household member to (target_x, target_y).
+    Strict criteria:
+    - Must be alive.
+    - Belongs to a household.
+    - Not assigned to any active workplace permit.
+    - Not holding another active dedicated job (Priest, Gravedigger, Blacksmith, Carpenter, etc.).
+    - Adults (age >= 16) prioritized.
+    - Distance measured from household residence (home permit lot or chest/bed),
+      so relocating a household dynamically updates proximity for all subsequent assignments.
+    """
+    if not villager_manager:
+        return None
+
+    all_vils = villager_manager.get_all_villagers() if hasattr(villager_manager, "get_all_villagers") else getattr(villager_manager, "villagers", [])
+
+    assigned_worker_ids = set()
+    if permit_manager and hasattr(permit_manager, "permits"):
+        for p in permit_manager.permits:
+            for wid in getattr(p, "assigned_workers", []):
+                assigned_worker_ids.add(str(wid))
+
+    if exclude_worker_ids:
+        for wid in exclude_worker_ids:
+            assigned_worker_ids.add(str(wid))
+
+    # Phase 1: Strict Candidates (alive, in a household, not assigned to a permit, not holding dedicated other job)
+    candidates = []
+    for v in all_vils:
+        if not getattr(v, "is_alive", True):
+            continue
+        if str(v.id) in assigned_worker_ids:
+            continue
+        if not getattr(v, "family_id", None):
+            continue
+
+        cur_job = getattr(v, "job", "Farmer")
+        # Unassigned / Unemployed / default Farmer / Peasant
+        if cur_job not in ("Farmer", "Unassigned", "Unemployed", "Peasant", None, ""):
+            if cur_job != target_job:
+                continue
+        candidates.append(v)
+
+    # Phase 2: Relax household requirement if no candidates found
+    if not candidates:
+        for v in all_vils:
+            if not getattr(v, "is_alive", True):
+                continue
+            if str(v.id) in assigned_worker_ids:
+                continue
+            cur_job = getattr(v, "job", "Farmer")
+            if cur_job not in ("Farmer", "Unassigned", "Unemployed", "Peasant", None, ""):
+                if cur_job != target_job:
+                    continue
+            candidates.append(v)
+
+    # Phase 3: Final fallback to any alive villager not in assigned_worker_ids
+    if not candidates:
+        candidates = [
+            v for v in all_vils
+            if getattr(v, "is_alive", True) and str(v.id) not in assigned_worker_ids
+        ]
+
+    if not candidates:
+        return None
+
+    def sort_key(v):
+        hx, hy = get_villager_home_position(v, villager_manager, permit_manager, furniture_manager)
+        dist = math.hypot(target_x - hx, target_y - hy)
+        has_family = 1 if getattr(v, "family_id", None) else 0
+        is_adult = 1 if getattr(v, "age", 20) >= 16 else 0
+        return (-has_family, -is_adult, dist, str(v.id))
+
+    candidates.sort(key=sort_key)
+    return candidates[0]
+
+
 class PermitManager:
     def __init__(self):
         self.permits = []
@@ -822,7 +952,11 @@ class PermitManager:
             p.assigned_workers = []
         if villager_id in p.assigned_workers:
             return False, "Worker already assigned"
+        if getattr(p, "permit_type", "") == "church" and len(p.assigned_workers) >= 1:
+            return False, "Church can have exactly one Priest assigned"
         if len(p.assigned_workers) >= getattr(p, "max_workers", 2):
+            if getattr(p, "permit_type", "") == "church":
+                return False, "Church can have exactly one Priest assigned"
             p.max_workers = len(p.assigned_workers) + 1
         p.assigned_workers.append(villager_id)
 
@@ -878,7 +1012,7 @@ class PermitManager:
                             all_v = villager_manager.get_all_villagers()
                             v = next((x for x in all_v if str(x.id) == str(popped_id)), None)
                             if v:
-                                v.set_job("Farmer")
+                                v.set_job("Unassigned")
 
             # 2. Increasing worker count: automatically select closest available household member
             elif delta > 0 and villager_manager and len(p.assigned_workers) < p.max_workers:

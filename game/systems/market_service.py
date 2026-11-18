@@ -59,6 +59,17 @@ class MarketService:
         return MarketPricingSystem.get_base_price(item_name)
 
     @classmethod
+    def get_buying_price(cls, item_name, market=None):
+        """
+        Membaca harga beli (buying price) pasar saat membeli barang dari penduduk/household.
+        Terpisah dari selling price. Default: 50% dari selling price (minimal 1 copper) atau dikonfigurasi di market.buying_prices.
+        """
+        if market and hasattr(market, "buying_prices") and item_name in market.buying_prices:
+            return max(1, int(market.buying_prices[item_name]))
+        selling = cls.get_item_price(item_name, market)
+        return max(1, int(selling * 0.5))
+
+    @classmethod
     def get_market_stock(cls, item_name, market):
         """Mengecek ketersediaan stok barang di pasar"""
         if not market or not hasattr(market, "inventory"):

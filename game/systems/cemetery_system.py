@@ -71,6 +71,93 @@ class CemeterySystem:
         all_vils = villager_manager.get_all_villagers() if hasattr(villager_manager, "get_all_villagers") else getattr(villager_manager, "villagers", [])
         return [v for v in all_vils if getattr(v, "job", "") == "Gravedigger" and getattr(v, "is_alive", True)]
 
+    @classmethod
+    def assign_gravedigger(cls, permit_manager, villager_manager, target_permit=None):
+        """
+        Assigns the closest available household member without an active job as Gravedigger.
+        Changes their title to Gravedigger and registers them to the cemetery permit.
+        Returns (success: bool, villager or error message).
+        """
+        if not villager_manager:
+            return False, "Villager manager unavailable."
+
+        cemetery = target_permit or cls.get_cemetery_permit(permit_manager)
+        all_vils = villager_manager.get_all_villagers() if hasattr(villager_manager, "get_all_villagers") else getattr(villager_manager, "villagers", [])
+
+        # Collect occupied worker IDs across all permits
+        assigned_worker_ids = set()
+        if permit_manager and hasattr(permit_manager, "permits"):
+            for p in permit_manager.permits:
+                for wid in getattr(p, "assigned_workers", []):
+                    assigned_worker_ids.add(str(wid))
+
+        # Eligible candidates: alive, part of a household, not assigned to another permit, not holding a dedicated non-farmer job
+        candidates = []
+        for v in all_vils:
+            if not getattr(v, "is_alive", True):
+                continue
+            if not getattr(v, "family_id", None):
+                continue
+            if str(v.id) in assigned_worker_ids:
+                continue
+            if getattr(v, "job", "Farmer") not in ("Farmer", "Peasant", "Unemployed", "Unassigned", None, ""):
+                continue
+            candidates.append(v)
+
+        if not candidates:
+            candidates = [v for v in all_vils if getattr(v, "is_alive", True) and getattr(v, "job", "") != "Gravedigger"]
+
+        if not candidates:
+            return False, "No available household member without an active job."
+
+        # Reference location: center of cemetery permit or origin
+        ref_x, ref_y = 0.0, 0.0
+        if cemetery and hasattr(cemetery, "grid_x"):
+            ref_x = (cemetery.grid_x + cemetery.tiles_w / 2.0) * TILE_SIZE
+            ref_y = (cemetery.grid_y + cemetery.tiles_h / 2.0) * TILE_SIZE
+
+        candidates.sort(key=lambda v: math.hypot(ref_x - v.x, ref_y - v.y))
+        chosen = candidates[0]
+
+        chosen.set_job("Gravedigger")
+        chosen.say("I have taken up the Gravedigger duty.", duration=2.5)
+
+        if cemetery:
+            if not hasattr(cemetery, "assigned_workers"):
+                cemetery.assigned_workers = []
+            if str(chosen.id) not in [str(w) for w in cemetery.assigned_workers]:
+                cemetery.assigned_workers.append(chosen.id)
+            cemetery.max_workers = max(getattr(cemetery, "max_workers", 1), len(cemetery.assigned_workers))
+
+        return True, chosen
+
+    @classmethod
+    def release_gravedigger(cls, permit_manager, villager_manager, target_permit=None):
+        """
+        Releases an assigned Gravedigger, restoring them to normal household member status.
+        """
+        if not villager_manager:
+            return False, "Villager manager unavailable."
+
+        cemetery = target_permit or cls.get_cemetery_permit(permit_manager)
+        all_vils = villager_manager.get_all_villagers() if hasattr(villager_manager, "get_all_villagers") else getattr(villager_manager, "villagers", [])
+
+        released_vil = None
+        if cemetery and getattr(cemetery, "assigned_workers", None):
+            pid = cemetery.assigned_workers.pop()
+            cemetery.max_workers = max(0, getattr(cemetery, "max_workers", 1) - 1)
+            released_vil = next((v for v in all_vils if str(v.id) == str(pid)), None)
+
+        if not released_vil:
+            released_vil = next((v for v in all_vils if getattr(v, "job", "") == "Gravedigger"), None)
+
+        if released_vil:
+            released_vil.set_job("Farmer")
+            released_vil.say("I have stepped down from being a Gravedigger.", duration=2.5)
+            return True, released_vil
+
+        return False, "No active Gravedigger found."
+
     # -------------------------------------------------------------------------
     # Grave Lifecycle (30-day reuse, corpse history, 5 tombstone models)
     # -------------------------------------------------------------------------
@@ -219,11 +306,12 @@ class CemeterySystem:
     # -------------------------------------------------------------------------
 
     @classmethod
-    def commission_burial(cls, deceased_villager, villager_manager, furniture_manager=None, stockpile_manager=None, resources=None):
+    def commission_burial(cls, deceased_villager, villager_manager, furniture_manager=None, stockpile_manager=None, resources=None, gravedigger=None):
         """
         Processes burial arrangement for a deceased villager:
         - If surviving household members exist: Burial Representative retrieves up to 1 Silver
-          from household chest and pays Gravedigger.
+          from household chest and pays Gravedigger directly.
+          If household has 1 Gold but no Silver, exchanges Gold to smaller denominations (Requirement 5).
         - If deceased has NO surviving household members: Gravedigger retrieves burial fee
           (up to 1 Silver = 10 Copper) directly from Landlord storage/resources.
         """
@@ -244,20 +332,36 @@ class CemeterySystem:
             wallet = {"Copper": 0, "Silver": 0, "Gold": 0}
             source = None
 
-            if chest and hasattr(chest, "currency"):
+            if chest and hasattr(chest, "currency") and isinstance(chest.currency, dict):
                 wallet = normalize_wallet(chest.currency)
                 source = chest.currency
+            elif chest and hasattr(chest, "inventory") and isinstance(chest.inventory, dict):
+                for k in ("Copper", "Silver", "Gold"):
+                    wallet[k] = chest.inventory.get(k, 0)
+                source = chest.inventory
             else:
                 wallet = normalize_wallet(getattr(rep, "currency", {}))
                 source = getattr(rep, "currency", None)
 
+            # Currency exchange: If household has 1 Gold but no Silver/Copper, exchange Gold (Requirement 5)
+            if wallet.get("Silver", 0) <= 0 and wallet.get("Copper", 0) <= 0 and wallet.get("Gold", 0) > 0:
+                wallet["Gold"] -= 1
+                wallet["Silver"] += 10
+                if source is not None:
+                    source["Gold"] = wallet["Gold"]
+                    source["Silver"] = wallet["Silver"]
+
             avail_copper = to_copper(wallet)
             fee_paid_copper = min(max_fee_copper, avail_copper)
             if fee_paid_copper > 0 and source is not None:
-                success, transferred, _ = execute_currency_transfer(wallet, fee_paid_copper)
-                if success:
-                    source.clear()
-                    source.update(wallet)
+                # Deduct payment from household source
+                remaining_copper = max(0, avail_copper - fee_paid_copper)
+                new_w = from_copper(remaining_copper)
+                for d in ("Copper", "Silver", "Gold"):
+                    source[d] = new_w.get(d, 0)
+                    if source[d] <= 0 and d in source:
+                        del source[d]
+
             rep.say(f"Commissioned burial for {deceased_villager.first_name} (Paid {fee_paid_copper}c).", duration=2.5)
         else:
             # Fallback: No surviving members -> Gravedigger retrieves fee from Landlord storage
@@ -269,6 +373,25 @@ class CemeterySystem:
                 # Deduct from landlord resources
                 if fee_paid_copper > 0:
                     resources["Copper"] = max(0, resources.get("Copper", 0) - fee_paid_copper)
+
+        # Deposit payment directly to Gravedigger (Requirement 5 & 6)
+        target_gd = gravedigger
+        if not target_gd and villager_manager:
+            all_v = villager_manager.get_all_villagers()
+            target_gd = next((v for v in all_v if getattr(v, "job", "") == "Gravedigger" and getattr(v, "is_alive", True)), None)
+
+        if target_gd and fee_paid_copper > 0:
+            if not hasattr(target_gd, "currency") or not isinstance(target_gd.currency, dict):
+                target_gd.currency = {"Copper": 0, "Silver": 0, "Gold": 0}
+            target_gd.currency["Copper"] = target_gd.currency.get("Copper", 0) + fee_paid_copper
+            if hasattr(target_gd, "inventory") and isinstance(target_gd.inventory, dict):
+                target_gd.inventory["Copper"] = target_gd.inventory.get("Copper", 0) + fee_paid_copper
+
+        try:
+            from game.systems.wealth_system import VillageWealthSystem
+            VillageWealthSystem.mark_dirty()
+        except ImportError:
+            pass
 
         commission = {
             "corpse_id": str(deceased_villager.id),

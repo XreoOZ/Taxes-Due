@@ -22,6 +22,7 @@ class ScheduleManager:
         self.default_schedule = list(DEFAULT_JOB_SCHEDULE)
         self.prayer_start_hour = 12
         self.prayer_end_hour = 14
+        self.prayer_override_all = False
 
         # Schedules dictionary: job_id -> day_name -> 24-hour list
         self.job_schedules = {}
@@ -57,6 +58,7 @@ class ScheduleManager:
         e = max(s + 1, min(24, int(end_hour)))
         self.prayer_start_hour = s
         self.prayer_end_hour = e
+        self.prayer_override_all = True
         self._sync_priest_prayer_block()
 
     def get_schedule(self, job_id, day="Monday"):
@@ -72,11 +74,10 @@ class ScheduleManager:
     def get_current_activity(self, job_id, current_hour, day="Monday"):
         """
         Returns the schedule activity for a job at the specified hour and day.
-        Only the Prayer Time block is forced onto other jobs; outside Prayer Time,
-        each job retains its own independently configurable schedule.
+        Priest prayer hours are enforced for Priest and, when decreed by the landlord/priest, across all jobs.
         """
         h = int(current_hour) % 24
-        if self.prayer_start_hour <= h < self.prayer_end_hour:
+        if (job_id == "Priest" or getattr(self, "prayer_override_all", False)) and self.prayer_start_hour <= h < self.prayer_end_hour:
             return SCHEDULE_PRAYER
         sched = self.get_schedule(job_id, day)
         return sched[h]

@@ -661,7 +661,8 @@ BUILDING_TYPES = {
     },
     "market": {
         "id": "market",
-        "name": "Market Stall",
+        "name": "Market",
+        "title": "Market Stall",
         "category": "Market Stall",
         "category_id": "market",
         "desc": "Medieval marketplace stall for trading food, goods, and currency. Footprint: 3x2 tiles.",

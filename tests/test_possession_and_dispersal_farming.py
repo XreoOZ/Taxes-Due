@@ -67,6 +67,8 @@ class TestPossessionAndDispersalFarming(unittest.TestCase):
         v.inventory["Sickle"] = 1
         v.inventory["Hoe"] = 2  # 1 excess hoe
 
+        v.set_job("Farmer")
+
         # Farm permit with unwatered & untilled tiles (no harvestable tiles)
         farm_p = self.permit_manager.add_permit("Farm", "farm", [(0, 0), (0, 1), (1, 0), (1, 1)])
         farm_p.set_crop("potato")

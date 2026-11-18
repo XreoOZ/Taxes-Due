@@ -36,24 +36,27 @@ class TestAgent1AICoreNeedsJobsAndDeathRecovery(unittest.TestCase):
     def test_01_job_assignment_updates_profession_and_title_immediately(self):
         """1. Assigning a job immediately changes the individual's profession and title."""
         v = Villager("vil_1", "Arthur", "Mason", "Male", 35, 2, "Father", "fam_mason")
+        self.assertEqual(v.job, "Unassigned")
+
+        v.set_job("Farmer")
         self.assertEqual(v.job, "Farmer")
         self.assertEqual(v.profession, "Farmer")
-        self.assertEqual(v.title, "Peasant Farmer")
+        self.assertEqual(v.title, "Farmer")
 
         v.set_job("Builder")
         self.assertEqual(v.job, "Builder")
         self.assertEqual(v.profession, "Builder")
-        self.assertEqual(v.title, "Village Builder")
+        self.assertEqual(v.title, "Builder")
 
         v.set_job("Gravedigger")
         self.assertEqual(v.job, "Gravedigger")
         self.assertEqual(v.profession, "Gravedigger")
-        self.assertEqual(v.title, "Cemetery Gravedigger")
+        self.assertEqual(v.title, "Gravedigger")
 
         v.set_job("Priest")
         self.assertEqual(v.job, "Priest")
         self.assertEqual(v.profession, "Priest")
-        self.assertEqual(v.title, "Village Priest")
+        self.assertEqual(v.title, "Priest")
 
     def test_02_household_members_can_have_different_jobs(self):
         """2. Members of the same household can hold different dedicated professions without affecting ownership."""

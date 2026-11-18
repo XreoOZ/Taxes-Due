@@ -978,6 +978,8 @@ class Servant:
         if not hasattr(self, "route_retry_count"):
             self.route_retry_count = 0
 
+
+
         # Doorway passage yield when door_waypoints is explicitly configured
         if getattr(self, "door_waypoints", None) and building_manager and all_servants:
             for other_s in all_servants:

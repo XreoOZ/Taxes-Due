@@ -151,6 +151,8 @@ class RaportUI:
         self.church_tax_c_inc_rect = None
         self.priest_inc_btn_rect = None
         self.priest_dec_btn_rect = None
+        self.job_inc_btn_rects = {}
+        self.job_dec_btn_rects = {}
 
         # Village Wealth State
         self.show_wealth_detail_dialog = False
@@ -1051,6 +1053,22 @@ class RaportUI:
                                     ))
                                     permit_manager.assign_worker_to_permit(avail_permits[0].id, worker.id)
                         return f"assign_worker_{v_id}"
+
+            # Check Universal Job Worker +/- button clicks across ALL jobs (both View 1 and View 2)
+            from game.systems.job_tool_system import assign_job_worker, release_job_worker
+            for j_id, rect in list(getattr(self, "job_dec_btn_rects", {}).items()):
+                if rect and rect.collidepoint(mouse_pos):
+                    success, res = release_job_worker(j_id, permit_manager, villager_manager)
+                    if j_id == "Priest":
+                        return "priest_worker_dec"
+                    return f"job_worker_dec_{j_id}"
+
+            for j_id, rect in list(getattr(self, "job_inc_btn_rects", {}).items()):
+                if rect and rect.collidepoint(mouse_pos):
+                    success, res = assign_job_worker(j_id, permit_manager, villager_manager)
+                    if j_id == "Priest":
+                        return "priest_worker_inc"
+                    return f"job_worker_inc_{j_id}"
 
             # Check Priest worker +/- button clicks (both View 1 and View 2)
             if self.priest_inc_btn_rect and self.priest_inc_btn_rect.collidepoint(mouse_pos):
@@ -2950,6 +2968,10 @@ class RaportUI:
             y_cur = cy + 46
             self.job_select_btn_rects = {}
             self.job_schedule_btn_rects = {}
+            self.job_inc_btn_rects = {}
+            self.job_dec_btn_rects = {}
+            self.priest_inc_btn_rect = None
+            self.priest_dec_btn_rect = None
 
             all_vils = villager_manager.get_all_villagers() if villager_manager else []
 
@@ -2995,22 +3017,30 @@ class RaportUI:
                     btn_h = 30
                     btn_y = card_rect.y + 14
 
-                    # Priest Worker Count adjustment: [- Number of Workers +]
-                    if job_id == "Priest":
+                    # Universal Worker Count adjustment for ALL jobs: [- Number of Workers +]
+                    if job_id != "Unassigned":
                         p_ctrl_x = card_rect.right - 14 - (btn_w * 2 + 10) - 130
-                        self.priest_dec_btn_rect = pygame.Rect(p_ctrl_x, btn_y + 4, 22, 22)
-                        d_hov = self.priest_dec_btn_rect.collidepoint(mouse_pos)
-                        pygame.draw.rect(surface, (71, 85, 105) if d_hov else (51, 65, 85), self.priest_dec_btn_rect, border_radius=4)
-                        surface.blit(self.font_badge.render("-", True, (255, 255, 255)), (self.priest_dec_btn_rect.x + 7, self.priest_dec_btn_rect.y + 3))
+                        dec_rect = pygame.Rect(p_ctrl_x, btn_y + 4, 22, 22)
+                        self.job_dec_btn_rects[job_id] = dec_rect
+                        d_hov = dec_rect.collidepoint(mouse_pos)
+                        pygame.draw.rect(surface, (71, 85, 105) if d_hov else (51, 65, 85), dec_rect, border_radius=4)
+                        surface.blit(self.font_badge.render("-", True, (255, 255, 255)), (dec_rect.x + 7, dec_rect.y + 3))
 
                         cnt_str = f"{len(job_vils)} Workers"
                         cnt_s = self.font_badge.render(cnt_str, True, (241, 245, 249))
                         surface.blit(cnt_s, (p_ctrl_x + 28, btn_y + 8))
 
-                        self.priest_inc_btn_rect = pygame.Rect(p_ctrl_x + 94, btn_y + 4, 22, 22)
-                        i_hov = self.priest_inc_btn_rect.collidepoint(mouse_pos)
-                        pygame.draw.rect(surface, (168, 85, 247) if i_hov else (126, 34, 206), self.priest_inc_btn_rect, border_radius=4)
-                        surface.blit(self.font_badge.render("+", True, (255, 255, 255)), (self.priest_inc_btn_rect.x + 6, self.priest_inc_btn_rect.y + 3))
+                        inc_rect = pygame.Rect(p_ctrl_x + 94, btn_y + 4, 22, 22)
+                        self.job_inc_btn_rects[job_id] = inc_rect
+                        i_hov = inc_rect.collidepoint(mouse_pos)
+                        job_col = job_cfg.get("color", (168, 85, 247))
+                        btn_col = (min(255, job_col[0] + 40), min(255, job_col[1] + 40), min(255, job_col[2] + 40)) if i_hov else job_col
+                        pygame.draw.rect(surface, btn_col, inc_rect, border_radius=4)
+                        surface.blit(self.font_badge.render("+", True, (255, 255, 255)), (inc_rect.x + 6, inc_rect.y + 3))
+
+                        if job_id == "Priest":
+                            self.priest_dec_btn_rect = dec_rect
+                            self.priest_inc_btn_rect = inc_rect
 
                     # 1. View Workers Button
                     vw_rect = pygame.Rect(card_rect.right - 14 - (btn_w * 2 + 10), btn_y, btn_w, btn_h)
@@ -3075,21 +3105,29 @@ class RaportUI:
             stat_txt = f"Total: {len(job_vils)} Workers   |   Assigned: {len(assigned_vils)}   |   Unassigned / Idle: {unassigned_count}"
             surface.blit(self.font_sub.render(stat_txt, True, (56, 189, 248)), (banner_rect.x + 14, banner_rect.y + 8))
 
-            if self.selected_job_id == "Priest":
+            if self.selected_job_id and self.selected_job_id != "Unassigned":
                 b_ctrl_x = banner_rect.right - 145
-                self.priest_dec_btn_rect = pygame.Rect(b_ctrl_x, banner_rect.y + 5, 22, 22)
-                d_hov = self.priest_dec_btn_rect.collidepoint(mouse_pos)
-                pygame.draw.rect(surface, (71, 85, 105) if d_hov else (51, 65, 85), self.priest_dec_btn_rect, border_radius=4)
-                surface.blit(self.font_badge.render("-", True, (255, 255, 255)), (self.priest_dec_btn_rect.x + 7, self.priest_dec_btn_rect.y + 3))
+                dec_rect = pygame.Rect(b_ctrl_x, banner_rect.y + 5, 22, 22)
+                self.job_dec_btn_rects[self.selected_job_id] = dec_rect
+                d_hov = dec_rect.collidepoint(mouse_pos)
+                pygame.draw.rect(surface, (71, 85, 105) if d_hov else (51, 65, 85), dec_rect, border_radius=4)
+                surface.blit(self.font_badge.render("-", True, (255, 255, 255)), (dec_rect.x + 7, dec_rect.y + 3))
 
-                cnt_str = f"{len(job_vils)} Priests"
+                cnt_str = f"{len(job_vils)} Workers"
                 cnt_s = self.font_badge.render(cnt_str, True, (241, 245, 249))
                 surface.blit(cnt_s, (b_ctrl_x + 28, banner_rect.y + 8))
 
-                self.priest_inc_btn_rect = pygame.Rect(b_ctrl_x + 94, banner_rect.y + 5, 22, 22)
-                i_hov = self.priest_inc_btn_rect.collidepoint(mouse_pos)
-                pygame.draw.rect(surface, (168, 85, 247) if i_hov else (126, 34, 206), self.priest_inc_btn_rect, border_radius=4)
-                surface.blit(self.font_badge.render("+", True, (255, 255, 255)), (self.priest_inc_btn_rect.x + 6, self.priest_inc_btn_rect.y + 3))
+                inc_rect = pygame.Rect(b_ctrl_x + 94, banner_rect.y + 5, 22, 22)
+                self.job_inc_btn_rects[self.selected_job_id] = inc_rect
+                i_hov = inc_rect.collidepoint(mouse_pos)
+                job_col = job_cfg.get("color", (168, 85, 247))
+                btn_col = (min(255, job_col[0] + 40), min(255, job_col[1] + 40), min(255, job_col[2] + 40)) if i_hov else job_col
+                pygame.draw.rect(surface, btn_col, inc_rect, border_radius=4)
+                surface.blit(self.font_badge.render("+", True, (255, 255, 255)), (inc_rect.x + 6, inc_rect.y + 3))
+
+                if self.selected_job_id == "Priest":
+                    self.priest_dec_btn_rect = dec_rect
+                    self.priest_inc_btn_rect = inc_rect
 
             y_cur = banner_y + 40
             self.worker_assign_btn_rects = {}

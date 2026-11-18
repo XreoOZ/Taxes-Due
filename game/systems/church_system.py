@@ -161,9 +161,9 @@ class ChurchSystem:
 
         if released_vil:
             if hasattr(released_vil, "set_job"):
-                released_vil.set_job("Farmer")
+                released_vil.set_job("Unassigned")
             else:
-                released_vil.job = "Farmer"
+                released_vil.job = "Unassigned"
                 released_vil.title = "Peasant Farmer"
             released_vil.say("I have stepped down from the priesthood.", duration=2.5)
             return True, released_vil
