@@ -16,16 +16,18 @@ def canonical_item_name(raw_name):
     """
     Returns the canonical display name for an item or resource without hardcoding logic.
     Uses existing TOOL_TYPES, CROP_TYPES, DEFAULT_RESOURCES, and CURRENCY definitions.
+    Strips WIP tags to ensure only clean actual item names appear.
     """
     if not raw_name or not isinstance(raw_name, str):
         return ""
-    name_str = raw_name.strip()
+    name_str = raw_name.replace("(WIP)", "").replace("(wip)", "").strip()
     name_lower = name_str.lower()
 
     # 1. Check Tool Types
     for tool_id, tool_data in TOOL_TYPES.items():
-        if name_lower in (tool_id.lower(), tool_data.get("name", "").lower()):
-            return tool_data.get("name", tool_id)
+        t_name = tool_data.get("name", tool_id).replace("(WIP)", "").replace("(wip)", "").strip()
+        if name_lower in (tool_id.lower(), t_name.lower()):
+            return t_name
 
     # Known tool aliases in codebase (legacy/multilingual)
     if name_lower == "cangkul":
@@ -37,8 +39,9 @@ def canonical_item_name(raw_name):
 
     # 2. Check Crop Types
     for crop_id, crop_data in CROP_TYPES.items():
-        if name_lower in (crop_id.lower(), crop_data.get("name", "").lower()):
-            return crop_data.get("name", crop_id.capitalize())
+        c_name = crop_data.get("name", crop_id.capitalize()).replace("(WIP)", "").replace("(wip)", "").strip()
+        if name_lower in (crop_id.lower(), c_name.lower()):
+            return c_name
 
     # 3. Check Currency Denominations
     c_denom = canonical_denomination(name_str)

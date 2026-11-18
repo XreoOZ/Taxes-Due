@@ -484,18 +484,22 @@ def load_from_slot(slot_id, day_cycle, resources, player, permit_manager, buildi
         ps.household_records = restored
 
     # 11. Recalculate ID counters to prevent future ID collisions
-    max_p = max([int(p.id.split("_")[-1]) for p in permit_manager.permits if "_" in p.id and p.id.split("_")[-1].isdigit()] + [0])
-    permit_manager.permit_counter = max_p + 1
+    max_p = max([int(str(p.id).split("_")[-1]) for p in permit_manager.permits if "_" in str(p.id) and str(p.id).split("_")[-1].isdigit()] + [0])
+    if hasattr(permit_manager, "permit_counter"):
+        permit_manager.permit_counter = max_p + 1
 
-    max_f = max([int(f.id.split("_")[-1]) for f in furniture_manager.furnitures if "_" in f.id and f.id.split("_")[-1].isdigit()] + [0])
-    furniture_manager.counter = max_f + 1
+    max_f = max([int(str(f.id).split("_")[-1]) for f in furniture_manager.furnitures if "_" in str(f.id) and str(f.id).split("_")[-1].isdigit()] + [0])
+    if hasattr(furniture_manager, "counter"):
+        furniture_manager.counter = max_f + 1
 
-    max_fam = max([int(f.id.split("_")[-1]) for f in villager_manager.families if "_" in f.id and f.id.split("_")[-1].isdigit()] + [0])
-    villager_manager.family_counter = max_fam + 1
+    max_fam = max([int(str(f.id).split("_")[-1]) for f in villager_manager.families if "_" in str(f.id) and str(f.id).split("_")[-1].isdigit()] + [0])
+    if hasattr(villager_manager, "family_counter"):
+        villager_manager.family_counter = max_fam + 1
 
-    all_vils = villager_manager.get_all_villagers()
-    max_vil = max([int(v.id.split("_")[-1]) for v in all_vils if "_" in v.id and v.id.split("_")[-1].isdigit()] + [0])
-    villager_manager.villager_counter = max_vil + 1
+    all_vils = villager_manager.get_all_villagers() if hasattr(villager_manager, "get_all_villagers") else []
+    max_vil = max([int(str(v.id).split("_")[-1]) for v in all_vils if "_" in str(v.id) and str(v.id).split("_")[-1].isdigit()] + [0])
+    if hasattr(villager_manager, "villager_counter"):
+        villager_manager.villager_counter = max_vil + 1
 
     # 12. Refresh spatial caches & Reset Global Path Registry so stale route reservations from prior session are cleared
     if hasattr(building_manager, "rebuild_tile_cache"):

@@ -147,5 +147,43 @@ class TestUIGrantModalResponsive(unittest.TestCase):
         self.assertLess(self.ui.grant_confirm_btn_rect.bottom, 720)
         self.assertGreater(self.ui.grant_confirm_btn_rect.top, 0)
 
+    def test_07_issue_market_permit_button_exists_and_clickable(self):
+        """7. Area Permits tab includes '+ Market Permit' button and starts placing market permit."""
+        from game.world.permits import PermitManager
+        from game.buildings.buildings import BuildingManager
+
+        pm = PermitManager()
+        bm = BuildingManager()
+
+        surf = pygame.Surface((1280, 720))
+        self.ui._init_fonts()
+        self.ui.active_tab = 1  # Area Permits tab
+        self.ui.show_grant_dialog = False
+        self.ui.show_grant_confirm = False
+        self.ui._draw_permit_tab(surf, 210, 110, pm, bm)
+
+        # 1. Check all 5 permit buttons exist
+        expected_permits = ["housing", "storage", "market", "farm", "landlord_private"]
+        for p_key in expected_permits:
+            self.assertIn(p_key, self.ui.permit_btn_rects, f"Missing permit button: {p_key}")
+            self.assertIsNotNone(self.ui.permit_btn_rects[p_key])
+
+        # 2. Market permit button specifically
+        mkt_btn = self.ui.permit_btn_rects["market"]
+        self.assertGreater(mkt_btn.width, 100)
+
+        # Verify buttons do not overlap
+        btn_list = list(self.ui.permit_btn_rects.values())
+        for i in range(len(btn_list)):
+            for j in range(i + 1, len(btn_list)):
+                self.assertFalse(btn_list[i].colliderect(btn_list[j]), f"Permit buttons {i} and {j} overlap!")
+
+        # 3. Simulate clicking '+ Market Permit'
+        ev_click = pygame.event.Event(pygame.MOUSEBUTTONDOWN, {"button": 1, "pos": mkt_btn.center})
+        action = self.ui.handle_event(ev_click, bm, pm, self.resources)
+        self.assertEqual(action, "start_placing_permit_market")
+        self.assertEqual(self.ui.placing_permit_type, "market")
+        self.assertFalse(self.ui.is_open, "Raport should close when starting permit placement")
+
 if __name__ == "__main__":
     unittest.main()

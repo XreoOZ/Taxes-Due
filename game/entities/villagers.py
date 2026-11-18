@@ -54,7 +54,10 @@ from game.config import (
     COLOR_STATUS_ALIVE,
     COLOR_STATUS_DECEASED,
     COLOR_CORPSE_BODY,
-    COLOR_CORPSE_OUTLINE
+    COLOR_CORPSE_OUTLINE,
+    is_food_item,
+    is_water_item,
+    get_item_category
 )
 from game.world.pathfinding import GlobalPathRegistry
 from game.systems.market_interface import request_market_food_purchase
@@ -583,26 +586,26 @@ class Villager:
                     else:
                         self.task = "SEEKING_FOOD"
 
-        # Eksekusi Pencarian Makanan (SEEKING_FOOD)
+        # Eksekusi Pencarian Makanan (SEEKING_FOOD) - Category-Based, Zero Hardcoding
         if self.task == "SEEKING_FOOD":
             self.active_tool = None
-            # 1. Dari inventory pribadi
-            inv_food = next((it for it in ("Potato", "Food", "Bread") if self.inventory.get(it, 0) > 0), None)
+            # 1. Dari inventory pribadi (makanan yang dibawa di saku)
+            inv_food = next((it for it, c in self.inventory.items() if is_food_item(it) and c > 0), None)
             if inv_food:
                 self.inventory[inv_food] -= 1
                 if self.inventory[inv_food] <= 0:
                     del self.inventory[inv_food]
                 self.hunger = min(AI_NEED_MAX, self.hunger + AI_NEED_FOOD_RESTORE)
                 self.daily_food_consumed += 1
-                self.say("Ate food from personal inventory!", duration=2.5)
+                self.say(f"Ate {inv_food} from personal inventory!", duration=2.5)
                 self._resume_or_idle_after_need()
                 return
 
-            # 2. Dari peti penyimpanan keluarga
+            # 2. Dari peti penyimpanan keluarga (household_storage chest)
             chest = furniture_manager.get_storage_for_family(self.family_id) if furniture_manager else None
             chest_food = None
-            if chest and hasattr(chest, "inventory"):
-                chest_food = next((it for it in ("Potato", "Food", "Bread") if chest.inventory.get(it, 0) > 0), None)
+            if chest and hasattr(chest, "inventory") and isinstance(chest.inventory, dict):
+                chest_food = next((it for it, c in chest.inventory.items() if is_food_item(it) and c > 0), None)
 
             if chest and chest_food:
                 cx, cy = chest.get_world_pos(TILE_SIZE)
@@ -612,17 +615,17 @@ class Villager:
                     if taken > 0:
                         self.hunger = min(AI_NEED_MAX, self.hunger + AI_NEED_FOOD_RESTORE)
                         self.daily_food_consumed += 1
-                        self.say("Ate hearty meal from household chest!", duration=2.5)
+                        self.say(f"Ate hearty meal of {chest_food} from household chest!", duration=2.5)
                         self._resume_or_idle_after_need()
                 return
 
-            # 3. Dari tumpukan di tanah milik keluarga
+            # 3. Dari tumpukan di tanah milik keluarga (ground stockpile stack)
             ground_food = None
             if stockpile_manager:
                 fam_str = str(self.family_id)
                 for s in getattr(stockpile_manager, "stacks", []):
                     if getattr(s, "owner_type", None) == "villager" and str(getattr(s, "owner_id", "")) == fam_str:
-                        if s.resource_type in ("Potato", "Food", "Bread") and s.amount > 0:
+                        if is_food_item(getattr(s, "resource_type", "")) and getattr(s, "amount", 0) > 0:
                             ground_food = s
                             break
 
@@ -631,12 +634,13 @@ class Villager:
                 gy_pos = (ground_food.grid_y + 0.5) * TILE_SIZE
                 arrived = self._move_towards(gx_pos, gy_pos, dt, arrival_dist=LOOSE_ITEM_ARRIVAL_DIST, all_entities=all_entities, player=player, building_manager=building_manager, furniture_manager=furniture_manager, exclusive_target=False)
                 if arrived:
+                    f_name = ground_food.resource_type
                     ground_food.amount -= 1
                     if ground_food.amount <= 0:
                         stockpile_manager.stacks = [st for st in stockpile_manager.stacks if st != ground_food]
                     self.hunger = min(AI_NEED_MAX, self.hunger + AI_NEED_FOOD_RESTORE)
                     self.daily_food_consumed += 1
-                    self.say("Ate food from family stockpile!", duration=2.5)
+                    self.say(f"Ate {f_name} from family stockpile!", duration=2.5)
                     self._resume_or_idle_after_need()
                 return
 
@@ -658,10 +662,11 @@ class Villager:
         if self.task == "SEEKING_WATER":
             self.active_tool = None
             # 1. Dari inventory pribadi
-            if self.inventory.get("Water", 0) > 0:
-                self.inventory["Water"] -= 1
-                if self.inventory["Water"] <= 0:
-                    del self.inventory["Water"]
+            inv_water = next((it for it, c in self.inventory.items() if is_water_item(it) and c > 0), None)
+            if inv_water:
+                self.inventory[inv_water] -= 1
+                if self.inventory[inv_water] <= 0:
+                    del self.inventory[inv_water]
                 self.thirst = min(AI_NEED_MAX, self.thirst + AI_NEED_WATER_RESTORE)
                 self.daily_water_consumed += 1
                 self.say("Drank water from personal supply!", duration=2.5)
@@ -670,16 +675,42 @@ class Villager:
 
             # 2. Dari peti penyimpanan keluarga
             chest = furniture_manager.get_storage_for_family(self.family_id) if furniture_manager else None
-            if chest and hasattr(chest, "inventory") and chest.inventory.get("Water", 0) > 0:
+            chest_water = None
+            if chest and hasattr(chest, "inventory") and isinstance(chest.inventory, dict):
+                chest_water = next((it for it, c in chest.inventory.items() if is_water_item(it) and c > 0), None)
+            if chest and chest_water:
                 cx, cy = chest.get_world_pos(TILE_SIZE)
                 arrived = self._move_towards(cx, cy, dt, arrival_dist=CHEST_INTERACTION_RADIUS, all_entities=all_entities, player=player, building_manager=building_manager, furniture_manager=furniture_manager, exclusive_target=False)
                 if arrived:
-                    taken = chest.take_item("Water", 1)
+                    taken = chest.take_item(chest_water, 1)
                     if taken > 0:
                         self.thirst = min(AI_NEED_MAX, self.thirst + AI_NEED_WATER_RESTORE)
                         self.daily_water_consumed += 1
                         self.say("Drank fresh water from storage chest!", duration=2.5)
                         self._resume_or_idle_after_need()
+                return
+
+            # 2.5. Dari stockpile tanah milik keluarga
+            ground_water = None
+            if stockpile_manager:
+                fam_str = str(self.family_id)
+                for s in getattr(stockpile_manager, "stacks", []):
+                    if getattr(s, "owner_type", None) == "villager" and str(getattr(s, "owner_id", "")) == fam_str:
+                        if is_water_item(getattr(s, "resource_type", "")) and getattr(s, "amount", 0) > 0:
+                            ground_water = s
+                            break
+            if ground_water:
+                gx_pos = (ground_water.grid_x + 0.5) * TILE_SIZE
+                gy_pos = (ground_water.grid_y + 0.5) * TILE_SIZE
+                arrived = self._move_towards(gx_pos, gy_pos, dt, arrival_dist=LOOSE_ITEM_ARRIVAL_DIST, all_entities=all_entities, player=player, building_manager=building_manager, furniture_manager=furniture_manager, exclusive_target=False)
+                if arrived:
+                    ground_water.amount -= 1
+                    if ground_water.amount <= 0:
+                        stockpile_manager.stacks = [st for st in stockpile_manager.stacks if st != ground_water]
+                    self.thirst = min(AI_NEED_MAX, self.thirst + AI_NEED_WATER_RESTORE)
+                    self.daily_water_consumed += 1
+                    self.say("Drank water from family stockpile!", duration=2.5)
+                    self._resume_or_idle_after_need()
                 return
 
             # 3. Dari sumur desa (jika air di rumah habis, ambil minum di sumur)
@@ -905,10 +936,10 @@ class Villager:
         # -------------------------------------------------------------
         # Rutinitas 1.65: Household Water Production & Storage Execution (Agent 1)
         # -------------------------------------------------------------
-        if sched_activity != "SLEEP" and furniture_manager:
+        if sched_activity != "SLEEP" and (furniture_manager or stockpile_manager):
             # A. Jika sedang mengangkut air hasil timba menuju peti keluarga (HAULING_HOUSEHOLD_WATER)
             if self.task == "HAULING_HOUSEHOLD_WATER":
-                chest = furniture_manager.get_storage_for_family(self.family_id)
+                chest = furniture_manager.get_storage_for_family(self.family_id) if furniture_manager else None
                 if chest:
                     cx, cy = chest.get_world_pos(TILE_SIZE)
                     arrived = self._move_towards(cx, cy, dt, arrival_dist=CHEST_INTERACTION_RADIUS, all_entities=all_entities, player=player, building_manager=building_manager, furniture_manager=furniture_manager, exclusive_target=False)
@@ -919,6 +950,15 @@ class Villager:
                             del self.inventory["Water"]
                         self.say("Stored fresh water in household chest!", duration=2.5)
                         self.task = "IDLE"
+                elif stockpile_manager:
+                    cur_gx = int(math.floor(self.x / TILE_SIZE))
+                    cur_gy = int(math.floor(self.y / TILE_SIZE))
+                    amt = self.inventory.get("Water", 0)
+                    if amt > 0:
+                        stockpile_manager.drop_resource("Water", amt, cur_gx, cur_gy, owner_type="villager", owner_id=self.family_id)
+                        del self.inventory["Water"]
+                    self.say("Stored fresh water at home!", duration=2.5)
+                    self.task = "IDLE"
                 else:
                     self.task = "IDLE"
                 return
@@ -1366,14 +1406,16 @@ class Villager:
                             self.say("Collecting water for our household needs!", duration=2.5)
                             return
 
-        # Evaluasi Makan & Minum Malam (Dinner & Daily Needs Fulfillment)
-        if sched_activity in ("LEISURE", "ANY") and cur_hour >= 18.0 and self.need_seek_cooldown <= 0.0:
-            if self.daily_food_consumed < DAILY_FOOD_REQUIREMENT and (self.hunger < 95.0 or cur_hour >= 20.0):
-                self.task = "SEEKING_FOOD"
-                return
-            if self.daily_water_consumed < DAILY_WATER_REQUIREMENT and (self.thirst < 95.0 or cur_hour >= 20.0):
-                self.task = "SEEKING_WATER"
-                return
+        # Evaluasi Makan & Minum (Mealtime & Daily Needs Fulfillment)
+        if sched_activity in ("LEISURE", "ANY") and self.need_seek_cooldown <= 0.0:
+            is_mealtime = (cur_hour >= 18.0 or cur_hour < 8.0 or self.hunger < 95.0 or self.thirst < 95.0)
+            if is_mealtime:
+                if self.daily_food_consumed < DAILY_FOOD_REQUIREMENT and (self.hunger < 95.0 or cur_hour >= 20.0 or (cur_hour < 8.0 and self.hunger < 98.0)):
+                    self.task = "SEEKING_FOOD"
+                    return
+                if self.daily_water_consumed < DAILY_WATER_REQUIREMENT and (self.thirst < 95.0 or cur_hour >= 20.0 or (cur_hour < 8.0 and self.thirst < 98.0)):
+                    self.task = "SEEKING_WATER"
+                    return
 
         self.idle_wander_timer -= dt
         if self.idle_wander_timer <= 0:
@@ -1937,31 +1979,61 @@ class Family:
         return y, z, x
 
     def get_food_stock(self, furniture_manager=None, stockpile_manager=None):
+        """
+        Derives total available food from actual household-owned items categorized as FOOD.
+        Single source of truth reading directly from storage chests and ground stockpiles.
+        Zero hardcoded item checks.
+        """
         total = 0
         fam_str = str(self.id)
         if furniture_manager:
-            chest = furniture_manager.get_storage_for_family(fam_str)
-            if chest and hasattr(chest, "inventory"):
-                for it in ("Potato", "Food", "Bread"):
-                    total += chest.inventory.get(it, 0)
+            checked_chests = set()
+            furn_list = getattr(furniture_manager, "furnitures", getattr(furniture_manager, "furniture_list", []))
+            for f in furn_list:
+                if str(getattr(f, "family_id", "")) == fam_str and not getattr(f, "is_dropped", False) and hasattr(f, "inventory") and isinstance(f.inventory, dict):
+                    checked_chests.add(id(f))
+                    for it_name, count in f.inventory.items():
+                        if is_food_item(it_name) and count > 0:
+                            total += count
+            if not checked_chests:
+                chest = furniture_manager.get_storage_for_family(fam_str)
+                if chest and hasattr(chest, "inventory") and isinstance(chest.inventory, dict):
+                    for it_name, count in chest.inventory.items():
+                        if is_food_item(it_name) and count > 0:
+                            total += count
         if stockpile_manager:
             for s in getattr(stockpile_manager, "stacks", []):
                 if getattr(s, "owner_type", None) == "villager" and str(getattr(s, "owner_id", "")) == fam_str:
-                    if s.resource_type in ("Potato", "Food", "Bread"):
+                    if is_food_item(getattr(s, "resource_type", "")):
                         total += getattr(s, "amount", 0)
         return total
 
     def get_water_stock(self, furniture_manager=None, stockpile_manager=None):
+        """
+        Derives total available water from actual household-owned water resources.
+        Single source of truth reading directly from storage chests and ground stockpiles.
+        """
         total = 0
         fam_str = str(self.id)
         if furniture_manager:
-            chest = furniture_manager.get_storage_for_family(fam_str)
-            if chest and hasattr(chest, "inventory"):
-                total += chest.inventory.get("Water", 0)
+            checked_chests = set()
+            furn_list = getattr(furniture_manager, "furnitures", getattr(furniture_manager, "furniture_list", []))
+            for f in furn_list:
+                if str(getattr(f, "family_id", "")) == fam_str and not getattr(f, "is_dropped", False) and hasattr(f, "inventory") and isinstance(f.inventory, dict):
+                    checked_chests.add(id(f))
+                    for it_name, count in f.inventory.items():
+                        if is_water_item(it_name) and count > 0:
+                            total += count
+            if not checked_chests:
+                chest = furniture_manager.get_storage_for_family(fam_str)
+                if chest and hasattr(chest, "inventory") and isinstance(chest.inventory, dict):
+                    for it_name, count in chest.inventory.items():
+                        if is_water_item(it_name) and count > 0:
+                            total += count
         if stockpile_manager:
             for s in getattr(stockpile_manager, "stacks", []):
                 if getattr(s, "owner_type", None) == "villager" and str(getattr(s, "owner_id", "")) == fam_str:
-                    if s.resource_type == "Water":
+                    if is_water_item(getattr(s, "resource_type", "")):
                         total += getattr(s, "amount", 0)
         return total
 

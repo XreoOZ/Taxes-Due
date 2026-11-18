@@ -52,6 +52,7 @@ GRANTABLE_ITEMS = [
     {"type": "Sickle", "name": "Sickle"},
     {"type": "Watering_Can", "name": "Watering Can"},
     {"type": "Potato", "name": "Potato"},
+    {"type": "Water", "name": "Water"},
     {"type": "Wood", "name": "Wood"},
     {"type": "Stone", "name": "Stone"},
     {"type": "Copper", "name": "Copper Coin"},
@@ -1292,36 +1293,59 @@ class RaportUI:
         surface.blit(inst_txt, (mx + 24, btn_y))
 
         self.permit_btn_rects = {}
-        btn_w = (self.modal_w - 75) // 4
-        housing_btn = pygame.Rect(mx + 24, btn_y + 26, btn_w - 6, 36)
-        storage_btn = pygame.Rect(mx + 24 + btn_w, btn_y + 26, btn_w - 6, 36)
-        farm_btn = pygame.Rect(mx + 24 + btn_w * 2, btn_y + 26, btn_w - 6, 36)
-        private_btn = pygame.Rect(mx + 24 + btn_w * 3, btn_y + 26, btn_w - 6, 36)
+        
+        # 5 Permit Buttons: Housing, Storage, Market, Farm, Landlord Private Area
+        m_pos = pygame.mouse.get_pos()
+        total_avail_w = self.modal_w - 48
+        btn_gap = 8
+        btn_w = (total_avail_w - (4 * btn_gap)) // 5
+        
+        housing_btn = pygame.Rect(mx + 24 + 0 * (btn_w + btn_gap), btn_y + 26, btn_w, 36)
+        storage_btn = pygame.Rect(mx + 24 + 1 * (btn_w + btn_gap), btn_y + 26, btn_w, 36)
+        market_btn = pygame.Rect(mx + 24 + 2 * (btn_w + btn_gap), btn_y + 26, btn_w, 36)
+        farm_btn = pygame.Rect(mx + 24 + 3 * (btn_w + btn_gap), btn_y + 26, btn_w, 36)
+        private_btn = pygame.Rect(mx + 24 + 4 * (btn_w + btn_gap), btn_y + 26, btn_w, 36)
 
         self.permit_btn_rects["housing"] = housing_btn
         self.permit_btn_rects["storage"] = storage_btn
+        self.permit_btn_rects["market"] = market_btn
         self.permit_btn_rects["farm"] = farm_btn
         self.permit_btn_rects["landlord_private"] = private_btn
 
-        # Housing Permit Button
-        pygame.draw.rect(surface, (37, 99, 235), housing_btn, border_radius=6)
-        pygame.draw.rect(surface, (96, 165, 250), housing_btn, width=1, border_radius=6)
-        surface.blit(self.font_btn.render("+ Housing Permit", True, (255, 255, 255)), (housing_btn.x + 14, housing_btn.y + 8))
+        # 1. Housing Permit Button
+        h_hov = housing_btn.collidepoint(m_pos)
+        pygame.draw.rect(surface, (59, 130, 246) if h_hov else (37, 99, 235), housing_btn, border_radius=6)
+        pygame.draw.rect(surface, (147, 197, 253) if h_hov else (96, 165, 250), housing_btn, width=1, border_radius=6)
+        h_lbl = self.font_btn.render("+ Housing Permit", True, (255, 255, 255))
+        surface.blit(h_lbl, (housing_btn.centerx - h_lbl.get_width() // 2, housing_btn.centery - h_lbl.get_height() // 2))
 
-        # Storage Permit Button
-        pygame.draw.rect(surface, (202, 138, 4), storage_btn, border_radius=6)
-        pygame.draw.rect(surface, (250, 204, 21), storage_btn, width=1, border_radius=6)
-        surface.blit(self.font_btn.render("+ Storage Permit", True, (255, 255, 255)), (storage_btn.x + 14, storage_btn.y + 8))
+        # 2. Storage Permit Button
+        s_hov = storage_btn.collidepoint(m_pos)
+        pygame.draw.rect(surface, (234, 179, 8) if s_hov else (202, 138, 4), storage_btn, border_radius=6)
+        pygame.draw.rect(surface, (253, 224, 71) if s_hov else (250, 204, 21), storage_btn, width=1, border_radius=6)
+        s_lbl = self.font_btn.render("+ Storage Permit", True, (255, 255, 255))
+        surface.blit(s_lbl, (storage_btn.centerx - s_lbl.get_width() // 2, storage_btn.centery - s_lbl.get_height() // 2))
 
-        # Farm Permit Button
-        pygame.draw.rect(surface, (22, 101, 52), farm_btn, border_radius=6)
-        pygame.draw.rect(surface, (74, 222, 128), farm_btn, width=1, border_radius=6)
-        surface.blit(self.font_btn.render("+ Farm Permit", True, (255, 255, 255)), (farm_btn.x + 14, farm_btn.y + 8))
+        # 3. Market Permit Button
+        m_hov = market_btn.collidepoint(m_pos)
+        pygame.draw.rect(surface, (245, 158, 11) if m_hov else (217, 119, 6), market_btn, border_radius=6)
+        pygame.draw.rect(surface, (253, 230, 138) if m_hov else (251, 191, 36), market_btn, width=1, border_radius=6)
+        m_lbl = self.font_btn.render("+ Market Permit", True, (255, 255, 255))
+        surface.blit(m_lbl, (market_btn.centerx - m_lbl.get_width() // 2, market_btn.centery - m_lbl.get_height() // 2))
 
-        # Landlord Private Area Button
-        pygame.draw.rect(surface, (126, 34, 206), private_btn, border_radius=6)
-        pygame.draw.rect(surface, (234, 179, 8), private_btn, width=1, border_radius=6)
-        surface.blit(self.font_btn.render("+ Private Area", True, (255, 255, 255)), (private_btn.x + 12, private_btn.y + 8))
+        # 4. Farm Permit Button
+        f_hov = farm_btn.collidepoint(m_pos)
+        pygame.draw.rect(surface, (34, 197, 94) if f_hov else (22, 101, 52), farm_btn, border_radius=6)
+        pygame.draw.rect(surface, (134, 239, 172) if f_hov else (74, 222, 128), farm_btn, width=1, border_radius=6)
+        f_lbl = self.font_btn.render("+ Farm Permit", True, (255, 255, 255))
+        surface.blit(f_lbl, (farm_btn.centerx - f_lbl.get_width() // 2, farm_btn.centery - f_lbl.get_height() // 2))
+
+        # 5. Landlord Private Area Button
+        p_hov = private_btn.collidepoint(m_pos)
+        pygame.draw.rect(surface, (147, 51, 234) if p_hov else (126, 34, 206), private_btn, border_radius=6)
+        pygame.draw.rect(surface, (250, 204, 21) if p_hov else (234, 179, 8), private_btn, width=1, border_radius=6)
+        p_lbl = self.font_btn.render("+ Private Area", True, (255, 255, 255))
+        surface.blit(p_lbl, (private_btn.centerx - p_lbl.get_width() // 2, private_btn.centery - p_lbl.get_height() // 2))
 
         # Crop Selection Popup Dialog
         self.crop_select_btn_rects = {}
@@ -1714,25 +1738,27 @@ class RaportUI:
                     gen_txt = self.font_badge.render(f"Generations: {fam.get_generation_label()}", True, (56, 189, 248))
                     surface.blit(gen_txt, (card_rect.x + 46 + fam_name.get_width() + 12, card_rect.y + 10))
 
-                    # Primary Needs Indicator (Agent 1: Food: y/x | Water: z/x)
+                    # Primary Needs Indicator (Agent 1: Food & Water Stocks + Daily Fulfillment)
+                    food_stk = fam.get_food_stock(furniture_manager, stockpile_manager)
+                    water_stk = fam.get_water_stock(furniture_manager, stockpile_manager)
                     food_ok, water_ok, living_tot = fam.get_primary_needs_progress()
-                    needs_x = card_rect.right - 290
+                    needs_x = card_rect.right - 350
                     needs_y = card_rect.y + 18
 
-                    # Food Badge
-                    food_col = (34, 197, 94) if (food_ok >= living_tot and living_tot > 0) else ((245, 158, 11) if food_ok > 0 else (239, 68, 68))
-                    food_badge = pygame.Rect(needs_x, needs_y, 76, 22)
+                    # Food Badge: Displays actual storage stock + daily fulfillment count
+                    food_col = (34, 197, 94) if (food_ok >= living_tot and living_tot > 0) else ((245, 158, 11) if (food_ok > 0 or food_stk > 0) else (239, 68, 68))
+                    food_badge = pygame.Rect(needs_x, needs_y, 105, 22)
                     pygame.draw.rect(surface, (15, 23, 42), food_badge, border_radius=4)
                     pygame.draw.rect(surface, food_col, food_badge, width=1, border_radius=4)
-                    f_txt = self.font_badge.render(f"Food: {food_ok}/{living_tot}", True, food_col)
+                    f_txt = self.font_badge.render(f"Food: {food_stk} ({food_ok}/{living_tot})", True, food_col)
                     surface.blit(f_txt, (food_badge.centerx - f_txt.get_width() // 2, food_badge.centery - f_txt.get_height() // 2))
 
-                    # Water Badge
-                    water_col = (56, 189, 248) if (water_ok >= living_tot and living_tot > 0) else ((245, 158, 11) if water_ok > 0 else (239, 68, 68))
-                    water_badge = pygame.Rect(needs_x + 82, needs_y, 76, 22)
+                    # Water Badge: Displays actual storage stock + daily fulfillment count
+                    water_col = (56, 189, 248) if (water_ok >= living_tot and living_tot > 0) else ((245, 158, 11) if (water_ok > 0 or water_stk > 0) else (239, 68, 68))
+                    water_badge = pygame.Rect(needs_x + 112, needs_y, 105, 22)
                     pygame.draw.rect(surface, (15, 23, 42), water_badge, border_radius=4)
                     pygame.draw.rect(surface, water_col, water_badge, width=1, border_radius=4)
-                    w_txt = self.font_badge.render(f"Water: {water_ok}/{living_tot}", True, water_col)
+                    w_txt = self.font_badge.render(f"Water: {water_stk} ({water_ok}/{living_tot})", True, water_col)
                     surface.blit(w_txt, (water_badge.centerx - w_txt.get_width() // 2, water_badge.centery - w_txt.get_height() // 2))
 
                     # Dedicated Job & Assigned Deed Status
@@ -1946,7 +1972,8 @@ class RaportUI:
             # Row 2: Food & Water Stocks and Daily Requirements (Agent 1)
             food_stk = fam.get_food_stock(furniture_manager, stockpile_manager)
             water_stk = fam.get_water_stock(furniture_manager, stockpile_manager)
-            needs_summary = f"Primary Needs: Food Stock {food_stk} (Req: {fam.daily_food_required}/day)   |   Water Stock {water_stk} (Req: {fam.daily_water_required}/day)"
+            food_ok, water_ok, living_tot = fam.get_primary_needs_progress()
+            needs_summary = f"Primary Needs: Food: {food_stk} ({food_ok}/{living_tot} fulfilled)   |   Water: {water_stk} ({water_ok}/{living_tot} fulfilled)   |   Daily Requirement: {fam.daily_food_required} Food, {fam.daily_water_required} Water"
             surface.blit(self.font_badge.render(needs_summary, True, (241, 245, 249)), (banner_rect.x + 14, banner_rect.y + 22))
 
             # Row 3: Currency (Agent 2) & Production (Agent 3)

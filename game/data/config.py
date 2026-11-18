@@ -267,6 +267,101 @@ DEFAULT_ITEM_PRICES = {
     "Potato": 3,       # 1 Potato = 3 Copper (Configurable default price)
 }
 
+# -----------------------------------------------------------------------------
+# GENERIC ITEM CATEGORY DEFINITIONS (Single Source of Truth - No Hardcoding)
+# -----------------------------------------------------------------------------
+ITEM_CATEGORIES = {
+    # FOOD
+    "Potato": "FOOD",
+    "potato": "FOOD",
+    "Food": "FOOD",
+    "food": "FOOD",
+    "Bread": "FOOD",
+    "bread": "FOOD",
+    "Carrot": "FOOD",
+    "carrot": "FOOD",
+    "Cabbage": "FOOD",
+    "cabbage": "FOOD",
+    "Wheat": "FOOD",
+    "wheat": "FOOD",
+    "Fish": "FOOD",
+    "fish": "FOOD",
+    "Meat": "FOOD",
+    "meat": "FOOD",
+    "Apple": "FOOD",
+    "apple": "FOOD",
+
+    # WATER
+    "Water": "WATER",
+    "water": "WATER",
+
+    # TOOLS
+    "Hoe": "TOOL",
+    "Sickle": "TOOL",
+    "Watering_Can": "TOOL",
+    "Watering Can": "TOOL",
+    "Hammer": "TOOL",
+    "Tongs": "TOOL",
+    "Saw": "TOOL",
+    "Adze": "TOOL",
+    "Rolling_Pin": "TOOL",
+    "Peel": "TOOL",
+    "Fishing_Rod": "TOOL",
+
+    # RESOURCES
+    "Wood": "RESOURCE",
+    "Stone": "RESOURCE",
+    "Timber": "RESOURCE",
+    "Carved Stone": "RESOURCE",
+    "Linen Cloth": "RESOURCE",
+
+    # CURRENCY
+    "Copper": "CURRENCY",
+    "Silver": "CURRENCY",
+    "Gold": "CURRENCY",
+    "Copper Coin": "CURRENCY",
+    "Silver Coin": "CURRENCY",
+    "Gold Coin": "CURRENCY",
+}
+
+def register_item_category(item_name: str, category: str):
+    """
+    Dynamically register or update an item's category.
+    Allows new items (e.g. newly modded or planted crops/foods) to be registered at runtime.
+    """
+    if item_name and category:
+        ITEM_CATEGORIES[str(item_name).strip()] = str(category).strip().upper()
+
+def get_item_category(item_name: str) -> str:
+    """
+    Returns the generic category of an item ('FOOD', 'WATER', 'TOOL', 'RESOURCE', 'CURRENCY', or 'MISC').
+    Case-insensitive fallback is applied.
+    """
+    if not item_name:
+        return "MISC"
+    cat = ITEM_CATEGORIES.get(item_name)
+    if cat:
+        return cat
+    low = str(item_name).strip().lower()
+    for k, v in ITEM_CATEGORIES.items():
+        if k.lower() == low:
+            return v
+    return "MISC"
+
+def is_food_item(item_name: str) -> bool:
+    """
+    Generic verification if an item belongs to the FOOD category.
+    Zero hardcoded item names!
+    """
+    return get_item_category(item_name) == "FOOD"
+
+def is_water_item(item_name: str) -> bool:
+    """
+    Generic verification if an item belongs to the WATER category.
+    """
+    return get_item_category(item_name) == "WATER"
+
+
 RESOURCE_COLORS = {
     "Wood": (180, 120, 70),     # Wood brown
     "Food": (234, 179, 8),      # Golden food grain
