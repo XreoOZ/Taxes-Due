@@ -23,7 +23,9 @@ from game.config import (
     COLOR_STONE_FLOOR,
     COLOR_STONE_FLOOR_ALT,
     COLOR_STONE_DOOR,
-    DEFAULT_ITEM_PRICES
+    DEFAULT_ITEM_PRICES,
+    DOORWAY_IDLE_MIN_DISTANCE,
+    DOORWAY_QUEUE_LATERAL_OFFSET
 )
 from game.permits import get_exterior_edges_for_tile
 
@@ -403,15 +405,18 @@ class Building:
 
     def get_door_queue_pos(self, queue_idx, is_outside, tile_size=TILE_SIZE):
         """
-        Menghitung koordinat posisi antrean di dekat pintu (staggered fan-out agar tidak bertumpuk).
-        Berada di ruang terbuka dekat pintu, memungkinkan AI mendekati pintu dan mengantre rapi.
+        Menghitung koordinat posisi antrean di dekat pintu (staggered lateral fan-out agar tidak bertumpuk).
+        Posisi antrean dialihkan ke samping (lateral offset) dari sumbu pintu sehingga tidak menghalangi
+        jalur lalu lintas AI yang sedang keluar maupun masuk (doorway clearance).
         """
         dx, dy = self.door_pos
         cx = (dx + 0.5) * tile_size
         cy = (dy + 0.5) * tile_size
 
-        dist_offset = tile_size * (1.1 + queue_idx * 0.55)
-        stagger = 18.0 if (queue_idx % 2 == 1) else -18.0
+        dist_offset = tile_size * (1.25 + queue_idx * 0.45)
+        # Offset ke samping sumbu pintu minimal DOORWAY_QUEUE_LATERAL_OFFSET agar koridor lurus pintu bersih
+        lateral = DOORWAY_QUEUE_LATERAL_OFFSET + (queue_idx * 8.0)
+        stagger = lateral if (queue_idx % 2 == 1) else -lateral
 
         side = self.door_side
         if side == "top":
@@ -1044,13 +1049,18 @@ class BuildingManager:
                 return True
         return False
 
-    def is_near_any_door(self, x, y, min_dist=48.0, tile_size=TILE_SIZE):
-        """Mengecek apakah posisi (x, y) terlalu dekat dengan celah pintu bangunan mana pun"""
+    def is_near_any_door(self, x, y, min_dist=DOORWAY_IDLE_MIN_DISTANCE, tile_size=TILE_SIZE):
+        """Mengecek apakah posisi (x, y) terlalu dekat dengan celah pintu atau koridor threshold pintu bangunan mana pun"""
         for b in self.buildings:
             if b.door_pos:
                 cx = (b.door_pos[0] + 0.5) * tile_size
                 cy = (b.door_pos[1] + 0.5) * tile_size
                 if math.hypot(x - cx, y - cy) < min_dist:
+                    return True
+                d_out = b.get_door_world_outside(tile_size)
+                d_in = b.get_door_world_inside(tile_size)
+                if math.hypot(x - d_out[0], y - d_out[1]) < (min_dist * 0.75) or \
+                   math.hypot(x - d_in[0], y - d_in[1]) < (min_dist * 0.75):
                     return True
         return False
 

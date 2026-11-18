@@ -234,6 +234,11 @@ class RaportUI:
         self.grant_is_dragging_scrollbar = False
         self.cached_stockpile_manager = None
 
+        # Contextual View Navigation Rects (Agent 2)
+        self.permit_household_btn_rects = {}
+        self.building_household_btn_rects = {}
+        self.household_view_permit_btn_rect = None
+
         self.modal_w = RAPORT_MODAL_WIDTH
         self.modal_h = RAPORT_MODAL_HEIGHT
 
@@ -327,6 +332,49 @@ class RaportUI:
         self.selected_member_inventory_id = None
         self.show_assign_permit_picker = False
         self.crop_picker_permit_id = None
+
+    def open_household_directly(self, family_id):
+        """Contextual View: Opens Town Ledger directly to the specified family's View Family screen"""
+        self.is_open = True
+        self.active_tab = 4  # Tab Household
+        self.selected_family_id = family_id
+        self.show_household_possession = False
+        self.show_grant_dialog = False
+        self.show_grant_confirm = False
+        self.show_assign_permit_picker = False
+
+    def open_possession_directly(self, family_id):
+        """Contextual View: Opens Town Ledger directly to the specified household's Possession screen"""
+        self.is_open = True
+        self.active_tab = 4  # Tab Household
+        self.selected_family_id = family_id
+        self.show_household_possession = True
+        self.show_grant_dialog = False
+        self.show_grant_confirm = False
+        self.show_assign_permit_picker = False
+
+    def open_permit_directly(self, permit_id, permit_manager):
+        """Contextual View: Opens Town Ledger directly to the specified permit within its category view"""
+        target_p = next((p for p in getattr(permit_manager, "permits", []) if p.id == permit_id), None)
+        self.is_open = True
+        self.active_tab = 1  # Tab Area Permits
+        self.selected_permit_inspect_id = permit_id
+        if target_p:
+            categories = get_permit_categories()
+            cat = next((c for c in categories if target_p.permit_type in c.get("permit_types", [])), None)
+            self.selected_permit_category = cat["id"] if cat else None
+        else:
+            self.selected_permit_category = None
+
+    def open_building_directly(self, building):
+        """Contextual View: Opens Town Ledger directly to the specified building in its category view"""
+        if building:
+            b_cfg = BUILDING_TYPES.get(getattr(building, "building_type", ""), {})
+            cat_id = b_cfg.get("category_id", getattr(building, "building_type", "wooden_structure"))
+            self.is_open = True
+            self.active_tab = 0  # Tab Buildings
+            self.selected_building_category = cat_id
+            self.selected_building_inspect = building
 
     def get_landlord_stock(self, stockpile_manager, resources):
         stock = {
@@ -581,6 +629,12 @@ class RaportUI:
                     self.is_open = False
                     return "open_market_profile"
 
+            # Contextual Navigation: Jump to Household from Building
+            for b, (btn_rect, fid) in list(self.building_household_btn_rects.items()):
+                if btn_rect.collidepoint(mouse_pos):
+                    self.open_household_directly(fid)
+                    return f"open_household_{fid}"
+
             # Check Destroy Building buttons
             for b, rect in list(self.destroy_building_btn_rects.items()):
                 if rect.collidepoint(mouse_pos):
@@ -646,6 +700,12 @@ class RaportUI:
                     if rect.collidepoint(mouse_pos):
                         self.selected_permit_category = cat_id
                         return f"select_permit_category_{cat_id}"
+
+            # Contextual Navigation: Jump to Household from Permit
+            for pid, (btn_rect, fid) in list(self.permit_household_btn_rects.items()):
+                if btn_rect.collidepoint(mouse_pos):
+                    self.open_household_directly(fid)
+                    return f"open_household_{fid}"
 
             # Worker count +/- and Auto buttons
             for pid, rect in list(self.worker_dec_btn_rects.items()):
@@ -841,6 +901,13 @@ class RaportUI:
                         if btn_rect.collidepoint(mouse_pos):
                             self.selected_member_inventory_id = mem_id
                             return f"open_member_inventory_{mem_id}"
+
+                    # Contextual Navigation: Jump to Permit from Household
+                    if self.household_view_permit_btn_rect and self.household_view_permit_btn_rect.collidepoint(mouse_pos):
+                        fam = villager_manager.get_family_by_id(self.selected_family_id) if (villager_manager and self.selected_family_id) else None
+                        if fam and fam.assigned_permit_id:
+                            self.open_permit_directly(fam.assigned_permit_id, permit_manager)
+                            return f"open_permit_{fam.assigned_permit_id}"
 
                     if self.household_possession_btn_rect and self.household_possession_btn_rect.collidepoint(mouse_pos):
                         self.show_household_possession = True
@@ -1057,6 +1124,7 @@ class RaportUI:
 
         self.building_category_back_btn_rect = None
         self.building_category_btn_rects = {}
+        self.building_household_btn_rects.clear()
         self.destroy_building_btn_rects = {}
         self.market_profile_btn_rects.clear()
         self.building_select_rects = {}
@@ -1306,6 +1374,23 @@ class RaportUI:
                         txt = f"{b.name} ({len(b.tiles)} tiles | Door: {door_side_str}) — Refund: +{ref_w}W, +{ref_s}S"
                         surface.blit(self.font_body.render(txt, True, (255, 255, 255) if is_focused else COLOR_TEXT_MAIN), (mx + 36, y_cur + 2))
 
+                        # Contextual Button: Jump to Household if building is occupied by a family
+                        tenant_fam = None
+                        if villager_manager:
+                            for fam in getattr(villager_manager, "families", []):
+                                p_fam = next((p for p in getattr(permit_manager, "permits", []) if p.id == fam.assigned_permit_id), None) if (fam.assigned_permit_id and permit_manager) else None
+                                if p_fam and any(tile in p_fam.tiles for tile in b.tiles):
+                                    tenant_fam = fam
+                                    break
+                        if tenant_fam:
+                            fam_b_btn = pygame.Rect(row_rect.right - 276, y_cur - 1, 84, 22)
+                            self.building_household_btn_rects[b] = (fam_b_btn, tenant_fam.id)
+                            fh_hov = fam_b_btn.collidepoint(m_pos)
+                            pygame.draw.rect(surface, (14, 116, 144) if fh_hov else (15, 23, 42), fam_b_btn, border_radius=4)
+                            pygame.draw.rect(surface, (56, 189, 248), fam_b_btn, width=1, border_radius=4)
+                            fh_lbl = self.font_badge.render("Household", True, (255, 255, 255))
+                            surface.blit(fh_lbl, (fam_b_btn.x + (fam_b_btn.w - fh_lbl.get_width()) // 2, fam_b_btn.y + 4))
+
                         # Market Profile Button
                         if getattr(b, "building_type", "") == "market":
                             prof_btn = pygame.Rect(row_rect.right - 180, y_cur - 1, 84, 22)
@@ -1410,6 +1495,16 @@ class RaportUI:
             pygame.draw.rect(surface, (250, 204, 21), edit_btn, width=1, border_radius=4)
             edit_lbl = self.font_badge.render("Edit", True, (255, 255, 255))
             surface.blit(edit_lbl, (edit_btn.x + (edit_btn.w - edit_lbl.get_width()) // 2, edit_btn.y + 4))
+
+            # Contextual Navigation: Household button if lot is assigned to a family
+            if getattr(p, "assigned_family_id", None):
+                fam_btn = pygame.Rect(edit_btn.left - 88, y_cur - 1, 82, 22)
+                self.permit_household_btn_rects[p.id] = (fam_btn, p.assigned_family_id)
+                f_hov = fam_btn.collidepoint(pygame.mouse.get_pos())
+                pygame.draw.rect(surface, (14, 116, 144) if f_hov else (15, 23, 42), fam_btn, border_radius=4)
+                pygame.draw.rect(surface, (56, 189, 248), fam_btn, width=1, border_radius=4)
+                f_lbl = self.font_badge.render("Household", True, (255, 255, 255))
+                surface.blit(f_lbl, (fam_btn.x + (fam_btn.w - f_lbl.get_width()) // 2, fam_btn.y + 4))
             right_cursor -= 68
 
             # Plant button for Farm permit
@@ -1476,6 +1571,16 @@ class RaportUI:
             edit_lbl = self.font_badge.render("Edit", True, (255, 255, 255))
             surface.blit(edit_lbl, (edit_btn.x + (edit_btn.w - edit_lbl.get_width()) // 2, edit_btn.y + 4))
 
+            # Contextual Navigation: Household button if lot is assigned to a family
+            if getattr(p, "assigned_family_id", None):
+                fam_btn = pygame.Rect(edit_btn.left - 88, y_cur - 1, 82, 22)
+                self.permit_household_btn_rects[p.id] = (fam_btn, p.assigned_family_id)
+                f_hov = fam_btn.collidepoint(pygame.mouse.get_pos())
+                pygame.draw.rect(surface, (14, 116, 144) if f_hov else (15, 23, 42), fam_btn, border_radius=4)
+                pygame.draw.rect(surface, (56, 189, 248), fam_btn, width=1, border_radius=4)
+                f_lbl = self.font_badge.render("Household", True, (255, 255, 255))
+                surface.blit(f_lbl, (fam_btn.x + (fam_btn.w - f_lbl.get_width()) // 2, fam_btn.y + 4))
+
     def _draw_permit_tab(self, surface, mx, cy, permit_manager, building_manager):
         """
         Category-based Permit Organization UI (Agent 2)
@@ -1489,6 +1594,7 @@ class RaportUI:
 
         self.permit_category_back_btn_rect = None
         self.permit_category_btn_rects = {}
+        self.permit_household_btn_rects.clear()
         self.delete_permit_btn_rects = {}
         self.edit_permit_btn_rects = {}
         self.open_plant_btn_rects = {}
@@ -2294,7 +2400,14 @@ class RaportUI:
             if p_assigned:
                 d_txt = f"Land Deed: Assigned to {p_assigned.name} ({len(p_assigned.tiles)} tiles)"
                 d_col = (34, 197, 94)
+                self.household_view_permit_btn_rect = pygame.Rect(banner_rect.right - 108, banner_rect.y + 4, 96, 22)
+                vp_hov = self.household_view_permit_btn_rect.collidepoint(mouse_pos)
+                pygame.draw.rect(surface, (37, 99, 235) if vp_hov else (30, 41, 59), self.household_view_permit_btn_rect, border_radius=4)
+                pygame.draw.rect(surface, (96, 165, 250), self.household_view_permit_btn_rect, width=1, border_radius=4)
+                vp_lbl = self.font_badge.render("View Permit", True, (255, 255, 255))
+                surface.blit(vp_lbl, (self.household_view_permit_btn_rect.centerx - vp_lbl.get_width() // 2, self.household_view_permit_btn_rect.centery - vp_lbl.get_height() // 2))
             else:
+                self.household_view_permit_btn_rect = None
                 d_txt = "Land Deed: Unassigned — Living at Town Center"
                 d_col = (245, 158, 11)
 

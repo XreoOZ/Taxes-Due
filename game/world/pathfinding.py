@@ -33,7 +33,12 @@ from game.config import (
     ROUTE_STATE_ASSIGNED,
     ROUTE_STATE_ACTIVE,
     ROUTE_STATE_COMPLETED,
-    ROUTE_STATE_FAILED
+    ROUTE_STATE_FAILED,
+    DOORWAY_IDLE_MIN_DISTANCE,
+    DOORWAY_QUEUE_LATERAL_OFFSET,
+    TILE_OCCUPANCY_TIMEOUT,
+    TILE_STEP_RESERVATION_TIMEOUT,
+    NARROW_PASSAGE_WAIT_DISTANCE
 )
 
 def get_tiles_along_segment(p1, p2, tile_size=TILE_SIZE):
@@ -548,14 +553,68 @@ class PathReservation:
             self.reserved_tiles.update(seg_tiles)
 
 
+def is_narrow_passage_tile(tile, building_manager=None, furniture_manager=None, tile_size=TILE_SIZE):
+    """
+    Memeriksa apakah petak (gx, gy) merupakan lorong sempit (lebar 1 petak) atau celah pintu.
+    Pada lorong sempit, AI tidak memiliki ruang lateral untuk meluncur (slide), sehingga
+    arus pergerakan harus dikoordinasikan agar tidak saling mengunci (deadlock).
+    """
+    if not tile:
+        return False
+    gx, gy = int(tile[0]), int(tile[1])
+
+    # 1. Celah pintu bangunan memiliki manajemen antrean khusus (Building.request_door_passage)
+    if building_manager:
+        for b in getattr(building_manager, "buildings", []):
+            if getattr(b, "door_pos", None) == (gx, gy):
+                return False
+
+    # 2. Cek ketersediaan ruang gerak lateral di 4 penjuru (Utara, Selatan, Barat, Timur)
+    def is_tile_walkable(tx, ty):
+        if building_manager:
+            b_at = building_manager.get_building_at(gx, gy)
+            b_target = building_manager.get_building_at(tx, ty)
+            if b_target and (getattr(b_target, "is_solid", False) or getattr(b_target, "building_type", "") == "well" or not getattr(b_target, "door_pos", None)):
+                return False
+            # Jika ada dinding pemisah antar bangunan atau luar/dalam tanpa pintu
+            if b_at != b_target:
+                if b_target and getattr(b_target, "door_pos", None) != (tx, ty):
+                    return False
+                if b_at and getattr(b_at, "door_pos", None) != (gx, gy):
+                    return False
+        if furniture_manager:
+            if hasattr(furniture_manager, "get_occupied_tiles") and (tx, ty) in furniture_manager.get_occupied_tiles():
+                return False
+            flist = getattr(furniture_manager, "furniture_list", None) or getattr(furniture_manager, "furniture", None)
+            if flist and any((int(getattr(f, "grid_x", -999)), int(getattr(f, "grid_y", -999))) == (tx, ty) for f in flist):
+                return False
+        return True
+
+    walk_n = is_tile_walkable(gx, gy - 1)
+    walk_s = is_tile_walkable(gx, gy + 1)
+    walk_w = is_tile_walkable(gx - 1, gy)
+    walk_e = is_tile_walkable(gx + 1, gy)
+
+    # Lorong horizontal sempit (atas dan bawah terhalang)
+    if not walk_n and not walk_s and (walk_w or walk_e):
+        return True
+    # Lorong vertikal sempit (kiri dan kanan terhalang)
+    if not walk_w and not walk_e and (walk_n or walk_s):
+        return True
+
+    return False
+
+
 class GlobalPathRegistry:
     """
-    Sistem manajemen reservasi rute, deteksi konflik, dan antrean prioritas AI.
-    Aturan:
-    1. A visible pathfinding line means the path is occupied/reserved by an AI.
-    2. Other AI must not use or cross that reserved path.
-    3. First-Come, First-Served priority: AI with earlier reservation proceeds; others wait.
-    4. Zero hardcode, generic and dynamic for all entities and maps.
+    Sistem manajemen reservasi rute, alokasi okupansi petak (Tile Occupancy),
+    reservasi langkah (Step Reservation), deteksi konflik, dan antrean prioritas AI.
+    Aturan Arsitektur:
+    1. Every walkable tile has an occupancy state (physical occupant vs step reservation).
+    2. Physically occupied tiles cannot be simultaneously claimed by another AI.
+    3. Doors and narrow passages are coordinated to ensure smooth flow without deadlocks.
+    4. Stale reservations and occupancies are automatically cleaned up on failure, timeout, or death.
+    5. Zero hardcode, generic and dynamic for all entities and maps.
     """
     _instance = None
 
@@ -572,25 +631,153 @@ class GlobalPathRegistry:
         self.waiting_queue = []
         # claims: { (gx, gy): (entity_id, sequence_id, timestamp) } for target exclusivity
         self.claims = {}
+        # tile_occupants: { (gx, gy): (entity_id, last_timestamp) } (Physical tile occupancy)
+        self.tile_occupants = {}
+        # tile_step_reservations: { (gx, gy): (entity_id, expire_timestamp) } (Next tile reservation)
+        self.tile_step_reservations = {}
         self.seq_counter = 0
 
     def clear(self):
         self.reservations.clear()
         self.waiting_queue.clear()
         self.claims.clear()
+        self.tile_occupants.clear()
+        self.tile_step_reservations.clear()
         self.seq_counter = 0
 
     def reset(self):
         self.clear()
 
     def clean_stale_reservations(self, timeout=PATH_RESERVATION_TIMEOUT):
-        """Menghapus reservasi basi yang tidak pernah diupdate melebihi batas waktu (timeout)"""
+        """Menghapus reservasi dan okupansi basi yang tidak pernah diupdate melebihi batas waktu (timeout)"""
         now = time.time()
         stale_eids = [eid for eid, res in self.reservations.items() if (now - res.last_update) > timeout]
         for eid in stale_eids:
             self.release_reservation(eid)
-        # Bersihkan juga antrean menunggu yang basi (> ROUTE_REQUEST_TIMEOUT)
+        # Bersihkan antrean menunggu yang basi (> ROUTE_REQUEST_TIMEOUT)
         self.waiting_queue = [w for w in self.waiting_queue if (now - w[2]) < ROUTE_REQUEST_TIMEOUT]
+        # Bersihkan tile occupancies yang basi (> TILE_OCCUPANCY_TIMEOUT)
+        for t, occ in list(self.tile_occupants.items()):
+            if (now - occ[1]) > TILE_OCCUPANCY_TIMEOUT:
+                del self.tile_occupants[t]
+        # Bersihkan tile step reservations yang expired
+        for t, r in list(self.tile_step_reservations.items()):
+            if now >= r[1]:
+                del self.tile_step_reservations[t]
+
+    def occupy_tile(self, entity_id, tile):
+        """
+        Mendaftarkan entitas sebagai penghuni fisik (physical occupant) pada petak tile=(gx, gy).
+        Jika petak sedang dihuni oleh entitas lain yang valid, kembalikan False.
+        """
+        if not tile or not entity_id:
+            return False
+        eid_str = str(entity_id)
+        now = time.time()
+        tile_tup = (int(tile[0]), int(tile[1]))
+
+        # Bersihkan kepemilikan petak lama milik diri sendiri jika berbeda
+        for t, occ in list(self.tile_occupants.items()):
+            if occ[0] == eid_str and t != tile_tup:
+                del self.tile_occupants[t]
+
+        # Cek apakah petak dihuni entitas lain
+        current_occ = self.tile_occupants.get(tile_tup)
+        if current_occ:
+            other_eid, occ_time = current_occ
+            if other_eid != eid_str and (now - occ_time) < TILE_OCCUPANCY_TIMEOUT:
+                return False
+
+        self.tile_occupants[tile_tup] = (eid_str, now)
+        return True
+
+    def release_tile_occupancy(self, entity_id, tile=None):
+        """Melepas status penghuni fisik petak untuk entitas"""
+        if not entity_id:
+            return
+        eid_str = str(entity_id)
+        if tile:
+            tile_tup = (int(tile[0]), int(tile[1]))
+            if self.tile_occupants.get(tile_tup, (None,))[0] == eid_str:
+                del self.tile_occupants[tile_tup]
+        else:
+            for t, occ in list(self.tile_occupants.items()):
+                if occ[0] == eid_str:
+                    del self.tile_occupants[t]
+
+    def get_tile_occupant(self, tile):
+        """Mengembalikan entity_id yang menghuni petak fisik, atau None jika kosong/stale"""
+        if not tile:
+            return None
+        tile_tup = (int(tile[0]), int(tile[1]))
+        occ = self.tile_occupants.get(tile_tup)
+        if occ:
+            eid_str, occ_time = occ
+            if (time.time() - occ_time) < TILE_OCCUPANCY_TIMEOUT:
+                return eid_str
+            del self.tile_occupants[tile_tup]
+        return None
+
+    def reserve_step_tile(self, entity_id, tile, duration=TILE_STEP_RESERVATION_TIMEOUT):
+        """
+        Mereservasi petak tujuan langkah berikutnya (step reservation) sebelum melangkah masuk.
+        Mencegah dua AI saling berebut atau melangkah bersamaan ke petak yang sama.
+        """
+        if not tile or not entity_id:
+            return False
+        eid_str = str(entity_id)
+        now = time.time()
+        tile_tup = (int(tile[0]), int(tile[1]))
+
+        # Cek apakah petak dihuni secara fisik oleh entitas lain
+        occ_eid = self.get_tile_occupant(tile_tup)
+        if occ_eid and occ_eid != eid_str:
+            return False
+
+        # Cek apakah petak sudah direservasi entitas lain untuk langkah berikutnya
+        res = self.tile_step_reservations.get(tile_tup)
+        if res:
+            res_eid, exp_time = res
+            if res_eid != eid_str and now < exp_time:
+                return False
+
+        # Bersihkan step reservation lama milik diri sendiri jika berbeda petak
+        for t, r in list(self.tile_step_reservations.items()):
+            if r[0] == eid_str and t != tile_tup:
+                del self.tile_step_reservations[t]
+
+        self.tile_step_reservations[tile_tup] = (eid_str, now + duration)
+        return True
+
+    def release_step_tile(self, entity_id, tile=None):
+        """Melepaskan reservasi petak langkah berikutnya"""
+        if not entity_id:
+            return
+        eid_str = str(entity_id)
+        if tile:
+            tile_tup = (int(tile[0]), int(tile[1]))
+            if self.tile_step_reservations.get(tile_tup, (None,))[0] == eid_str:
+                del self.tile_step_reservations[tile_tup]
+        else:
+            for t, r in list(self.tile_step_reservations.items()):
+                if r[0] == eid_str:
+                    del self.tile_step_reservations[t]
+
+    def is_tile_claimable(self, entity_id, tile):
+        """Memeriksa apakah petak bebas untuk dimasuki atau sudah milik entitas ini"""
+        if not tile:
+            return True
+        eid_str = str(entity_id)
+        tile_tup = (int(tile[0]), int(tile[1]))
+        occ = self.get_tile_occupant(tile_tup)
+        if occ and occ != eid_str:
+            return False
+        res = self.tile_step_reservations.get(tile_tup)
+        if res:
+            res_eid, exp_time = res
+            if res_eid != eid_str and time.time() < exp_time:
+                return False
+        return True
 
     def get_all_reserved_tiles(self, exclude_entity=None):
         """Mengembalikan gabungan set seluruh petak grid yang direservasi oleh AI lain"""
@@ -690,6 +877,20 @@ class GlobalPathRegistry:
                     conflicts.append((other_eid, "DOORWAY_THRESHOLD_JAM", res))
                     continue
 
+            # 3. Lorong sempit 1-petak berlawanan arah (Narrow passage bottleneck)
+            for st in shared_tiles:
+                if is_narrow_passage_tile(st, building_manager=bm):
+                    # Pintu bangunan telah dikelola tersendiri oleh Doorway Conflict & request_door_passage di ambang pintu
+                    if any(getattr(b, "door_pos", None) == st for b in getattr(bm, "buildings", [])):
+                        continue
+                    st_cx = (st[0] + 0.5) * TILE_SIZE
+                    st_cy = (st[1] + 0.5) * TILE_SIZE
+                    dist_other = math.hypot(res.current_pos[0] - st_cx, res.current_pos[1] - st_cy)
+                    dist_me = math.hypot(current_pos[0] - st_cx, current_pos[1] - st_cy)
+                    if dist_other < (TILE_SIZE * 1.5) and dist_me > dist_other:
+                        conflicts.append((other_eid, "NARROW_PASSAGE_CONFLICT", res))
+                        break
+
         return conflicts
 
     def request_path_reservation(self, entity_id, waypoints, current_pos, target_tile, building_manager=None, exclusive_target=False):
@@ -746,6 +947,8 @@ class GlobalPathRegistry:
         else:
             self.release_claim(eid_str)
         self.waiting_queue = [w for w in self.waiting_queue if w[0] != eid_str]
+        self.release_tile_occupancy(eid_str)
+        self.release_step_tile(eid_str)
 
     def cancel_waiting(self, entity_id):
         """Membatalkan antrean menunggu rute untuk entitas tertentu saat timeout atau recovery"""

@@ -72,10 +72,17 @@ from game.config import (
     ROUTE_STATE_ASSIGNED,
     ROUTE_STATE_ACTIVE,
     ROUTE_STATE_COMPLETED,
-    ROUTE_STATE_FAILED
+    ROUTE_STATE_FAILED,
+    DOORWAY_IDLE_MIN_DISTANCE,
+    DOORWAY_QUEUE_LATERAL_OFFSET,
+    TILE_OCCUPANCY_TIMEOUT,
+    TILE_STEP_RESERVATION_TIMEOUT,
+    NARROW_PASSAGE_WAIT_DISTANCE
 )
-from game.world.pathfinding import GlobalPathRegistry, calculate_collision_slide
+from game.world.pathfinding import GlobalPathRegistry, calculate_collision_slide, is_narrow_passage_tile
 from game.systems.market_interface import request_market_food_purchase
+from game.systems.market_purchasing import AIFoodPurchasingSystem
+from game.systems.currency import to_copper, normalize_wallet
 from game.systems.job_tool_system import (
     get_job_required_tools,
     get_missing_tools_for_worker,
@@ -165,6 +172,9 @@ class Villager:
         self.need_seek_cooldown = 0.0
         self.market_service = None
         self.water_collect_amount = 0
+        self.purchase_target_market_id = None
+        self.purchase_food_item = None
+        self.purchase_target_price = 0
 
     @property
     def full_name(self):
@@ -209,6 +219,30 @@ class Villager:
         self.previous_task_before_need = None
         self.need_seek_cooldown = 0.0
 
+
+    def _idle_behavior(self, dt, player=None, all_entities=None, building_manager=None, furniture_manager=None):
+        """Idle & wandering behavior, keeping clear from doorways."""
+        # Pastikan target santai tidak berada di celah atau koridor pintu
+        if building_manager and hasattr(building_manager, "is_near_any_door") and building_manager.is_near_any_door(self.idle_target[0], self.idle_target[1], min_dist=DOORWAY_IDLE_MIN_DISTANCE):
+            for offset in (40.0, -40.0, 60.0, -60.0):
+                cand_x = self.idle_target[0] + offset
+                cand_y = self.idle_target[1] + offset
+                if not building_manager.is_near_any_door(cand_x, cand_y, min_dist=DOORWAY_IDLE_MIN_DISTANCE):
+                    self.idle_target = (cand_x, cand_y)
+                    break
+
+        # Bebaskan celah pintu jika tanpa sengaja berada di threshold saat idle
+        if building_manager and hasattr(building_manager, "is_near_any_door") and building_manager.is_near_any_door(self.x, self.y, min_dist=32.0):
+            for b in getattr(building_manager, "buildings", []):
+                if b.door_pos and b.is_in_door_threshold(self.x, self.y, TILE_SIZE):
+                    d_out = b.get_door_world_outside(TILE_SIZE)
+                    n_dx = d_out[0] - self.x
+                    n_dy = d_out[1] - self.y
+                    n_dist = math.hypot(n_dx, n_dy)
+                    if n_dist > 0.001:
+                        step = max(2.0, self.speed * dt * 0.8)
+                        self.x += (n_dx / n_dist) * step
+                        self.y += (n_dy / n_dist) * step
 
     def say(self, text, duration=3.0):
         self.speech_text = text
@@ -600,6 +634,10 @@ class Villager:
             self.market_service = market_service
         self.building_manager = building_manager
         self.furniture_manager = furniture_manager
+        if villager_manager is not None:
+            self.villager_manager = villager_manager
+        if stockpile_manager is not None:
+            self.stockpile_manager = stockpile_manager
 
         # Evaluasi Jadwal 24-Jam (Work, Leisure, Sleep, Anything)
         cur_hour = getattr(day_cycle, "current_hour", 8.0) if day_cycle else 8.0
@@ -624,7 +662,7 @@ class Villager:
 
         # Critical interruption: Interupsi pekerjaan apa pun jika lapar atau haus mencapai <= 20%
         if (is_crit_hunger or is_crit_thirst):
-            if self.task not in ("SEEKING_FOOD", "SEEKING_WATER") and self.need_seek_cooldown <= 0.0:
+            if self.task not in ("SEEKING_FOOD", "SEEKING_WATER", "BUYING_FOOD_RETRIEVE_COINS", "BUYING_FOOD_TRAVEL_TO_MARKET", "BUYING_FOOD_HAULING_HOME") and self.need_seek_cooldown <= 0.0:
                 if is_crit_hunger or is_crit_thirst or (sched_activity in ("LEISURE", "ANY") and self.task in ("IDLE", "LEISURE", "STROLLING")):
                     # Lepaskan reservasi pekerjaan jika sedang bekerja
                     if self.current_work_tile and permit_manager:
@@ -705,27 +743,128 @@ class Villager:
                     self._resume_or_idle_after_need()
                 return
 
-            # 4. Hubungi interface pasar AGENT 2 jika makanan di rumah kosong (Agent 2 rule: IF HOUSEHOLD HAS FOOD -> DO NOT BUY)
-            bought, food_name, amt = request_market_food_purchase(
-                self.family_id, self,
-                market_service=getattr(self, "market_service", None),
-                building_manager=building_manager,
-                furniture_manager=furniture_manager,
-                villager_manager=getattr(self, "villager_manager", None),
-                stockpile_manager=stockpile_manager
-            )
-            if bought and amt > 0:
-                self.hunger = min(AI_NEED_MAX, self.hunger + AI_NEED_FOOD_RESTORE)
-                self.hunger_death_timer = None
-                self.daily_food_consumed += 1
-                self.say(f"Purchased {food_name or 'Food'} from Market and ate!", duration=2.5)
-                self._resume_or_idle_after_need()
+            # 4. Inisiasi proses belanja makanan fisik ke pasar jika makanan di rumah kosong (Agent 3)
+            # Dukungan backward-compatibility jika ada custom mock market_service yang di-inject (misal unit test Agent 1)
+            ms = getattr(self, "market_service", None)
+            if ms is not None and not building_manager and hasattr(ms, "purchase_food"):
+                bought, food_name, amt = ms.purchase_food(self.family_id, self, "Potato", 1)
+                if bought and amt > 0:
+                    self.hunger = min(AI_NEED_MAX, self.hunger + AI_NEED_FOOD_RESTORE)
+                    self.hunger_death_timer = None
+                    self.daily_food_consumed += 1
+                    self.say(f"Purchased {food_name or 'Food'} from Market and ate!", duration=2.5)
+                    self._resume_or_idle_after_need()
+                    return
+                else:
+                    self.need_seek_cooldown = 4.0
+                    self.say("No food at home and market has none!", duration=2.5)
+                    self.task = "IDLE"
+                    return
+
+            vm = getattr(self, "villager_manager", None) or villager_manager
+            if AIFoodPurchasingSystem.is_family_member_purchasing_food(self, vm):
+                self.need_seek_cooldown = 3.0
+                self.say("Waiting: family member is already purchasing food!", duration=2.5)
+                self.task = "IDLE"
                 return
-            else:
+
+            market, food_item, price = AIFoodPurchasingSystem.find_nearest_eligible_market(
+                self, building_manager, furniture_manager=furniture_manager, villager_manager=vm
+            )
+            if not market:
                 self.need_seek_cooldown = 4.0
                 self.say("No food at home and market has none!", duration=2.5)
                 self.task = "IDLE"
                 return
+
+            self.purchase_target_market_id = getattr(market, "id", None)
+            self.purchase_food_item = food_item
+            self.purchase_target_price = price
+
+            my_coins = to_copper(normalize_wallet(self.inventory))
+            if my_coins >= price:
+                self.task = "BUYING_FOOD_TRAVEL_TO_MARKET"
+                self.say(f"Heading to Market to buy {food_item}!", duration=2.0)
+            else:
+                chest = furniture_manager.get_storage_for_family(self.family_id) if furniture_manager else None
+                if not chest:
+                    self.need_seek_cooldown = 4.0
+                    self.say("Cannot afford food: no household storage chest!", duration=2.5)
+                    self.task = "IDLE"
+                    return
+                self.task = "BUYING_FOOD_RETRIEVE_COINS"
+                self.say(f"Getting coins from chest to buy {food_item} at Market!", duration=2.0)
+            return
+
+        # -------------------------------------------------------------
+        # Eksekusi Belanja Makanan Fisik ke Pasar (Agent 3)
+        # -------------------------------------------------------------
+        if self.task == "BUYING_FOOD_RETRIEVE_COINS":
+            self.active_tool = None
+            chest = furniture_manager.get_storage_for_family(self.family_id) if furniture_manager else None
+            if not chest:
+                self.task = "IDLE"
+                self.need_seek_cooldown = 4.0
+                return
+            cx, cy = chest.get_world_pos(TILE_SIZE)
+            arrived = self._move_towards(cx, cy, dt, arrival_dist=CHEST_INTERACTION_RADIUS, all_entities=all_entities, player=player, building_manager=building_manager, furniture_manager=furniture_manager, exclusive_target=False)
+            if arrived:
+                price = getattr(self, "purchase_target_price", 3)
+                ok, msg = AIFoodPurchasingSystem.retrieve_coins_from_storage(self, price, furniture_manager=furniture_manager)
+                if ok:
+                    self.task = "BUYING_FOOD_TRAVEL_TO_MARKET"
+                    self.say(f"Retrieved coins, heading to Market for {getattr(self, 'purchase_food_item', 'Food')}!", duration=2.0)
+                else:
+                    self.say("Not enough coins in chest for Market food!", duration=2.5)
+                    self.task = "IDLE"
+                    self.need_seek_cooldown = 4.0
+            return
+
+        if self.task == "BUYING_FOOD_TRAVEL_TO_MARKET":
+            self.active_tool = None
+            target_m_id = getattr(self, "purchase_target_market_id", None)
+            market = None
+            if building_manager:
+                if target_m_id:
+                    market = next((b for b in building_manager.buildings if getattr(b, "id", None) == target_m_id and getattr(b, "building_type", "") == "market"), None)
+                if not market:
+                    market = next((b for b in building_manager.buildings if getattr(b, "building_type", "") == "market"), None)
+
+            if not market:
+                self.say("Market no longer available, returning coins home!", duration=2.5)
+                self.task = "BUYING_FOOD_HAULING_HOME"
+                return
+
+            approach_pt = market.get_approach_point((self.x, self.y), TILE_SIZE, building_manager)
+            arrived = self._move_towards(approach_pt[0], approach_pt[1], dt, arrival_dist=32, all_entities=all_entities, player=player, building_manager=building_manager, furniture_manager=furniture_manager, exclusive_target=False)
+            if arrived:
+                food_item = getattr(self, "purchase_food_item", "Potato")
+                ok, msg = AIFoodPurchasingSystem.execute_market_transaction(self, market, food_item, building_manager=building_manager)
+                if ok:
+                    self.say(f"Bought {food_item} at Market! Hauling home.", duration=2.5)
+                else:
+                    self.say(f"Market purchase failed ({msg}), returning home.", duration=2.5)
+                self.task = "BUYING_FOOD_HAULING_HOME"
+            return
+
+        if self.task == "BUYING_FOOD_HAULING_HOME":
+            self.active_tool = None
+            chest = furniture_manager.get_storage_for_family(self.family_id) if furniture_manager else None
+            if chest:
+                cx, cy = chest.get_world_pos(TILE_SIZE)
+            elif permit_manager and self.family_id:
+                vm = getattr(self, "villager_manager", None) or villager_manager
+                fam = vm.get_family_by_id(self.family_id) if vm else None
+                pid = getattr(fam, "assigned_permit_id", None)
+                p = permit_manager.get_permit_by_id(pid) if pid else None
+                cx, cy = p.get_center_world(TILE_SIZE) if p else (self.x, self.y)
+            else:
+                cx, cy = (self.x, self.y)
+
+            arrived = self._move_towards(cx, cy, dt, arrival_dist=CHEST_INTERACTION_RADIUS, all_entities=all_entities, player=player, building_manager=building_manager, furniture_manager=furniture_manager, exclusive_target=False)
+            if arrived:
+                AIFoodPurchasingSystem.deliver_and_consume_food(self, furniture_manager=furniture_manager, stockpile_manager=stockpile_manager)
+            return
 
         # Eksekusi Pencarian Air Minum (SEEKING_WATER)
         if self.task == "SEEKING_WATER":
@@ -1490,11 +1629,14 @@ class Villager:
                     self.task = "SEEKING_WATER"
                     return
 
+        self._idle_behavior(dt, player=player, all_entities=all_entities, building_manager=building_manager, permit_manager=permit_manager, furniture_manager=furniture_manager)
+
+    def _idle_behavior(self, dt, player=None, all_entities=None, building_manager=None, permit_manager=None, furniture_manager=None):
         self.idle_wander_timer -= dt
         if self.idle_wander_timer <= 0:
             self.idle_wander_timer = random.uniform(4.0, 8.0)
 
-            if self.assigned_permit_id:
+            if getattr(self, "assigned_permit_id", None) and permit_manager:
                 home_b = self._get_home_building(permit_manager, building_manager)
                 if home_b and random.random() < 0.60:
                     avail_tiles = [t for t in home_b.tiles if t != getattr(home_b, "door_pos", None)]
@@ -1533,11 +1675,32 @@ class Villager:
                     "Enjoying our family leisure time.",
                     "Checking our household supplies.",
                     "The crops are thriving nicely, Lord!"
-                ] if self.assigned_permit_id else [
+                ] if getattr(self, "assigned_permit_id", None) else [
                     "Seeking land to farm, my Lord...",
                     "Awaiting the Landlord's deed assignment."
                 ]
                 self.say(random.choice(phrases), duration=2.5)
+
+        # Pastikan target santai tidak berada di celah atau koridor pintu
+        if building_manager and hasattr(building_manager, "is_near_any_door") and building_manager.is_near_any_door(self.idle_target[0], self.idle_target[1], min_dist=DOORWAY_IDLE_MIN_DISTANCE):
+            for offset in (40.0, -40.0, 60.0, -60.0):
+                cand_x = self.idle_target[0] + offset
+                cand_y = self.idle_target[1] + offset
+                if not building_manager.is_near_any_door(cand_x, cand_y, min_dist=DOORWAY_IDLE_MIN_DISTANCE):
+                    self.idle_target = (cand_x, cand_y)
+                    break
+
+        # Bebaskan celah pintu jika tanpa sengaja berada di threshold saat idle
+        if building_manager and hasattr(building_manager, "is_near_any_door") and building_manager.is_near_any_door(self.x, self.y, min_dist=32.0):
+            for b in getattr(building_manager, "buildings", []):
+                if b.door_pos and b.is_in_door_threshold(self.x, self.y, TILE_SIZE):
+                    d_out = b.get_door_world_outside(TILE_SIZE)
+                    n_dx = d_out[0] - self.x
+                    n_dy = d_out[1] - self.y
+                    n_dist = math.hypot(n_dx, n_dy)
+                    if n_dist > 0.1:
+                        self.x += (n_dx / n_dist) * (self.speed * dt * 0.8)
+                        self.y += (n_dy / n_dist) * (self.speed * dt * 0.8)
 
         self.is_waiting_for_path = False
         self._move_towards(self.idle_target[0], self.idle_target[1], dt, arrival_dist=16, all_entities=all_entities, player=player, building_manager=building_manager, furniture_manager=furniture_manager, exclusive_target=False)
@@ -1593,14 +1756,30 @@ class Villager:
                 else:
                     self.route_state = ROUTE_STATE_REQUESTED
                     self.repath_cooldown = 0.0
+                    return False
             elif self.wait_timer > 0.0:
                 if not reg.is_path_blocked_for(self.id, (self.x, self.y), (tx, ty)):
                     self.wait_timer = 0.0
                 else:
                     return False
 
-        if getattr(self, "repath_cooldown", 0.0) > 0.0:
-            self.repath_cooldown -= dt
+        # Validasi langsung: jika sudah berada di dalam jarak kedatangan / jangkauan interaksi target
+        direct_dist_to_target = math.hypot(tx - self.x, ty - self.y)
+        if direct_dist_to_target <= arrival_dist:
+            self.is_moving = False
+            self.current_path = []
+            self.path_index = 0
+            self.path_target = None
+            self.is_waiting_for_path = False
+            self.route_state = ROUTE_STATE_COMPLETED
+            self.route_request_timer = 0.0
+            self.route_retry_count = 0
+            reg.release_reservation(self.id)
+            if building_manager:
+                for b in getattr(building_manager, "buildings", []):
+                    if hasattr(b, "release_door_passage"):
+                        b.release_door_passage(self.id)
+            return True
 
         # 1. Rute Predetermined Pathfinding A* (Jalur Garis yang Ditentukan)
         target_dist = math.hypot(tx - (self.path_target[0] if self.path_target else 999999),
@@ -1654,17 +1833,21 @@ class Villager:
 
             if building_manager:
                 cand_path = building_manager.find_path((self.x, self.y), (tx, ty), TILE_SIZE, furniture_manager=furniture_manager, avoid_tiles=avoid_set)
-                if not cand_path and furniture_manager and hasattr(furniture_manager, "get_furniture_at") and furniture_manager.get_furniture_at(tgt_gx, tgt_gy):
-                    # Coba petak pendekatan adjacent jika target tepat sedang diduduki perabotan
-                    for (adx, ady) in ((0, 1), (1, 0), (0, -1), (-1, 0)):
-                        adj_gx = tgt_gx + adx
-                        adj_gy = tgt_gy + ady
-                        adj_tx = (adj_gx + 0.5) * TILE_SIZE
-                        adj_ty = (adj_gy + 0.5) * TILE_SIZE
-                        adj_cand = building_manager.find_path((self.x, self.y), (adj_tx, adj_ty), TILE_SIZE, furniture_manager=furniture_manager, avoid_tiles=avoid_set)
-                        if adj_cand:
-                            cand_path = adj_cand
+                if not cand_path:
+                    # Coba petak pendekatan adjacent di sekitarnya
+                    candidates = []
+                    for dist in (1, 2):
+                        for (adx, ady) in ((0, dist), (dist, 0), (0, -dist), (-dist, 0), (dist, dist), (-dist, -dist), (dist, -dist), (-dist, dist)):
+                            adj_tx = (tgt_gx + adx + 0.5) * TILE_SIZE
+                            adj_ty = (tgt_gy + ady + 0.5) * TILE_SIZE
+                            adj_cand = building_manager.find_path((self.x, self.y), (adj_tx, adj_ty), TILE_SIZE, furniture_manager=furniture_manager, avoid_tiles=avoid_set)
+                            if adj_cand:
+                                candidates.append((len(adj_cand), adj_cand))
+                        if candidates:
                             break
+                    if candidates:
+                        candidates.sort(key=lambda c: c[0])
+                        cand_path = candidates[0][1]
             else:
                 cand_path = [(tx, ty)]
 
@@ -1685,7 +1868,7 @@ class Villager:
                     self.current_path = []
                     self.path_index = 0
                     self.is_moving = False
-                    has_blocker = any(c[1] in ("DOORWAY_CONFLICT", "DOORWAY_THRESHOLD_JAM", "TARGET_CONFLICT", "QUEUE_PRIORITY") for c in res_or_conf) if isinstance(res_or_conf, list) else False
+                    has_blocker = any(c[1] in ("DOORWAY_CONFLICT", "DOORWAY_THRESHOLD_JAM", "TARGET_CONFLICT", "QUEUE_PRIORITY", "NARROW_PASSAGE_CONFLICT") for c in res_or_conf) if isinstance(res_or_conf, list) else False
                     if exclusive_target or has_blocker:
                         self.is_waiting_for_path = True
                         self.wait_timer = PATH_WAIT_RECHECK_INTERVAL
@@ -1736,6 +1919,11 @@ class Villager:
             self.is_moving = False
             return False
 
+        # Daftarkan okupansi fisik petak saat ini ke GlobalPathRegistry
+        cur_gx = int(math.floor(self.x / TILE_SIZE))
+        cur_gy = int(math.floor(self.y / TILE_SIZE))
+        reg.occupy_tile(self.id, (cur_gx, cur_gy))
+
         # 4. Melangkah Mengikuti Waypoint Jalur Garis & Update Reservasi
         target_wp = self.current_path[self.path_index]
         wp_dx = target_wp[0] - self.x
@@ -1743,6 +1931,23 @@ class Villager:
         dist_to_wp = math.hypot(wp_dx, wp_dy)
         is_last_wp = (self.path_index == len(self.current_path) - 1)
         tol = arrival_dist if is_last_wp else PATH_WAYPOINT_TOLERANCE
+
+        # Koordinasi Okupansi & Reservasi Langkah (Step Reservation)
+        next_gx = int(math.floor(target_wp[0] / TILE_SIZE))
+        next_gy = int(math.floor(target_wp[1] / TILE_SIZE))
+        if (next_gx, next_gy) != (cur_gx, cur_gy):
+            is_narrow = is_narrow_passage_tile((next_gx, next_gy), building_manager=building_manager, furniture_manager=furniture_manager)
+            occ_eid = reg.get_tile_occupant((next_gx, next_gy))
+            if occ_eid and occ_eid != str(self.id):
+                if is_narrow or exclusive_target:
+                    self.is_moving = False
+                    self.wait_timer = PATH_WAIT_RECHECK_INTERVAL
+                    return False
+            reserved_step = reg.reserve_step_tile(self.id, (next_gx, next_gy))
+            if not reserved_step and (is_narrow or exclusive_target):
+                self.is_moving = False
+                self.wait_timer = PATH_WAIT_RECHECK_INTERVAL
+                return False
 
         if dist_to_wp <= tol:
             if is_last_wp:
@@ -1804,7 +2009,8 @@ class Villager:
                 d_in = b.get_door_world_inside(TILE_SIZE)
                 dist_out = math.hypot(self.x - d_out[0], self.y - d_out[1])
                 dist_in = math.hypot(self.x - d_in[0], self.y - d_in[1])
-                near_door = dist_out < 64.0 or dist_in < 64.0 or b.is_in_door_threshold(self.x, self.y, TILE_SIZE)
+                in_threshold = b.is_in_door_threshold(self.x, self.y, TILE_SIZE)
+                near_door = dist_out < 64.0 or dist_in < 64.0 or in_threshold
 
                 if near_door:
                     tar_gx = int(math.floor(tx / TILE_SIZE))
@@ -1814,16 +2020,30 @@ class Villager:
                                    (getattr(self, "door_waypoints", None) and any(b.occupies_tile(int(wp[0]//TILE_SIZE), int(wp[1]//TILE_SIZE)) for wp in self.door_waypoints)) or \
                                    (self.current_path and any(b.occupies_tile(int(wp[0]//TILE_SIZE), int(wp[1]//TILE_SIZE)) for wp in self.current_path[self.path_index:]))
                     if crosses_door:
-                        door_phys = building_manager.is_door_occupied(b.door_pos, all_entities, exclude_entity=self, tile_size=TILE_SIZE)
-                        is_outside = (dist_out <= dist_in) and not b.occupies_tile(cur_gx, cur_gy)
-                        can_pass, q_pos = b.request_door_passage(self.id, is_outside, tile_size=TILE_SIZE)
-                        if door_phys or (not can_pass and q_pos):
-                            # Pintu sedang aktif dipakai AI lain -> Menunggu di posisi antrean dekat pintu
-                            self.is_waiting_for_path = True
-                            self.is_moving = False
-                            return False
-                        else:
+                        if in_threshold:
+                            # Selesaikan langkah melintasi celah kusen pintu; jangan berhenti di tengah kusen
+                            b.door_active_user = str(self.id)
                             self.is_waiting_for_path = False
+                        else:
+                            door_phys = building_manager.is_door_occupied(b.door_pos, all_entities, exclude_entity=self, tile_size=TILE_SIZE)
+                            is_outside = (dist_out <= dist_in) and not b.occupies_tile(cur_gx, cur_gy)
+                            can_pass, q_pos = b.request_door_passage(self.id, is_outside, tile_size=TILE_SIZE)
+                            if door_phys or not can_pass:
+                                # Pintu sedang aktif dipakai AI lain -> Bergerak ke posisi antrean lateral di samping pintu jika posisi tersedia
+                                if q_pos:
+                                    q_dist = math.hypot(self.x - q_pos[0], self.y - q_pos[1])
+                                    if q_dist > 12.0:
+                                        q_dx = (q_pos[0] - self.x) / q_dist
+                                        q_dy = (q_pos[1] - self.y) / q_dist
+                                        self.x += q_dx * self.speed * dt * 0.7
+                                        self.y += q_dy * self.speed * dt * 0.7
+                                        if building_manager:
+                                            self.x, self.y = building_manager.resolve_collision(self.x, self.y, self.radius, TILE_SIZE)
+                                self.is_waiting_for_path = True
+                                self.is_moving = False
+                                return False
+                            else:
+                                self.is_waiting_for_path = False
                 else:
                     if b.door_active_user == str(self.id):
                         b.release_door_passage(self.id)

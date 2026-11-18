@@ -66,7 +66,7 @@ class MarketProfileModal:
         self.is_open = False
         self.target_market = None
 
-    def handle_event(self, event, resources=None, stockpile_manager=None):
+    def handle_event(self, event, resources=None, stockpile_manager=None, servant_manager=None):
         """Menangani klik mouse dan keyboard pada Market Profile"""
         if not self.is_open or not self.target_market:
             return None
@@ -112,36 +112,47 @@ class MarketProfileModal:
                     mkt.prices[it_name] = cur_p + 5
                     return f"price_increased5_{it_name}"
 
-            # 3. Manajemen Stok: Deposit dari Landlord Storage ke Market
+            # 3. Manajemen Stok: Physical Restock dari Landlord Storage ke Market (Agent 2)
             for it_name, rect in self.stock_dep_btns.items():
                 if rect.collidepoint(mouse_pos):
-                    target_res = "Food" if it_name in ("Potato", "potato") else it_name
-                    avail_stock = 0
-                    if stockpile_manager:
-                        for s in getattr(stockpile_manager, "stacks", []):
-                            if s.owner_type == "landlord" and s.resource_type in (it_name, target_res):
-                                avail_stock += s.amount
-                    elif resources:
-                        avail_stock = resources.get(target_res, resources.get(it_name, 0))
-
-                    transfer_amt = min(10, avail_stock)
-                    if transfer_amt > 0:
-                        # Kurangi dari landlord stockpile
+                    if servant_manager:
+                        order = servant_manager.add_restock_order(
+                            mkt, it_name, 10,
+                            stockpile_manager=stockpile_manager,
+                            resources=resources
+                        )
+                        if order:
+                            return f"restock_order_created_{it_name}"
+                        else:
+                            return f"restock_no_stock_{it_name}"
+                    else:
+                        # Fallback for standalone tests without servants
+                        target_res = "Food" if it_name in ("Potato", "potato") else it_name
+                        avail_stock = 0
                         if stockpile_manager:
-                            rem = transfer_amt
-                            for s in list(getattr(stockpile_manager, "stacks", [])):
+                            for s in getattr(stockpile_manager, "stacks", []):
                                 if s.owner_type == "landlord" and s.resource_type in (it_name, target_res):
-                                    taken = stockpile_manager.take_from_stack(s, rem)
-                                    rem -= taken
-                                    if rem <= 0:
-                                        break
-                            stockpile_manager.refresh_stacks(resources, None)
+                                    avail_stock += s.amount
                         elif resources:
-                            k = target_res if target_res in resources else it_name
-                            resources[k] = max(0, resources.get(k, 0) - transfer_amt)
+                            avail_stock = resources.get(target_res, resources.get(it_name, 0))
 
-                        mkt.inventory[it_name] = mkt.inventory.get(it_name, 0) + transfer_amt
-                        return f"stock_deposited_{it_name}"
+                        transfer_amt = min(10, avail_stock)
+                        if transfer_amt > 0:
+                            if stockpile_manager:
+                                rem = transfer_amt
+                                for s in list(getattr(stockpile_manager, "stacks", [])):
+                                    if s.owner_type == "landlord" and s.resource_type in (it_name, target_res):
+                                        taken = stockpile_manager.take_from_stack(s, rem)
+                                        rem -= taken
+                                        if rem <= 0:
+                                            break
+                                stockpile_manager.refresh_stacks(resources, None)
+                            elif resources:
+                                k = target_res if target_res in resources else it_name
+                                resources[k] = max(0, resources.get(k, 0) - transfer_amt)
+
+                            mkt.inventory[it_name] = mkt.inventory.get(it_name, 0) + transfer_amt
+                            return f"stock_deposited_{it_name}"
 
             # 4. Manajemen Stok: Withdraw dari Market ke Landlord Storage
             for it_name, rect in self.stock_with_btns.items():
@@ -167,7 +178,7 @@ class MarketProfileModal:
 
         return None
 
-    def draw(self, surface, resources=None, stockpile_manager=None):
+    def draw(self, surface, resources=None, stockpile_manager=None, servant_manager=None):
         if not self.is_open or not self.target_market:
             return
 
@@ -292,9 +303,15 @@ class MarketProfileModal:
             pygame.draw.circle(surface, col, (mx + 46, row_y + row_h // 2), 7)
             surface.blit(self.font_sub.render(it_name, True, (241, 245, 249)), (mx + 60, row_y + 12))
 
-            # Stock Quantity
+            # Stock Quantity (reflects actual delivered items, with in-transit indicator)
+            in_transit = 0
+            if servant_manager and hasattr(servant_manager, "get_in_transit_for_market"):
+                in_transit = servant_manager.get_in_transit_for_market(mkt, it_name)
+
             stock_str = f"{stock_qty} in stock" if stock_qty > 0 else "OUT OF STOCK"
-            stock_col = (34, 197, 94) if stock_qty > 0 else (239, 68, 68)
+            if in_transit > 0:
+                stock_str += f" (+{in_transit} in transit)"
+            stock_col = (34, 197, 94) if stock_qty > 0 else ((56, 189, 248) if in_transit > 0 else (239, 68, 68))
             surface.blit(self.font_sub.render(stock_str, True, stock_col), (mx + 170, row_y + 12))
 
             # Active Selling Price

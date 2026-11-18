@@ -103,6 +103,13 @@ ROUTE_STATE_ACTIVE = "ACTIVE"
 ROUTE_STATE_COMPLETED = "COMPLETED"
 ROUTE_STATE_FAILED = "FAILED"
 
+# Tile Occupancy, Narrow Doorways & Passage Management (Agent 1)
+DOORWAY_IDLE_MIN_DISTANCE = 48.0          # Minimum distance (px) AI must keep from any doorway when idling/wandering
+DOORWAY_QUEUE_LATERAL_OFFSET = 36.0       # Lateral offset (px) for doorway queueing to clear passage line
+TILE_OCCUPANCY_TIMEOUT = 5.0              # Timeout (seconds) for physical tile occupancy tracking
+TILE_STEP_RESERVATION_TIMEOUT = 1.5       # Timeout (seconds) for step reservation ahead
+NARROW_PASSAGE_WAIT_DISTANCE = 32.0       # Distance to halt outside narrow passage when opposing AI is traversing
+
 # Villager & Family Settings
 VILLAGER_RADIUS = 20
 VILLAGER_SPEED = 180.0

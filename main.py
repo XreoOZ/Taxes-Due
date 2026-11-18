@@ -133,9 +133,12 @@ def main():
     btn_furn_move_rect = pygame.Rect(0, 0, 112, 30)
     btn_furn_destroy_rect = pygame.Rect(0, 0, 112, 30)
     btn_furn_close_rect = pygame.Rect(0, 0, 22, 22)
+    btn_furn_house_rect = pygame.Rect(0, 0, 116, 26)
+    btn_furn_poss_rect = pygame.Rect(0, 0, 116, 26)
 
     entity_card_rect = pygame.Rect(0, 0, 310, 180)
     btn_entity_close_rect = pygame.Rect(0, 0, 22, 22)
+    btn_entity_household_rect = pygame.Rect(0, 0, 96, 22)
 
     show_debug_paths = True
     btn_path_toggle_rect = pygame.Rect(0, 0, PATH_TOGGLE_BTN_WIDTH, PATH_TOGGLE_BTN_HEIGHT)
@@ -722,7 +725,7 @@ def main():
                     if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
                         market_modal.close()
                     else:
-                        market_modal.handle_event(event, resources, stockpile_manager)
+                        market_modal.handle_event(event, resources, stockpile_manager, servant_manager=servant_manager)
 
                 # -------------------------------------------------------------
                 # 5. NORMAL GAMEPLAY
@@ -803,14 +806,31 @@ def main():
                                     )
                                     selected_furniture = None
                                     continue
+                                elif btn_furn_house_rect and btn_furn_house_rect.collidepoint(event.pos):
+                                    if selected_furniture.family_id:
+                                        raport_ui.open_household_directly(selected_furniture.family_id)
+                                    selected_furniture = None
+                                    continue
+                                elif btn_furn_poss_rect and btn_furn_poss_rect.collidepoint(event.pos):
+                                    if selected_furniture.family_id:
+                                        raport_ui.open_possession_directly(selected_furniture.family_id)
+                                    selected_furniture = None
+                                    continue
                                 elif btn_furn_close_rect and btn_furn_close_rect.collidepoint(event.pos):
                                     selected_furniture = None
                                     continue
 
-                            # 0A2. Cek apakah pemain mengklik tombol close pada kartu profil entitas
-                            if selected_entity is not None and btn_entity_close_rect and btn_entity_close_rect.collidepoint(event.pos):
-                                selected_entity = None
-                                continue
+                            # 0A2. Cek apakah pemain mengklik tombol close / action pada kartu profil entitas
+                            if selected_entity is not None:
+                                if btn_entity_close_rect and btn_entity_close_rect.collidepoint(event.pos):
+                                    selected_entity = None
+                                    continue
+                                elif btn_entity_household_rect and btn_entity_household_rect.collidepoint(event.pos):
+                                    fam_id = getattr(selected_entity, "family_id", None)
+                                    if fam_id:
+                                        raport_ui.open_household_directly(fam_id)
+                                        selected_entity = None
+                                        continue
 
                             # 0A3. Cek apakah pemain mengklik entitas AI di peta (Villager / Servant)
                             clicked_ai = None
@@ -885,9 +905,7 @@ def main():
                                     market_modal.open(clicked_b)
                                     raport_ui.close()
                                 else:
-                                    raport_ui.is_open = True
-                                    raport_ui.active_tab = 0  # Tab Buildings
-                                    raport_ui.selected_building_inspect = clicked_b
+                                    raport_ui.open_building_directly(clicked_b)
                                 continue
 
                             # 2. Cek apakah pemain mengklik surat tanah / permit di peta (empty atau occupied)
@@ -895,9 +913,7 @@ def main():
                             if clicked_p:
                                 selected_furniture = None
                                 selected_entity = None
-                                raport_ui.is_open = True
-                                raport_ui.active_tab = 1  # Tab Area Permits
-                                raport_ui.selected_permit_inspect_id = clicked_p.id
+                                raport_ui.open_permit_directly(clicked_p.id, permit_manager)
                                 continue
 
         # Update Game Logic
@@ -1433,7 +1449,8 @@ def main():
                 pygame.draw.rect(screen, (250, 204, 21), (fsx - 2, fsy - 2, scaled_t + 4, scaled_t + 4), width=2, border_radius=5)
 
                 # Modal popup positioned conveniently above/below the tile
-                cw, ch = 270, 140
+                has_owner = bool(selected_furniture.family_id)
+                cw, ch = 280, (152 if has_owner else 134)
                 cx = max(12, min(screen.get_width() - cw - 12, fsx + scaled_t // 2 - cw // 2))
                 cy = fsy - ch - 12
                 if cy < 50:
@@ -1480,6 +1497,31 @@ def main():
                 else:
                     det_txt = f"Location: ({selected_furniture.grid_x}, {selected_furniture.grid_y})"
                 screen.blit(font_hud.render(det_txt, True, (56, 189, 248)), (cx + 14, cy + 54))
+
+                # Contextual buttons for owned furniture: Household and Possession
+                if owner_fam:
+                    btn_furn_house_rect.x = cx + 14
+                    btn_furn_house_rect.y = cy + 76
+                    btn_furn_house_rect.w = 114
+                    btn_furn_house_rect.h = 24
+                    h_hov = btn_furn_house_rect.collidepoint(m_pos)
+                    pygame.draw.rect(screen, (14, 116, 144) if h_hov else (15, 23, 42), btn_furn_house_rect, border_radius=4)
+                    pygame.draw.rect(screen, (56, 189, 248), btn_furn_house_rect, width=1, border_radius=4)
+                    h_txt = font_badge.render("Household", True, (255, 255, 255))
+                    screen.blit(h_txt, (btn_furn_house_rect.centerx - h_txt.get_width() // 2, btn_furn_house_rect.centery - h_txt.get_height() // 2))
+
+                    btn_furn_poss_rect.x = cx + cw - 14 - 114
+                    btn_furn_poss_rect.y = cy + 76
+                    btn_furn_poss_rect.w = 114
+                    btn_furn_poss_rect.h = 24
+                    p_hov = btn_furn_poss_rect.collidepoint(m_pos)
+                    pygame.draw.rect(screen, (202, 138, 4) if p_hov else (161, 98, 7), btn_furn_poss_rect, border_radius=4)
+                    pygame.draw.rect(screen, (250, 204, 21), btn_furn_poss_rect, width=1, border_radius=4)
+                    p_txt = font_badge.render("Possessions", True, (255, 255, 255))
+                    screen.blit(p_txt, (btn_furn_poss_rect.centerx - p_txt.get_width() // 2, btn_furn_poss_rect.centery - p_txt.get_height() // 2))
+                else:
+                    btn_furn_house_rect.x = -9999
+                    btn_furn_poss_rect.x = -9999
 
                 # Buttons: Move & Destroy
                 btn_furn_move_rect.x = cx + 14
@@ -1569,8 +1611,19 @@ def main():
                 if fam_id and villager_manager:
                     fam_obj = villager_manager.get_family_by_id(fam_id)
                     household_name = f"The {fam_obj.surname} Family" if fam_obj else str(fam_id)
+                    # Contextual button: [ Household ]
+                    btn_entity_household_rect.x = cx + cw - 96
+                    btn_entity_household_rect.y = cy + 32
+                    btn_entity_household_rect.w = 82
+                    btn_entity_household_rect.h = 20
+                    hh_hov = btn_entity_household_rect.collidepoint(m_pos)
+                    pygame.draw.rect(screen, (14, 116, 144) if hh_hov else (15, 23, 42), btn_entity_household_rect, border_radius=4)
+                    pygame.draw.rect(screen, (56, 189, 248), btn_entity_household_rect, width=1, border_radius=4)
+                    hh_lbl = font_badge.render("Household", True, (255, 255, 255))
+                    screen.blit(hh_lbl, (btn_entity_household_rect.centerx - hh_lbl.get_width() // 2, btn_entity_household_rect.centery - hh_lbl.get_height() // 2))
                 else:
                     household_name = getattr(selected_entity, "household_name", "Crown Estate Household")
+                    btn_entity_household_rect.x = -9999
                 screen.blit(font_hud.render(f"Household: {household_name}", True, (56, 189, 248)), (cx + 14, cy + 34))
 
                 # Current Activity / Job
@@ -1661,7 +1714,7 @@ def main():
             raport_ui.draw(screen, building_manager, permit_manager, resources, servant_manager, villager_manager, schedule_manager=schedule_manager, day_cycle=day_cycle, furniture_manager=furniture_manager, stockpile_manager=stockpile_manager, production_system=production_system)
 
             # 11.5. Market Profile Modal Dialog (AGENT 2)
-            market_modal.draw(screen, resources, stockpile_manager)
+            market_modal.draw(screen, resources, stockpile_manager, servant_manager=servant_manager)
 
             # 12. Speed Control HUD (Bottom Right)
             speed_controller.draw(screen)

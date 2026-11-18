@@ -39,9 +39,14 @@ from game.config import (
     ROUTE_STATE_ASSIGNED,
     ROUTE_STATE_ACTIVE,
     ROUTE_STATE_COMPLETED,
-    ROUTE_STATE_FAILED
+    ROUTE_STATE_FAILED,
+    DOORWAY_IDLE_MIN_DISTANCE,
+    DOORWAY_QUEUE_LATERAL_OFFSET,
+    TILE_OCCUPANCY_TIMEOUT,
+    TILE_STEP_RESERVATION_TIMEOUT,
+    NARROW_PASSAGE_WAIT_DISTANCE
 )
-from game.world.pathfinding import GlobalPathRegistry, calculate_collision_slide
+from game.world.pathfinding import GlobalPathRegistry, calculate_collision_slide, is_narrow_passage_tile
 from game.systems.job_tool_system import (
     get_job_required_tools,
     get_missing_tools_for_worker,
@@ -90,6 +95,15 @@ class Servant:
         self.target_grant_fam_id = None
         self.target_grant_res = None
         self.target_grant_amount = 0
+
+        # Market Restock hauling targets (Agent 2)
+        self.target_restock_order = None
+        self.target_restock_stack = None
+        self.target_restock_market = None
+        self.target_restock_pos = None
+        self.target_restock_dest = None
+        self.target_restock_res = None
+        self.target_restock_amount = 0
 
         # Carried items (Max 5 items)
         self.carried_res = None
@@ -490,6 +504,72 @@ class Servant:
                 self.repath_cooldown = 0.0
                 self._reset_task()
 
+        elif self.state == "RESTOCK_FETCH":
+            if not self.target_restock_stack or self.target_restock_stack not in stockpile_manager.stacks or self.target_restock_stack.amount <= 0:
+                self._reset_task()
+                return
+
+            all_vils = villager_manager.get_all_villagers() if villager_manager else []
+            all_ents = list(all_servants or []) + all_vils
+            if self._move_towards(self.target_restock_pos[0], self.target_restock_pos[1], dt, arrival_dist=24, all_servants=all_servants, player=player, building_manager=building_manager, all_entities=all_ents, furniture_manager=furniture_manager, exclusive_target=False):
+                actual = stockpile_manager.take_from_stack(self.target_restock_stack, self.target_restock_amount)
+                if actual > 0:
+                    stockpile_manager.refresh_stacks(resources, permit_manager)
+                    self.carried_res = self.target_restock_res
+                    self.carried_amount = actual
+                    reg = GlobalPathRegistry.get_instance()
+                    reg.release_reservation(self.id)
+                    self.current_path = []
+                    self.path_index = 0
+                    self.path_target = None
+                    self.path_target_tile = None
+                    self.is_waiting_for_path = False
+                    self.wait_timer = 0.0
+                    self.repath_cooldown = 0.0
+                    self.state = "RESTOCK_DELIVER"
+                    self.say(f"Hauling {actual} {self.carried_res} to Market...")
+                else:
+                    if self.target_restock_order:
+                        self.target_restock_order["in_transit"] = max(0, self.target_restock_order.get("in_transit", 0) - self.target_restock_amount)
+                    self._reset_task()
+
+        elif self.state == "RESTOCK_DELIVER":
+            if not self.target_restock_dest or not self.target_restock_market:
+                self._reset_task()
+                return
+
+            all_vils = villager_manager.get_all_villagers() if villager_manager else []
+            all_ents = list(all_servants or []) + all_vils
+
+            if self._move_towards(self.target_restock_dest[0], self.target_restock_dest[1], dt, arrival_dist=32, all_servants=all_servants, player=player, building_manager=building_manager, all_entities=all_ents, furniture_manager=furniture_manager, exclusive_target=False):
+                # Arrived at Market! Deposit physical items into market inventory
+                mkt = self.target_restock_market
+                if not hasattr(mkt, "inventory") or mkt.inventory is None:
+                    mkt.inventory = {}
+
+                mkt.inventory[self.carried_res] = mkt.inventory.get(self.carried_res, 0) + self.carried_amount
+
+                if self.target_restock_order:
+                    self.target_restock_order["delivered"] = self.target_restock_order.get("delivered", 0) + self.carried_amount
+                    self.target_restock_order["in_transit"] = max(0, self.target_restock_order.get("in_transit", 0) - self.carried_amount)
+                    if self.target_restock_order["delivered"] >= self.target_restock_order["amount"]:
+                        if servant_manager and self.target_restock_order in getattr(servant_manager, "restock_orders", []):
+                            servant_manager.restock_orders.remove(self.target_restock_order)
+
+                self.say(f"Restocked {self.carried_amount} {self.carried_res} at Market, Sire!", duration=2.5)
+                self.carried_res = None
+                self.carried_amount = 0
+                reg = GlobalPathRegistry.get_instance()
+                reg.release_reservation(self.id)
+                self.current_path = []
+                self.path_index = 0
+                self.path_target = None
+                self.path_target_tile = None
+                self.is_waiting_for_path = False
+                self.wait_timer = 0.0
+                self.repath_cooldown = 0.0
+                self._reset_task()
+
     def _is_matching_grant_item(self, stack_res_type, requested_item):
         """Generic matching between landlord stockpile stack and requested grant item."""
         if not stack_res_type or not requested_item:
@@ -583,6 +663,64 @@ class Servant:
                         self.target_grant_amount = amt_to_take
                         self.state = "GRANT_FETCH"
                         self.say(f"Fetching {amt_to_take} {item_type} for The {fam_id} Family, Lord!")
+                        return True
+
+        # Royal Decree: Hauling Restock Items to Market (Agent 2)
+        if servant_manager and getattr(servant_manager, "restock_orders", None):
+            for order in servant_manager.restock_orders:
+                remaining = order["amount"] - order.get("in_transit", 0) - order.get("delivered", 0)
+                if remaining > 0:
+                    item_type = order["item_type"]
+                    target_res = "Food" if item_type in ("Potato", "potato") else item_type
+                    # Find stack in Landlord's stockpile with available capacity
+                    storage_stack = None
+                    for s in stockpile_manager.stacks:
+                        if getattr(s, "owner_type", "landlord") == "landlord" and getattr(s, "available_amount", s.amount) > 0:
+                            if s.resource_type in (item_type, target_res) or self._is_matching_grant_item(s.resource_type, item_type):
+                                storage_stack = s
+                                break
+                    if storage_stack:
+                        mkt = order["market_building"]
+                        dest_pos = mkt.get_world_pos(TILE_SIZE) if hasattr(mkt, "get_world_pos") else None
+                        if not dest_pos and getattr(mkt, "tiles", None):
+                            t_list = list(mkt.tiles)
+                            avg_x = sum(t[0] for t in t_list) / len(t_list)
+                            avg_y = sum(t[1] for t in t_list) / len(t_list)
+                            dest_pos = ((avg_x + 0.5) * TILE_SIZE, (avg_y + 0.5) * TILE_SIZE)
+                        if not dest_pos:
+                            dest_pos = (player.x + 40, player.y + 40)
+
+                        amt_to_take = min(SERVANT_CARRY_CAPACITY, remaining, getattr(storage_stack, "available_amount", storage_stack.amount))
+                        if amt_to_take <= 0:
+                            continue
+                        order["in_transit"] = order.get("in_transit", 0) + amt_to_take
+                        if hasattr(storage_stack, "reserve"):
+                            storage_stack.reserve(amt_to_take)
+
+                        # Clear old path & reservation before switching task
+                        reg = GlobalPathRegistry.get_instance()
+                        reg.release_reservation(self.id)
+                        self.current_path = []
+                        self.path_index = 0
+                        self.path_target = None
+                        self.path_target_tile = None
+                        self.is_waiting_for_path = False
+                        self.wait_timer = 0.0
+                        self.repath_cooldown = 0.0
+
+                        worker_idx = all_servants.index(self) if (all_servants and self in all_servants) else 0
+                        offsets = [(0, -10), (0, 10), (-10, 0), (10, 0)]
+                        ox, oy = offsets[worker_idx % len(offsets)]
+
+                        self.target_restock_order = order
+                        self.target_restock_stack = storage_stack
+                        self.target_restock_pos = ((storage_stack.grid_x + 0.5) * TILE_SIZE + ox, (storage_stack.grid_y + 0.5) * TILE_SIZE + oy)
+                        self.target_restock_dest = dest_pos
+                        self.target_restock_market = mkt
+                        self.target_restock_res = item_type
+                        self.target_restock_amount = amt_to_take
+                        self.state = "RESTOCK_FETCH"
+                        self.say(f"Fetching {amt_to_take} {item_type} for Market restock, Sire!")
                         return True
 
         # Hauling Designated Landlord / Unassigned Furniture
@@ -737,6 +875,19 @@ class Servant:
         if self.target_grant_stack and hasattr(self.target_grant_stack, "release_reservation"):
             self.target_grant_stack.release_reservation(self.target_grant_amount)
 
+        # Refund restock order in_transit count (Agent 2)
+        if self.target_restock_order:
+            self.target_restock_order["in_transit"] = max(0, self.target_restock_order.get("in_transit", 0) - self.target_restock_amount)
+        if self.target_restock_stack and hasattr(self.target_restock_stack, "release_reservation"):
+            self.target_restock_stack.release_reservation(self.target_restock_amount)
+        self.target_restock_order = None
+        self.target_restock_stack = None
+        self.target_restock_market = None
+        self.target_restock_pos = None
+        self.target_restock_dest = None
+        self.target_restock_res = None
+        self.target_restock_amount = 0
+
         # Release any path reservation and reset route state
         reg = GlobalPathRegistry.get_instance()
         reg.release_reservation(self.id)
@@ -773,10 +924,25 @@ class Servant:
             offset_y = random.uniform(-90, 90)
             tx = player.x + offset_x
             ty = player.y + offset_y
-            if building_manager and building_manager.is_near_any_door(tx, ty, min_dist=48.0):
-                tx += 40.0 if offset_x >= 0 else -40.0
-                ty += 40.0 if offset_y >= 0 else -40.0
+            if building_manager and building_manager.is_near_any_door(tx, ty, min_dist=DOORWAY_IDLE_MIN_DISTANCE):
+                tx += 50.0 if offset_x >= 0 else -50.0
+                ty += 50.0 if offset_y >= 0 else -50.0
+                if building_manager.is_near_any_door(tx, ty, min_dist=DOORWAY_IDLE_MIN_DISTANCE):
+                    tx = player.x + (60.0 if offset_x >= 0 else -60.0)
+                    ty = player.y + (60.0 if offset_y >= 0 else -60.0)
             self.idle_target = (tx, ty)
+
+        # Bebaskan celah pintu jika tanpa sengaja berada di threshold saat idle
+        if building_manager and building_manager.is_near_any_door(self.x, self.y, min_dist=32.0):
+            for b in getattr(building_manager, "buildings", []):
+                if b.door_pos and b.is_in_door_threshold(self.x, self.y, TILE_SIZE):
+                    d_out = b.get_door_world_outside(TILE_SIZE)
+                    n_dx = d_out[0] - self.x
+                    n_dy = d_out[1] - self.y
+                    n_dist = math.hypot(n_dx, n_dy)
+                    if n_dist > 0.1:
+                        self.x += (n_dx / n_dist) * (self.speed * dt * 0.8)
+                        self.y += (n_dy / n_dist) * (self.speed * dt * 0.8)
 
         self.is_waiting_for_path = False
         self._move_towards(self.idle_target[0], self.idle_target[1], dt, arrival_dist=20, all_servants=all_servants, player=player, building_manager=building_manager, all_entities=all_entities, furniture_manager=furniture_manager, exclusive_target=False)
@@ -794,6 +960,11 @@ class Servant:
 
         if getattr(self, "repath_cooldown", 0.0) > 0.0:
             self.repath_cooldown -= dt
+
+        if getattr(self, "route_state", None) == ROUTE_STATE_FAILED:
+            if getattr(self, "repath_cooldown", 0.0) <= 0.0:
+                self.route_state = ROUTE_STATE_NONE
+                self.is_waiting_for_path = False
 
         if self.wait_timer > 0.0 or getattr(self, "is_waiting_for_path", False):
             self.route_request_timer += dt
@@ -821,11 +992,29 @@ class Servant:
                 else:
                     self.route_state = ROUTE_STATE_REQUESTED
                     self.repath_cooldown = 0.0
+                    return False
             elif self.wait_timer > 0.0:
                 if not reg.is_path_blocked_for(self.id, (self.x, self.y), (tx, ty)):
                     self.wait_timer = 0.0
                 else:
                     return False
+
+        # Validasi langsung: jika sudah berada di dalam jarak kedatangan / jangkauan interaksi target
+        direct_dist_to_target = math.hypot(tx - self.x, ty - self.y)
+        if direct_dist_to_target <= arrival_dist:
+            self.is_moving = False
+            self.current_path = []
+            self.path_index = 0
+            self.path_target = None
+            self.is_waiting_for_path = False
+            self.route_state = ROUTE_STATE_COMPLETED
+            self.route_request_timer = 0.0
+            self.route_retry_count = 0
+            reg.release_reservation(self.id)
+            if building_manager:
+                for b in getattr(building_manager, "buildings", []):
+                    b.release_door_passage(self.id)
+            return True
 
         # 1. Rute Predetermined Pathfinding A* (Jalur Garis yang Ditentukan)
         target_dist = math.hypot(tx - (self.path_target[0] if self.path_target else 999999),
@@ -880,13 +1069,20 @@ class Servant:
             if building_manager:
                 cand_path = building_manager.find_path((self.x, self.y), (tx, ty), TILE_SIZE, furniture_manager=furniture_manager, avoid_tiles=avoid_set)
                 if not cand_path:
-                    for (adx, ady) in ((0, 1), (1, 0), (0, -1), (-1, 0)):
-                        adj_tx = tx + adx * TILE_SIZE
-                        adj_ty = ty + ady * TILE_SIZE
-                        adj_cand = building_manager.find_path((self.x, self.y), (adj_tx, adj_ty), TILE_SIZE, furniture_manager=furniture_manager, avoid_tiles=avoid_set)
-                        if adj_cand:
-                            cand_path = adj_cand
+                    # Cari di petak-petak sekitarnya (jarak 1 hingga 2 petak)
+                    candidates = []
+                    for dist in (1, 2):
+                        for (adx, ady) in ((0, dist), (dist, 0), (0, -dist), (-dist, 0), (dist, dist), (-dist, -dist), (dist, -dist), (-dist, dist)):
+                            adj_tx = tx + adx * TILE_SIZE
+                            adj_ty = ty + ady * TILE_SIZE
+                            adj_cand = building_manager.find_path((self.x, self.y), (adj_tx, adj_ty), TILE_SIZE, furniture_manager=furniture_manager, avoid_tiles=avoid_set)
+                            if adj_cand:
+                                candidates.append((len(adj_cand), adj_cand))
+                        if candidates:
                             break
+                    if candidates:
+                        candidates.sort(key=lambda c: c[0])
+                        cand_path = candidates[0][1]
             else:
                 cand_path = [(tx, ty)]
 
@@ -906,7 +1102,7 @@ class Servant:
                     self.current_path = []
                     self.path_index = 0
                     self.is_moving = False
-                    has_blocker = any(c[1] in ("DOORWAY_CONFLICT", "DOORWAY_THRESHOLD_JAM", "TARGET_CONFLICT", "QUEUE_PRIORITY") for c in res_or_conf) if isinstance(res_or_conf, list) else False
+                    has_blocker = any(c[1] in ("DOORWAY_CONFLICT", "DOORWAY_THRESHOLD_JAM", "TARGET_CONFLICT", "QUEUE_PRIORITY", "NARROW_PASSAGE_CONFLICT") for c in res_or_conf) if isinstance(res_or_conf, list) else False
                     if exclusive_target or has_blocker:
                         self.is_waiting_for_path = True
                         self.wait_timer = PATH_WAIT_RECHECK_INTERVAL
@@ -947,6 +1143,11 @@ class Servant:
             self.is_moving = False
             return False
 
+        # Daftarkan okupansi fisik petak saat ini ke GlobalPathRegistry
+        cur_gx = int(math.floor(self.x / TILE_SIZE))
+        cur_gy = int(math.floor(self.y / TILE_SIZE))
+        reg.occupy_tile(self.id, (cur_gx, cur_gy))
+
         # 4. Melangkah Mengikuti Waypoint Jalur Garis & Update Reservasi
         target_wp = self.current_path[self.path_index]
         wp_dx = target_wp[0] - self.x
@@ -954,6 +1155,23 @@ class Servant:
         dist_to_wp = math.hypot(wp_dx, wp_dy)
         is_last_wp = (self.path_index == len(self.current_path) - 1)
         tol = arrival_dist if is_last_wp else PATH_WAYPOINT_TOLERANCE
+
+        # Koordinasi Okupansi & Reservasi Langkah (Step Reservation)
+        next_gx = int(math.floor(target_wp[0] / TILE_SIZE))
+        next_gy = int(math.floor(target_wp[1] / TILE_SIZE))
+        if (next_gx, next_gy) != (cur_gx, cur_gy):
+            is_narrow = is_narrow_passage_tile((next_gx, next_gy), building_manager=building_manager, furniture_manager=furniture_manager)
+            occ_eid = reg.get_tile_occupant((next_gx, next_gy))
+            if occ_eid and occ_eid != str(self.id):
+                if is_narrow or exclusive_target:
+                    self.is_moving = False
+                    self.wait_timer = PATH_WAIT_RECHECK_INTERVAL
+                    return False
+            reserved_step = reg.reserve_step_tile(self.id, (next_gx, next_gy))
+            if not reserved_step and (is_narrow or exclusive_target):
+                self.is_moving = False
+                self.wait_timer = PATH_WAIT_RECHECK_INTERVAL
+                return False
 
         if dist_to_wp <= tol:
             if is_last_wp:
@@ -1016,7 +1234,8 @@ class Servant:
                 d_in = b.get_door_world_inside(TILE_SIZE)
                 dist_out = math.hypot(self.x - d_out[0], self.y - d_out[1])
                 dist_in = math.hypot(self.x - d_in[0], self.y - d_in[1])
-                near_door = dist_out < 64.0 or dist_in < 64.0 or b.is_in_door_threshold(self.x, self.y, TILE_SIZE)
+                in_threshold = b.is_in_door_threshold(self.x, self.y, TILE_SIZE)
+                near_door = dist_out < 64.0 or dist_in < 64.0 or in_threshold
 
                 if near_door:
                     tar_gx = int(math.floor(tx / TILE_SIZE))
@@ -1026,15 +1245,30 @@ class Servant:
                                    (getattr(self, "door_waypoints", None) and any(b.occupies_tile(int(wp[0]//TILE_SIZE), int(wp[1]//TILE_SIZE)) for wp in self.door_waypoints)) or \
                                    (self.current_path and any(b.occupies_tile(int(wp[0]//TILE_SIZE), int(wp[1]//TILE_SIZE)) for wp in self.current_path[self.path_index:]))
                     if crosses_door:
-                        door_phys = building_manager.is_door_occupied(b.door_pos, check_ents, exclude_entity=self, tile_size=TILE_SIZE)
-                        is_outside = (dist_out <= dist_in) and not b.occupies_tile(cur_gx, cur_gy)
-                        can_pass, q_pos = b.request_door_passage(self.id, is_outside, tile_size=TILE_SIZE)
-                        if door_phys or (not can_pass and q_pos):
-                            self.is_waiting_for_path = True
-                            self.is_moving = False
-                            return False
-                        else:
+                        if in_threshold:
+                            # Selesaikan langkah melintasi celah kusen pintu; jangan berhenti di tengah kusen
+                            b.door_active_user = str(self.id)
                             self.is_waiting_for_path = False
+                        else:
+                            door_phys = building_manager.is_door_occupied(b.door_pos, check_ents, exclude_entity=self, tile_size=TILE_SIZE)
+                            is_outside = (dist_out <= dist_in) and not b.occupies_tile(cur_gx, cur_gy)
+                            can_pass, q_pos = b.request_door_passage(self.id, is_outside, tile_size=TILE_SIZE)
+                            if door_phys or not can_pass:
+                                # Pintu sedang dipakai AI lain -> Bergerak ke posisi antrean lateral di samping pintu jika posisi tersedia
+                                if q_pos:
+                                    q_dist = math.hypot(self.x - q_pos[0], self.y - q_pos[1])
+                                    if q_dist > 12.0:
+                                        q_dx = (q_pos[0] - self.x) / q_dist
+                                        q_dy = (q_pos[1] - self.y) / q_dist
+                                        self.x += q_dx * self.speed * dt * 0.7
+                                        self.y += q_dy * self.speed * dt * 0.7
+                                        if building_manager:
+                                            self.x, self.y = building_manager.resolve_collision(self.x, self.y, self.radius, TILE_SIZE)
+                                self.is_waiting_for_path = True
+                                self.is_moving = False
+                                return False
+                            else:
+                                self.is_waiting_for_path = False
                 else:
                     if b.door_active_user == str(self.id):
                         b.release_door_passage(self.id)
@@ -1214,6 +1448,7 @@ class ServantManager:
     def __init__(self):
         self.servants = []
         self.grant_orders = []
+        self.restock_orders = []
         self.font_bubble = None
 
         # Inisialisasi 2 Servant awal
@@ -1235,6 +1470,45 @@ class ServantManager:
             "in_transit": 0,
             "delivered": 0
         })
+
+    def add_restock_order(self, market_building, item_type, amount, stockpile_manager=None, resources=None):
+        """Mendaftarkan tugas restock fisik barang dari storage Landlord ke pasar oleh Servant (Agent 2)"""
+        if amount <= 0 or not market_building:
+            return None
+
+        # Cek ketersediaan di Landlord storage
+        target_res = "Food" if item_type in ("Potato", "potato") else item_type
+        avail_stock = 0
+        if stockpile_manager:
+            for s in getattr(stockpile_manager, "stacks", []):
+                if s.owner_type == "landlord" and s.resource_type in (item_type, target_res):
+                    avail_stock += getattr(s, "available_amount", s.amount)
+        elif resources:
+            avail_stock = resources.get(target_res, resources.get(item_type, 0))
+
+        if avail_stock <= 0:
+            return None
+
+        order_amt = min(amount, avail_stock)
+        order = {
+            "id": f"restock_{int(time.time()*1000)}_{len(self.restock_orders)}",
+            "market_building": market_building,
+            "item_type": item_type,
+            "amount": order_amt,
+            "in_transit": 0,
+            "delivered": 0
+        }
+        self.restock_orders.append(order)
+        return order
+
+    def get_in_transit_for_market(self, market_building, item_type=None):
+        """Mengembalikan total jumlah barang yang sedang dalam proses pengiriman oleh Servant ke pasar"""
+        total = 0
+        for o in self.restock_orders:
+            if o.get("market_building") == market_building:
+                if item_type is None or o.get("item_type") == item_type:
+                    total += (o.get("amount", 0) - o.get("delivered", 0))
+        return total
 
     def _ensure_font(self):
         if self.font_bubble is None:
