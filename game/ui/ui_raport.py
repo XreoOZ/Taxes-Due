@@ -34,6 +34,7 @@ from game.config import (
     DEMOLITION_REFUND_RATIO,
     SCHEDULE_TYPES,
     DEFAULT_JOB_SCHEDULE,
+    DAYS_OF_WEEK,
     is_food_item
 )
 from game.data.planning import (
@@ -195,11 +196,29 @@ class RaportUI:
         # Schedule State
         self.selected_schedule_job_id = None
         self.selected_schedule_brush = "WORK"
+        self.selected_schedule_day = "Monday"
+        self.schedule_day_btn_rects = {}
+        self.prayer_start_dec_rect = None
+        self.prayer_start_inc_rect = None
+        self.prayer_end_dec_rect = None
+        self.prayer_end_inc_rect = None
         self.schedule_job_select_btn_rects = {}
         self.schedule_brush_btn_rects = {}
         self.schedule_hour_cell_rects = {}
         self.schedule_preset_btn_rects = {}
         self.schedule_back_btn_rect = None
+
+        # Member Job Assignment State
+        self.member_job_btn_rects = {}
+
+        # Church Tax State
+        self.church_tax = {"Gold": 0, "Silver": 0, "Copper": 1}
+        self.church_tax_g_dec_rect = None
+        self.church_tax_g_inc_rect = None
+        self.church_tax_s_dec_rect = None
+        self.church_tax_s_inc_rect = None
+        self.church_tax_c_dec_rect = None
+        self.church_tax_c_inc_rect = None
 
         # Household Possession State
         self.show_household_possession = False
@@ -238,6 +257,8 @@ class RaportUI:
         self.permit_household_btn_rects = {}
         self.building_household_btn_rects = {}
         self.household_view_permit_btn_rect = None
+        self.cancel_construction_btn_rects = {}
+        self.cancel_demolition_btn_rects = {}
 
         self.modal_w = RAPORT_MODAL_WIDTH
         self.modal_h = RAPORT_MODAL_HEIGHT
@@ -640,6 +661,22 @@ class RaportUI:
                     self.open_household_directly(fid)
                     return f"open_household_{fid}"
 
+            # Check Cancel Demolition buttons
+            for d, rect in list(self.cancel_demolition_btn_rects.items()):
+                if rect.collidepoint(mouse_pos):
+                    servants = servant_manager.servants if servant_manager else None
+                    building_manager.cancel_demolition(d, all_servants=servants)
+                    self.cancel_demolition_btn_rects.clear()
+                    return "cancel_demolition"
+
+            # Check Cancel Construction buttons
+            for s, rect in list(self.cancel_construction_btn_rects.items()):
+                if rect.collidepoint(mouse_pos):
+                    servants = servant_manager.servants if servant_manager else None
+                    building_manager.cancel_construction(s, resources=resources, stockpile_manager=stockpile_manager, all_servants=servants)
+                    self.cancel_construction_btn_rects.clear()
+                    return "cancel_construction"
+
             # Check Destroy Building buttons
             for b, rect in list(self.destroy_building_btn_rects.items()):
                 if rect.collidepoint(mouse_pos):
@@ -802,6 +839,30 @@ class RaportUI:
                         self.selected_schedule_job_id = None
                         return "back_to_schedule_jobs"
 
+                    for day_name, rect in self.schedule_day_btn_rects.items():
+                        if rect.collidepoint(mouse_pos):
+                            self.selected_schedule_day = day_name
+                            return f"select_schedule_day_{day_name}"
+
+                    if self.prayer_start_dec_rect and self.prayer_start_dec_rect.collidepoint(mouse_pos):
+                        s, e = schedule_manager.get_prayer_hours()
+                        schedule_manager.set_prayer_time(max(0, s - 1), e)
+                        return "prayer_start_dec"
+                    if self.prayer_start_inc_rect and self.prayer_start_inc_rect.collidepoint(mouse_pos):
+                        s, e = schedule_manager.get_prayer_hours()
+                        if s + 1 < e:
+                            schedule_manager.set_prayer_time(s + 1, e)
+                        return "prayer_start_inc"
+                    if self.prayer_end_dec_rect and self.prayer_end_dec_rect.collidepoint(mouse_pos):
+                        s, e = schedule_manager.get_prayer_hours()
+                        if e - 1 > s:
+                            schedule_manager.set_prayer_time(s, e - 1)
+                        return "prayer_end_dec"
+                    if self.prayer_end_inc_rect and self.prayer_end_inc_rect.collidepoint(mouse_pos):
+                        s, e = schedule_manager.get_prayer_hours()
+                        schedule_manager.set_prayer_time(s, min(24, e + 1))
+                        return "prayer_end_inc"
+
                     for brush_type, rect in self.schedule_brush_btn_rects.items():
                         if rect.collidepoint(mouse_pos):
                             self.selected_schedule_brush = brush_type
@@ -809,21 +870,21 @@ class RaportUI:
 
                     for hour_idx, rect in self.schedule_hour_cell_rects.items():
                         if rect.collidepoint(mouse_pos):
-                            schedule_manager.set_hour_activity(self.selected_schedule_job_id, hour_idx, self.selected_schedule_brush)
+                            schedule_manager.set_hour_activity(self.selected_schedule_job_id, hour_idx, self.selected_schedule_brush, day=self.selected_schedule_day)
                             return f"paint_hour_{hour_idx}_{self.selected_schedule_brush}"
 
                     for preset_name, rect in self.schedule_preset_btn_rects.items():
                         if rect.collidepoint(mouse_pos):
                             if preset_name == "standard":
-                                schedule_manager.reset_to_default(self.selected_schedule_job_id)
+                                schedule_manager.reset_to_default(self.selected_schedule_job_id, day=self.selected_schedule_day)
                             elif preset_name == "hardwork":
                                 sched = ["SLEEP"]*5 + ["LEISURE"] + ["WORK"]*15 + ["LEISURE"] + ["SLEEP"]*2
                                 for h in range(24):
-                                    schedule_manager.set_hour_activity(self.selected_schedule_job_id, h, sched[h])
+                                    schedule_manager.set_hour_activity(self.selected_schedule_job_id, h, sched[h], day=self.selected_schedule_day)
                             elif preset_name == "relaxed":
                                 sched = ["SLEEP"]*7 + ["LEISURE"]*2 + ["WORK"]*7 + ["LEISURE"]*6 + ["SLEEP"]*2
                                 for h in range(24):
-                                    schedule_manager.set_hour_activity(self.selected_schedule_job_id, h, sched[h])
+                                    schedule_manager.set_hour_activity(self.selected_schedule_job_id, h, sched[h], day=self.selected_schedule_day)
                             return f"apply_schedule_preset_{preset_name}"
 
         # 7. Tab 4: Villagers & Family Clans Management
@@ -907,6 +968,19 @@ class RaportUI:
                             self.selected_member_inventory_id = mem_id
                             return f"open_member_inventory_{mem_id}"
 
+                    # Interactive Member Job Assignment: Cycle job directly
+                    for mem_id, btn_rect in list(self.member_job_btn_rects.items()):
+                        if btn_rect.collidepoint(mouse_pos):
+                            fam = villager_manager.get_family_by_id(self.selected_family_id)
+                            if fam:
+                                mem = next((m for m in fam.members if m.id == mem_id), None)
+                                if mem:
+                                    job_keys = list(DEDICATED_JOBS.keys())
+                                    cur_idx = job_keys.index(mem.job) if mem.job in job_keys else 0
+                                    next_job = job_keys[(cur_idx + 1) % len(job_keys)]
+                                    mem.set_job(next_job)
+                                    return f"cycle_job_{mem_id}_{next_job}"
+
                     # Contextual Navigation: Jump to Permit from Household
                     if self.household_view_permit_btn_rect and self.household_view_permit_btn_rect.collidepoint(mouse_pos):
                         fam = villager_manager.get_family_by_id(self.selected_family_id) if (villager_manager and self.selected_family_id) else None
@@ -959,6 +1033,30 @@ class RaportUI:
                     return "back_to_jobs"
 
                 if schedule_manager:
+                    for day_name, rect in self.schedule_day_btn_rects.items():
+                        if rect.collidepoint(mouse_pos):
+                            self.selected_schedule_day = day_name
+                            return f"select_schedule_day_{day_name}"
+
+                    if self.prayer_start_dec_rect and self.prayer_start_dec_rect.collidepoint(mouse_pos):
+                        s, e = schedule_manager.get_prayer_hours()
+                        schedule_manager.set_prayer_time(max(0, s - 1), e)
+                        return "prayer_start_dec"
+                    if self.prayer_start_inc_rect and self.prayer_start_inc_rect.collidepoint(mouse_pos):
+                        s, e = schedule_manager.get_prayer_hours()
+                        if s + 1 < e:
+                            schedule_manager.set_prayer_time(s + 1, e)
+                        return "prayer_start_inc"
+                    if self.prayer_end_dec_rect and self.prayer_end_dec_rect.collidepoint(mouse_pos):
+                        s, e = schedule_manager.get_prayer_hours()
+                        if e - 1 > s:
+                            schedule_manager.set_prayer_time(s, e - 1)
+                        return "prayer_end_dec"
+                    if self.prayer_end_inc_rect and self.prayer_end_inc_rect.collidepoint(mouse_pos):
+                        s, e = schedule_manager.get_prayer_hours()
+                        schedule_manager.set_prayer_time(s, min(24, e + 1))
+                        return "prayer_end_inc"
+
                     for brush_type, rect in self.schedule_brush_btn_rects.items():
                         if rect.collidepoint(mouse_pos):
                             self.selected_schedule_brush = brush_type
@@ -966,21 +1064,21 @@ class RaportUI:
 
                     for hour_idx, rect in self.schedule_hour_cell_rects.items():
                         if rect.collidepoint(mouse_pos):
-                            schedule_manager.set_hour_activity(self.selected_schedule_job_id, hour_idx, self.selected_schedule_brush)
+                            schedule_manager.set_hour_activity(self.selected_schedule_job_id, hour_idx, self.selected_schedule_brush, day=self.selected_schedule_day)
                             return f"paint_hour_{hour_idx}_{self.selected_schedule_brush}"
 
                     for preset_name, rect in self.schedule_preset_btn_rects.items():
                         if rect.collidepoint(mouse_pos):
                             if preset_name == "standard":
-                                schedule_manager.reset_to_default(self.selected_schedule_job_id)
+                                schedule_manager.reset_to_default(self.selected_schedule_job_id, day=self.selected_schedule_day)
                             elif preset_name == "hardwork":
                                 sched = ["SLEEP"]*5 + ["LEISURE"] + ["WORK"]*15 + ["LEISURE"] + ["SLEEP"]*2
                                 for h in range(24):
-                                    schedule_manager.set_hour_activity(self.selected_schedule_job_id, h, sched[h])
+                                    schedule_manager.set_hour_activity(self.selected_schedule_job_id, h, sched[h], day=self.selected_schedule_day)
                             elif preset_name == "relaxed":
                                 sched = ["SLEEP"]*7 + ["LEISURE"]*2 + ["WORK"]*7 + ["LEISURE"]*6 + ["SLEEP"]*2
                                 for h in range(24):
-                                    schedule_manager.set_hour_activity(self.selected_schedule_job_id, h, sched[h])
+                                    schedule_manager.set_hour_activity(self.selected_schedule_job_id, h, sched[h], day=self.selected_schedule_day)
                             return f"apply_schedule_preset_{preset_name}"
 
             # Sub-view B: Worker Roster for Selected Job
@@ -1031,6 +1129,29 @@ class RaportUI:
                     if rect.collidepoint(mouse_pos):
                         self.selected_schedule_job_id = job_id
                         return f"edit_schedule_{job_id}"
+
+        # 8.5. Tab 7: Taxation & Tithes
+        elif self.active_tab == 7:
+            if not hasattr(self, "church_tax") or not isinstance(self.church_tax, dict):
+                self.church_tax = {"Gold": 0, "Silver": 0, "Copper": 1}
+            if self.church_tax_g_dec_rect and self.church_tax_g_dec_rect.collidepoint(mouse_pos):
+                self.church_tax["Gold"] = max(0, self.church_tax.get("Gold", 0) - 1)
+                return "church_tax_gold_dec"
+            if self.church_tax_g_inc_rect and self.church_tax_g_inc_rect.collidepoint(mouse_pos):
+                self.church_tax["Gold"] = self.church_tax.get("Gold", 0) + 1
+                return "church_tax_gold_inc"
+            if self.church_tax_s_dec_rect and self.church_tax_s_dec_rect.collidepoint(mouse_pos):
+                self.church_tax["Silver"] = max(0, self.church_tax.get("Silver", 0) - 1)
+                return "church_tax_silver_dec"
+            if self.church_tax_s_inc_rect and self.church_tax_s_inc_rect.collidepoint(mouse_pos):
+                self.church_tax["Silver"] = self.church_tax.get("Silver", 0) + 1
+                return "church_tax_silver_inc"
+            if self.church_tax_c_dec_rect and self.church_tax_c_dec_rect.collidepoint(mouse_pos):
+                self.church_tax["Copper"] = max(0, self.church_tax.get("Copper", 0) - 1)
+                return "church_tax_copper_dec"
+            if self.church_tax_c_inc_rect and self.church_tax_c_inc_rect.collidepoint(mouse_pos):
+                self.church_tax["Copper"] = self.church_tax.get("Copper", 0) + 1
+                return "church_tax_copper_inc"
 
         # 9. Tab 8: Planning & Roadmap Tab
         elif self.active_tab == 8:
@@ -1254,7 +1375,7 @@ class RaportUI:
 
             # Bottom: Quick Construction Deeds Bar
             btn_y = cy + 270
-            inst_txt = self.font_sub.render("Construct New Buildings & Furnishings (Select to Place on Map):", True, (56, 189, 248))
+            inst_txt = self.font_sub.render("Construct New Structures (Select to Place on Map):", True, (56, 189, 248))
             surface.blit(inst_txt, (mx + 24, btn_y))
 
             total_avail_w = self.modal_w - 48
@@ -1265,13 +1386,13 @@ class RaportUI:
             stone_btn = pygame.Rect(mx + 24 + 1 * (btn_w + btn_gap), btn_y + 26, btn_w, 36)
             well_btn = pygame.Rect(mx + 24 + 2 * (btn_w + btn_gap), btn_y + 26, btn_w, 36)
             market_btn = pygame.Rect(mx + 24 + 3 * (btn_w + btn_gap), btn_y + 26, btn_w, 36)
-            furn_btn = pygame.Rect(mx + 24 + 4 * (btn_w + btn_gap), btn_y + 26, btn_w, 36)
+            toilet_btn = pygame.Rect(mx + 24 + 4 * (btn_w + btn_gap), btn_y + 26, btn_w, 36)
 
             self.building_select_rects["wooden_structure"] = wood_btn
             self.building_select_rects["stone_structure"] = stone_btn
             self.building_select_rects["well"] = well_btn
             self.building_select_rects["market"] = market_btn
-            self.building_category_btn_rects["furniture_quick"] = furn_btn
+            self.building_select_rects["toilet"] = toilet_btn
 
             # 1. Wooden Structure
             w_has = permit_manager.has_permit_type("wooden_structure")
@@ -1305,12 +1426,13 @@ class RaportUI:
             m_lbl = self.font_btn.render("+ Market Stall", True, (255, 255, 255))
             surface.blit(m_lbl, (market_btn.centerx - m_lbl.get_width() // 2, market_btn.centery - m_lbl.get_height() // 2))
 
-            # 5. Furniture Quick
-            f_hov = furn_btn.collidepoint(m_pos)
-            pygame.draw.rect(surface, (202, 138, 4) if f_hov else (161, 98, 7), furn_btn, border_radius=6)
-            pygame.draw.rect(surface, (250, 204, 21), furn_btn, width=1, border_radius=6)
-            f_lbl = self.font_btn.render("+ Furnishings", True, (255, 255, 255))
-            surface.blit(f_lbl, (furn_btn.centerx - f_lbl.get_width() // 2, furn_btn.centery - f_lbl.get_height() // 2))
+            # 5. Toilet
+            tl_has = permit_manager.has_permit_type("toilet")
+            tl_hov = toilet_btn.collidepoint(m_pos)
+            pygame.draw.rect(surface, (139, 90, 43) if tl_has else (71, 85, 105), toilet_btn, border_radius=6)
+            pygame.draw.rect(surface, (202, 138, 4) if (tl_hov and tl_has) else (101, 67, 33), toilet_btn, width=1, border_radius=6)
+            tl_lbl = self.font_btn.render("+ Toilet", True, (255, 255, 255))
+            surface.blit(tl_lbl, (toilet_btn.centerx - tl_lbl.get_width() // 2, toilet_btn.centery - tl_lbl.get_height() // 2))
 
         else:
             # -----------------------------------------------------------------
@@ -1396,14 +1518,30 @@ class RaportUI:
                     for d in b_demos:
                         pct = int((d.progress / d.duration) * 100)
                         txt = f"[Demolishing] {d.name} ({pct}% | Salvaging +{d.refund_wood}W, +{d.refund_stone}S)"
-                        surface.blit(self.font_body.render(txt, True, (239, 68, 68)), (mx + 36, y_cur))
-                        y_cur += 24
+                        surface.blit(self.font_body.render(txt, True, (239, 68, 68)), (mx + 36, y_cur + 2))
+
+                        c_btn = pygame.Rect(mx + self.modal_w - 120, y_cur - 1, 80, 22)
+                        self.cancel_demolition_btn_rects[d] = c_btn
+                        c_hov = c_btn.collidepoint(m_pos)
+                        pygame.draw.rect(surface, (220, 38, 38) if c_hov else (153, 27, 27), c_btn, border_radius=4)
+                        c_lbl = self.font_badge.render("Cancel", True, (255, 255, 255))
+                        surface.blit(c_lbl, (c_btn.centerx - c_lbl.get_width() // 2, c_btn.centery - c_lbl.get_height() // 2))
+
+                        y_cur += 26
 
                     # Construction Sites
                     for s in b_sites:
                         txt = f"[Building] {s.name} ({s.total_delivered()}/{s.total_required()} Materials)"
-                        surface.blit(self.font_body.render(txt, True, (245, 158, 11)), (mx + 36, y_cur))
-                        y_cur += 24
+                        surface.blit(self.font_body.render(txt, True, (245, 158, 11)), (mx + 36, y_cur + 2))
+
+                        c_btn = pygame.Rect(mx + self.modal_w - 120, y_cur - 1, 80, 22)
+                        self.cancel_construction_btn_rects[s] = c_btn
+                        c_hov = c_btn.collidepoint(m_pos)
+                        pygame.draw.rect(surface, (217, 119, 6) if c_hov else (180, 83, 9), c_btn, border_radius=4)
+                        c_lbl = self.font_badge.render("Cancel", True, (255, 255, 255))
+                        surface.blit(c_lbl, (c_btn.centerx - c_lbl.get_width() // 2, c_btn.centery - c_lbl.get_height() // 2))
+
+                        y_cur += 26
 
                     # Completed Buildings
                     for b in b_built:
@@ -1480,22 +1618,20 @@ class RaportUI:
                     lbl = self.font_btn.render(lbl_txt, True, (255, 255, 255))
                     surface.blit(lbl, (f_btn.centerx - lbl.get_width() // 2, f_btn.centery - lbl.get_height() // 2))
             else:
-                for idx, b_id in enumerate(cat_types):
+                avail_w = self.modal_w - 48
+                b_keys = [b for b in cat_types if b in ("wooden_structure", "stone_structure", "well", "market", "toilet")]
+                if not b_keys:
+                    b_keys = list(cat_types)
+                b_btn_w = (avail_w - ((len(b_keys) - 1) * 8)) // max(1, len(b_keys))
+                for idx, b_id in enumerate(b_keys):
                     b_cfg = BUILDING_TYPES.get(b_id, {})
                     has_permit = permit_manager.has_permit_type(b_id)
-                    fixed = b_cfg.get("fixed_cost", False)
-                    if fixed:
-                        cost_str = f"({b_cfg.get('cost_wood', 0)} Wood + {b_cfg.get('cost_stone', 0)} Stone)"
-                    else:
-                        cost_str = f"({b_cfg.get('cost_wood', 0)} Wood + {b_cfg.get('cost_stone', 0)} Stone / tile)"
-
-                    b_btn = pygame.Rect(mx + 24, btn_y + 26, min(480, self.modal_w - 48), 36)
+                    b_btn = pygame.Rect(mx + 24 + idx * (b_btn_w + 8), btn_y + 26, b_btn_w, 36)
                     self.building_select_rects[b_id] = b_btn
                     hov = b_btn.collidepoint(m_pos)
                     b_col = (16, 185, 129) if has_permit else (71, 85, 105)
                     pygame.draw.rect(surface, (34, 197, 94) if (hov and has_permit) else b_col, b_btn, border_radius=6)
-                    status_note = "" if has_permit else " [NEED PERMIT]"
-                    lbl_txt = f"+ Construct {b_cfg.get('name', b_id.replace('_', ' ').title())} {cost_str}{status_note}"
+                    lbl_txt = f"+ {b_cfg.get('name', b_id.replace('_', ' ').title())}"
                     lbl = self.font_btn.render(lbl_txt, True, (255, 255, 255))
                     surface.blit(lbl, (b_btn.centerx - lbl.get_width() // 2, b_btn.centery - lbl.get_height() // 2))
 
@@ -1671,7 +1807,7 @@ class RaportUI:
                 cat_permits = [p for p in permit_manager.permits if p.permit_type in cat["permit_types"]]
                 lot_count = len(cat_permits)
 
-                card_rect = pygame.Rect(mx + 24, card_y, self.modal_w - 48, 36)
+                card_rect = pygame.Rect(mx + 24, card_y, self.modal_w - 48, 32)
                 self.permit_category_btn_rects[cat_id] = card_rect
 
                 is_hov = card_rect.collidepoint(m_pos)
@@ -1687,14 +1823,14 @@ class RaportUI:
 
                 # Category title & description
                 t_surf = self.font_sub.render(cat_name, True, (241, 245, 249) if is_hov else (226, 232, 240))
-                surface.blit(t_surf, (card_rect.x + 16, card_rect.y + 9))
+                surface.blit(t_surf, (card_rect.x + 16, card_rect.y + 7))
 
                 desc_surf = self.font_body.render(f"— {cat_desc}", True, COLOR_TEXT_MUTED)
-                surface.blit(desc_surf, (card_rect.x + 22 + t_surf.get_width(), card_rect.y + 10))
+                surface.blit(desc_surf, (card_rect.x + 22 + t_surf.get_width(), card_rect.y + 8))
 
                 # Right badges: Lot count and "View Lots →"
                 badge_w = 80
-                badge_rect = pygame.Rect(card_rect.right - badge_w - 12, card_rect.y + 7, badge_w, 22)
+                badge_rect = pygame.Rect(card_rect.right - badge_w - 12, card_rect.y + 5, badge_w, 22)
                 badge_bg = (22, 101, 52) if lot_count > 0 else (51, 65, 85)
                 badge_border = (74, 222, 128) if lot_count > 0 else (100, 116, 139)
                 pygame.draw.rect(surface, badge_bg, badge_rect, border_radius=4)
@@ -1705,29 +1841,37 @@ class RaportUI:
                 surface.blit(cnt_txt, (badge_rect.centerx - cnt_txt.get_width() // 2, badge_rect.centery - cnt_txt.get_height() // 2))
 
                 arrow_lbl = self.font_badge.render("View →", True, (56, 189, 248) if is_hov else (148, 163, 184))
-                surface.blit(arrow_lbl, (badge_rect.x - arrow_lbl.get_width() - 10, card_rect.y + 11))
+                surface.blit(arrow_lbl, (badge_rect.x - arrow_lbl.get_width() - 10, card_rect.y + 9))
 
-                card_y += 42
+                card_y += 36
 
             # Bottom: Quick Issue New Landlord Permits
-            btn_y = cy + 270
+            btn_y = max(cy + 250, card_y + 4)
             inst_txt = self.font_sub.render("Issue New Landlord Permits (Select, then Click & Drag on Map to Size):", True, (56, 189, 248))
             surface.blit(inst_txt, (mx + 24, btn_y))
 
             total_avail_w = self.modal_w - 48
             btn_gap = 8
-            btn_w = (total_avail_w - (4 * btn_gap)) // 5
 
-            housing_btn = pygame.Rect(mx + 24 + 0 * (btn_w + btn_gap), btn_y + 26, btn_w, 36)
-            storage_btn = pygame.Rect(mx + 24 + 1 * (btn_w + btn_gap), btn_y + 26, btn_w, 36)
-            market_btn = pygame.Rect(mx + 24 + 2 * (btn_w + btn_gap), btn_y + 26, btn_w, 36)
-            farm_btn = pygame.Rect(mx + 24 + 3 * (btn_w + btn_gap), btn_y + 26, btn_w, 36)
-            private_btn = pygame.Rect(mx + 24 + 4 * (btn_w + btn_gap), btn_y + 26, btn_w, 36)
+            # Row 1 (4 buttons: Housing, Storage, Market, Farm)
+            w4 = (total_avail_w - (3 * btn_gap)) // 4
+            housing_btn = pygame.Rect(mx + 24 + 0 * (w4 + btn_gap), btn_y + 24, w4, 30)
+            storage_btn = pygame.Rect(mx + 24 + 1 * (w4 + btn_gap), btn_y + 24, w4, 30)
+            market_btn = pygame.Rect(mx + 24 + 2 * (w4 + btn_gap), btn_y + 24, w4, 30)
+            farm_btn = pygame.Rect(mx + 24 + 3 * (w4 + btn_gap), btn_y + 24, w4, 30)
+
+            # Row 2 (3 buttons: Church, Cemetery, Private Area)
+            w3 = (total_avail_w - (2 * btn_gap)) // 3
+            church_btn = pygame.Rect(mx + 24 + 0 * (w3 + btn_gap), btn_y + 58, w3, 30)
+            cemetery_btn = pygame.Rect(mx + 24 + 1 * (w3 + btn_gap), btn_y + 58, w3, 30)
+            private_btn = pygame.Rect(mx + 24 + 2 * (w3 + btn_gap), btn_y + 58, w3, 30)
 
             self.permit_btn_rects["housing"] = housing_btn
             self.permit_btn_rects["storage"] = storage_btn
             self.permit_btn_rects["market"] = market_btn
             self.permit_btn_rects["farm"] = farm_btn
+            self.permit_btn_rects["church"] = church_btn
+            self.permit_btn_rects["cemetery"] = cemetery_btn
             self.permit_btn_rects["landlord_private"] = private_btn
 
             # 1. Housing Permit Button
@@ -1758,9 +1902,23 @@ class RaportUI:
             f_lbl = self.font_btn.render("+ Farm Permit", True, (255, 255, 255))
             surface.blit(f_lbl, (farm_btn.centerx - f_lbl.get_width() // 2, farm_btn.centery - f_lbl.get_height() // 2))
 
-            # 5. Landlord Private Area Button
+            # 5. Church Permit Button
+            ch_hov = church_btn.collidepoint(m_pos)
+            pygame.draw.rect(surface, (168, 85, 247) if ch_hov else (147, 51, 234), church_btn, border_radius=6)
+            pygame.draw.rect(surface, (216, 180, 254) if ch_hov else (192, 132, 252), church_btn, width=1, border_radius=6)
+            ch_lbl = self.font_btn.render("+ Church Permit", True, (255, 255, 255))
+            surface.blit(ch_lbl, (church_btn.centerx - ch_lbl.get_width() // 2, church_btn.centery - ch_lbl.get_height() // 2))
+
+            # 6. Cemetery Permit Button
+            cm_hov = cemetery_btn.collidepoint(m_pos)
+            pygame.draw.rect(surface, (100, 116, 139) if cm_hov else (71, 85, 105), cemetery_btn, border_radius=6)
+            pygame.draw.rect(surface, (203, 213, 225) if cm_hov else (148, 163, 184), cemetery_btn, width=1, border_radius=6)
+            cm_lbl = self.font_btn.render("+ Cemetery Permit", True, (255, 255, 255))
+            surface.blit(cm_lbl, (cemetery_btn.centerx - cm_lbl.get_width() // 2, cemetery_btn.centery - cm_lbl.get_height() // 2))
+
+            # 7. Landlord Private Area Button
             p_hov = private_btn.collidepoint(m_pos)
-            pygame.draw.rect(surface, (147, 51, 234) if p_hov else (126, 34, 206), private_btn, border_radius=6)
+            pygame.draw.rect(surface, (126, 34, 206) if p_hov else (88, 28, 135), private_btn, border_radius=6)
             pygame.draw.rect(surface, (250, 204, 21) if p_hov else (234, 179, 8), private_btn, width=1, border_radius=6)
             p_lbl = self.font_btn.render("+ Private Area", True, (255, 255, 255))
             surface.blit(p_lbl, (private_btn.centerx - p_lbl.get_width() // 2, private_btn.centery - p_lbl.get_height() // 2))
@@ -2064,18 +2222,34 @@ class RaportUI:
             curr_str = f"Time: {int(cur_hour):02d}:00"
             surface.blit(self.font_sub.render(curr_str, True, (250, 204, 21)), (mx + self.modal_w - 180, cy - 2))
 
-            # Paintbrush tools banner
-            tool_y = cy + 34
-            tool_rect = pygame.Rect(mx + 24, tool_y, self.modal_w - 48, 44)
+            # 1. Day of the Week Selector Bar (Monday - Sunday)
+            cur_d_y = cy + 28
+            avail_w = self.modal_w - 48
+            day_w = (avail_w - (6 * 6)) // 7
+            self.schedule_day_btn_rects = {}
+            for idx, d_name in enumerate(DAYS_OF_WEEK):
+                day_btn = pygame.Rect(mx + 24 + idx * (day_w + 6), cur_d_y, day_w, 24)
+                self.schedule_day_btn_rects[d_name] = day_btn
+                is_cur_day = (self.selected_schedule_day == d_name)
+                d_hov = day_btn.collidepoint(mouse_pos)
+                d_bg = (37, 99, 235) if is_cur_day else ((45, 60, 80) if d_hov else (24, 34, 52))
+                pygame.draw.rect(surface, d_bg, day_btn, border_radius=4)
+                pygame.draw.rect(surface, (96, 165, 250) if is_cur_day else (51, 65, 85), day_btn, width=1, border_radius=4)
+                d_lbl = self.font_badge.render(d_name[:3], True, (255, 255, 255) if is_cur_day else (148, 163, 184))
+                surface.blit(d_lbl, (day_btn.centerx - d_lbl.get_width() // 2, day_btn.centery - d_lbl.get_height() // 2))
+
+            # 2. Paintbrush tools banner
+            tool_y = cur_d_y + 30
+            tool_rect = pygame.Rect(mx + 24, tool_y, self.modal_w - 48, 38)
             pygame.draw.rect(surface, (24, 34, 52), tool_rect, border_radius=6)
             pygame.draw.rect(surface, (71, 85, 105), tool_rect, width=1, border_radius=6)
 
-            surface.blit(self.font_badge.render("SELECT TOOL TO PAINT HOURS:", True, COLOR_TEXT_MUTED), (tool_rect.x + 12, tool_rect.y + 14))
+            surface.blit(self.font_badge.render("PAINT TOOL:", True, COLOR_TEXT_MUTED), (tool_rect.x + 12, tool_rect.y + 11))
 
             self.schedule_brush_btn_rects = {}
-            bx = tool_rect.x + 200
+            bx = tool_rect.x + 100
             for b_id, b_info in SCHEDULE_TYPES.items():
-                b_btn = pygame.Rect(bx, tool_rect.y + 7, 100, 30)
+                b_btn = pygame.Rect(bx, tool_rect.y + 5, 96, 28)
                 self.schedule_brush_btn_rects[b_id] = b_btn
                 is_sel = (self.selected_schedule_brush == b_id)
                 col = b_info["color"]
@@ -2090,17 +2264,61 @@ class RaportUI:
 
                 t_lbl = self.font_badge.render(f"{b_info['name']}", True, lbl_col)
                 surface.blit(t_lbl, (b_btn.centerx - t_lbl.get_width() // 2, b_btn.centery - t_lbl.get_height() // 2))
-                bx += 108
+                bx += 104
 
-            # Timetable Grid (24 boxes)
-            grid_y = tool_y + 58
-            surface.blit(self.font_sub.render("Daily 24-Hour Timeline (Left-click an hour slot to apply selected tool):", True, (241, 245, 249)), (mx + 24, grid_y))
+            # 3. Priest Prayer Time Contiguous Block Adjustment Banner (If Priest selected)
+            self.prayer_start_dec_rect = None
+            self.prayer_start_inc_rect = None
+            self.prayer_end_dec_rect = None
+            self.prayer_end_inc_rect = None
+            if self.selected_schedule_job_id == "Priest" and schedule_manager:
+                p_s, p_e = schedule_manager.get_prayer_hours()
+                pr_banner = pygame.Rect(mx + 24, tool_y + 44, self.modal_w - 48, 36)
+                pygame.draw.rect(surface, (30, 27, 46), pr_banner, border_radius=6)
+                pygame.draw.rect(surface, (168, 85, 247), pr_banner, width=1, border_radius=6)
 
-            sched = schedule_manager.get_schedule(self.selected_schedule_job_id) if schedule_manager else list(DEFAULT_JOB_SCHEDULE)
-            grid_bar_y = grid_y + 26
+                pr_head = self.font_badge.render("⛪ DECREED PRAYER TIME BLOCK (ALL GUILDS ATTEND):", True, (216, 180, 254))
+                surface.blit(pr_head, (pr_banner.x + 12, pr_banner.y + 10))
+
+                # Start Hour [-] {p_s}:00 [+]
+                ctrl_x = pr_banner.right - 280
+                surface.blit(self.font_badge.render("Start:", True, COLOR_TEXT_MUTED), (ctrl_x, pr_banner.y + 10))
+                self.prayer_start_dec_rect = pygame.Rect(ctrl_x + 40, pr_banner.y + 6, 22, 24)
+                pygame.draw.rect(surface, (51, 65, 85), self.prayer_start_dec_rect, border_radius=3)
+                surface.blit(self.font_badge.render("-", True, (255, 255, 255)), (self.prayer_start_dec_rect.x + 7, self.prayer_start_dec_rect.y + 4))
+
+                surface.blit(self.font_sub.render(f"{p_s:02d}:00", True, (250, 204, 21)), (ctrl_x + 68, pr_banner.y + 8))
+
+                self.prayer_start_inc_rect = pygame.Rect(ctrl_x + 115, pr_banner.y + 6, 22, 24)
+                pygame.draw.rect(surface, (51, 65, 85), self.prayer_start_inc_rect, border_radius=3)
+                surface.blit(self.font_badge.render("+", True, (255, 255, 255)), (self.prayer_start_inc_rect.x + 6, self.prayer_start_inc_rect.y + 4))
+
+                # End Hour [-] {p_e}:00 [+]
+                end_ctrl_x = ctrl_x + 150
+                surface.blit(self.font_badge.render("End:", True, COLOR_TEXT_MUTED), (end_ctrl_x, pr_banner.y + 10))
+                self.prayer_end_dec_rect = pygame.Rect(end_ctrl_x + 35, pr_banner.y + 6, 22, 24)
+                pygame.draw.rect(surface, (51, 65, 85), self.prayer_end_dec_rect, border_radius=3)
+                surface.blit(self.font_badge.render("-", True, (255, 255, 255)), (self.prayer_end_dec_rect.x + 7, self.prayer_end_dec_rect.y + 4))
+
+                surface.blit(self.font_sub.render(f"{p_e:02d}:00", True, (250, 204, 21)), (end_ctrl_x + 63, pr_banner.y + 8))
+
+                self.prayer_end_inc_rect = pygame.Rect(end_ctrl_x + 110, pr_banner.y + 6, 22, 24)
+                pygame.draw.rect(surface, (51, 65, 85), self.prayer_end_inc_rect, border_radius=3)
+                surface.blit(self.font_badge.render("+", True, (255, 255, 255)), (self.prayer_end_inc_rect.x + 6, self.prayer_end_inc_rect.y + 4))
+
+                grid_y = pr_banner.bottom + 12
+            else:
+                grid_y = tool_y + 46
+
+            # 4. Timetable Grid (24 boxes)
+            day_sched_title = f"{self.selected_schedule_day} 24-Hour Timeline (Click hour slot to apply paint tool):"
+            surface.blit(self.font_sub.render(day_sched_title, True, (241, 245, 249)), (mx + 24, grid_y))
+
+            sched = schedule_manager.get_schedule(self.selected_schedule_job_id, day=self.selected_schedule_day) if schedule_manager else list(DEFAULT_JOB_SCHEDULE)
+            grid_bar_y = grid_y + 24
             avail_grid_w = self.modal_w - 48
             cell_w = avail_grid_w // 24
-            cell_h = 56
+            cell_h = 54
 
             self.schedule_hour_cell_rects = {}
             for h in range(24):
@@ -2120,12 +2338,12 @@ class RaportUI:
 
                 # Hour text
                 h_txt = self.font_badge.render(f"{h:02d}", True, (255, 255, 255))
-                surface.blit(h_txt, (cell_rect.centerx - h_txt.get_width() // 2, cell_rect.y + 6))
+                surface.blit(h_txt, (cell_rect.centerx - h_txt.get_width() // 2, cell_rect.y + 5))
 
                 # Activity abbreviation
-                abbrev = act[:1]  # 'W', 'L', 'S', 'A'
+                abbrev = act[:1]  # 'W', 'L', 'S', 'A', 'P'
                 a_txt = self.font_sub.render(abbrev, True, (255, 255, 255))
-                surface.blit(a_txt, (cell_rect.centerx - a_txt.get_width() // 2, cell_rect.y + 24))
+                surface.blit(a_txt, (cell_rect.centerx - a_txt.get_width() // 2, cell_rect.y + 22))
 
                 if is_current:
                     pygame.draw.polygon(surface, (250, 204, 21), [
@@ -2135,8 +2353,8 @@ class RaportUI:
                     ])
 
             # Presets & Quick Fill Section
-            preset_y = grid_bar_y + cell_h + 16
-            surface.blit(self.font_sub.render("Quick Schedule Presets:", True, COLOR_TEXT_MUTED), (mx + 24, preset_y + 5))
+            preset_y = grid_bar_y + cell_h + 14
+            surface.blit(self.font_sub.render("Quick Schedule Presets:", True, COLOR_TEXT_MUTED), (mx + 24, preset_y + 4))
 
             self.schedule_preset_btn_rects = {}
             presets = [
@@ -3366,23 +3584,58 @@ class RaportUI:
         title = self.font_title.render("VILLAGE TAXATION & ROYAL TITHES", True, COLOR_TEXT_TITLE)
         surface.blit(title, (mx + 24, cy - 4))
 
-        # Prominent WIP Notice Banner
-        notice_r = pygame.Rect(mx + 24, cy + 22, self.modal_w - 48, 44)
-        pygame.draw.rect(surface, (69, 26, 3), notice_r, border_radius=6)
-        pygame.draw.rect(surface, (245, 158, 11), notice_r, width=1, border_radius=6)
+        # 1. Configurable Church Tax (Daily Tithe per Household)
+        church_card = pygame.Rect(mx + 24, cy + 22, self.modal_w - 48, 56)
+        pygame.draw.rect(surface, (30, 27, 46), church_card, border_radius=6)
+        pygame.draw.rect(surface, (168, 85, 247), church_card, width=1, border_radius=6)
 
-        wip_badge = pygame.Rect(notice_r.x + 10, notice_r.y + 12, 46, 20)
-        pygame.draw.rect(surface, COLOR_BADGE_WIP, wip_badge, border_radius=3)
-        w_lbl = self.font_badge.render("WIP", True, (0, 0, 0))
-        surface.blit(w_lbl, (wip_badge.centerx - w_lbl.get_width() // 2, wip_badge.centery - w_lbl.get_height() // 2))
+        surface.blit(self.font_sub.render("⛪ Church Tax (Daily Tithe per Household):", True, (216, 180, 254)), (church_card.x + 14, church_card.y + 8))
+        surface.blit(self.font_body.render("Ecclesiastical tithe collected daily by the Priest for village church operations & salvation rites.", True, COLOR_TEXT_MUTED), (church_card.x + 14, church_card.y + 30))
 
-        wip_t1 = self.font_sub.render("Tax Calculation & Collection System is WORK IN PROGRESS (No Deductions Active)", True, (251, 191, 36))
-        wip_t2 = self.font_body.render("Reporting structure only. Village charter decrees households are exempt from deductions during initial settlement.", True, (226, 232, 240))
-        surface.blit(wip_t1, (notice_r.x + 64, notice_r.y + 4))
-        surface.blit(wip_t2, (notice_r.x + 64, notice_r.y + 24))
+        if not hasattr(self, "church_tax") or not isinstance(self.church_tax, dict):
+            self.church_tax = {"Gold": 0, "Silver": 0, "Copper": 1}
+
+        # Denomination controls: Gold, Silver, Copper
+        tx_ctrl_x = church_card.right - 330
+        btn_ty = church_card.y + 15
+
+        # Gold
+        surface.blit(self.font_badge.render("Gold:", True, (250, 204, 21)), (tx_ctrl_x, btn_ty + 3))
+        self.church_tax_g_dec_rect = pygame.Rect(tx_ctrl_x + 36, btn_ty, 20, 22)
+        self.church_tax_g_inc_rect = pygame.Rect(tx_ctrl_x + 76, btn_ty, 20, 22)
+        pygame.draw.rect(surface, (51, 65, 85), self.church_tax_g_dec_rect, border_radius=3)
+        surface.blit(self.font_badge.render("-", True, (255, 255, 255)), (self.church_tax_g_dec_rect.x + 7, self.church_tax_g_dec_rect.y + 3))
+        g_val_s = self.font_sub.render(str(self.church_tax.get("Gold", 0)), True, (250, 204, 21))
+        surface.blit(g_val_s, (tx_ctrl_x + 60, btn_ty + 2))
+        pygame.draw.rect(surface, (51, 65, 85), self.church_tax_g_inc_rect, border_radius=3)
+        surface.blit(self.font_badge.render("+", True, (255, 255, 255)), (self.church_tax_g_inc_rect.x + 6, self.church_tax_g_inc_rect.y + 3))
+
+        # Silver
+        s_ctrl_x = tx_ctrl_x + 106
+        surface.blit(self.font_badge.render("Silver:", True, (203, 213, 225)), (s_ctrl_x, btn_ty + 3))
+        self.church_tax_s_dec_rect = pygame.Rect(s_ctrl_x + 38, btn_ty, 20, 22)
+        self.church_tax_s_inc_rect = pygame.Rect(s_ctrl_x + 78, btn_ty, 20, 22)
+        pygame.draw.rect(surface, (51, 65, 85), self.church_tax_s_dec_rect, border_radius=3)
+        surface.blit(self.font_badge.render("-", True, (255, 255, 255)), (self.church_tax_s_dec_rect.x + 7, self.church_tax_s_dec_rect.y + 3))
+        s_val_s = self.font_sub.render(str(self.church_tax.get("Silver", 0)), True, (203, 213, 225))
+        surface.blit(s_val_s, (s_ctrl_x + 62, btn_ty + 2))
+        pygame.draw.rect(surface, (51, 65, 85), self.church_tax_s_inc_rect, border_radius=3)
+        surface.blit(self.font_badge.render("+", True, (255, 255, 255)), (self.church_tax_s_inc_rect.x + 6, self.church_tax_s_inc_rect.y + 3))
+
+        # Copper
+        c_ctrl_x = s_ctrl_x + 110
+        surface.blit(self.font_badge.render("Copper:", True, (217, 119, 6)), (c_ctrl_x, btn_ty + 3))
+        self.church_tax_c_dec_rect = pygame.Rect(c_ctrl_x + 48, btn_ty, 20, 22)
+        self.church_tax_c_inc_rect = pygame.Rect(c_ctrl_x + 88, btn_ty, 20, 22)
+        pygame.draw.rect(surface, (51, 65, 85), self.church_tax_c_dec_rect, border_radius=3)
+        surface.blit(self.font_badge.render("-", True, (255, 255, 255)), (self.church_tax_c_dec_rect.x + 7, self.church_tax_c_dec_rect.y + 3))
+        c_val_s = self.font_sub.render(str(self.church_tax.get("Copper", 1)), True, (217, 119, 6))
+        surface.blit(c_val_s, (c_ctrl_x + 72, btn_ty + 2))
+        pygame.draw.rect(surface, (51, 65, 85), self.church_tax_c_inc_rect, border_radius=3)
+        surface.blit(self.font_badge.render("+", True, (255, 255, 255)), (self.church_tax_c_inc_rect.x + 6, self.church_tax_c_inc_rect.y + 3))
 
         # Proposed Taxation Policies Structure (3 cards)
-        y_cur = cy + 74
+        y_cur = cy + 88
         surface.blit(self.font_sub.render("Proposed Village Tax Policies (Future Implementation Framework):", True, (241, 245, 249)), (mx + 24, y_cur))
         y_cur += 22
 

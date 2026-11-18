@@ -415,6 +415,10 @@ def calculate_collision_slide(entity, dir_x, dir_y, all_entities, building_manag
     if not all_entities or (abs(dir_x) < 0.0001 and abs(dir_y) < 0.0001):
         return dir_x, dir_y, False
 
+    # Emergency collision bypass: AI meluncur langsung lurus tanpa terhambat entitas lain
+    if getattr(entity, "collision_bypass_timer", 0.0) > 0.0:
+        return dir_x, dir_y, False
+
     colliding_count = 0
     slide_acc_x = 0.0
     slide_acc_y = 0.0

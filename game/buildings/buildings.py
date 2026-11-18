@@ -41,7 +41,7 @@ class ConstructionSite:
         if self.type_cfg.get("has_door", True) is False or self.building_type in ("well", "market"):
             self.door_pos = None
             self.door_side = None
-            self.is_solid = (self.building_type == "well")
+            self.is_solid = False
         else:
             self.door_pos, self.door_side = self._resolve_door(door_pos, door_side)
             self.is_solid = False
@@ -323,7 +323,7 @@ class Building:
         if self.type_cfg.get("has_door", True) is False or self.building_type in ("well", "market"):
             self.door_pos = None
             self.door_side = None
-            self.is_solid = (self.building_type == "well")
+            self.is_solid = (self.building_type in ("well", "market") or self.type_cfg.get("is_solid", False) or not self.type_cfg.get("has_door", True))
         else:
             self.door_pos, self.door_side = self._resolve_door(door_pos, door_side)
             self.is_solid = False
@@ -602,12 +602,6 @@ class Building:
             return self._cached_oriented_walls
 
         if getattr(self, "is_solid", False) or self.building_type in ("well", "market") or not self.type_cfg.get("has_door", True):
-            if self.building_type == "market":
-                # Market is an open-air medieval marketplace stall - workers and customers can walk around freely
-                self._cached_oriented_walls = []
-                self._cached_tile_size = tile_size
-                self._cached_wall_rects = []
-                return []
             walls = [(pygame.Rect(x * tile_size, y * tile_size, tile_size, tile_size), "solid") for x, y in self.tiles]
             self._cached_oriented_walls = walls
             self._cached_tile_size = tile_size
@@ -744,16 +738,11 @@ class BuildingManager:
         self._tile_to_building = {}
 
     def rebuild_tile_cache(self):
-        """Membangun pemetaan spasial O(1) dari petak (gx, gy) ke objek Building"""
+        """Membangun pemetaan spasial O(1) dari petak (gx, gy) ke objek Building (Demolition sites are not solid)"""
         tb = {}
         for b in self.buildings:
             for t in b.tiles:
                 tb[t] = b
-        for d in getattr(self, "demolition_sites", []):
-            b_dem = getattr(d, "building", None)
-            if b_dem:
-                for t in b_dem.tiles:
-                    tb[t] = b_dem
         self._tile_to_building = tb
 
     @property
@@ -853,10 +842,110 @@ class BuildingManager:
         all_walls = []
         for b in self.buildings:
             all_walls.extend(b.get_wall_rects(tile_size))
-        for d in getattr(self, "demolition_sites", []):
-            if hasattr(d, "building"):
-                all_walls.extend(d.building.get_wall_rects(tile_size))
         return all_walls
+
+    def get_site_at(self, gx, gy):
+        """Mencari construction site yang berada di koordinat tile (gx, gy)"""
+        for site in self.construction_sites:
+            if (gx, gy) in site.tiles:
+                return site
+        return None
+
+    def get_demolition_at(self, gx, gy):
+        """Mencari demolition site yang berada di koordinat tile (gx, gy)"""
+        for demo in self.demolition_sites:
+            if (gx, gy) in demo.tiles:
+                return demo
+        return None
+
+    def cancel_construction(self, site, resources=None, stockpile_manager=None, all_servants=None):
+        """
+        Membatalkan proyek pembangunan bangunan (Blueprint atau sedang berjalan).
+        - Mengembalikan material yang sudah diantar ke site.
+        - Membebaskan reservasi sumber daya di stockpile.
+        - Menghapus site dan membebaskan penugasan pekerja/servant.
+        """
+        if site not in self.construction_sites:
+            return False
+
+        # 1. Refund material yang sudah diantar ke site
+        for res, amt in getattr(site, "delivered_cost", {}).items():
+            if amt > 0:
+                if resources is not None and res in resources:
+                    resources[res] += amt
+                elif stockpile_manager is not None:
+                    stockpile_manager.add_resource(res, amt)
+
+        # 2. Release reservasi pada stockpile jika ada
+        for res, amt in getattr(site, "reserved_cost", {}).items():
+            if amt > 0 and stockpile_manager:
+                for stack in getattr(stockpile_manager, "stacks", []):
+                    stack_res = getattr(stack, "resource_type", getattr(stack, "item_name", None))
+                    if stack_res == res and getattr(stack, "reserved_amount", 0) > 0:
+                        unres = min(stack.reserved_amount, amt)
+                        stack.reserved_amount -= unres
+                        amt -= unres
+                        if amt <= 0:
+                            break
+
+        # 3. Hapus site dari daftar konstruksi aktif
+        self.construction_sites.remove(site)
+
+        # 4. Bebaskan servant/pekerja yang sedang ditugaskan ke site ini
+        if all_servants:
+            for s in all_servants:
+                if getattr(s, "target_site", None) == site or getattr(s, "target_construction", None) == site:
+                    s.target_site = None
+                    s.target_construction = None
+                    s.state = "IDLE"
+                    s.task = "IDLE"
+                    s.is_moving = False
+                    s.current_path = []
+                    s.path_target = None
+
+        # 5. Reset rute dan reservasi pathfinding
+        from game.world.pathfinding import GlobalPathRegistry
+        GlobalPathRegistry.get_instance().reset()
+        return True
+
+    def cancel_demolition(self, site_or_building, all_servants=None):
+        """
+        Membatalkan pembongkaran bangunan (Demolition).
+        - Menghentikan proses pembongkaran.
+        - Mengembalikan bangunan ke status utuh (SOLID) di daftar buildings.
+        - Membebaskan penugasan pekerja/servant.
+        - Menjaga seluruh isi bangunan (furnitur, inventaris, izin tanah) tetap utuh.
+        """
+        target_site = None
+        for d in self.demolition_sites:
+            if d == site_or_building or getattr(d, "building", None) == site_or_building:
+                target_site = d
+                break
+
+        if not target_site:
+            return False
+
+        self.demolition_sites.remove(target_site)
+        b = target_site.building
+        if b and b not in self.buildings:
+            self.buildings.append(b)
+
+        self.rebuild_tile_cache()
+
+        if all_servants:
+            for s in all_servants:
+                if getattr(s, "target_demolition", None) == target_site or getattr(s, "target_site", None) == target_site:
+                    s.target_demolition = None
+                    s.target_site = None
+                    s.state = "IDLE"
+                    s.task = "IDLE"
+                    s.is_moving = False
+                    s.current_path = []
+                    s.path_target = None
+
+        from game.world.pathfinding import GlobalPathRegistry
+        GlobalPathRegistry.get_instance().reset()
+        return True
 
     def resolve_collision(self, px, py, radius, tile_size, old_x=None, old_y=None):
         new_x = px
@@ -1114,6 +1203,9 @@ class BuildingManager:
             return
         if b.building_type == "market":
             self._draw_market(surface, camera, tile_size, b)
+            return
+        if b.building_type == "toilet":
+            self._draw_toilet(surface, camera, tile_size, b)
             return
 
         scaled_tile = max(1, math.ceil(tile_size * camera.zoom))
@@ -1469,3 +1561,74 @@ class BuildingManager:
 
         sign_txt = self.font.render("MARKET", True, (250, 204, 21))
         surface.blit(sign_txt, (sign_x + (sign_w - sign_txt.get_width()) // 2, sign_y + (sign_h - sign_txt.get_height()) // 2))
+
+    def _draw_toilet(self, surface, camera, tile_size, b):
+        """
+        Renders a completed medieval wooden outhouse latrine (1x1 footprint).
+        Authentic medieval wooden outhouse aesthetic:
+        - Timber floor plank foundation
+        - Sloped wooden shingle roof
+        - Vertical timber planks with carved crescent moon door aperture
+        - Subtle occupied indicator and label
+        """
+        self._ensure_font()
+        scaled_tile = max(1, math.ceil(tile_size * camera.zoom))
+
+        for (gx, gy) in b.tiles:
+            sx, sy = camera.world_to_screen(gx * tile_size, gy * tile_size)
+
+            # 1. Foundation Drop Shadow
+            shadow_surf = pygame.Surface((scaled_tile, scaled_tile), pygame.SRCALPHA)
+            pygame.draw.rect(shadow_surf, (0, 0, 0, 75), (4, 4, scaled_tile - 4, scaled_tile - 4), border_radius=3)
+            surface.blit(shadow_surf, (sx, sy))
+
+            # 2. Wooden Floor Foundation
+            pygame.draw.rect(surface, (101, 67, 33), (sx + 2, sy + 2, scaled_tile - 4, scaled_tile - 4), border_radius=2)
+            pygame.draw.rect(surface, (60, 35, 15), (sx + 2, sy + 2, scaled_tile - 4, scaled_tile - 4), width=1, border_radius=2)
+
+            # 3. Wooden Booth Walls
+            wall_margin = max(2, int(4 * camera.zoom))
+            booth_w = scaled_tile - wall_margin * 2
+            booth_h = scaled_tile - wall_margin * 2
+            bx = sx + wall_margin
+            by = sy + wall_margin
+
+            pygame.draw.rect(surface, (139, 90, 43), (bx, by, booth_w, booth_h), border_radius=3)
+            pygame.draw.rect(surface, (78, 48, 20), (bx, by, booth_w, booth_h), width=max(1, int(2 * camera.zoom)), border_radius=3)
+
+            # Planks vertical texture
+            plank_count = 3
+            for p in range(1, plank_count):
+                px_line = bx + int(booth_w * (p / plank_count))
+                pygame.draw.line(surface, (95, 60, 25), (px_line, by + 2), (px_line, by + booth_h - 2), 1)
+
+            # 4. Sloped Wooden Roof Overhang
+            roof_h = max(4, int(booth_h * 0.32))
+            roof_points = [
+                (bx - 3, by + roof_h),
+                (bx + booth_w // 2, by - 3),
+                (bx + booth_w + 3, by + roof_h)
+            ]
+            pygame.draw.polygon(surface, (115, 75, 35), roof_points)
+            pygame.draw.polygon(surface, (55, 30, 10), roof_points, max(1, int(1.5 * camera.zoom)))
+
+            # 5. Out-house Door Crescent Aperture (Iconic medieval crescent moon)
+            c_center_x = bx + booth_w // 2
+            c_center_y = by + int(booth_h * 0.62)
+            c_radius = max(2, int(3.5 * camera.zoom))
+            if c_radius >= 2:
+                pygame.draw.circle(surface, (45, 25, 10), (c_center_x, c_center_y), c_radius)
+                pygame.draw.circle(surface, (139, 90, 43), (c_center_x + max(1, int(c_radius * 0.45)), c_center_y), int(c_radius * 0.82))
+
+            # 6. Subtle Occupied Indicator
+            is_occupied = getattr(b, "occupied_by", None) is not None
+            if is_occupied:
+                pip_r = max(2, int(3 * camera.zoom))
+                pygame.draw.circle(surface, (239, 68, 68), (bx + booth_w - pip_r - 2, by + pip_r + 2), pip_r)
+            else:
+                pip_r = max(2, int(3 * camera.zoom))
+                pygame.draw.circle(surface, (34, 197, 94), (bx + booth_w - pip_r - 2, by + pip_r + 2), pip_r)
+
+            # 7. Subtle Label
+            lbl = self.font.render("WC", True, (245, 245, 240))
+            surface.blit(lbl, (bx + 3, by + 3))

@@ -274,3 +274,145 @@ class AIFoodPurchasingSystem:
         villager.purchase_target_price = 0
         villager.task = "IDLE"
         villager.need_seek_cooldown = 4.0
+
+
+class AIMarketPurchasingSystem:
+    """
+    Universal Market Purchasing System for AI (Agent 3).
+    Handles needed materials purchasing (e.g. Wood and Stone restocking for Gravedigger).
+    """
+
+    @classmethod
+    def check_gravedigger_stock(cls, villager, furniture_manager=None):
+        """
+        Target: 5 Wood, 5 Stone in assigned household chest.
+        Returns dict with missing amounts: e.g. {"Wood": X, "Stone": Y}.
+        """
+        if not furniture_manager or not getattr(villager, "family_id", None):
+            return {}
+        chest = furniture_manager.get_storage_for_family(villager.family_id)
+        if not chest or not hasattr(chest, "inventory"):
+            return {}
+        from game.config import GRAVEDIGGER_TARGET_WOOD, GRAVEDIGGER_TARGET_STONE
+        cur_wood = chest.inventory.get("Wood", 0)
+        cur_stone = chest.inventory.get("Stone", 0)
+        missing = {}
+        if cur_wood < GRAVEDIGGER_TARGET_WOOD:
+            missing["Wood"] = GRAVEDIGGER_TARGET_WOOD - cur_wood
+        if cur_stone < GRAVEDIGGER_TARGET_STONE:
+            missing["Stone"] = GRAVEDIGGER_TARGET_STONE - cur_stone
+        return missing
+
+    @classmethod
+    def find_nearest_market_for_material(cls, villager, material_name, needed_amount, building_manager, furniture_manager=None, villager_manager=None):
+        """
+        Finds completed market selling material_name with available stock > 0, price > 0,
+        and verifies household has enough coins to buy at least 1 unit.
+        Returns: (market_obj, unit_price_copper, max_affordable_qty) or (None, 0, 0)
+        """
+        if not building_manager:
+            return None, 0, 0
+        from game.systems.currency import to_copper
+        wallet, _ = MarketService.get_household_funds_and_source(villager, furniture_manager, villager_manager)
+        total_funds = to_copper(wallet)
+        if total_funds <= 0:
+            return None, 0, 0
+
+        completed_markets = [
+            b for b in building_manager.buildings
+            if getattr(b, "building_type", "") == "market" and not getattr(b, "is_under_construction", False)
+        ]
+        if not completed_markets:
+            return None, 0, 0
+
+        best_mkt = None
+        best_price = 0
+        best_qty = 0
+        min_dist = float('inf')
+
+        for m in completed_markets:
+            inv = getattr(m, "inventory", {})
+            stock = inv.get(material_name, 0)
+            if stock <= 0:
+                continue
+            prices = getattr(m, "prices", {})
+            from game.data.config import DEFAULT_ITEM_PRICES
+            unit_price = prices.get(material_name, DEFAULT_ITEM_PRICES.get(material_name, 2))
+            if unit_price <= 0:
+                continue
+            if total_funds < unit_price:
+                continue
+
+            affordable_qty = min(stock, needed_amount, total_funds // unit_price)
+            if affordable_qty <= 0:
+                continue
+
+            mx, my = m.get_center_world(TILE_SIZE)
+            d = math.hypot(villager.x - mx, villager.y - my)
+            if d < min_dist:
+                min_dist = d
+                best_mkt = m
+                best_price = unit_price
+                best_qty = affordable_qty
+
+        return best_mkt, best_price, best_qty
+
+    @classmethod
+    def execute_material_transaction(cls, villager, market, material_name, quantity=1):
+        """
+        Executes atomic purchase of material at the market counter.
+        Returns (success: bool, msg: str).
+        """
+        if not market or not hasattr(market, "inventory"):
+            return False, "Market is invalid."
+        stock = market.inventory.get(material_name, 0)
+        if stock < quantity:
+            return False, f"Insufficient stock: requested {quantity}, available {stock}."
+
+        prices = getattr(market, "prices", {})
+        from game.data.config import DEFAULT_ITEM_PRICES
+        unit_price = prices.get(material_name, DEFAULT_ITEM_PRICES.get(material_name, 2))
+        total_cost = unit_price * quantity
+
+        from game.systems.currency import calculate_payment_and_change, execute_currency_transfer
+        can_pay, payment, change, _ = calculate_payment_and_change(villager.inventory, total_cost, getattr(market, "currency", None))
+        if not can_pay:
+            return False, f"Insufficient coins in pocket for {total_cost} Copper."
+
+        ok, _, _, err = execute_currency_transfer(villager.inventory, market.currency, payment, change)
+        if not ok:
+            return False, f"Currency transfer failed: {err}"
+
+        market.inventory[material_name] -= quantity
+        if market.inventory[material_name] <= 0:
+            del market.inventory[material_name]
+
+        villager.inventory[material_name] = villager.inventory.get(material_name, 0) + quantity
+        return True, f"Successfully purchased {quantity}x {material_name} for {total_cost} Copper."
+
+    @classmethod
+    def deposit_materials_and_change_to_chest(cls, villager, furniture_manager=None):
+        """
+        Deposits purchased materials (Wood, Stone) and any remaining coins into household chest.
+        """
+        chest = furniture_manager.get_storage_for_family(villager.family_id) if furniture_manager else None
+        if chest and hasattr(chest, "inventory") and isinstance(chest.inventory, dict):
+            from game.systems.currency import CURRENCY_DENOMINATIONS
+            # Deposit coins
+            for denom in CURRENCY_DENOMINATIONS:
+                amt = villager.inventory.get(denom, 0)
+                if amt > 0:
+                    chest.inventory[denom] = chest.inventory.get(denom, 0) + amt
+                    del villager.inventory[denom]
+
+            # Deposit materials
+            for mat in ("Wood", "Stone"):
+                amt = villager.inventory.get(mat, 0)
+                if amt > 0:
+                    chest.store_item(mat, amt)
+                    del villager.inventory[mat]
+
+        villager.target_restock_market = None
+        villager.target_restock_mat = None
+        villager.target_restock_qty = 0
+        villager.task = "IDLE"

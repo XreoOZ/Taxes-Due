@@ -14,7 +14,9 @@ from game.config import (
     COLOR_SOIL_WET,
     COLOR_WATER_SHEEN,
     COLOR_CROP_WITHERED,
-    DEDICATED_JOBS
+    DEDICATED_JOBS,
+    FARMING_BATCH_GROWTH_DAYS,
+    FARMING_BATCH_WINDOW_DAYS
 )
 
 def is_connected_tiles(tiles):
@@ -49,6 +51,104 @@ def get_exterior_edges_for_tile(tile, tiles):
         edges.append("right")
     return edges
 
+class FarmingBatch:
+    """
+    Synchronized Farming Batch
+    Ensures all crops planted in the same batch grow and become harvestable simultaneously.
+    """
+    def __init__(self, batch_id, permit_id, crop_name, start_day=1.0, window_duration_days=FARMING_BATCH_WINDOW_DAYS):
+        self.id = str(batch_id)
+        self.permit_id = str(permit_id)
+        self.crop = crop_name
+        self.start_day = float(start_day)
+        self.window_duration_days = float(window_duration_days)
+        self.close_day = self.start_day + self.window_duration_days
+        self.closed = False
+        self.tiles = set()  # set of (gx, gy)
+        self.growth_days = 0.0
+        self.watered_today = False
+        self.unwatered_days = 0
+        self.is_dead = False
+
+    @property
+    def is_harvestable(self):
+        crop_cfg = CROP_TYPES.get(str(self.crop).lower(), CROP_TYPES.get("potato", {}))
+        target = float(crop_cfg.get("growth_days", FARMING_BATCH_GROWTH_DAYS))
+        return self.growth_days >= target and len(self.tiles) > 0 and not self.is_dead
+
+    @property
+    def completion_day(self):
+        crop_cfg = CROP_TYPES.get(str(self.crop).lower(), CROP_TYPES.get("potato", {}))
+        target = float(crop_cfg.get("growth_days", FARMING_BATCH_GROWTH_DAYS))
+        return self.start_day + target
+
+    def can_accept_planting(self, current_day=None):
+        if self.closed:
+            return False
+        if current_day is not None and float(current_day) > self.close_day:
+            return False
+        return True
+
+    def add_tile(self, gx, gy, current_day=None):
+        if not self.can_accept_planting(current_day):
+            return False
+        self.tiles.add((gx, gy))
+        return True
+
+    def remove_tile(self, gx, gy):
+        if (gx, gy) in self.tiles:
+            self.tiles.remove((gx, gy))
+            return True
+        return False
+
+    def close(self, current_day=None):
+        self.closed = True
+        if current_day is not None:
+            self.close_day = float(current_day)
+
+    def update_growth(self, day_dt):
+        if not self.tiles or self.is_dead:
+            return
+        crop_cfg = CROP_TYPES.get(str(self.crop).lower(), CROP_TYPES.get("potato", {}))
+        target = float(crop_cfg.get("growth_days", FARMING_BATCH_GROWTH_DAYS))
+        if self.watered_today:
+            self.growth_days = min(target, self.growth_days + day_dt)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "permit_id": self.permit_id,
+            "crop": self.crop,
+            "start_day": self.start_day,
+            "window_duration_days": self.window_duration_days,
+            "close_day": self.close_day,
+            "completion_day": self.completion_day,
+            "closed": self.closed,
+            "tiles": [[gx, gy] for gx, gy in sorted(self.tiles)],
+            "growth_days": self.growth_days,
+            "watered_today": self.watered_today,
+            "unwatered_days": self.unwatered_days,
+            "is_dead": self.is_dead
+        }
+
+    @classmethod
+    def from_dict(cls, d):
+        batch = cls(
+            batch_id=d["id"],
+            permit_id=d.get("permit_id", ""),
+            crop_name=d.get("crop", "Potato"),
+            start_day=d.get("start_day", 1.0),
+            window_duration_days=d.get("window_duration_days", FARMING_BATCH_WINDOW_DAYS)
+        )
+        batch.close_day = float(d.get("close_day", batch.start_day + batch.window_duration_days))
+        batch.closed = bool(d.get("closed", False))
+        batch.tiles = {(t[0], t[1]) for t in d.get("tiles", [])}
+        batch.growth_days = float(d.get("growth_days", 0.0))
+        batch.watered_today = bool(d.get("watered_today", False))
+        batch.unwatered_days = int(d.get("unwatered_days", 0))
+        batch.is_dead = bool(d.get("is_dead", False))
+        return batch
+
 class AreaPermit:
     def __init__(self, permit_id, name, permit_type, tiles_or_gx, gy=None, tw=None, th=None):
         self.id = permit_id
@@ -61,6 +161,17 @@ class AreaPermit:
         self.assigned_workers = []  # List of villager IDs
         self.max_workers = DEFAULT_PLOT_MAX_WORKERS
         self.task_reservations = {}  # (gx, gy) -> {"worker_id": int/str, "task_type": str}
+        self.batches = {}  # batch_id -> FarmingBatch
+        self.active_batch_id = None
+        self.batch_counter = 0
+        self.current_day_time = 1.0
+
+        # Cemetery & Church Systems (Agent 3)
+        self.tile_graves = {}  # (gx, gy) -> grave dict
+        self.church_tax = {"Gold": 0, "Silver": 0, "Copper": 1}
+        self.church_tax_paid_households = {}  # household_id -> day_number_paid
+        if self.permit_type == "church":
+            self.max_workers = 1
 
         if isinstance(tiles_or_gx, (set, list, tuple)):
             self.tiles = set(tiles_or_gx)
@@ -78,24 +189,140 @@ class AreaPermit:
         self.growth_days = 0.0
         self.watered_today = False
         self.tile_crops.clear()
+        self.batches.clear()
+        self.active_batch_id = None
+        self.batch_counter = 0
+
+    def is_planting_window_open(self, current_day=None):
+        """Mengecek apakah window penanaman untuk batch sedang aktif/terbuka"""
+        if not self.crop or self.permit_type != "farm":
+            return False
+        if not self.batches:
+            return True
+        active = self.get_active_batch(current_day)
+        if active and not active.closed:
+            return True
+        return False
+
+    def get_active_batch(self, current_day=None):
+        """Mengambil batch penanaman aktif yang belum ditutup"""
+        cur_day = float(current_day) if current_day is not None else float(self.current_day_time)
+        if self.active_batch_id and self.active_batch_id in self.batches:
+            b = self.batches[self.active_batch_id]
+            if b.closed:
+                self.active_batch_id = None
+                return None
+            if cur_day > b.close_day:
+                b.close(cur_day)
+                self.active_batch_id = None
+                return None
+            return b
+        return None
+
+    def start_planting_batch(self, crop_name=None, start_day=None, window_duration_days=None):
+        """Membuka batch penanaman baru"""
+        cur_day = float(start_day) if start_day is not None else float(self.current_day_time)
+        active = self.get_active_batch(cur_day)
+        if active:
+            return active
+        self.batch_counter += 1
+        batch_id = f"{self.id}_batch_{self.batch_counter}"
+        crop = crop_name or self.crop or "Potato"
+        win_days = float(window_duration_days) if window_duration_days is not None else FARMING_BATCH_WINDOW_DAYS
+        batch = FarmingBatch(batch_id, self.id, crop, start_day=cur_day, window_duration_days=win_days)
+        self.batches[batch_id] = batch
+        self.active_batch_id = batch_id
+        return batch
+
+    def open_next_batch(self, crop_name=None, start_day=None, window_duration_days=None):
+        """Membuka batch tanam baru, menutup batch aktif sebelumnya jika ada"""
+        self.close_active_batch()
+        return self.start_planting_batch(crop_name=crop_name, start_day=start_day, window_duration_days=window_duration_days)
+
+    def close_active_batch(self, current_day=None):
+        """Menutup batch penanaman yang sedang aktif sehingga tidak menerima penanaman susulan"""
+        cur_day = float(current_day) if current_day is not None else float(self.current_day_time)
+        if self.active_batch_id and self.active_batch_id in self.batches:
+            b = self.batches[self.active_batch_id]
+            b.close(cur_day)
+            self.active_batch_id = None
+            if len(b.tiles) == 0:
+                del self.batches[b.id]
+            return True
+        return False
+
+    def get_tile_batch(self, gx, gy):
+        """Mencari objek batch yang menaungi tile (gx, gy)"""
+        tc = self.tile_crops.get((gx, gy))
+        if tc and tc.get("batch_id") and tc["batch_id"] in self.batches:
+            return self.batches[tc["batch_id"]]
+        for b in self.batches.values():
+            if (gx, gy) in b.tiles:
+                return b
+        return None
 
     def get_untilled_tiles(self):
-        """Mendapatkan petak ladang yang belum dicangkul/ditanami benih"""
+        """Mendapatkan petak ladang yang belum dicangkul/ditanami benih dan eligible untuk ditanami"""
         if not self.crop or self.permit_type != "farm":
+            return []
+        if not self.is_planting_window_open():
             return []
         untilled = []
         for t in sorted(self.tiles, key=lambda x: (x[1], x[0])):
-            if t not in self.tile_crops or not self.tile_crops[t].get("crop"):
+            tc = self.tile_crops.get(t)
+            if not tc or not tc.get("crop") or tc.get("is_dead"):
                 untilled.append(t)
         return untilled
 
-    def till_and_sow_tile(self, gx, gy):
-        """Mencangkul dan menabur benih pada petak ladang menggunakan cangkul"""
-        if not self.crop:
+    def get_empty_tiles(self):
+        """Mendapatkan seluruh petak ladang yang saat ini kosong/tidak memiliki tanaman hidup (termasuk missed batch)"""
+        if self.permit_type != "farm":
+            return []
+        empty = []
+        for t in sorted(self.tiles, key=lambda x: (x[1], x[0])):
+            tc = self.tile_crops.get(t)
+            if not tc or not tc.get("crop") or tc.get("is_dead"):
+                empty.append(t)
+        return empty
+
+    def till_and_sow_tile(self, gx, gy, current_day=None):
+        """Mencangkul dan menabur benih pada petak ladang. Bergabung ke batch tanam aktif."""
+        if not self.crop or self.permit_type != "farm":
             return False
+        if (gx, gy) not in self.tiles:
+            return False
+
+        # Tile yang sedang ditumbuhi tanaman TIDAK BISA ditanami lagi
+        if (gx, gy) in self.tile_crops:
+            existing_tc = self.tile_crops[(gx, gy)]
+            if existing_tc.get("crop") and not existing_tc.get("is_dead"):
+                return False
+
+        cur_day = float(current_day) if current_day is not None else float(self.current_day_time)
+        active_batch = self.get_active_batch(cur_day)
+        if not active_batch:
+            if not self.batches:
+                active_batch = self.start_planting_batch(crop_name=self.crop, start_day=cur_day)
+            else:
+                # Batch sebelumnya sudah ditutup -> Penanaman susulan ditolak sampai batch baru dibuka
+                return False
+
+        if active_batch.closed or not active_batch.can_accept_planting(cur_day):
+            return False
+
+        # Pastikan tile tidak berada di batch aktif lain
+        for b in self.batches.values():
+            if b.id != active_batch.id:
+                b.remove_tile(gx, gy)
+
+        success = active_batch.add_tile(gx, gy, cur_day)
+        if not success:
+            return False
+
         self.tile_crops[(gx, gy)] = {
-            "crop": self.crop,
-            "growth_days": 0.0,
+            "crop": active_batch.crop,
+            "batch_id": active_batch.id,
+            "growth_days": active_batch.growth_days,
             "watered_today": False,
             "unwatered_days": 0,
             "is_dead": False
@@ -126,6 +353,9 @@ class AreaPermit:
             if tc.get("crop") and not tc["is_dead"]:
                 tc["watered_today"] = True
                 tc["unwatered_days"] = 0
+                batch = self.get_tile_batch(gx, gy)
+                if batch:
+                    batch.watered_today = True
                 return True
         return False
 
@@ -138,48 +368,100 @@ class AreaPermit:
         return unwatered
 
     def get_harvestable_tiles(self):
+        """Mendapatkan petak ladang yang siap panen berbasis sinkronisasi batch"""
         self.ensure_tile_crops()
         ready = []
         crop_cfg = CROP_TYPES.get("potato", {})
-        growth_target = crop_cfg.get("growth_days", 10.0)
+        growth_target = crop_cfg.get("growth_days", FARMING_BATCH_GROWTH_DAYS)
+
+        # Batch-based harvest readiness: seluruh tile dalam batch siap panen serempak
+        for batch in self.batches.values():
+            if batch.is_harvestable and not batch.is_dead:
+                for t in sorted(batch.tiles):
+                    if t in self.tile_crops:
+                        tc = self.tile_crops[t]
+                        if tc.get("crop") and not tc.get("is_dead") and t not in ready:
+                            ready.append(t)
+
+        # Fallback untuk tile tanpa batch
         for t, tc in self.tile_crops.items():
-            if tc.get("crop") and not tc["is_dead"] and tc["growth_days"] >= growth_target:
-                ready.append(t)
+            if tc.get("crop") and not tc.get("is_dead") and tc.get("growth_days", 0.0) >= growth_target:
+                if t not in ready:
+                    ready.append(t)
         return ready
 
     def harvest_tile(self, gx, gy):
         self.ensure_tile_crops()
         if (gx, gy) in self.tile_crops:
             tc = self.tile_crops[(gx, gy)]
-            if tc.get("crop") and not tc["is_dead"] and tc["growth_days"] >= 10.0:
+            batch = self.get_tile_batch(gx, gy)
+            crop_cfg = CROP_TYPES.get("potato", {})
+            growth_target = crop_cfg.get("growth_days", FARMING_BATCH_GROWTH_DAYS)
+            is_harvestable = (batch.is_harvestable if batch else False) or (tc.get("growth_days", 0.0) >= growth_target)
+
+            if tc.get("crop") and not tc["is_dead"] and is_harvestable:
                 crop_key = str(tc.get("crop") or "potato").lower()
-                crop_cfg = CROP_TYPES.get(crop_key, CROP_TYPES.get("potato", {}))
-                yield_val = int(crop_cfg.get("yield_per_tile", crop_cfg.get("yield", 2)))
-                # Reset tile to untilled state for next cultivation cycle
+                c_cfg = CROP_TYPES.get(crop_key, crop_cfg)
+                yield_val = int(c_cfg.get("yield_per_tile", c_cfg.get("yield", 2)))
+
+                # Hapus tile dari batch
+                if batch:
+                    batch.remove_tile(gx, gy)
+                    if len(batch.tiles) == 0:
+                        if batch.id in self.batches:
+                            del self.batches[batch.id]
+                        if self.active_batch_id == batch.id:
+                            self.active_batch_id = None
+
+                # Reset tile menjadi untilled / kosong untuk batch masa depan
                 tc["crop"] = None
                 tc["growth_days"] = 0.0
+                tc["batch_id"] = None
                 tc["watered_today"] = False
                 tc["unwatered_days"] = 0
                 return yield_val
         return 0
 
-    def update_growth(self, day_dt):
-        """Update pertumbuhan harian tanaman berbasis tile (hanya tumbuh jika disiram)"""
+    def update_growth(self, day_dt, current_day=None):
+        """Update pertumbuhan harian tanaman berbasis synchronized batch"""
+        if current_day is not None:
+            self.current_day_time = float(current_day)
+        else:
+            self.current_day_time += float(day_dt)
+
         self.ensure_tile_crops()
         crop_cfg = CROP_TYPES.get("potato", {})
-        growth_target = crop_cfg.get("growth_days", 10.0)
+        growth_target = crop_cfg.get("growth_days", FARMING_BATCH_GROWTH_DAYS)
 
-        # Update per tile
+        # Cek jika window batch aktif telah kadaluarsa
+        if self.active_batch_id and self.active_batch_id in self.batches:
+            act_b = self.batches[self.active_batch_id]
+            if not act_b.closed and self.current_day_time >= act_b.close_day:
+                self.close_active_batch(self.current_day_time)
+
+        # Update per batch: seluruh tile dalam 1 batch tumbuh bersamaan
+        for batch in list(self.batches.values()):
+            if batch.is_dead or len(batch.tiles) == 0:
+                continue
+            has_watered = any(self.tile_crops.get(t, {}).get("watered_today", False) for t in batch.tiles)
+            batch.watered_today = has_watered
+            batch.update_growth(day_dt)
+            # Sinkronisasi growth_days ke seluruh tile anggota batch
+            for t in batch.tiles:
+                if t in self.tile_crops:
+                    self.tile_crops[t]["growth_days"] = batch.growth_days
+
+        # Fallback untuk tile tanpa batch (legacy safety)
         for tc in self.tile_crops.values():
-            if tc["crop"] and not tc["is_dead"]:
-                if tc["watered_today"]:
+            if tc.get("crop") and not tc.get("is_dead") and not tc.get("batch_id"):
+                if tc.get("watered_today"):
                     tc["growth_days"] = min(growth_target, tc["growth_days"] + day_dt)
 
         # Update aggregate display
-        living = [tc["growth_days"] for tc in self.tile_crops.values() if not tc["is_dead"]]
+        living = [tc["growth_days"] for tc in self.tile_crops.values() if tc.get("crop") and not tc.get("is_dead")]
         if living:
             self.growth_days = sum(living) / len(living)
-        self.watered_today = any(tc["watered_today"] for tc in self.tile_crops.values())
+        self.watered_today = any(tc.get("watered_today", False) for tc in self.tile_crops.values())
 
     def is_tile_reserved(self, gx, gy, exclude_worker_id=None):
         """Mengecek apakah petak (gx, gy) sedang dipesan oleh worker lain"""
@@ -297,7 +579,14 @@ class AreaPermit:
         """Dipanggil setiap fajar (Day transition)"""
         self.ensure_tile_crops()
         self.task_reservations.clear()  # Reset antrean reservasi tugas setiap fajar
-        for tc in self.tile_crops.values():
+
+        # Tutup batch aktif jika batas window telah terlewati
+        if self.active_batch_id and self.active_batch_id in self.batches:
+            b = self.batches[self.active_batch_id]
+            if self.current_day_time >= b.close_day:
+                self.close_active_batch(self.current_day_time)
+
+        for t, tc in list(self.tile_crops.items()):
             if tc.get("crop") and not tc.get("is_dead", False):
                 if tc.get("watered_today", False):
                     tc["watered_today"] = False
@@ -307,9 +596,22 @@ class AreaPermit:
                     # Jika telat disiram (1 hari terlewat tidak disiram), tanaman mati & menjadi tile kosong
                     if tc["unwatered_days"] >= 1:
                         tc["is_dead"] = True
+                        b_id = tc.get("batch_id")
+                        if b_id and b_id in self.batches:
+                            self.batches[b_id].remove_tile(t[0], t[1])
                         tc["crop"] = None  # Menjadi tile kosong yang siap dicangkul & ditanami kembali
                         tc["growth_days"] = 0.0
                         tc["watered_today"] = False
+                        tc["batch_id"] = None
+
+        # Reset flag watering pada seluruh batch dan bersihkan batch kosong
+        for batch in list(self.batches.values()):
+            batch.watered_today = False
+            if len(batch.tiles) == 0:
+                del self.batches[batch.id]
+                if self.active_batch_id == batch.id:
+                    self.active_batch_id = None
+
         self.watered_today = False
 
     def is_ready_for_harvest(self):
@@ -411,10 +713,10 @@ class PermitManager:
                     return None, f"Overlaps furniture: {f.name}"
 
         # 4. Validasi batasan permit & status keterisian lot
-        # A. Cek apakah menabrak zona pertanian (Farm Permit)
+        # A. Cek apakah menabrak zona pertanian (Farm Permit) atau Pemakaman (Cemetery Permit)
         for p in self.permits:
-            if p.permit_type == "farm" and p.overlaps_tiles(building_tiles):
-                return None, f"Cannot build structures on agricultural Farm Lot: {p.name}!"
+            if p.permit_type in ("farm", "cemetery") and p.overlaps_tiles(building_tiles):
+                return None, f"Cannot build structures on {p.permit_type.capitalize()} Lot: {p.name}!"
 
         # B. Cek apakah menabrak lot yang SUDAH memiliki bangunan (Occupied Lot)
         for p in self.permits:
@@ -426,15 +728,15 @@ class PermitManager:
                 if existing_sites:
                     return None, f"Cannot build: Lot '{p.name}' already has an active construction site!"
 
-        # C. Validasi khusus Well: Tidak memerlukan permit, dapat dibangun di tanah terbuka atau dalam permit kosong
-        if req_type == "well":
+        # C. Validasi khusus Well & Toilet: Tidak memerlukan permit, dapat dibangun di tanah terbuka atau dalam permit kosong
+        if req_type in ("well", "toilet"):
             for p in self.permits:
                 if p.overlaps_tiles(building_tiles):
                     if p.contains_all_tiles(building_tiles):
                         return p, "Valid (Inside Empty Lot)"
                     else:
                         return None, f"Cannot straddle lot boundary of '{p.name}'!"
-            return True, "Valid (No Permit Required for Well)"
+            return True, f"Valid (No Permit Required for {req_type.capitalize()})"
 
         # D. Bangunan standar: Wajib berada sepenuhnya di dalam permit kosong yang sesuai
         if req_type in BUILDING_TYPES:
@@ -464,10 +766,12 @@ class PermitManager:
 
     def has_permit_type(self, req_type):
         """Mengecek apakah ada surat tanah / permit aktif untuk tipe ini"""
-        if req_type == "well":
-            return True  # Well tidak memerlukan Area Permit
+        if req_type in ("well", "toilet"):
+            return True  # Well & Toilet tidak memerlukan Area Permit khusus
         if req_type in BUILDING_TYPES:
-            allowed = BUILDING_TYPES[req_type].get("allowed_permits", ["housing", "storage", "landlord_private"])
+            allowed = BUILDING_TYPES[req_type].get("allowed_permits")
+            if not allowed:
+                return True
             return any(p.permit_type in allowed for p in self.permits)
         return any(
             (p.permit_type == req_type) or (req_type == "housing" and p.permit_type == "landlord_private")
@@ -502,8 +806,12 @@ class PermitManager:
             p.assigned_workers = []
         if villager_id in p.assigned_workers:
             return False, "Worker already assigned"
-        # Tidak ada batas maksimal - jika slot penuh, otomatis bertambah sesuai keinginan pemain
+        if getattr(p, "permit_type", "") == "church" and len(p.assigned_workers) >= 1:
+            return False, "Church can have exactly one Priest assigned"
+        # Tidak ada batas maksimal - jika slot penuh, otomatis bertambah sesuai keinginan pemain (kecuali Church)
         if len(p.assigned_workers) >= getattr(p, "max_workers", 2):
+            if getattr(p, "permit_type", "") == "church":
+                return False, "Church can have exactly one Priest assigned"
             p.max_workers = len(p.assigned_workers) + 1
         p.assigned_workers.append(villager_id)
         return True, "Worker assigned"
@@ -705,6 +1013,92 @@ class PermitManager:
                                 flower_r = max(2, int(3 * camera.zoom))
                                 pygame.draw.circle(surface, (254, 240, 138), (px, py - 1), flower_r)
                                 pygame.draw.circle(surface, (255, 255, 255), (px, py - 1), max(1, flower_r - 1))
+
+                # Jika zona pemakaman (Cemetery Permit), gambar visual tanah kuburan & 5 varian batu nisan
+                if p.permit_type == "cemetery":
+                    # Tanah dasar makam
+                    soil_rect = pygame.Rect(sx + 1, sy + 1, scaled_tile - 2, scaled_tile - 2)
+                    pygame.draw.rect(surface, (78, 64, 50), soil_rect)
+                    for fx_o, fy_o in ((0.2, 0.3), (0.7, 0.25), (0.4, 0.75), (0.8, 0.8)):
+                        pygame.draw.circle(surface, (120, 110, 100), (sx + int(scaled_tile * fx_o), sy + int(scaled_tile * fy_o)), max(1, int(1.5 * camera.zoom)))
+
+                    g = getattr(p, "tile_graves", {}).get((gx, gy))
+                    if g:
+                        is_occ = g.get("is_occupied", False)
+                        dig_prog = g.get("dig_progress", 0.0)
+                        bury_prog = g.get("bury_progress", 0.0)
+                        var = g.get("tombstone_variant", 0)
+                        has_history = bool(g.get("corpse_history", []))
+
+                        if is_occ or dig_prog > 0.0 or bury_prog > 0.0:
+                            gx_w = int(scaled_tile * 0.55)
+                            gy_h = int(scaled_tile * 0.65)
+                            gx_m = sx + (scaled_tile - gx_w) // 2
+                            gy_m = sy + int(scaled_tile * 0.25)
+                            pygame.draw.rect(surface, (45, 30, 18), (gx_m, gy_m, gx_w, gy_h), border_radius=3)
+                            pygame.draw.rect(surface, (30, 18, 10), (gx_m, gy_m, gx_w, gy_h), width=1, border_radius=3)
+                        elif has_history and not is_occ:
+                            for gx_o, gy_o in ((0.3, 0.4), (0.6, 0.5), (0.4, 0.7)):
+                                tx = sx + int(scaled_tile * gx_o)
+                                ty = sy + int(scaled_tile * gy_o)
+                                pygame.draw.line(surface, (34, 197, 94), (tx, ty), (tx - 2, ty - 4), 1)
+                                pygame.draw.line(surface, (34, 197, 94), (tx, ty), (tx + 2, ty - 5), 1)
+
+                        if is_occ and var is not None:
+                            head_cx = sx + scaled_tile // 2
+                            head_base_y = sy + int(scaled_tile * 0.38)
+                            var = var % 5
+
+                            if var == 0:
+                                cw = max(2, int(3 * camera.zoom))
+                                ch = max(10, int(16 * camera.zoom))
+                                bw = max(8, int(12 * camera.zoom))
+                                pygame.draw.rect(surface, (148, 163, 184), (head_cx - cw // 2, head_base_y - ch, cw, ch))
+                                pygame.draw.rect(surface, (148, 163, 184), (head_cx - bw // 2, head_base_y - int(ch * 0.7), bw, cw))
+                                ring_r = max(4, int(5 * camera.zoom))
+                                pygame.draw.circle(surface, (148, 163, 184), (head_cx, head_base_y - int(ch * 0.7) + cw // 2), ring_r, 1)
+                            elif var == 1:
+                                tw = max(10, int(14 * camera.zoom))
+                                th = max(12, int(18 * camera.zoom))
+                                top_y = head_base_y - th
+                                pts = [
+                                    (head_cx - tw // 2, head_base_y),
+                                    (head_cx - tw // 2, top_y + int(th * 0.35)),
+                                    (head_cx, top_y),
+                                    (head_cx + tw // 2, top_y + int(th * 0.35)),
+                                    (head_cx + tw // 2, head_base_y),
+                                ]
+                                pygame.draw.polygon(surface, (160, 165, 175), pts)
+                                pygame.draw.polygon(surface, (100, 105, 115), pts, 1)
+                                pygame.draw.line(surface, (71, 85, 105), (head_cx - tw // 4, head_base_y - int(th * 0.35)), (head_cx + tw // 4, head_base_y - int(th * 0.35)), 1)
+                            elif var == 2:
+                                tw = max(10, int(14 * camera.zoom))
+                                th = max(11, int(16 * camera.zoom))
+                                rect_h = int(th * 0.6)
+                                pygame.draw.rect(surface, (170, 175, 185), (head_cx - tw // 2, head_base_y - rect_h, tw, rect_h))
+                                pygame.draw.circle(surface, (170, 175, 185), (head_cx, head_base_y - rect_h), tw // 2)
+                                pygame.draw.rect(surface, (100, 105, 115), (head_cx - tw // 2, head_base_y - rect_h, tw, rect_h), 1)
+                                pygame.draw.circle(surface, (100, 105, 115), (head_cx, head_base_y - rect_h), tw // 2, 1)
+                            elif var == 3:
+                                tw = max(14, int(18 * camera.zoom))
+                                th = max(9, int(13 * camera.zoom))
+                                base_w = max(16, int(22 * camera.zoom))
+                                pygame.draw.rect(surface, (100, 105, 115), (head_cx - base_w // 2, head_base_y - 3, base_w, 4))
+                                pygame.draw.rect(surface, (130, 135, 145), (head_cx - tw // 2, head_base_y - th, tw, th - 3))
+                                pygame.draw.rect(surface, (71, 85, 105), (head_cx - tw // 2, head_base_y - th, tw, th - 3), 1)
+                                pygame.draw.line(surface, (51, 65, 85), (head_cx, head_base_y - th + 2), (head_cx, head_base_y - 5), 1)
+                                pygame.draw.line(surface, (51, 65, 85), (head_cx - 2, head_base_y - th + 5), (head_cx + 2, head_base_y - th + 5), 1)
+                            elif var == 4:
+                                tw = max(14, int(18 * camera.zoom))
+                                th = max(12, int(16 * camera.zoom))
+                                arch_r = tw // 4
+                                rect_h = int(th * 0.55)
+                                pygame.draw.rect(surface, (180, 185, 195), (head_cx - tw // 2, head_base_y - rect_h, tw, rect_h))
+                                pygame.draw.circle(surface, (180, 185, 195), (head_cx - arch_r, head_base_y - rect_h), arch_r)
+                                pygame.draw.circle(surface, (180, 185, 195), (head_cx + arch_r, head_base_y - rect_h), arch_r)
+                                pygame.draw.rect(surface, (110, 115, 125), (head_cx - tw // 2, head_base_y - rect_h, tw, rect_h), 1)
+                                pygame.draw.circle(surface, (110, 115, 125), (head_cx - arch_r, head_base_y - rect_h), arch_r, 1)
+                                pygame.draw.circle(surface, (110, 115, 125), (head_cx + arch_r, head_base_y - rect_h), arch_r, 1)
 
                 # Exterior border segments
                 if (gx, gy - 1) not in p.tiles:

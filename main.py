@@ -503,6 +503,13 @@ def main():
                                 planned_door_side = None
                                 building_drag_start = None
                                 continue
+                            elif planning_building_type == "toilet":
+                                # Footprint 1x1 instan untuk toilet/latrine
+                                planning_building_tiles = {(m_gx, m_gy)}
+                                planned_door_tile = None
+                                planned_door_side = None
+                                building_drag_start = None
+                                continue
                             building_drag_start = (m_gx, m_gy)
                         elif event.button == 3:
                             building_erase_start = (m_gx, m_gy)
@@ -908,6 +915,21 @@ def main():
                                     raport_ui.open_building_directly(clicked_b)
                                 continue
 
+                            # 1B. Cek apakah mengklik construction site atau demolition site
+                            clicked_site = building_manager.get_site_at(m_gx, m_gy)
+                            if clicked_site:
+                                selected_furniture = None
+                                selected_entity = None
+                                raport_ui.open_building_directly(clicked_site)
+                                continue
+
+                            clicked_demo = building_manager.get_demolition_at(m_gx, m_gy)
+                            if clicked_demo:
+                                selected_furniture = None
+                                selected_entity = None
+                                raport_ui.open_building_directly(getattr(clicked_demo, "building", clicked_demo))
+                                continue
+
                             # 2. Cek apakah pemain mengklik surat tanah / permit di peta (empty atau occupied)
                             clicked_p = permit_manager.get_permit_at(m_gx, m_gy)
                             if clicked_p:
@@ -929,8 +951,9 @@ def main():
                 villager_manager.daily_midnight_update(day_cycle.day_number)
 
             day_dt = game_dt / max(1.0, day_cycle.day_length_seconds)
+            cur_day_time = day_cycle.day_number + (day_cycle.current_hour / 24.0)
             for p in permit_manager.permits:
-                p.update_growth(day_dt)
+                p.update_growth(day_dt, current_day=cur_day_time)
 
             # Substep physics/entities so high speed multiplier (Fast 2x, Very Fast 4x) never tunnels through walls
             MAX_PHYSICS_SUB_DT = 0.02  # Maximum 20ms per physics integration step
@@ -1170,10 +1193,10 @@ def main():
                     d_lbl = font_badge.render(f"DOOR ({planned_door_side.upper()})", True, (0, 0, 0))
                     screen.blit(d_lbl, (door_box.centerx - d_lbl.get_width() // 2, door_box.centery - d_lbl.get_height() // 2))
 
-                # C. Well & Market Hover Preview (when 0 tiles selected)
-                if planning_building_type in ("well", "market") and not planning_building_tiles and not building_drag_start:
-                    w_w = b_cfg.get("width_tiles", 2)
-                    w_h = b_cfg.get("height_tiles", 2)
+                # C. Fixed Size (Well, Market, Toilet) Hover Preview (when 0 tiles selected)
+                if planning_building_type in ("well", "market", "toilet") and not planning_building_tiles and not building_drag_start:
+                    w_w = b_cfg.get("width_tiles", 1 if planning_building_type == "toilet" else 2)
+                    w_h = b_cfg.get("height_tiles", 1 if planning_building_type == "toilet" else 2)
                     preview_box = {(m_gx + c, m_gy + r) for c in range(w_w) for r in range(w_h)}
                     can_fit, _ = permit_manager.find_matching_permit_for_tiles(planning_building_type, preview_box, building_manager, furniture_manager=furniture_manager)
                     fit_tint = (34, 197, 94, 100) if can_fit else (239, 68, 68, 100)
@@ -1550,7 +1573,7 @@ def main():
                 # Ring indicator around entity
                 pygame.draw.circle(screen, (56, 189, 248), (esx, esy), er + 6, 2)
 
-                cw, ch = 350, 185
+                cw, ch = 380, 225
                 cx = max(12, min(screen.get_width() - cw - 12, esx - cw // 2))
                 cy = esy - ch - 16
                 if cy < 50:
@@ -1583,21 +1606,6 @@ def main():
                 else:
                     st_txt = font_badge.render("[ALIVE]", True, (34, 197, 94))
 
-                # Identity Name & Role (prevent text collision with status badge)
-                name_str = getattr(selected_entity, "full_name", getattr(selected_entity, "name", "Settler"))
-                role_str = getattr(selected_entity, "role", "")
-                title_lbl = f"{name_str} ({role_str})" if role_str else name_str
-                max_title_w = max(40, cw - 36 - st_txt.get_width() - 20)
-                title_surf = font_card.render(title_lbl, True, (255, 255, 255))
-                if title_surf.get_width() > max_title_w:
-                    for i in range(len(title_lbl), 0, -1):
-                        trunc_s = font_card.render(title_lbl[:i] + "...", True, (255, 255, 255))
-                        if trunc_s.get_width() <= max_title_w:
-                            title_surf = trunc_s
-                            break
-                screen.blit(title_surf, (cx + 14, cy + 10))
-                screen.blit(st_txt, (cx + cw - 32 - st_txt.get_width(), cy + 12))
-
                 # Close (X) button
                 btn_entity_close_rect.x = cx + cw - 26
                 btn_entity_close_rect.y = cy + 10
@@ -1606,12 +1614,28 @@ def main():
                 x_lbl = font_badge.render("X", True, (255, 255, 255))
                 screen.blit(x_lbl, (btn_entity_close_rect.centerx - x_lbl.get_width() // 2, btn_entity_close_rect.centery - x_lbl.get_height() // 2))
 
+                # Row 1: Identity Name & Role
+                name_str = getattr(selected_entity, "full_name", getattr(selected_entity, "name", "Settler"))
+                role_str = getattr(selected_entity, "role", "")
+                title_lbl = f"{name_str} ({role_str})" if role_str else name_str
+                
+                avail_title_w = max(40, cw - 36 - (st_txt.get_width() + 14 if is_alive else 0))
+                title_surf = font_card.render(title_lbl, True, (255, 255, 255))
+                if title_surf.get_width() > avail_title_w:
+                    for i in range(len(title_lbl), 0, -1):
+                        trunc_s = font_card.render(title_lbl[:i] + "...", True, (255, 255, 255))
+                        if trunc_s.get_width() <= avail_title_w:
+                            title_surf = trunc_s
+                            break
+                screen.blit(title_surf, (cx + 14, cy + 10))
+                if is_alive:
+                    screen.blit(st_txt, (cx + cw - 32 - st_txt.get_width(), cy + 12))
+
                 # Household Affiliation
                 fam_id = getattr(selected_entity, "family_id", None)
                 if fam_id and villager_manager:
                     fam_obj = villager_manager.get_family_by_id(fam_id)
                     household_name = f"The {fam_obj.surname} Family" if fam_obj else str(fam_id)
-                    # Contextual button: [ Household ]
                     btn_entity_household_rect.x = cx + cw - 96
                     btn_entity_household_rect.y = cy + 32
                     btn_entity_household_rect.w = 82
@@ -1624,42 +1648,70 @@ def main():
                 else:
                     household_name = getattr(selected_entity, "household_name", "Crown Estate Household")
                     btn_entity_household_rect.x = -9999
-                screen.blit(font_hud.render(f"Household: {household_name}", True, (56, 189, 248)), (cx + 14, cy + 34))
 
-                # Current Activity / Job
+                # Row 2: Status (if deceased) or Household Name
+                if not is_alive:
+                    screen.blit(st_txt, (cx + 14, cy + 32))
+                    screen.blit(font_hud.render(f"Household: {household_name}", True, (56, 189, 248)), (cx + 14, cy + 48))
+                    act_y = cy + 68
+                else:
+                    screen.blit(font_hud.render(f"Household: {household_name}", True, (56, 189, 248)), (cx + 14, cy + 34))
+                    act_y = cy + 54
+
+                # Row 3: Current Activity / Job (Dynamic, Specific Description)
                 job_name = getattr(selected_entity, "job", "Worker")
-                task_name = getattr(selected_entity, "task", getattr(selected_entity, "state", "IDLE"))
-                screen.blit(font_body.render(f"Profession: {job_name}  |  Activity: {task_name}", True, (226, 232, 240)), (cx + 14, cy + 54))
+                if not is_alive:
+                    task_name = "DECEASED"
+                else:
+                    raw_act = getattr(selected_entity, "current_activity", None) or getattr(selected_entity, "task", None) or getattr(selected_entity, "state", "IDLE")
+                    task_name = str(raw_act).replace("_", " ").title()
+                screen.blit(font_body.render(f"Profession: {job_name}  |  Activity: {task_name}", True, (226, 232, 240)), (cx + 14, act_y))
 
-                # Hunger Bar
+                # Row 4: Hunger Bar
+                bar_y1 = act_y + 19
                 h_val = max(0.0, min(100.0, getattr(selected_entity, "hunger", 100.0)))
-                screen.blit(font_badge.render("Hunger:", True, (241, 245, 249)), (cx + 14, cy + 76))
-                h_bg = pygame.Rect(cx + 68, cy + 76, 150, 14)
+                screen.blit(font_badge.render("Hunger:", True, (241, 245, 249)), (cx + 14, bar_y1))
+                h_bg = pygame.Rect(cx + 68, bar_y1, 150, 14)
                 pygame.draw.rect(screen, (30, 41, 59), h_bg, border_radius=4)
                 h_fill = max(0, int(150 * (h_val / 100.0)))
                 if h_fill > 0:
                     h_c = (34, 197, 94) if h_val > 50 else ((234, 179, 8) if h_val > 20 else (239, 68, 68))
-                    pygame.draw.rect(screen, h_c, (cx + 68, cy + 76, h_fill, 14), border_radius=4)
+                    pygame.draw.rect(screen, h_c, (cx + 68, bar_y1, h_fill, 14), border_radius=4)
                 pygame.draw.rect(screen, (71, 85, 105), h_bg, width=1, border_radius=4)
                 h_str = f"{int(h_val)}%" if h_timer is None else f"{int(h_val)}% ({h_timer:.1f}h)"
                 h_color = (255, 255, 255) if h_timer is None else (239, 68, 68)
-                screen.blit(font_badge.render(h_str, True, h_color), (cx + 226, cy + 76))
+                screen.blit(font_badge.render(h_str, True, h_color), (cx + 226, bar_y1))
 
-                # Thirst Bar
+                # Row 5: Thirst Bar
+                bar_y2 = bar_y1 + 17
                 t_val = max(0.0, min(100.0, getattr(selected_entity, "thirst", 100.0)))
-                screen.blit(font_badge.render("Thirst:", True, (241, 245, 249)), (cx + 14, cy + 96))
-                t_bg = pygame.Rect(cx + 68, cy + 96, 150, 14)
+                screen.blit(font_badge.render("Thirst:", True, (241, 245, 249)), (cx + 14, bar_y2))
+                t_bg = pygame.Rect(cx + 68, bar_y2, 150, 14)
                 pygame.draw.rect(screen, (30, 41, 59), t_bg, border_radius=4)
                 t_fill = max(0, int(150 * (t_val / 100.0)))
                 if t_fill > 0:
                     t_c = (56, 189, 248) if t_val > 50 else ((59, 130, 246) if t_val > 20 else (239, 68, 68))
-                    pygame.draw.rect(screen, t_c, (cx + 68, cy + 96, t_fill, 14), border_radius=4)
+                    pygame.draw.rect(screen, t_c, (cx + 68, bar_y2, t_fill, 14), border_radius=4)
                 pygame.draw.rect(screen, (71, 85, 105), t_bg, width=1, border_radius=4)
                 t_str = f"{int(t_val)}%" if t_timer is None else f"{int(t_val)}% ({t_timer:.1f}h)"
                 t_color = (255, 255, 255) if t_timer is None else (239, 68, 68)
-                screen.blit(font_badge.render(t_str, True, t_color), (cx + 226, cy + 96))
+                screen.blit(font_badge.render(t_str, True, t_color), (cx + 226, bar_y2))
 
-                # Inventory Information
+                # Row 6: Need Toilet Bar
+                bar_y3 = bar_y2 + 17
+                tl_val = max(0.0, min(100.0, getattr(selected_entity, "toilet", getattr(selected_entity, "need_toilet", 100.0))))
+                screen.blit(font_badge.render("Toilet:", True, (241, 245, 249)), (cx + 14, bar_y3))
+                tl_bg = pygame.Rect(cx + 68, bar_y3, 150, 14)
+                pygame.draw.rect(screen, (30, 41, 59), tl_bg, border_radius=4)
+                tl_fill = max(0, int(150 * (tl_val / 100.0)))
+                if tl_fill > 0:
+                    tl_c = (16, 185, 129) if tl_val > 50 else ((245, 158, 11) if tl_val > 20 else (239, 68, 68))
+                    pygame.draw.rect(screen, tl_c, (cx + 68, bar_y3, tl_fill, 14), border_radius=4)
+                pygame.draw.rect(screen, (71, 85, 105), tl_bg, width=1, border_radius=4)
+                screen.blit(font_badge.render(f"{int(tl_val)}%", True, (255, 255, 255)), (cx + 226, bar_y3))
+
+                # Row 7: Inventory Information
+                info_y1 = bar_y3 + 19
                 inv_items = []
                 for it, c in getattr(selected_entity, "inventory", {}).items():
                     if c > 0:
@@ -1672,13 +1724,14 @@ def main():
                     inv_items.append(f"{selected_entity.carried_amount}x {carried_res}")
 
                 inv_summary = ", ".join(inv_items) if inv_items else "Empty (Hands free)"
-                screen.blit(font_badge.render(f"Inventory: {inv_summary[:36]}", True, (148, 163, 184)), (cx + 14, cy + 120))
+                screen.blit(font_badge.render(f"Inventory: {inv_summary[:40]}", True, (148, 163, 184)), (cx + 14, info_y1))
 
-                # Bed / Tool info
+                # Row 8: Bed / Tool info
+                info_y2 = info_y1 + 17
                 assigned_bed = getattr(selected_entity, "assigned_bed_id", None)
                 bed_str = f"Bed: {assigned_bed}" if assigned_bed else "Bed: Floor"
                 tool_str = f"Tool: {getattr(selected_entity, 'active_tool', None) or 'None'}"
-                screen.blit(font_badge.render(f"{bed_str}  •  {tool_str}", True, (100, 116, 139)), (cx + 14, cy + 142))
+                screen.blit(font_badge.render(f"{bed_str}  •  {tool_str}", True, (100, 116, 139)), (cx + 14, info_y2))
 
 
             # 8. Clock & Calendar HUD (Top Left)

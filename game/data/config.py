@@ -79,6 +79,8 @@ COLOR_PATH_TOGGLE_BORDER = (100, 116, 139)   # Border outline
 STUCK_THRESHOLD_SECONDS = 0.5           # Time with no progress before triggering stuck recovery
 STUCK_MIN_PROGRESS_DISTANCE = 2.0       # Minimum distance moved in step to count as progress
 STUCK_AVOIDANCE_DURATION = 3.0          # Time to remember a blocked node to prevent route oscillation
+EMERGENCY_STUCK_TIMEOUT = 3.0           # Continuous seconds before triggering emergency recovery
+EMERGENCY_COLLISION_BYPASS_DURATION = 0.8 # Duration (seconds) of collision bypass to unblock deadlock
 PATH_SEGMENT_COLLISION_RADIUS = 12.0    # Radius margin for line-of-sight sweep validation
 PATH_MAX_ASTAR_ITERATIONS = 1500        # Max A* iterations for extensive map searches
 PATH_RESERVATION_CLEARANCE = 28.0      # Minimum clearance distance between two distinct path reservations
@@ -204,14 +206,38 @@ DEDICATED_JOBS = {
         "workplace_permit": "fishery",
         "desc": "Catches fish and gathers seafood at village docks and shores.",
         "required_tools": ["Fishing_Rod"]
+    },
+    "Priest": {
+        "id": "Priest",
+        "name": "Priest",
+        "title": "Village Priest",
+        "color": (168, 85, 247),
+        "wip": False,
+        "workplace_permit": "church",
+        "desc": "Conducts daily prayer and collects church taxes at the village church.",
+        "required_tools": []
+    },
+    "Gravedigger": {
+        "id": "Gravedigger",
+        "name": "Gravedigger",
+        "title": "Cemetery Gravedigger",
+        "color": (100, 116, 139),
+        "wip": False,
+        "workplace_permit": "cemetery",
+        "desc": "Prepares graves and buries deceased villagers in the cemetery.",
+        "required_tools": ["Hoe"]
     }
 }
+
+# Days of the Week Schedule
+DAYS_OF_WEEK = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
 
 # 24-Hour Schedule System (RimWorld-Style Activity Management)
 SCHEDULE_WORK = "WORK"
 SCHEDULE_LEISURE = "LEISURE"
 SCHEDULE_SLEEP = "SLEEP"
 SCHEDULE_ANY = "ANY"
+SCHEDULE_PRAYER = "PRAYER"
 
 SCHEDULE_TYPES = {
     "WORK": {
@@ -237,6 +263,12 @@ SCHEDULE_TYPES = {
         "name": "Anything",
         "color": (100, 116, 139),      # Slate gray
         "desc": "Work if unfinished tasks remain; otherwise relax and rest."
+    },
+    "PRAYER": {
+        "id": "PRAYER",
+        "name": "Prayer",
+        "color": (234, 179, 8),        # Radiant gold
+        "desc": "Mandatory church prayer time decreed by the Priest."
     }
 }
 
@@ -290,6 +322,8 @@ EXCHANGE_RATES = {
 }
 DEFAULT_ITEM_PRICES = {
     "Potato": 3,       # 1 Potato = 3 Copper (Configurable default price)
+    "Wood": 2,         # 1 Wood = 2 Copper
+    "Stone": 3,        # 1 Stone = 3 Copper
 }
 
 # -----------------------------------------------------------------------------
@@ -583,7 +617,7 @@ BUILDING_TYPES = {
         "color": (180, 120, 70),
         "border_color": (217, 119, 6),
         "required_permit": "housing",
-        "allowed_permits": ["housing", "storage", "landlord_private"],
+        "allowed_permits": ["housing", "storage", "landlord_private", "church"],
     },
     "stone_structure": {
         "id": "stone_structure",
@@ -596,7 +630,7 @@ BUILDING_TYPES = {
         "color": (148, 163, 184),
         "border_color": (203, 213, 225),
         "required_permit": "housing",
-        "allowed_permits": ["housing", "storage", "landlord_private"],
+        "allowed_permits": ["housing", "storage", "landlord_private", "church"],
     },
     "well": {
         "id": "well",
@@ -613,7 +647,7 @@ BUILDING_TYPES = {
         "color": (56, 189, 248),
         "border_color": (96, 165, 250),
         "required_permit": "any",
-        "allowed_permits": ["housing", "storage", "landlord_private"],
+        "allowed_permits": ["housing", "storage", "landlord_private", "church"],
     },
     "market": {
         "id": "market",
@@ -633,6 +667,25 @@ BUILDING_TYPES = {
         "border_color": (251, 191, 36),
         "required_permit": "any",
         "allowed_permits": ["market", "storage", "landlord_private", "housing"],
+    },
+    "toilet": {
+        "id": "toilet",
+        "name": "Toilet",
+        "category": "Sanitation & Latrine",
+        "category_id": "toilet",
+        "desc": "Medieval wooden outhouse latrine. Footprint: 1x1 tile. Does not require a Permit.",
+        "cost_wood": 5,
+        "cost_stone": 0,
+        "fixed_cost": True,
+        "fixed_tiles_count": 1,
+        "width_tiles": 1,
+        "height_tiles": 1,
+        "is_solid": False,
+        "has_door": False,
+        "color": (120, 80, 40),
+        "border_color": (160, 110, 60),
+        "required_permit": None,
+        "allowed_permits": None,
     }
 }
 # Backward compatibility aliases
@@ -720,6 +773,24 @@ PERMIT_TYPES = {
         "desc": "Restricted estate grounds. Only Landlord and Servants may enter.",
         "color": (147, 51, 234, 60),
         "border_color": (234, 179, 8),
+    },
+    "church": {
+        "id": "church",
+        "name": "Church Permit",
+        "category": "Religious & Community",
+        "category_id": "church",
+        "desc": "Official landlord deed for church grounds. Uses Wooden or Stone Structure construction.",
+        "color": (168, 85, 247, 60),
+        "border_color": (192, 132, 252),
+    },
+    "cemetery": {
+        "id": "cemetery",
+        "name": "Cemetery Permit",
+        "category": "Burial & Memorial Grounds",
+        "category_id": "cemetery",
+        "desc": "Consecrated ground for burial plots and tombstones. Editable plot area.",
+        "color": (100, 116, 139, 60),
+        "border_color": (148, 163, 184),
     }
 }
 
@@ -745,6 +816,9 @@ def get_permit_categories():
     return list(categories.values())
 
 # Agricultural Crops System (Cultivated on Farm Permits)
+FARMING_BATCH_GROWTH_DAYS = 10.0
+FARMING_BATCH_WINDOW_DAYS = 1.0  # 1 in-game day default planting window
+
 CROP_TYPES = {
     "potato": {
         "id": "potato",
@@ -838,4 +912,26 @@ COLOR_STATUS_ALIVE = (34, 197, 94)
 COLOR_STATUS_DECEASED = (148, 163, 184)
 COLOR_CORPSE_BODY = (100, 116, 139)       # Desaturated slate gray for deceased villagers
 COLOR_CORPSE_OUTLINE = (51, 65, 85)
+
+# =====================================================================
+# Church, Priest, Cemetery, Gravedigger & Toilet Systems (Agent 3)
+# =====================================================================
+DEFAULT_CHURCH_TAX = {"Gold": 0, "Silver": 0, "Copper": 1}  # 1 Copper per household per day default
+
+GRAVEDIGGER_TARGET_WOOD = 5
+GRAVEDIGGER_TARGET_STONE = 5
+GRAVE_COST_WOOD = 1
+GRAVE_COST_STONE = 1
+GRAVE_DIG_HOURS = 1.0           # Exactly 1 in-game hour digging
+GRAVE_BURY_HOURS = 0.5          # Exactly 30 in-game minutes burial
+GRAVE_REUSE_DAYS = 30.0         # Reusable after 30 in-game days
+BURIAL_FEE_MAX_SILVER = 1       # Up to 1 Silver (10 Copper)
+CORPSE_CARRY_SPEED_RATIO = 0.5  # 50% speed while carrying corpse
+TOMBSTONE_MODELS_COUNT = 5      # At least 5 distinct tombstone variants
+
+AI_NEED_TOILET_DECAY_PER_DAY = 150.0   # Decays over time to trigger urgent need ~1-2 times daily
+AI_NEED_TOILET_URGENT_THRESHOLD = 20.0 # <= 20% triggers toilet seeking
+AI_NEED_TOILET_RESTORE = 100.0         # Restored when using toilet
+TOILET_USE_DURATION_HOURS = 0.25       # 15 in-game minutes
+
 

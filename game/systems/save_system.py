@@ -61,6 +61,16 @@ def serialize_game_state(day_cycle, resources, player, permit_manager, building_
         for (gx, gy), tc in getattr(p, "tile_crops", {}).items():
             serialized_tile_crops[f"{gx},{gy}"] = dict(tc)
 
+        # Convert tile_graves keys to string "gx,gy"
+        serialized_tile_graves = {}
+        for (gx, gy), g_data in getattr(p, "tile_graves", {}).items():
+            serialized_tile_graves[f"{gx},{gy}"] = dict(g_data)
+
+        batches_data = []
+        if hasattr(p, "batches"):
+            for b in p.batches.values():
+                batches_data.append(b.to_dict())
+
         permits_data.append({
             "id": p.id,
             "name": p.name,
@@ -71,7 +81,15 @@ def serialize_game_state(day_cycle, resources, player, permit_manager, building_
             "crop": getattr(p, "crop", None),
             "growth_days": getattr(p, "growth_days", 0.0),
             "watered_today": getattr(p, "watered_today", False),
-            "tile_crops": serialized_tile_crops
+            "tile_crops": serialized_tile_crops,
+            "tile_graves": serialized_tile_graves,
+            "church_tax": getattr(p, "church_tax", {"Gold": 0, "Silver": 0, "Copper": 1}),
+            "church_tax_paid_households": getattr(p, "church_tax_paid_households", {}),
+            "tax_paid_households_today": list(getattr(p, "tax_paid_households_today", [])),
+            "batches": batches_data,
+            "active_batch_id": getattr(p, "active_batch_id", None),
+            "batch_counter": getattr(p, "batch_counter", 0),
+            "current_day_time": getattr(p, "current_day_time", 1.0)
         })
 
     # 4. Buildings & Construction Sites
@@ -142,6 +160,7 @@ def serialize_game_state(day_cycle, resources, player, permit_manager, building_
             "surname": fam.surname,
             "assigned_permit_id": fam.assigned_permit_id,
             "generations_present": fam.generations_present,
+            "pending_death_recovery": [dict(d) for d in getattr(fam, "pending_death_recovery", [])],
             "members": [
                 {
                     "id": m.id,
@@ -168,6 +187,9 @@ def serialize_game_state(day_cycle, resources, player, permit_manager, building_
                     "tilling_timer": getattr(m, "tilling_timer", 0.0),
                     "hunger": getattr(m, "hunger", 100.0),
                     "thirst": getattr(m, "thirst", 100.0),
+                    "need_toilet": getattr(m, "need_toilet", 100.0),
+                    "interrupted_task_state": getattr(m, "interrupted_task_state", None),
+                    "activity_description": getattr(m, "activity_description", None),
                     "hunger_death_timer": getattr(m, "hunger_death_timer", None),
                     "thirst_death_timer": getattr(m, "thirst_death_timer", None),
                     "daily_food_consumed": getattr(m, "daily_food_consumed", 0),
@@ -175,7 +197,10 @@ def serialize_game_state(day_cycle, resources, player, permit_manager, building_
                     "is_alive": getattr(m, "is_alive", True),
                     "status": getattr(m, "status", "ALIVE"),
                     "death_reason": getattr(m, "death_reason", None),
-                    "death_day": getattr(m, "death_day", None)
+                    "death_day": getattr(m, "death_day", None),
+                    "carrying_corpse_id": getattr(m, "carrying_corpse_id", None),
+                    "is_buried": getattr(m, "is_buried", False),
+                    "is_picked_up": getattr(m, "is_picked_up", False)
                 } for m in fam.members
             ]
         })
@@ -195,7 +220,10 @@ def serialize_game_state(day_cycle, resources, player, permit_manager, building_
     # 9. Schedules
     schedules_data = {}
     if schedule_manager:
-        schedules_data = {job_id: list(sched) for job_id, sched in schedule_manager.job_schedules.items()}
+        schedules_data = {
+            job_id: ({d: list(s) for d, s in sched.items()} if isinstance(sched, dict) else list(sched))
+            for job_id, sched in schedule_manager.job_schedules.items()
+        }
 
     all_vils = villager_manager.get_all_villagers()
     total_pop = len(all_vils) + len(servant_manager.servants)
@@ -273,17 +301,7 @@ def save_to_slot(slot_id, day_cycle, resources, player, permit_manager, building
     except Exception as e:
         return False, f"Save failed: {e}"
 
-def load_from_slot(slot_id, day_cycle, resources, player, permit_manager, building_manager, stockpile_manager, furniture_manager, villager_manager, servant_manager, schedule_manager):
-    path = get_slot_path(slot_id)
-    if not os.path.exists(path):
-        return False, f"Slot {slot_id} save file not found!"
-
-    try:
-        with open(path, "r", encoding="utf-8") as f:
-            data = json.load(f)
-    except Exception as e:
-        return False, f"Failed to read slot {slot_id}: {e}"
-
+def deserialize_game_state(data, day_cycle, resources, player, permit_manager, building_manager, stockpile_manager, furniture_manager, villager_manager, servant_manager, schedule_manager):
     from game.world.permits import AreaPermit
     from game.buildings.buildings import Building, ConstructionSite
     from game.world.stockpile import ResourceStack
@@ -321,6 +339,25 @@ def load_from_slot(slot_id, day_cycle, resources, player, permit_manager, buildi
             parts = k.split(",")
             gx, gy = int(parts[0]), int(parts[1])
             p.tile_crops[(gx, gy)] = dict(tc_val)
+
+        from game.world.permits import FarmingBatch
+        p.batches = {}
+        for b_d in p_d.get("batches", []):
+            batch = FarmingBatch.from_dict(b_d)
+            p.batches[batch.id] = batch
+        p.active_batch_id = p_d.get("active_batch_id", None)
+        p.batch_counter = p_d.get("batch_counter", len(p.batches))
+        p.current_day_time = float(p_d.get("current_day_time", 1.0))
+
+        # Deserialize Cemetery & Church attributes (Agent 3)
+        p.tile_graves = {}
+        for k, g_val in p_d.get("tile_graves", {}).items():
+            parts = k.split(",")
+            gx, gy = int(parts[0]), int(parts[1])
+            p.tile_graves[(gx, gy)] = dict(g_val)
+        p.church_tax = dict(p_d.get("church_tax", {"Gold": 0, "Silver": 0, "Copper": 1}))
+        p.church_tax_paid_households = dict(p_d.get("church_tax_paid_households", {}))
+        p.tax_paid_households_today = set(p_d.get("tax_paid_households_today", []))
 
         permit_manager.permits.append(p)
 
@@ -389,6 +426,7 @@ def load_from_slot(slot_id, day_cycle, resources, player, permit_manager, buildi
     for fam_d in data.get("families", []):
         fam = Family(fam_d["id"], fam_d["surname"])
         fam.assigned_permit_id = fam_d.get("assigned_permit_id", None)
+        fam.pending_death_recovery = list(fam_d.get("pending_death_recovery", []))
         fam.members = []
         for m_d in fam_d.get("members", []):
             v = Villager(
@@ -404,6 +442,7 @@ def load_from_slot(slot_id, day_cycle, resources, player, permit_manager, buildi
                 y=m_d.get("y", 0.0)
             )
             v.job = m_d.get("job", "Farmer")
+            v.profession = v.job
             v.task = m_d.get("task", "IDLE")
             v.carrying_crop = m_d.get("carrying_crop", 0)
             v.inventory = dict(m_d.get("inventory", {}))
@@ -416,6 +455,9 @@ def load_from_slot(slot_id, day_cycle, resources, player, permit_manager, buildi
             v.tilling_timer = m_d.get("tilling_timer", 0.0)
             v.hunger = float(m_d.get("hunger", 100.0))
             v.thirst = float(m_d.get("thirst", 100.0))
+            v.need_toilet = float(m_d.get("need_toilet", 100.0))
+            v.interrupted_task_state = m_d.get("interrupted_task_state", None)
+            v.activity_description = m_d.get("activity_description", None)
             v.hunger_death_timer = float(m_d["hunger_death_timer"]) if m_d.get("hunger_death_timer") is not None else None
             v.thirst_death_timer = float(m_d["thirst_death_timer"]) if m_d.get("thirst_death_timer") is not None else None
             if "daily_food_consumed" in m_d:
@@ -431,6 +473,9 @@ def load_from_slot(slot_id, day_cycle, resources, player, permit_manager, buildi
             v.status = str(m_d.get("status", "ALIVE"))
             v.death_reason = m_d.get("death_reason", None)
             v.death_day = m_d.get("death_day", None)
+            v.carrying_corpse_id = m_d.get("carrying_corpse_id", None)
+            v.is_buried = bool(m_d.get("is_buried", False))
+            v.is_picked_up = bool(m_d.get("is_picked_up", False))
             v.assigned_permit_id = fam.assigned_permit_id
             
             # Reconnect carrying furniture if applicable
@@ -471,8 +516,12 @@ def load_from_slot(slot_id, day_cycle, resources, player, permit_manager, buildi
 
     # 10. Schedules
     if schedule_manager and "schedules" in data:
+        from game.data.config import DAYS_OF_WEEK
         for job_id, sched in data["schedules"].items():
-            schedule_manager.job_schedules[job_id] = list(sched)
+            if isinstance(sched, dict):
+                schedule_manager.job_schedules[job_id] = {d: list(s) for d, s in sched.items()}
+            elif isinstance(sched, list):
+                schedule_manager.job_schedules[job_id] = {d: list(sched) for d in DAYS_OF_WEEK}
 
     # 10.5. Production Distribution Records
     if "production_records" in data:
@@ -513,5 +562,18 @@ def load_from_slot(slot_id, day_cycle, resources, player, permit_manager, buildi
 
     from game.world.pathfinding import GlobalPathRegistry
     GlobalPathRegistry.get_instance().reset()
+    return True
 
+def load_from_slot(slot_id, day_cycle, resources, player, permit_manager, building_manager, stockpile_manager, furniture_manager, villager_manager, servant_manager, schedule_manager):
+    path = get_slot_path(slot_id)
+    if not os.path.exists(path):
+        return False, f"Slot {slot_id} save file not found!"
+
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except Exception as e:
+        return False, f"Failed to read slot {slot_id}: {e}"
+
+    deserialize_game_state(data, day_cycle, resources, player, permit_manager, building_manager, stockpile_manager, furniture_manager, villager_manager, servant_manager, schedule_manager)
     return True, f"Loaded Slot {slot_id} successfully!"

@@ -23,6 +23,8 @@ from game.config import (
     PATH_WAYPOINT_TOLERANCE,
     STUCK_THRESHOLD_SECONDS,
     STUCK_AVOIDANCE_DURATION,
+    EMERGENCY_STUCK_TIMEOUT,
+    EMERGENCY_COLLISION_BYPASS_DURATION,
     PATH_WAIT_RECHECK_INTERVAL,
     is_food_item,
     is_water_item,
@@ -136,6 +138,8 @@ class Servant:
         self.wait_timer = 0.0
         self.is_waiting_for_path = False
         self.stuck_timer = 0.0
+        self.hard_stuck_timer = 0.0
+        self.collision_bypass_timer = 0.0
         self.stuck_blocked_tiles = {}
         self.route_state = ROUTE_STATE_NONE
         self.route_request_timer = 0.0
@@ -932,6 +936,19 @@ class Servant:
                     ty = player.y + (60.0 if offset_y >= 0 else -60.0)
             self.idle_target = (tx, ty)
 
+        # Bebaskan lorong sempit jika tanpa sengaja berada di lorong sempit saat idle
+        cur_gx = int(math.floor(self.x / TILE_SIZE))
+        cur_gy = int(math.floor(self.y / TILE_SIZE))
+        if is_narrow_passage_tile((cur_gx, cur_gy), building_manager=building_manager, furniture_manager=furniture_manager):
+            for dx, dy in ((0, 1), (0, -1), (1, 0), (-1, 0), (1, 1), (-1, -1), (1, -1), (-1, 1)):
+                cand_t = (cur_gx + dx, cur_gy + dy)
+                if not is_narrow_passage_tile(cand_t, building_manager=building_manager, furniture_manager=furniture_manager):
+                    cand_wx = (cand_t[0] + 0.5) * TILE_SIZE
+                    cand_wy = (cand_t[1] + 0.5) * TILE_SIZE
+                    self.idle_target = (cand_wx, cand_wy)
+                    self._move_towards(cand_wx, cand_wy, dt, arrival_dist=16, all_servants=all_servants, player=player, building_manager=building_manager, all_entities=all_entities, furniture_manager=furniture_manager)
+                    break
+
         # Bebaskan celah pintu jika tanpa sengaja berada di threshold saat idle
         if building_manager and building_manager.is_near_any_door(self.x, self.y, min_dist=32.0):
             for b in getattr(building_manager, "buildings", []):
@@ -949,6 +966,10 @@ class Servant:
 
     def _move_towards(self, tx, ty, dt, arrival_dist=10, all_servants=None, player=None, building_manager=None, all_entities=None, furniture_manager=None, exclusive_target=False):
         reg = GlobalPathRegistry.get_instance()
+        stuck_accrued = False
+
+        if getattr(self, "collision_bypass_timer", 0.0) > 0.0:
+            self.collision_bypass_timer = max(0.0, self.collision_bypass_timer - dt)
 
         # 0. Penanganan Antrean Menunggu Jalur (Waiting for Route Clearance) & Route Lifecycle Recovery
         if not hasattr(self, "route_state"):
@@ -968,6 +989,14 @@ class Servant:
 
         if self.wait_timer > 0.0 or getattr(self, "is_waiting_for_path", False):
             self.route_request_timer += dt
+            self.hard_stuck_timer += dt
+            stuck_accrued = True
+            if self.hard_stuck_timer >= EMERGENCY_STUCK_TIMEOUT:
+                self.collision_bypass_timer = EMERGENCY_COLLISION_BYPASS_DURATION
+                self.hard_stuck_timer = 0.0
+                self.wait_timer = 0.0
+                self.is_waiting_for_path = False
+
             if self.wait_timer > 0.0:
                 self.wait_timer -= dt
                 self.is_moving = False
@@ -1164,14 +1193,34 @@ class Servant:
             occ_eid = reg.get_tile_occupant((next_gx, next_gy))
             if occ_eid and occ_eid != str(self.id):
                 if is_narrow or exclusive_target:
-                    self.is_moving = False
-                    self.wait_timer = PATH_WAIT_RECHECK_INTERVAL
-                    return False
+                    if getattr(self, "collision_bypass_timer", 0.0) <= 0.0:
+                        self.is_moving = False
+                        self.wait_timer = PATH_WAIT_RECHECK_INTERVAL
+                        if not stuck_accrued:
+                            self.hard_stuck_timer += dt
+                            stuck_accrued = True
+                        if self.hard_stuck_timer >= EMERGENCY_STUCK_TIMEOUT:
+                            self.collision_bypass_timer = EMERGENCY_COLLISION_BYPASS_DURATION
+                            self.hard_stuck_timer = 0.0
+                            self.wait_timer = 0.0
+                            self.is_waiting_for_path = False
+                        else:
+                            return False
             reserved_step = reg.reserve_step_tile(self.id, (next_gx, next_gy))
             if not reserved_step and (is_narrow or exclusive_target):
-                self.is_moving = False
-                self.wait_timer = PATH_WAIT_RECHECK_INTERVAL
-                return False
+                if getattr(self, "collision_bypass_timer", 0.0) <= 0.0:
+                    self.is_moving = False
+                    self.wait_timer = PATH_WAIT_RECHECK_INTERVAL
+                    if not stuck_accrued:
+                        self.hard_stuck_timer += dt
+                        stuck_accrued = True
+                    if self.hard_stuck_timer >= EMERGENCY_STUCK_TIMEOUT:
+                        self.collision_bypass_timer = EMERGENCY_COLLISION_BYPASS_DURATION
+                        self.hard_stuck_timer = 0.0
+                        self.wait_timer = 0.0
+                        self.is_waiting_for_path = False
+                    else:
+                        return False
 
         if dist_to_wp <= tol:
             if is_last_wp:
@@ -1255,7 +1304,7 @@ class Servant:
                             can_pass, q_pos = b.request_door_passage(self.id, is_outside, tile_size=TILE_SIZE)
                             if door_phys or not can_pass:
                                 # Pintu sedang dipakai AI lain -> Bergerak ke posisi antrean lateral di samping pintu jika posisi tersedia
-                                if q_pos:
+                                if q_pos and len(q_pos) >= 2 and q_pos[0] is not None:
                                     q_dist = math.hypot(self.x - q_pos[0], self.y - q_pos[1])
                                     if q_dist > 12.0:
                                         q_dx = (q_pos[0] - self.x) / q_dist
@@ -1300,6 +1349,20 @@ class Servant:
         # 8. Stuck Detection & Dynamic Obstacle Recovery
         actual_moved = math.hypot(self.x - old_x, self.y - old_y)
         expected_moved = self.speed * dt * 0.20
+
+        # Continuous 3-second hard stuck recovery: bypass collision blocking
+        if actual_moved < expected_moved and dist_to_wp > tol:
+            if not stuck_accrued:
+                self.hard_stuck_timer += dt
+                stuck_accrued = True
+            if self.hard_stuck_timer >= EMERGENCY_STUCK_TIMEOUT:
+                self.collision_bypass_timer = EMERGENCY_COLLISION_BYPASS_DURATION
+                self.hard_stuck_timer = 0.0
+                self.stuck_timer = 0.0
+                self.wait_timer = 0.0
+                self.is_waiting_for_path = False
+        else:
+            self.hard_stuck_timer = max(0.0, self.hard_stuck_timer - dt * 2.0)
 
         # Jika sedang meluncur melewati AI lain, jangan anggap macet pada dinding
         if actual_moved < expected_moved and dist_to_wp > tol and not did_slide:

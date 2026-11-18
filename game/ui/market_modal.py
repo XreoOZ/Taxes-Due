@@ -16,7 +16,7 @@ from game.data.config import (
     RESOURCE_COLORS,
     DENOMINATION_CAP
 )
-from game.systems.currency import to_copper, normalize_wallet
+from game.systems.currency import to_copper, from_copper, normalize_wallet
 
 class MarketProfileModal:
     def __init__(self):
@@ -29,13 +29,19 @@ class MarketProfileModal:
         self.font_btn = None
 
         # Modal bounds (dynamically positioned)
-        self.modal_w = 700
-        self.modal_h = 490
+        self.modal_w = 740
+        self.modal_h = 510
 
         # UI interaction rects
         self.close_btn_rect = None
-        self.price_dec_btns = {}  # item_name -> pygame.Rect (-1)
-        self.price_inc_btns = {}  # item_name -> pygame.Rect (+1)
+        self.price_g_dec_btns = {}  # item_name -> pygame.Rect (-1 Gold = -100 Copper)
+        self.price_g_inc_btns = {}  # item_name -> pygame.Rect (+1 Gold = +100 Copper)
+        self.price_s_dec_btns = {}  # item_name -> pygame.Rect (-1 Silver = -10 Copper)
+        self.price_s_inc_btns = {}  # item_name -> pygame.Rect (+1 Silver = +10 Copper)
+        self.price_c_dec_btns = {}  # item_name -> pygame.Rect (-1 Copper = -1 Copper)
+        self.price_c_inc_btns = {}  # item_name -> pygame.Rect (+1 Copper = +1 Copper)
+        self.price_dec_btns = self.price_c_dec_btns
+        self.price_inc_btns = self.price_c_inc_btns
         self.price_dec5_btns = {} # item_name -> pygame.Rect (-5)
         self.price_inc5_btns = {} # item_name -> pygame.Rect (+5)
         self.stock_dep_btns = {}  # item_name -> pygame.Rect (+10)
@@ -86,14 +92,38 @@ class MarketProfileModal:
                 self.close()
                 return "close"
 
-            # 1. Edit Harga: [-1] dan [+1]
-            for it_name, rect in self.price_dec_btns.items():
+            # 1. Edit Harga Denominasi: Gold, Silver, Copper
+            for it_name, rect in self.price_g_dec_btns.items():
+                if rect.collidepoint(mouse_pos):
+                    cur_p = mkt.prices.get(it_name, DEFAULT_ITEM_PRICES.get(it_name, 1))
+                    mkt.prices[it_name] = max(1, cur_p - 100)
+                    return f"price_decreased_gold_{it_name}"
+
+            for it_name, rect in self.price_g_inc_btns.items():
+                if rect.collidepoint(mouse_pos):
+                    cur_p = mkt.prices.get(it_name, DEFAULT_ITEM_PRICES.get(it_name, 1))
+                    mkt.prices[it_name] = cur_p + 100
+                    return f"price_increased_gold_{it_name}"
+
+            for it_name, rect in self.price_s_dec_btns.items():
+                if rect.collidepoint(mouse_pos):
+                    cur_p = mkt.prices.get(it_name, DEFAULT_ITEM_PRICES.get(it_name, 1))
+                    mkt.prices[it_name] = max(1, cur_p - 10)
+                    return f"price_decreased_silver_{it_name}"
+
+            for it_name, rect in self.price_s_inc_btns.items():
+                if rect.collidepoint(mouse_pos):
+                    cur_p = mkt.prices.get(it_name, DEFAULT_ITEM_PRICES.get(it_name, 1))
+                    mkt.prices[it_name] = cur_p + 10
+                    return f"price_increased_silver_{it_name}"
+
+            for it_name, rect in self.price_c_dec_btns.items():
                 if rect.collidepoint(mouse_pos):
                     cur_p = mkt.prices.get(it_name, DEFAULT_ITEM_PRICES.get(it_name, 1))
                     mkt.prices[it_name] = max(1, cur_p - 1)
                     return f"price_decreased_{it_name}"
 
-            for it_name, rect in self.price_inc_btns.items():
+            for it_name, rect in self.price_c_inc_btns.items():
                 if rect.collidepoint(mouse_pos):
                     cur_p = mkt.prices.get(it_name, DEFAULT_ITEM_PRICES.get(it_name, 1))
                     mkt.prices[it_name] = cur_p + 1
@@ -264,21 +294,31 @@ class MarketProfileModal:
         th_y = list_y + 22
         pygame.draw.rect(surface, (30, 41, 59), (mx + 24, th_y, self.modal_w - 48, 24), border_radius=4)
         surface.blit(self.font_badge.render("ITEM", True, COLOR_TEXT_MUTED), (mx + 36, th_y + 4))
-        surface.blit(self.font_badge.render("MARKET STOCK", True, COLOR_TEXT_MUTED), (mx + 170, th_y + 4))
-        surface.blit(self.font_badge.render("SELLING PRICE", True, COLOR_TEXT_MUTED), (mx + 290, th_y + 4))
-        surface.blit(self.font_badge.render("PRICE ADJUSTMENT", True, COLOR_TEXT_MUTED), (mx + 395, th_y + 4))
-        surface.blit(self.font_badge.render("MANAGE STOCK", True, COLOR_TEXT_MUTED), (mx + 535, th_y + 4))
+        surface.blit(self.font_badge.render("MARKET STOCK", True, COLOR_TEXT_MUTED), (mx + 160, th_y + 4))
+        surface.blit(self.font_badge.render("SELLING PRICE", True, COLOR_TEXT_MUTED), (mx + 280, th_y + 4))
+        surface.blit(self.font_badge.render("PRICE ADJUSTMENT (G / S / C)", True, COLOR_TEXT_MUTED), (mx + 410, th_y + 4))
+        surface.blit(self.font_badge.render("MANAGE STOCK", True, COLOR_TEXT_MUTED), (mx + 590, th_y + 4))
 
         # Reset button rect mappings for this frame
-        self.price_dec_btns.clear()
-        self.price_inc_btns.clear()
+        self.price_g_dec_btns.clear()
+        self.price_g_inc_btns.clear()
+        self.price_s_dec_btns.clear()
+        self.price_s_inc_btns.clear()
+        self.price_c_dec_btns.clear()
+        self.price_c_inc_btns.clear()
         self.price_dec5_btns.clear()
         self.price_inc5_btns.clear()
         self.stock_dep_btns.clear()
         self.stock_with_btns.clear()
 
-        # Daftar komoditas pasar (Potato sebagai staple utama + generic item definitions)
-        market_items = ["Potato"]
+        # Dynamic commodities list: staple food + generic registered item definitions + existing inventory/prices
+        market_items = []
+        for it in ("Potato", "Wood", "Stone"):
+            if it not in market_items:
+                market_items.append(it)
+        for it in DEFAULT_ITEM_PRICES:
+            if it not in market_items:
+                market_items.append(it)
         for it in mkt.inventory:
             if it not in market_items:
                 market_items.append(it)
@@ -290,9 +330,10 @@ class MarketProfileModal:
         row_h = 44
         m_pos = pygame.mouse.get_pos()
 
-        for it_name in market_items:
+        for it_name in market_items[:5]:
             stock_qty = mkt.inventory.get(it_name, 0)
             active_price = mkt.prices.get(it_name, DEFAULT_ITEM_PRICES.get(it_name, 3))
+            d_price = from_copper(active_price)
 
             card_rect = pygame.Rect(mx + 24, row_y, self.modal_w - 48, row_h)
             pygame.draw.rect(surface, (15, 23, 42, 220), card_rect, border_radius=6)
@@ -300,8 +341,8 @@ class MarketProfileModal:
 
             # Item Icon & Name
             col = RESOURCE_COLORS.get(it_name, (200, 200, 200))
-            pygame.draw.circle(surface, col, (mx + 46, row_y + row_h // 2), 7)
-            surface.blit(self.font_sub.render(it_name, True, (241, 245, 249)), (mx + 60, row_y + 12))
+            pygame.draw.circle(surface, col, (mx + 44, row_y + row_h // 2), 7)
+            surface.blit(self.font_sub.render(it_name, True, (241, 245, 249)), (mx + 58, row_y + 12))
 
             # Stock Quantity (reflects actual delivered items, with in-transit indicator)
             in_transit = 0
@@ -310,62 +351,70 @@ class MarketProfileModal:
 
             stock_str = f"{stock_qty} in stock" if stock_qty > 0 else "OUT OF STOCK"
             if in_transit > 0:
-                stock_str += f" (+{in_transit} in transit)"
+                stock_str += f" (+{in_transit} transit)"
             stock_col = (34, 197, 94) if stock_qty > 0 else ((56, 189, 248) if in_transit > 0 else (239, 68, 68))
-            surface.blit(self.font_sub.render(stock_str, True, stock_col), (mx + 170, row_y + 12))
+            surface.blit(self.font_badge.render(stock_str, True, stock_col), (mx + 160, row_y + 14))
 
-            # Active Selling Price
-            pr_str = f"{active_price} Copper"
-            surface.blit(self.font_title.render(pr_str, True, (250, 204, 21)), (mx + 290, row_y + 10))
+            # Active Selling Price in Denominations (Gold, Silver, Copper)
+            pr_x = mx + 276
+            pr_y = row_y + 12
+            surface.blit(self.font_sub.render(f"{d_price['Gold']}g", True, (250, 204, 21)), (pr_x, pr_y))
+            surface.blit(self.font_sub.render(f"{d_price['Silver']}s", True, (203, 213, 225)), (pr_x + 36, pr_y))
+            surface.blit(self.font_sub.render(f"{d_price['Copper']}c", True, (217, 119, 6)), (pr_x + 72, pr_y))
 
-            # Price Adjustment Buttons ([-5] [-1] [+1] [+5])
-            btn_y = row_y + 8
-            # [-5]
-            btn_m5 = pygame.Rect(mx + 395, btn_y, 28, 26)
-            self.price_dec5_btns[it_name] = btn_m5
-            h_m5 = btn_m5.collidepoint(m_pos)
-            pygame.draw.rect(surface, (71, 85, 105) if h_m5 else (30, 41, 59), btn_m5, border_radius=4)
-            pygame.draw.rect(surface, (100, 116, 139), btn_m5, width=1, border_radius=4)
-            surface.blit(self.font_badge.render("-5", True, (255, 255, 255)), (btn_m5.x + 6, btn_m5.y + 6))
+            # Denomination Adjustment Buttons: G[-] G[+] | S[-] S[+] | C[-] C[+]
+            btn_y = row_y + 9
 
-            # [-1]
-            btn_m1 = pygame.Rect(mx + 427, btn_y, 28, 26)
-            self.price_dec_btns[it_name] = btn_m1
-            h_m1 = btn_m1.collidepoint(m_pos)
-            pygame.draw.rect(surface, (220, 38, 38) if h_m1 else (153, 27, 27), btn_m1, border_radius=4)
-            surface.blit(self.font_sub.render("-", True, (255, 255, 255)), (btn_m1.x + 10, btn_m1.y + 4))
+            # Gold adjustments
+            gm_rect = pygame.Rect(mx + 395, btn_y, 22, 24)
+            self.price_g_dec_btns[it_name] = gm_rect
+            gp_rect = pygame.Rect(mx + 419, btn_y, 22, 24)
+            self.price_g_inc_btns[it_name] = gp_rect
+            pygame.draw.rect(surface, (71, 85, 105) if gm_rect.collidepoint(m_pos) else (30, 41, 59), gm_rect, border_radius=3)
+            pygame.draw.rect(surface, (250, 204, 21), gm_rect, width=1, border_radius=3)
+            surface.blit(self.font_badge.render("-", True, (250, 204, 21)), (gm_rect.x + 7, gm_rect.y + 4))
+            pygame.draw.rect(surface, (71, 85, 105) if gp_rect.collidepoint(m_pos) else (30, 41, 59), gp_rect, border_radius=3)
+            pygame.draw.rect(surface, (250, 204, 21), gp_rect, width=1, border_radius=3)
+            surface.blit(self.font_badge.render("+", True, (250, 204, 21)), (gp_rect.x + 6, gp_rect.y + 4))
 
-            # [+1]
-            btn_p1 = pygame.Rect(mx + 459, btn_y, 28, 26)
-            self.price_inc_btns[it_name] = btn_p1
-            h_p1 = btn_p1.collidepoint(m_pos)
-            pygame.draw.rect(surface, (22, 163, 74) if h_p1 else (21, 128, 61), btn_p1, border_radius=4)
-            surface.blit(self.font_sub.render("+", True, (255, 255, 255)), (btn_p1.x + 8, btn_p1.y + 4))
+            # Silver adjustments
+            sm_rect = pygame.Rect(mx + 450, btn_y, 22, 24)
+            self.price_s_dec_btns[it_name] = sm_rect
+            sp_rect = pygame.Rect(mx + 474, btn_y, 22, 24)
+            self.price_s_inc_btns[it_name] = sp_rect
+            pygame.draw.rect(surface, (71, 85, 105) if sm_rect.collidepoint(m_pos) else (30, 41, 59), sm_rect, border_radius=3)
+            pygame.draw.rect(surface, (203, 213, 225), sm_rect, width=1, border_radius=3)
+            surface.blit(self.font_badge.render("-", True, (203, 213, 225)), (sm_rect.x + 7, sm_rect.y + 4))
+            pygame.draw.rect(surface, (71, 85, 105) if sp_rect.collidepoint(m_pos) else (30, 41, 59), sp_rect, border_radius=3)
+            pygame.draw.rect(surface, (203, 213, 225), sp_rect, width=1, border_radius=3)
+            surface.blit(self.font_badge.render("+", True, (203, 213, 225)), (sp_rect.x + 6, sp_rect.y + 4))
 
-            # [+5]
-            btn_p5 = pygame.Rect(mx + 491, btn_y, 28, 26)
-            self.price_inc5_btns[it_name] = btn_p5
-            h_p5 = btn_p5.collidepoint(m_pos)
-            pygame.draw.rect(surface, (71, 85, 105) if h_p5 else (30, 41, 59), btn_p5, border_radius=4)
-            pygame.draw.rect(surface, (100, 116, 139), btn_p5, width=1, border_radius=4)
-            surface.blit(self.font_badge.render("+5", True, (255, 255, 255)), (btn_p5.x + 5, btn_p5.y + 6))
+            # Copper adjustments
+            cm_rect = pygame.Rect(mx + 505, btn_y, 22, 24)
+            self.price_c_dec_btns[it_name] = cm_rect
+            cp_rect = pygame.Rect(mx + 529, btn_y, 22, 24)
+            self.price_c_inc_btns[it_name] = cp_rect
+            pygame.draw.rect(surface, (71, 85, 105) if cm_rect.collidepoint(m_pos) else (30, 41, 59), cm_rect, border_radius=3)
+            pygame.draw.rect(surface, (217, 119, 6), cm_rect, width=1, border_radius=3)
+            surface.blit(self.font_badge.render("-", True, (217, 119, 6)), (cm_rect.x + 7, cm_rect.y + 4))
+            pygame.draw.rect(surface, (71, 85, 105) if cp_rect.collidepoint(m_pos) else (30, 41, 59), cp_rect, border_radius=3)
+            pygame.draw.rect(surface, (217, 119, 6), cp_rect, width=1, border_radius=3)
+            surface.blit(self.font_badge.render("+", True, (217, 119, 6)), (cp_rect.x + 6, cp_rect.y + 4))
 
-            # Stock Management Buttons: [+10 Deposit] and [-10 Withdraw]
-            # [+ Deposit 10]
-            btn_dep = pygame.Rect(mx + 535, btn_y, 64, 26)
+            # Stock Management Buttons: [+ Restock 10] and [- Withdraw 10]
+            btn_dep = pygame.Rect(mx + 570, btn_y, 66, 24)
             self.stock_dep_btns[it_name] = btn_dep
             h_dep = btn_dep.collidepoint(m_pos)
             pygame.draw.rect(surface, (37, 99, 235) if h_dep else (30, 58, 138), btn_dep, border_radius=4)
-            surface.blit(self.font_badge.render("+10 Stock", True, (255, 255, 255)), (btn_dep.x + 5, btn_dep.y + 6))
+            surface.blit(self.font_badge.render("+Restock", True, (255, 255, 255)), (btn_dep.x + 7, btn_dep.y + 5))
 
-            # [- Withdraw 10]
-            btn_with = pygame.Rect(mx + 605, btn_y, 64, 26)
+            btn_with = pygame.Rect(mx + 642, btn_y, 66, 24)
             self.stock_with_btns[it_name] = btn_with
             h_with = btn_with.collidepoint(m_pos)
             pygame.draw.rect(surface, (71, 85, 105) if h_with else (51, 65, 85), btn_with, border_radius=4)
-            surface.blit(self.font_badge.render("-10 Stock", True, (255, 255, 255)), (btn_with.x + 5, btn_with.y + 6))
+            surface.blit(self.font_badge.render("-Withdraw", True, (255, 255, 255)), (btn_with.x + 5, btn_with.y + 5))
 
-            row_y += row_h + 8
+            row_y += row_h + 6
 
         # -------------------------------------------------------------
         # 6. FOOTER: ECONOMIC INSTRUCTION & LANDLORD STOCKPILE SUMMARY
