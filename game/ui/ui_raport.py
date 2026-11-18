@@ -1,0 +1,2304 @@
+"""
+Raport UI (Town Ledger, Free-form Area Permit Deeds, RimWorld Work Priorities & Building Management Modal)
+"""
+
+import math
+import pygame
+from game.config import (
+    COLOR_RAPORT_BTN_BG,
+    COLOR_RAPORT_BTN_BORDER,
+    COLOR_MODAL_BG,
+    COLOR_MODAL_BORDER,
+    COLOR_TAB_ACTIVE,
+    COLOR_TAB_INACTIVE,
+    COLOR_BADGE_WIP,
+    COLOR_TEXT_TITLE,
+    COLOR_TEXT_MAIN,
+    COLOR_TEXT_MUTED,
+    BUILDING_TYPES,
+    PERMIT_TYPES,
+    CROP_TYPES,
+    WORK_TYPES,
+    PRIORITY_COLORS,
+    DEDICATED_JOBS,
+    FURNITURE_TYPES,
+    COST_PER_BLOCK_WOOD,
+    COST_PER_BLOCK_STONE,
+    TILE_SIZE,
+    RAPORT_MODAL_WIDTH,
+    RAPORT_MODAL_HEIGHT,
+    DEMOLITION_REFUND_RATIO,
+    SCHEDULE_TYPES,
+    DEFAULT_JOB_SCHEDULE
+)
+
+GRANTABLE_ITEMS = [
+    {"type": "Hoe", "name": "Hoe"},
+    {"type": "Sickle", "name": "Sickle"},
+    {"type": "Watering_Can", "name": "Watering Can"},
+    {"type": "Potato", "name": "Potato"},
+    {"type": "Wood", "name": "Wood"},
+    {"type": "Stone", "name": "Stone"},
+]
+
+def draw_item_icon(surface, item_name, cx, cy, size=12):
+    """Draws crisp medieval procedural vector icons for items without relying on OS emoji fonts"""
+    name_low = str(item_name).lower()
+    if "potato" in name_low or "spud" in name_low:
+        r = pygame.Rect(cx - size, cy - int(size * 0.7), size * 2, int(size * 1.4))
+        pygame.draw.ellipse(surface, (180, 115, 60), r)
+        pygame.draw.ellipse(surface, (120, 70, 30), r, 1)
+        pygame.draw.circle(surface, (100, 50, 20), (cx - 4, cy - 2), 1)
+        pygame.draw.circle(surface, (100, 50, 20), (cx + 3, cy + 1), 1)
+    elif "hoe" in name_low:
+        pygame.draw.line(surface, (139, 90, 43), (cx - size + 2, cy + size - 2), (cx + 4, cy - 4), 2)
+        pygame.draw.line(surface, (170, 175, 185), (cx + 1, cy - 8), (cx + 8, cy - 2), 3)
+        pygame.draw.line(surface, (220, 225, 235), (cx + 2, cy - 7), (cx + 7, cy - 3), 1)
+    elif "sickle" in name_low:
+        pygame.draw.line(surface, (139, 90, 43), (cx - 4, cy + 2), (cx - 7, cy + size - 2), 2)
+        arc_rect = pygame.Rect(cx - 6, cy - size + 2, size * 2 - 2, size * 2 - 2)
+        pygame.draw.arc(surface, (200, 210, 225), arc_rect, 0.4, 3.2, 2)
+    elif "water" in name_low or "can" in name_low:
+        # Medieval Watering Pot (Chantepleure / terracotta vessel)
+        pygame.draw.circle(surface, (180, 105, 55), (cx, cy + 2), int(size * 0.75))
+        pygame.draw.circle(surface, (120, 65, 30), (cx, cy + 2), int(size * 0.75), 1)
+        pygame.draw.rect(surface, (160, 90, 45), (cx - 3, cy - int(size * 0.8), 6, int(size * 0.6)))
+        pygame.draw.arc(surface, (100, 50, 20), (cx - int(size * 0.9), cy - int(size * 0.7), int(size * 1.8), int(size * 1.4)), 0.3, 2.8, 2)
+        pygame.draw.line(surface, (190, 120, 60), (cx + int(size * 0.5), cy), (cx + size, cy - int(size * 0.6)), 2)
+        pygame.draw.circle(surface, (217, 149, 44), (cx + size, cy - int(size * 0.6)), 2)
+    elif "wood" in name_low or "timber" in name_low:
+        pygame.draw.rect(surface, (160, 105, 55), (cx - size + 1, cy - 3, size * 2 - 2, 7), border_radius=2)
+        pygame.draw.rect(surface, (100, 60, 25), (cx - size + 1, cy - 3, size * 2 - 2, 7), 1, border_radius=2)
+        pygame.draw.circle(surface, (200, 150, 90), (cx + size - 3, cy), 3)
+    elif "stone" in name_low:
+        r = pygame.Rect(cx - int(size * 0.8), cy - int(size * 0.6), int(size * 1.6), int(size * 1.2))
+        pygame.draw.rect(surface, (148, 163, 184), r, border_radius=2)
+        pygame.draw.rect(surface, (100, 116, 139), r, 1, border_radius=2)
+        pygame.draw.line(surface, (226, 232, 240), (r.left + 1, r.top + 1), (r.right - 2, r.top + 1), 1)
+    elif "bread" in name_low:
+        r = pygame.Rect(cx - size, cy - int(size * 0.6), size * 2, int(size * 1.2))
+        pygame.draw.ellipse(surface, (217, 149, 44), r)
+        pygame.draw.ellipse(surface, (146, 64, 14), r, 1)
+        pygame.draw.line(surface, (254, 243, 199), (cx - 4, cy - 2), (cx - 1, cy + 2), 1)
+        pygame.draw.line(surface, (254, 243, 199), (cx + 1, cy - 2), (cx + 4, cy + 2), 1)
+    elif "cloth" in name_low or "linen" in name_low:
+        r = pygame.Rect(cx - int(size * 0.8), cy - int(size * 0.6), int(size * 1.6), int(size * 1.2))
+        pygame.draw.rect(surface, (226, 232, 240), r, border_radius=2)
+        pygame.draw.rect(surface, (148, 163, 184), r, 1, border_radius=2)
+        pygame.draw.line(surface, (203, 213, 225), (r.left + 2, r.centery), (r.right - 2, r.centery), 1)
+    elif "coin" in name_low or "copper" in name_low:
+        pygame.draw.circle(surface, (180, 83, 9), (cx - 3, cy), 6)
+        pygame.draw.circle(surface, (120, 53, 15), (cx - 3, cy), 6, 1)
+        pygame.draw.circle(surface, (217, 119, 6), (cx + 3, cy), 6)
+        pygame.draw.circle(surface, (146, 64, 14), (cx + 3, cy), 6, 1)
+    else:
+        r = pygame.Rect(cx - 7, cy - 6, 14, 12)
+        pygame.draw.rect(surface, (139, 92, 246), r, border_radius=2)
+        pygame.draw.rect(surface, (91, 33, 182), r, 1, border_radius=2)
+
+class RaportUI:
+    def __init__(self):
+        self.is_open = False
+        self.active_tab = 0  # 0: Buildings, 1: Area Permits, 2: Priority, 3: Schedule, 4: Villagers, 5: Workers
+        self.show_build_menu = False
+        self.show_structures_menu = False
+        self.show_furniture_menu = False
+        self.selected_building_type = None
+        self.selected_furniture_type = None
+        self.placing_permit_type = None
+
+        # Inspection & Focused entity tracking
+        self.selected_permit_inspect_id = None
+        self.selected_building_inspect = None
+
+        # Left Raport Button
+        self.btn_left_rect = pygame.Rect(16, 200, 110, 42)
+
+        # Tabs
+        self.tabs = [
+            {"id": "building", "title": "Buildings", "wip": False},
+            {"id": "permit", "title": "Area Permits", "wip": False},
+            {"id": "priority", "title": "Priority", "wip": False},
+            {"id": "schedule", "title": "Schedule", "wip": False},
+            {"id": "villagers", "title": "Household", "wip": False},
+            {"id": "workers", "title": "Workers", "wip": False},
+        ]
+
+        # Schedule State
+        self.selected_schedule_job_id = None
+        self.selected_schedule_brush = "WORK"
+        self.schedule_job_select_btn_rects = {}
+        self.schedule_brush_btn_rects = {}
+        self.schedule_hour_cell_rects = {}
+        self.schedule_preset_btn_rects = {}
+        self.schedule_back_btn_rect = None
+
+        # Household Possession State
+        self.show_household_possession = False
+        self.household_possession_btn_rect = None
+        self.close_possession_btn_rect = None
+
+        # Royal Grant Item to Household State
+        self.show_grant_dialog = False
+        self.show_grant_confirm = False
+        self.grant_amounts = {}
+        self.open_grant_dialog_btn_rect = None
+        self.grant_close_btn_rect = None
+        self.grant_submit_btn_rect = None
+        self.grant_confirm_btn_rect = None
+        self.grant_cancel_btn_rect = None
+        self.grant_dec_btn_rects = {}
+        self.grant_inc_btn_rects = {}
+        self.grant_max_btn_rects = {}
+        self.grant_item_qty_rects = {}
+        self.active_grant_input_item = None
+        self.grant_input_text = ""
+        self.cached_stockpile_manager = None
+
+        self.modal_w = RAPORT_MODAL_WIDTH
+        self.modal_h = RAPORT_MODAL_HEIGHT
+
+        # Crop Planting State
+        self.crop_picker_permit_id = None
+        self.crop_select_btn_rects = {}
+        self.open_plant_btn_rects = {}
+        self.close_crop_picker_btn_rect = None
+        self.crop_picker_bg_rect = None
+
+        # Villagers Tab Navigation & State
+        self.selected_family_id = None
+        self.show_assign_permit_picker = False
+        self.add_family_cheat_btn_rect = None
+        self.back_to_families_btn_rect = None
+        self.view_family_btn_rects = []
+        self.open_assign_lot_btn_rect = None
+        self.revoke_deed_btn_rect = None
+        self.assign_permit_btn_rects = {}
+        self.close_deed_picker_btn_rect = None
+        self.deed_picker_bg_rect = None
+
+        # Individual Member Inventory Dialog State
+        self.selected_member_inventory_id = None
+        self.member_inventory_btn_rects = {}
+        self.close_member_inv_btn_rect = None
+        self.member_deposit_btn_rects = {}
+        self.member_drop_btn_rects = {}
+        self.member_inv_bg_rect = None
+
+        # Clickable rects cache
+        self.tab_rects = []
+        self.close_btn_rect = None
+        self.build_btn_rect = None
+        self.structures_btn_rect = None
+        self.furniture_btn_rect = None
+        self.building_select_rects = {}
+        self.furniture_select_rects = {}
+        self.permit_btn_rects = {}
+        self.delete_permit_btn_rects = {}
+        self.edit_permit_btn_rects = {}
+        self.destroy_building_btn_rects = {}
+        self.priority_cell_rects = {}  # (servant_id, work_id) -> Rect
+
+        # Area Permits Worker Assignment Controls
+        self.worker_dec_btn_rects = {}
+        self.worker_inc_btn_rects = {}
+        self.worker_auto_btn_rects = {}
+
+        # Workers Tab Controls
+        self.selected_job_id = None
+        self.back_to_jobs_btn_rect = None
+        self.auto_sort_all_btn_rect = None
+        self.job_select_btn_rects = {}
+        self.worker_assign_btn_rects = {}
+        self.worker_unassign_btn_rects = {}
+
+        self.fonts_loaded = False
+
+    def _init_fonts(self):
+        if not self.fonts_loaded:
+            self.font_btn = pygame.font.SysFont("Segoe UI", 12, bold=True)
+            self.font_title = pygame.font.SysFont("Segoe UI", 16, bold=True)
+            self.font_tab = pygame.font.SysFont("Segoe UI", 12, bold=True)
+            self.font_body = pygame.font.SysFont("Segoe UI", 12)
+            self.font_badge = pygame.font.SysFont("Segoe UI", 10, bold=True)
+            self.font_sub = pygame.font.SysFont("Segoe UI", 12, bold=True)
+            self.font_priority = pygame.font.SysFont("Segoe UI", 14, bold=True)
+            self.fonts_loaded = True
+
+    def open(self):
+        self.is_open = True
+
+    def close(self):
+        """Tutup modal Raport UI dan reset seluruh status dialog internalnya"""
+        self.is_open = False
+        self.show_build_menu = False
+        self.show_structures_menu = False
+        self.show_furniture_menu = False
+        self.show_household_possession = False
+        self.show_grant_dialog = False
+        self.show_grant_confirm = False
+        self.grant_amounts = {}
+        self.active_grant_input_item = None
+        self.grant_input_text = ""
+        self.selected_family_id = None
+        self.selected_member_inventory_id = None
+        self.show_assign_permit_picker = False
+        self.crop_picker_permit_id = None
+
+    def get_landlord_stock(self, stockpile_manager, resources):
+        stock = {
+            "Hoe": 0,
+            "Sickle": 0,
+            "Watering_Can": 0,
+            "Potato": 0,
+            "Wood": 0,
+            "Stone": 0,
+        }
+        sm = stockpile_manager or self.cached_stockpile_manager
+        if sm:
+            for s in getattr(sm, "stacks", []):
+                if getattr(s, "owner_type", "landlord") == "landlord" and getattr(s, "amount", 0) > 0:
+                    rt = s.resource_type
+                    if rt in ("Food", "Potato", "potato"):
+                        stock["Potato"] += s.amount
+                    elif rt in stock:
+                        stock[rt] += s.amount
+                    else:
+                        stock[rt] = stock.get(rt, 0) + s.amount
+        if resources:
+            for k in ("Wood", "Stone", "Food"):
+                target_k = "Potato" if k == "Food" else k
+                if resources.get(k, 0) > stock.get(target_k, 0):
+                    stock[target_k] = resources[k]
+        return stock
+
+    def toggle(self):
+        self.is_open = not self.is_open
+        self.show_build_menu = False
+
+    def handle_event(self, event, building_manager, permit_manager, resources, servant_manager=None, villager_manager=None, schedule_manager=None, day_cycle=None, stockpile_manager=None, furniture_manager=None):
+        if stockpile_manager is not None:
+            self.cached_stockpile_manager = stockpile_manager
+        sm = stockpile_manager or self.cached_stockpile_manager
+
+        if event.type == pygame.KEYDOWN:
+            if self.show_grant_dialog and self.active_grant_input_item:
+                if event.key == pygame.K_BACKSPACE:
+                    self.grant_input_text = self.grant_input_text[:-1]
+                    val = int(self.grant_input_text) if self.grant_input_text else 0
+                    self.grant_amounts[self.active_grant_input_item] = val
+                    return "grant_input_edit"
+                elif event.key in (pygame.K_RETURN, pygame.K_KP_ENTER, pygame.K_ESCAPE):
+                    self.active_grant_input_item = None
+                    self.grant_input_text = ""
+                    return "grant_input_done"
+                elif event.unicode.isdigit():
+                    new_text = self.grant_input_text + event.unicode
+                    val = int(new_text)
+                    stock = self.get_landlord_stock(sm, resources)
+                    avail = stock.get(self.active_grant_input_item, 0)
+                    val = min(avail, max(0, val))
+                    self.grant_input_text = str(val)
+                    self.grant_amounts[self.active_grant_input_item] = val
+                    return "grant_input_edit"
+            return None
+
+        if event.type != pygame.MOUSEBUTTONDOWN or event.button != 1:
+            return None
+
+        mouse_pos = event.pos
+
+        # 1. Left "Raport" Button
+        if self.btn_left_rect.collidepoint(mouse_pos):
+            self.toggle()
+            return "toggle_raport"
+
+        if not self.is_open:
+            return None
+
+        # 2. Close Button (X)
+        if self.close_btn_rect and self.close_btn_rect.collidepoint(mouse_pos):
+            self.is_open = False
+            return "close_raport"
+
+        # 3. Tab Switching
+        for i, tr in enumerate(self.tab_rects):
+            if tr.collidepoint(mouse_pos):
+                self.active_tab = i
+                self.show_build_menu = False
+                self.selected_family_id = None
+                self.show_household_possession = False
+                self.show_grant_dialog = False
+                self.show_grant_confirm = False
+                self.grant_amounts = {}
+                self.active_grant_input_item = None
+                self.show_assign_permit_picker = False
+                return f"switch_tab_{i}"
+
+        # 4. Tab 0: Building Management
+        if self.active_tab == 0:
+            # Check Destroy Building buttons
+            for b, rect in list(self.destroy_building_btn_rects.items()):
+                if rect.collidepoint(mouse_pos):
+                    building_manager.start_demolition(b)
+                    self.selected_building_inspect = None
+                    self.is_open = False
+                    return "destroy_building"
+
+            # Toggle Structures Menu
+            if self.structures_btn_rect and self.structures_btn_rect.collidepoint(mouse_pos):
+                self.show_structures_menu = not self.show_structures_menu
+                self.show_furniture_menu = False
+                return "toggle_structures_menu"
+
+            # Toggle Furniture Menu
+            if self.furniture_btn_rect and self.furniture_btn_rect.collidepoint(mouse_pos):
+                self.show_furniture_menu = not self.show_furniture_menu
+                self.show_structures_menu = False
+                return "toggle_furniture_menu"
+
+            if self.show_structures_menu:
+                for b_type, rect in self.building_select_rects.items():
+                    if rect.collidepoint(mouse_pos):
+                        b_cfg = BUILDING_TYPES[b_type]
+                        has_permit = permit_manager.has_permit_type(b_type)
+
+                        if has_permit:
+                            self.selected_building_type = b_type
+                            self.selected_furniture_type = None
+                            self.placing_permit_type = None
+                            self.show_structures_menu = False
+                            self.is_open = False
+                            return f"start_drag_building_{b_type}"
+
+            if self.show_furniture_menu:
+                for f_type, rect in self.furniture_select_rects.items():
+                    if rect.collidepoint(mouse_pos):
+                        f_cfg = FURNITURE_TYPES[f_type]
+                        if not f_cfg.get("wip", False) and resources.get("Wood", 0) >= f_cfg.get("cost_wood", 0):
+                            self.selected_furniture_type = f_type
+                            self.selected_building_type = None
+                            self.placing_permit_type = None
+                            self.show_furniture_menu = False
+                            self.is_open = False
+                            return f"start_place_furniture_{f_type}"
+
+        # 5. Tab 1: Area Permit Management
+        elif self.active_tab == 1:
+            # Worker count +/- and Auto buttons
+            for pid, rect in list(self.worker_dec_btn_rects.items()):
+                if rect.collidepoint(mouse_pos):
+                    permit_manager.change_max_workers(pid, -1, villager_manager)
+                    return f"dec_worker_{pid}"
+
+            for pid, rect in list(self.worker_inc_btn_rects.items()):
+                if rect.collidepoint(mouse_pos):
+                    permit_manager.change_max_workers(pid, 1, villager_manager)
+                    return f"inc_worker_{pid}"
+
+            for pid, rect in list(self.worker_auto_btn_rects.items()):
+                if rect.collidepoint(mouse_pos):
+                    if villager_manager:
+                        permit_manager.auto_sort_workers(villager_manager)
+                    return f"auto_worker_{pid}"
+
+            # Check crop picker dialog first if open
+            if self.crop_picker_permit_id:
+                if self.close_crop_picker_btn_rect and self.close_crop_picker_btn_rect.collidepoint(mouse_pos):
+                    self.crop_picker_permit_id = None
+                    return "close_crop_picker"
+
+                for crop_id, rect in self.crop_select_btn_rects.items():
+                    if rect.collidepoint(mouse_pos):
+                        c_cfg = CROP_TYPES[crop_id]
+                        if not c_cfg.get("wip", False):
+                            p = next((p for p in permit_manager.permits if p.id == self.crop_picker_permit_id), None)
+                            if p:
+                                p.set_crop(c_cfg["name"])
+                            self.crop_picker_permit_id = None
+                            return f"plant_crop_{crop_id}"
+
+                if self.crop_picker_bg_rect and not self.crop_picker_bg_rect.collidepoint(mouse_pos):
+                    self.crop_picker_permit_id = None
+                    return "close_crop_picker"
+
+            # Check Plant Crop buttons
+            for pid, rect in list(self.open_plant_btn_rects.items()):
+                if rect.collidepoint(mouse_pos):
+                    self.crop_picker_permit_id = pid if self.crop_picker_permit_id != pid else None
+                    return f"toggle_plant_{pid}"
+
+            # Check Edit Permit buttons
+            for pid, rect in list(self.edit_permit_btn_rects.items()):
+                if rect.collidepoint(mouse_pos):
+                    self.is_open = False
+                    return f"edit_permit_{pid}"
+
+            # Check Delete Permit buttons
+            for pid, rect in list(self.delete_permit_btn_rects.items()):
+                if rect.collidepoint(mouse_pos):
+                    permit_manager.delete_permit(pid, building_manager, furniture_manager=furniture_manager, stockpile_manager=sm)
+                    if self.selected_permit_inspect_id == pid:
+                        self.selected_permit_inspect_id = None
+                    return "delete_permit"
+
+            for p_type, btn_rect in self.permit_btn_rects.items():
+                if btn_rect.collidepoint(mouse_pos):
+                    self.placing_permit_type = p_type
+                    self.selected_building_type = None
+                    self.is_open = False
+                    return f"start_placing_permit_{p_type}"
+
+        # 6. Tab 2: RimWorld-Style Work Priorities Matrix
+        elif self.active_tab == 2:
+            if servant_manager:
+                for (s_id, w_id), cell_rect in self.priority_cell_rects.items():
+                    if cell_rect.collidepoint(mouse_pos):
+                        # Find servant and cycle priority
+                        for s in servant_manager.servants:
+                            if s.id == s_id:
+                                s.cycle_priority(w_id)
+                                if s.carried_amount == 0:
+                                    s._reset_task()
+                                return f"cycle_priority_{s_id}_{w_id}"
+
+        # 6.5. Tab 3: RimWorld-Style 24-Hour Schedule Matrix
+        elif self.active_tab == 3:
+            if schedule_manager:
+                if self.selected_schedule_job_id is None:
+                    for job_id, rect in self.schedule_job_select_btn_rects.items():
+                        if rect.collidepoint(mouse_pos):
+                            self.selected_schedule_job_id = job_id
+                            return f"select_schedule_job_{job_id}"
+                else:
+                    if self.schedule_back_btn_rect and self.schedule_back_btn_rect.collidepoint(mouse_pos):
+                        self.selected_schedule_job_id = None
+                        return "back_to_schedule_jobs"
+
+                    for brush_type, rect in self.schedule_brush_btn_rects.items():
+                        if rect.collidepoint(mouse_pos):
+                            self.selected_schedule_brush = brush_type
+                            return f"select_brush_{brush_type}"
+
+                    for hour_idx, rect in self.schedule_hour_cell_rects.items():
+                        if rect.collidepoint(mouse_pos):
+                            schedule_manager.set_hour_activity(self.selected_schedule_job_id, hour_idx, self.selected_schedule_brush)
+                            return f"paint_hour_{hour_idx}_{self.selected_schedule_brush}"
+
+                    for preset_name, rect in self.schedule_preset_btn_rects.items():
+                        if rect.collidepoint(mouse_pos):
+                            if preset_name == "standard":
+                                schedule_manager.reset_to_default(self.selected_schedule_job_id)
+                            elif preset_name == "hardwork":
+                                sched = ["SLEEP"]*5 + ["LEISURE"] + ["WORK"]*15 + ["LEISURE"] + ["SLEEP"]*2
+                                for h in range(24):
+                                    schedule_manager.set_hour_activity(self.selected_schedule_job_id, h, sched[h])
+                            elif preset_name == "relaxed":
+                                sched = ["SLEEP"]*7 + ["LEISURE"]*2 + ["WORK"]*7 + ["LEISURE"]*6 + ["SLEEP"]*2
+                                for h in range(24):
+                                    schedule_manager.set_hour_activity(self.selected_schedule_job_id, h, sched[h])
+                            return f"apply_schedule_preset_{preset_name}"
+
+        # 7. Tab 4: Villagers & Family Clans Management
+        elif self.active_tab == 4:
+            if villager_manager:
+                # View 1: Family Directory
+                if self.selected_family_id is None:
+                    if self.add_family_cheat_btn_rect and self.add_family_cheat_btn_rect.collidepoint(mouse_pos):
+                        villager_manager.generate_random_family()
+                        return "add_family_cheat"
+
+                    for fam_id, rect in self.view_family_btn_rects:
+                        if rect.collidepoint(mouse_pos):
+                            self.selected_family_id = fam_id
+                            self.show_household_possession = False
+                            self.show_grant_dialog = False
+                            self.show_grant_confirm = False
+                            self.grant_amounts = {}
+                            self.active_grant_input_item = None
+                            self.show_assign_permit_picker = False
+                            return f"view_family_{fam_id}"
+
+                # View 2: Family Roster & Deed Management
+                else:
+                    # Priority A: Confirmation modal clicks
+                    if self.show_grant_confirm:
+                        if self.grant_confirm_btn_rect and self.grant_confirm_btn_rect.collidepoint(mouse_pos):
+                            if servant_manager and self.selected_family_id is not None:
+                                for item_type, qty in list(self.grant_amounts.items()):
+                                    if qty > 0:
+                                        servant_manager.add_grant_order(self.selected_family_id, item_type, qty)
+                            self.show_grant_confirm = False
+                            self.show_grant_dialog = False
+                            self.grant_amounts = {}
+                            self.active_grant_input_item = None
+                            return "grant_items_confirmed"
+
+                        if self.grant_cancel_btn_rect and self.grant_cancel_btn_rect.collidepoint(mouse_pos):
+                            self.show_grant_confirm = False
+                            return "grant_items_cancelled"
+                        return "modal_blocked"
+
+                    # Priority B: Grant Dialog clicks
+                    if self.show_grant_dialog:
+                        if self.grant_close_btn_rect and self.grant_close_btn_rect.collidepoint(mouse_pos):
+                            self.show_grant_dialog = False
+                            self.grant_amounts = {}
+                            self.active_grant_input_item = None
+                            return "close_grant_dialog"
+
+                        if self.grant_submit_btn_rect and self.grant_submit_btn_rect.collidepoint(mouse_pos):
+                            if sum(self.grant_amounts.values()) > 0:
+                                self.show_grant_confirm = True
+                                self.active_grant_input_item = None
+                                return "open_grant_confirm"
+
+                        stock = self.get_landlord_stock(sm, resources)
+                        for it_type, rect in list(self.grant_dec_btn_rects.items()):
+                            if rect.collidepoint(mouse_pos):
+                                self.grant_amounts[it_type] = max(0, self.grant_amounts.get(it_type, 0) - 1)
+                                return f"grant_dec_{it_type}"
+
+                        for it_type, rect in list(self.grant_inc_btn_rects.items()):
+                            if rect.collidepoint(mouse_pos):
+                                avail = stock.get(it_type, 0)
+                                self.grant_amounts[it_type] = min(avail, self.grant_amounts.get(it_type, 0) + 1)
+                                return f"grant_inc_{it_type}"
+
+                        for it_type, rect in list(self.grant_max_btn_rects.items()):
+                            if rect.collidepoint(mouse_pos):
+                                avail = stock.get(it_type, 0)
+                                self.grant_amounts[it_type] = avail
+                                return f"grant_max_{it_type}"
+
+                        for it_type, rect in list(self.grant_item_qty_rects.items()):
+                            if rect.collidepoint(mouse_pos):
+                                self.active_grant_input_item = it_type
+                                self.grant_input_text = str(self.grant_amounts.get(it_type, 0))
+                                return f"grant_input_focus_{it_type}"
+
+                        return "modal_blocked"
+
+                    if self.show_household_possession:
+                        if self.close_possession_btn_rect and self.close_possession_btn_rect.collidepoint(mouse_pos):
+                            self.show_household_possession = False
+                            return "close_household_possession"
+
+                        if self.open_grant_dialog_btn_rect and self.open_grant_dialog_btn_rect.collidepoint(mouse_pos):
+                            self.show_grant_dialog = True
+                            self.grant_amounts = {}
+                            self.active_grant_input_item = None
+                            return "open_grant_dialog"
+
+                        return None
+
+                    # Priority 0.5: Member Inventory Dialog clicks
+                    if self.selected_member_inventory_id is not None:
+                        if self.close_member_inv_btn_rect and self.close_member_inv_btn_rect.collidepoint(mouse_pos):
+                            self.selected_member_inventory_id = None
+                            return "close_member_inventory"
+
+                        mem_obj = None
+                        fam = villager_manager.get_family_by_id(self.selected_family_id)
+                        if fam:
+                            mem_obj = next((m for m in fam.members if m.id == self.selected_member_inventory_id), None)
+
+                        if mem_obj:
+                            for it_name, d_rect in list(self.member_deposit_btn_rects.items()):
+                                if d_rect.collidepoint(mouse_pos):
+                                    mem_obj.deposit_item_to_chest(it_name, 1, furniture_manager)
+                                    return f"deposit_{it_name}"
+
+                            for it_name, dr_rect in list(self.member_drop_btn_rects.items()):
+                                if dr_rect.collidepoint(mouse_pos):
+                                    mem_obj.drop_inventory_item(it_name, 1, stockpile_manager)
+                                    return f"drop_{it_name}"
+
+                        if self.member_inv_bg_rect and not self.member_inv_bg_rect.collidepoint(mouse_pos):
+                            self.selected_member_inventory_id = None
+                            return "close_member_inventory"
+
+                        return "member_inventory_blocked"
+
+                    # Member inventory buttons on cards
+                    for mem_id, btn_rect in list(self.member_inventory_btn_rects.items()):
+                        if btn_rect.collidepoint(mouse_pos):
+                            self.selected_member_inventory_id = mem_id
+                            return f"open_member_inventory_{mem_id}"
+
+                    if self.household_possession_btn_rect and self.household_possession_btn_rect.collidepoint(mouse_pos):
+                        self.show_household_possession = True
+                        return "open_household_possession"
+
+                    if self.back_to_families_btn_rect and self.back_to_families_btn_rect.collidepoint(mouse_pos):
+                        self.selected_family_id = None
+                        self.show_household_possession = False
+                        self.show_assign_permit_picker = False
+                        return "back_to_families"
+
+                    if self.open_assign_lot_btn_rect and self.open_assign_lot_btn_rect.collidepoint(mouse_pos):
+                        self.show_assign_permit_picker = not self.show_assign_permit_picker
+                        return "toggle_assign_permit_picker"
+
+                    if self.revoke_deed_btn_rect and self.revoke_deed_btn_rect.collidepoint(mouse_pos):
+                        villager_manager.unassign_family(self.selected_family_id)
+                        return "revoke_deed"
+
+                    if self.show_assign_permit_picker:
+                        # Close button for deed picker
+                        if self.close_deed_picker_btn_rect and self.close_deed_picker_btn_rect.collidepoint(mouse_pos):
+                            self.show_assign_permit_picker = False
+                            return "close_assign_permit_picker"
+
+                        for pid, btn_rect in self.assign_permit_btn_rects.items():
+                            if btn_rect.collidepoint(mouse_pos):
+                                villager_manager.assign_family_to_permit(self.selected_family_id, pid, permit_manager, building_manager)
+                                self.show_assign_permit_picker = False
+                                return f"assign_permit_{pid}"
+
+                        # Click outside deed picker closes it
+                        if self.deed_picker_bg_rect and not self.deed_picker_bg_rect.collidepoint(mouse_pos):
+                            self.show_assign_permit_picker = False
+                            return "close_assign_permit_picker"
+
+        # 8. Tab 5: Dedicated Workers Management
+        elif self.active_tab == 5:
+            # View 1: Job Directory
+            if self.selected_job_id is None:
+                if self.auto_sort_all_btn_rect and self.auto_sort_all_btn_rect.collidepoint(mouse_pos):
+                    if villager_manager:
+                        permit_manager.auto_sort_workers(villager_manager)
+                    return "auto_sort_all"
+
+                for job_id, rect in self.job_select_btn_rects.items():
+                    if rect.collidepoint(mouse_pos):
+                        self.selected_job_id = job_id
+                        return f"select_job_{job_id}"
+
+            # View 2: Worker Roster for Selected Job
+            else:
+                if self.back_to_jobs_btn_rect and self.back_to_jobs_btn_rect.collidepoint(mouse_pos):
+                    self.selected_job_id = None
+                    return "back_to_jobs"
+
+                if self.auto_sort_all_btn_rect and self.auto_sort_all_btn_rect.collidepoint(mouse_pos):
+                    if villager_manager:
+                        permit_manager.auto_sort_workers(villager_manager)
+                    return "auto_sort_job"
+
+                # Unassign worker
+                for (pid, v_id), rect in list(self.worker_unassign_btn_rects.items()):
+                    if rect.collidepoint(mouse_pos):
+                        permit_manager.unassign_worker_from_permit(pid, v_id)
+                        return f"unassign_worker_{v_id}"
+
+                # Assign worker to nearest available farm permit
+                for v_id, rect in list(self.worker_assign_btn_rects.items()):
+                    if rect.collidepoint(mouse_pos):
+                        if villager_manager:
+                            worker = next((v for v in villager_manager.get_all_villagers() if v.id == v_id), None)
+                            if worker:
+                                avail_permits = [p for p in permit_manager.permits if p.permit_type == "farm"]
+                                if avail_permits:
+                                    avail_permits.sort(key=lambda p: (
+                                        0 if len(p.assigned_workers) < p.max_workers else 1,
+                                        math.hypot((p.grid_x + p.tiles_w / 2.0) * TILE_SIZE - worker.x, (p.grid_y + p.tiles_h / 2.0) * TILE_SIZE - worker.y)
+                                    ))
+                                    permit_manager.assign_worker_to_permit(avail_permits[0].id, worker.id)
+                        return f"assign_worker_{v_id}"
+
+        return None
+
+    def draw(self, surface, building_manager, permit_manager, resources, servant_manager=None, villager_manager=None, schedule_manager=None, day_cycle=None, furniture_manager=None, stockpile_manager=None):
+        self._init_fonts()
+        screen_w, screen_h = surface.get_size()
+
+        self.btn_left_rect.x = 16
+        self.btn_left_rect.y = (screen_h // 2) - 21
+
+        # Left HUD Button "Raport"
+        mouse_pos = pygame.mouse.get_pos()
+        btn_hover = self.btn_left_rect.collidepoint(mouse_pos)
+        btn_bg = (40, 56, 80) if btn_hover else COLOR_RAPORT_BTN_BG
+        pygame.draw.rect(surface, btn_bg, self.btn_left_rect, border_radius=6)
+        pygame.draw.rect(surface, COLOR_RAPORT_BTN_BORDER, self.btn_left_rect, width=2, border_radius=6)
+
+        btn_txt = self.font_btn.render("Raport", True, COLOR_TEXT_MAIN)
+        txt_rect = btn_txt.get_rect(center=self.btn_left_rect.center)
+        surface.blit(btn_txt, txt_rect)
+
+        if not self.is_open:
+            return
+
+        # Modal Overlay
+        dim_surf = pygame.Surface((screen_w, screen_h), pygame.SRCALPHA)
+        dim_surf.fill((0, 0, 0, 140))
+        surface.blit(dim_surf, (0, 0))
+
+        mx = (screen_w - self.modal_w) // 2
+        my = (screen_h - self.modal_h) // 2
+
+        modal_surf = pygame.Surface((self.modal_w, self.modal_h), pygame.SRCALPHA)
+        pygame.draw.rect(modal_surf, COLOR_MODAL_BG, (0, 0, self.modal_w, self.modal_h), border_radius=12)
+        pygame.draw.rect(modal_surf, COLOR_MODAL_BORDER, (0, 0, self.modal_w, self.modal_h), width=2, border_radius=12)
+        surface.blit(modal_surf, (mx, my))
+
+        # Title
+        title_surf = self.font_title.render("TOWN LEDGER (RAPORT DESA)", True, COLOR_TEXT_TITLE)
+        surface.blit(title_surf, (mx + 20, my + 16))
+
+        # Close (X)
+        self.close_btn_rect = pygame.Rect(mx + self.modal_w - 36, my + 14, 22, 22)
+        close_hover = self.close_btn_rect.collidepoint(mouse_pos)
+        close_col = (239, 68, 68) if close_hover else COLOR_TEXT_MUTED
+        close_surf = self.font_btn.render("X", True, close_col)
+        surface.blit(close_surf, (self.close_btn_rect.x + 5, self.close_btn_rect.y + 1))
+
+        # Tabs
+        self.tab_rects = []
+        tab_x = mx + 20
+        tab_y = my + 50
+        tab_spacing = 8
+        avail_w = self.modal_w - 40 - ((len(self.tabs) - 1) * tab_spacing)
+        tab_w = avail_w // len(self.tabs)
+        tab_h = 32
+
+        for i, tab in enumerate(self.tabs):
+            t_rect = pygame.Rect(tab_x, tab_y, tab_w, tab_h)
+            self.tab_rects.append(t_rect)
+            is_active = (i == self.active_tab)
+
+            t_bg = COLOR_TAB_ACTIVE if is_active else COLOR_TAB_INACTIVE
+            pygame.draw.rect(surface, t_bg, t_rect, border_radius=6)
+            if is_active:
+                pygame.draw.rect(surface, (96, 165, 250), t_rect, width=1, border_radius=6)
+
+            txt_c = (255, 255, 255) if is_active else COLOR_TEXT_MUTED
+            t_surf = self.font_tab.render(tab["title"], True, txt_c)
+            surface.blit(t_surf, (tab_x + 8, tab_y + 8))
+
+            if tab["wip"]:
+                wip_rect = pygame.Rect(tab_x + tab_w - 36, tab_y + 8, 28, 16)
+                pygame.draw.rect(surface, COLOR_BADGE_WIP, wip_rect, border_radius=3)
+                w_txt = self.font_badge.render("WIP", True, (0, 0, 0))
+                surface.blit(w_txt, (wip_rect.x + 4, wip_rect.y + 1))
+
+            tab_x += tab_w + tab_spacing
+
+        pygame.draw.line(surface, COLOR_MODAL_BORDER, (mx + 20, tab_y + tab_h + 8), (mx + self.modal_w - 20, tab_y + tab_h + 8))
+
+        content_y = tab_y + tab_h + 16
+        if self.active_tab == 0:
+            self._draw_building_tab(surface, mx, content_y, building_manager, permit_manager, resources)
+        elif self.active_tab == 1:
+            self._draw_permit_tab(surface, mx, content_y, permit_manager, building_manager)
+        elif self.active_tab == 2:
+            self._draw_priority_tab(surface, mx, content_y, servant_manager)
+        elif self.active_tab == 3:
+            self._draw_schedule_tab(surface, mx, content_y, schedule_manager=schedule_manager, day_cycle=day_cycle)
+        elif self.active_tab == 4:
+            self._draw_villagers_tab(surface, mx, content_y, villager_manager, permit_manager, building_manager, furniture_manager=furniture_manager, stockpile_manager=stockpile_manager, resources=resources, servant_manager=servant_manager)
+        elif self.active_tab == 5:
+            self._draw_workers_tab(surface, mx, content_y, villager_manager, permit_manager)
+
+    def _draw_building_tab(self, surface, mx, cy, building_manager, permit_manager, resources):
+        empty_areas, occupied_areas = permit_manager.get_permits_status(building_manager)
+
+        # 1. Built Buildings, Sites & Demolition Tasks
+        demos = getattr(building_manager, "demolition_sites", [])
+        total_b = len(building_manager.buildings) + len(building_manager.construction_sites) + len(demos)
+        b_title = self.font_sub.render(f" Buildings and Construction Sites ({total_b}):", True, COLOR_TEXT_TITLE)
+        surface.blit(b_title, (mx + 24, cy))
+
+        y_cur = cy + 22
+        self.destroy_building_btn_rects = {}
+
+        if not building_manager.buildings and not building_manager.construction_sites and not demos:
+            none_surf = self.font_body.render("- No buildings constructed yet.", True, COLOR_TEXT_MUTED)
+            surface.blit(none_surf, (mx + 36, y_cur))
+            list_end_y = cy + 42
+        else:
+            # Demolition Sites
+            for d in demos:
+                pct = int((d.progress / d.duration) * 100)
+                txt = f"[Demolishing] {d.name} ({pct}% | Salvaging +{d.refund_wood}W, +{d.refund_stone}S)"
+                surface.blit(self.font_body.render(txt, True, (239, 68, 68)), (mx + 36, y_cur))
+                y_cur += 24
+
+            # Construction Sites
+            for s in building_manager.construction_sites:
+                txt = f"[Building] {s.name} ({s.total_delivered()}/{s.total_required()} Materials)"
+                surface.blit(self.font_body.render(txt, True, (245, 158, 11)), (mx + 36, y_cur))
+                y_cur += 24
+
+            # Completed Buildings (Clickable & Destructible with 50% Refund)
+            for b in building_manager.buildings:
+                is_focused = (self.selected_building_inspect == b)
+                door_side_str = b.door_side.capitalize() if hasattr(b, "door_side") and b.door_side else "Standard"
+                b_cfg = BUILDING_TYPES.get(b.building_type, BUILDING_TYPES["wooden_structure"])
+                cost_w = b_cfg.get("cost_wood", COST_PER_BLOCK_WOOD)
+                cost_s = b_cfg.get("cost_stone", COST_PER_BLOCK_STONE)
+                ref_w = int(len(b.tiles) * cost_w * DEMOLITION_REFUND_RATIO)
+                ref_s = int(len(b.tiles) * cost_s * DEMOLITION_REFUND_RATIO)
+
+                row_rect = pygame.Rect(mx + 30, y_cur - 2, self.modal_w - 60, 24)
+                if is_focused:
+                    pygame.draw.rect(surface, (30, 58, 138, 120), row_rect, border_radius=4)
+                    pygame.draw.rect(surface, (59, 130, 246), row_rect, width=1, border_radius=4)
+
+                txt = f"{b.name} ({len(b.tiles)} tiles | Door: {door_side_str}) — Refund: +{ref_w}W, +{ref_s}S"
+                surface.blit(self.font_body.render(txt, True, (255, 255, 255) if is_focused else COLOR_TEXT_MAIN), (mx + 36, y_cur + 2))
+
+                # Destroy Button
+                dest_btn = pygame.Rect(row_rect.right - 90, y_cur - 1, 86, 22)
+                self.destroy_building_btn_rects[b] = dest_btn
+                dest_hover = dest_btn.collidepoint(pygame.mouse.get_pos())
+                pygame.draw.rect(surface, (220, 38, 38) if dest_hover else (153, 27, 27), dest_btn, border_radius=4)
+                d_lbl = self.font_badge.render("Destroy", True, (255, 255, 255))
+                surface.blit(d_lbl, (dest_btn.x + (dest_btn.w - d_lbl.get_width()) // 2, dest_btn.y + 4))
+
+                y_cur += 26
+
+            list_end_y = y_cur + 8
+
+        # 2. Area Permits
+        e_title = self.font_sub.render(f" Issued Area Permits ({len(permit_manager.permits)} Total Lots):", True, (245, 158, 11))
+        surface.blit(e_title, (mx + 24, list_end_y))
+
+        if not permit_manager.permits:
+            none_surf = self.font_body.render("- No Area permits issued! (Go to Area Permits tab to drag & issue one).", True, (239, 68, 68))
+            surface.blit(none_surf, (mx + 36, list_end_y + 20))
+        else:
+            y_cur = list_end_y + 20
+            for p in permit_manager.permits:
+                buildings_on_p = [b for b in building_manager.buildings if p.overlaps_building(b)] + [s for s in building_manager.construction_sites if p.overlaps_building(s)]
+                prefix = "[Private] " if p.permit_type == "landlord_private" else ""
+                status_desc = f"{len(buildings_on_p)} building(s) on lot" if buildings_on_p else "Ready (Empty lot)"
+                txt = f"• {prefix}{p.name} ({p.tiles_w}x{p.tiles_h} {p.permit_type.capitalize()}) — {status_desc}"
+                surface.blit(self.font_body.render(txt, True, (226, 232, 240)), (mx + 36, y_cur))
+                y_cur += 20
+
+        # 3. Build & Furniture Action Buttons
+        btn_y = self.modal_h + (cy - 120) - 20
+        self.structures_btn_rect = pygame.Rect(mx + 24, btn_y, 140, 36)
+        self.furniture_btn_rect = pygame.Rect(mx + 174, btn_y, 140, 36)
+        self.build_btn_rect = self.structures_btn_rect
+
+        # Structures Button
+        s_hover = self.structures_btn_rect.collidepoint(pygame.mouse.get_pos())
+        s_col = (37, 99, 235) if (s_hover or self.show_structures_menu) else (30, 41, 59)
+        pygame.draw.rect(surface, s_col, self.structures_btn_rect, border_radius=6)
+        pygame.draw.rect(surface, (96, 165, 250), self.structures_btn_rect, width=2, border_radius=6)
+        s_label = self.font_btn.render("Structures", True, (255, 255, 255))
+        surface.blit(s_label, (self.structures_btn_rect.x + (self.structures_btn_rect.w - s_label.get_width()) // 2, self.structures_btn_rect.y + 8))
+
+        # Furniture Button
+        f_hover = self.furniture_btn_rect.collidepoint(pygame.mouse.get_pos())
+        f_col = (202, 138, 4) if (f_hover or self.show_furniture_menu) else (30, 41, 59)
+        pygame.draw.rect(surface, f_col, self.furniture_btn_rect, border_radius=6)
+        pygame.draw.rect(surface, (250, 204, 21), self.furniture_btn_rect, width=2, border_radius=6)
+        f_label = self.font_btn.render("Furniture", True, (255, 255, 255))
+        surface.blit(f_label, (self.furniture_btn_rect.x + (self.furniture_btn_rect.w - f_label.get_width()) // 2, self.furniture_btn_rect.y + 8))
+
+        # Building Structures Menu (Wooden Structure vs Stone Structure vs Well)
+        self.building_select_rects = {}
+        if self.show_structures_menu:
+            tpl_x = self.structures_btn_rect.x
+            tpl_y = self.structures_btn_rect.y - 200
+            tpl_w = 480
+            tpl_h = 190
+
+            pygame.draw.rect(surface, (30, 41, 59), (tpl_x, tpl_y, tpl_w, tpl_h), border_radius=8)
+            pygame.draw.rect(surface, (71, 85, 105), (tpl_x, tpl_y, tpl_w, tpl_h), width=1, border_radius=8)
+
+            structures = [
+                ("wooden_structure", BUILDING_TYPES["wooden_structure"]),
+                ("stone_structure", BUILDING_TYPES["stone_structure"]),
+                ("well", BUILDING_TYPES["well"])
+            ]
+
+            row_y = tpl_y + 12
+            for b_id, b_cfg in structures:
+                has_permit = permit_manager.has_permit_type(b_id)
+
+                t_title = self.font_sub.render(b_cfg['name'], True, COLOR_TEXT_TITLE)
+                surface.blit(t_title, (tpl_x + 14, row_y))
+
+                if b_cfg.get("fixed_cost"):
+                    c_text = f"{b_cfg['cost_wood']} Wood + {b_cfg['cost_stone']} Stone (4 Tiles Solid)"
+                else:
+                    c_text = f"{b_cfg['cost_wood']} Wood + {b_cfg['cost_stone']} Stone / tile"
+                c_surf = self.font_body.render(c_text, True, (234, 179, 8))
+                surface.blit(c_surf, (tpl_x + 14, row_y + 20))
+
+                rect = pygame.Rect(tpl_x + 345, row_y + 4, 120, 28)
+                self.building_select_rects[b_id] = rect
+
+                if not has_permit:
+                    btn_col = (71, 85, 105)
+                    btn_text = "NEED PERMIT"
+                else:
+                    btn_col = (16, 185, 129)
+                    btn_text = "SELECT (Place)" if b_cfg.get("fixed_tiles_count") else "SELECT (Drag)"
+
+                pygame.draw.rect(surface, btn_col, rect, border_radius=4)
+                b_txt = self.font_badge.render(btn_text, True, (255, 255, 255))
+                surface.blit(b_txt, (rect.x + (rect.w - b_txt.get_width()) // 2, rect.y + 7))
+
+                row_y += 56
+
+        # Furniture Placement Menu (Household Storage, Beds & Furnishings)
+        self.furniture_select_rects = {}
+        if self.show_furniture_menu:
+            tpl_x = self.furniture_btn_rect.x
+            num_f = len(FURNITURE_TYPES)
+            tpl_h = 24 + num_f * 58
+            tpl_y = max(30, self.furniture_btn_rect.y - tpl_h - 10)
+            tpl_w = 480
+
+            pygame.draw.rect(surface, (30, 41, 59), (tpl_x, tpl_y, tpl_w, tpl_h), border_radius=8)
+            pygame.draw.rect(surface, (250, 204, 21), (tpl_x, tpl_y, tpl_w, tpl_h), width=1, border_radius=8)
+
+            row_y = tpl_y + 12
+            for f_id, f_cfg in FURNITURE_TYPES.items():
+                t_title = self.font_sub.render(f_cfg['name'], True, COLOR_TEXT_TITLE)
+                surface.blit(t_title, (tpl_x + 14, row_y))
+
+                c_surf = self.font_body.render(f"Cost: {f_cfg['cost_wood']} Wood — {f_cfg['desc']}", True, (234, 179, 8))
+                surface.blit(c_surf, (tpl_x + 14, row_y + 20))
+
+                rect = pygame.Rect(tpl_x + 345, row_y + 4, 120, 28)
+                self.furniture_select_rects[f_id] = rect
+
+                can_afford = (resources.get("Wood", 0) >= f_cfg.get("cost_wood", 0))
+                btn_col = (16, 185, 129) if can_afford else (71, 85, 105)
+                btn_text = "SELECT (Place)" if can_afford else "LOW WOOD"
+
+                pygame.draw.rect(surface, btn_col, rect, border_radius=4)
+                b_txt = self.font_badge.render(btn_text, True, (255, 255, 255))
+                surface.blit(b_txt, (rect.x + (rect.w - b_txt.get_width()) // 2, rect.y + 7))
+
+                row_y += 58
+
+    def _draw_permit_tab(self, surface, mx, cy, permit_manager, building_manager):
+        empty_areas, occupied_areas = permit_manager.get_permits_status(building_manager)
+
+        p_title = self.font_sub.render(f" Landlord Area Permits ({len(permit_manager.permits)} total lots):", True, COLOR_TEXT_TITLE)
+        surface.blit(p_title, (mx + 24, cy))
+
+        y_cur = cy + 22
+        self.delete_permit_btn_rects = {}
+        self.edit_permit_btn_rects = {}
+        self.open_plant_btn_rects = {}
+        self.worker_dec_btn_rects = {}
+        self.worker_inc_btn_rects = {}
+        self.worker_auto_btn_rects = {}
+
+        for p in permit_manager.permits:
+            is_empty = p in empty_areas
+            is_focused = (self.selected_permit_inspect_id == p.id)
+
+            row_rect = pygame.Rect(mx + 30, y_cur - 2, self.modal_w - 60, 24)
+            if is_focused:
+                pygame.draw.rect(surface, (30, 58, 138, 140), row_rect, border_radius=4)
+                pygame.draw.rect(surface, (59, 130, 246), row_rect, width=1, border_radius=4)
+
+            status_str = "Empty" if is_empty else "Occupied"
+            col = (245, 158, 11) if is_empty else (16, 185, 129)
+            prefix = "[Private] " if p.permit_type == "landlord_private" else ""
+
+            if p.permit_type == "farm":
+                if getattr(p, "crop", None):
+                    w_tag = "Watered" if getattr(p, "watered_today", False) else "Dry"
+                    crop_str = f"{p.crop} (Day {getattr(p, 'growth_days', 0.0):.0f}/10 | {w_tag})"
+                else:
+                    crop_str = "Unplanted"
+                col = (34, 197, 94)
+                txt = f"• {p.name} [{len(p.tiles)}t Farm] — {crop_str}"
+                surface.blit(self.font_body.render(txt, True, col), (mx + 36, y_cur + 2))
+
+                # Right side buttons
+                right_cursor = row_rect.right
+
+                # Delete button if empty
+                if is_empty:
+                    del_btn = pygame.Rect(right_cursor - 84, y_cur - 1, 82, 22)
+                    self.delete_permit_btn_rects[p.id] = del_btn
+                    del_hover = del_btn.collidepoint(pygame.mouse.get_pos())
+                    pygame.draw.rect(surface, (220, 38, 38) if del_hover else (153, 27, 27), del_btn, border_radius=4)
+                    del_lbl = self.font_badge.render("Delete", True, (255, 255, 255))
+                    surface.blit(del_lbl, (del_btn.x + (del_btn.w - del_lbl.get_width()) // 2, del_btn.y + 4))
+                    right_cursor -= 88
+
+                # Edit Lot button
+                edit_btn = pygame.Rect(right_cursor - 64, y_cur - 1, 60, 22)
+                self.edit_permit_btn_rects[p.id] = edit_btn
+                edit_hov = edit_btn.collidepoint(pygame.mouse.get_pos())
+                pygame.draw.rect(surface, (202, 138, 4) if edit_hov else (161, 98, 7), edit_btn, border_radius=4)
+                pygame.draw.rect(surface, (250, 204, 21), edit_btn, width=1, border_radius=4)
+                edit_lbl = self.font_badge.render("Edit", True, (255, 255, 255))
+                surface.blit(edit_lbl, (edit_btn.x + (edit_btn.w - edit_lbl.get_width()) // 2, edit_btn.y + 4))
+                right_cursor -= 68
+
+                # Plant button for Farm permit
+                plant_btn = pygame.Rect(right_cursor - 82, y_cur - 1, 78, 22)
+                self.open_plant_btn_rects[p.id] = plant_btn
+                plant_hover = plant_btn.collidepoint(pygame.mouse.get_pos())
+                pygame.draw.rect(surface, (22, 101, 52) if plant_hover else (20, 83, 45), plant_btn, border_radius=4)
+                pygame.draw.rect(surface, (74, 222, 128), plant_btn, width=1, border_radius=4)
+                p_label = f"{p.crop}" if getattr(p, "crop", None) else "Plant"
+                p_surf = self.font_badge.render(p_label, True, (255, 255, 255))
+                surface.blit(p_surf, (plant_btn.x + (plant_btn.w - p_surf.get_width()) // 2, plant_btn.y + 4))
+                right_cursor -= 86
+
+                # Worker Controls: [⚡ Auto] [+] {count/max} [-]
+                auto_btn = pygame.Rect(right_cursor - 28, y_cur - 1, 26, 22)
+                self.worker_auto_btn_rects[p.id] = auto_btn
+                a_hov = auto_btn.collidepoint(pygame.mouse.get_pos())
+                pygame.draw.rect(surface, (16, 185, 129) if a_hov else (5, 150, 105), auto_btn, border_radius=3)
+                a_txt = self.font_badge.render("Auto", True, (255, 255, 255))
+                surface.blit(a_txt, (auto_btn.x + 6, auto_btn.y + 4))
+                right_cursor -= 32
+
+                inc_btn = pygame.Rect(right_cursor - 20, y_cur - 1, 18, 22)
+                self.worker_inc_btn_rects[p.id] = inc_btn
+                inc_hov = inc_btn.collidepoint(pygame.mouse.get_pos())
+                pygame.draw.rect(surface, (37, 99, 235) if inc_hov else (30, 58, 138), inc_btn, border_radius=3)
+                surface.blit(self.font_badge.render("+", True, (255, 255, 255)), (inc_btn.x + 5, inc_btn.y + 3))
+                right_cursor -= 24
+
+                w_count = len(getattr(p, 'assigned_workers', set()))
+                w_max = getattr(p, 'max_workers', 2)
+                cnt_str = f"{w_count}/{w_max} Workers"
+                cnt_surf = self.font_badge.render(cnt_str, True, (241, 245, 249))
+                surface.blit(cnt_surf, (right_cursor - cnt_surf.get_width() - 4, y_cur + 3))
+                right_cursor -= (cnt_surf.get_width() + 8)
+
+                dec_btn = pygame.Rect(right_cursor - 20, y_cur - 1, 18, 22)
+                self.worker_dec_btn_rects[p.id] = dec_btn
+                dec_hov = dec_btn.collidepoint(pygame.mouse.get_pos())
+                pygame.draw.rect(surface, (71, 85, 105) if dec_hov else (51, 65, 85), dec_btn, border_radius=3)
+                surface.blit(self.font_badge.render("-", True, (255, 255, 255)), (dec_btn.x + 6, dec_btn.y + 3))
+
+            else:
+                txt = f"• {prefix}{p.name} [{len(p.tiles)} tiles {p.permit_type.capitalize()}] — {status_str}"
+                surface.blit(self.font_body.render(txt, True, col), (mx + 36, y_cur + 2))
+
+                right_cursor = row_rect.right
+                # Delete button for empty permits
+                if is_empty:
+                    del_btn = pygame.Rect(right_cursor - 84, y_cur - 1, 82, 22)
+                    self.delete_permit_btn_rects[p.id] = del_btn
+                    del_hover = del_btn.collidepoint(pygame.mouse.get_pos())
+                    pygame.draw.rect(surface, (220, 38, 38) if del_hover else (153, 27, 27), del_btn, border_radius=4)
+                    del_lbl = self.font_badge.render("Delete", True, (255, 255, 255))
+                    surface.blit(del_lbl, (del_btn.x + (del_btn.w - del_lbl.get_width()) // 2, del_btn.y + 4))
+                    right_cursor -= 88
+
+                # Edit Lot button
+                edit_btn = pygame.Rect(right_cursor - 64, y_cur - 1, 60, 22)
+                self.edit_permit_btn_rects[p.id] = edit_btn
+                edit_hov = edit_btn.collidepoint(pygame.mouse.get_pos())
+                pygame.draw.rect(surface, (202, 138, 4) if edit_hov else (161, 98, 7), edit_btn, border_radius=4)
+                pygame.draw.rect(surface, (250, 204, 21), edit_btn, width=1, border_radius=4)
+                edit_lbl = self.font_badge.render("Edit", True, (255, 255, 255))
+                surface.blit(edit_lbl, (edit_btn.x + (edit_btn.w - edit_lbl.get_width()) // 2, edit_btn.y + 4))
+
+            y_cur += 26
+
+        btn_y = cy + 200
+        inst_txt = self.font_sub.render("Issue New Landlord Permits (Select, then Click & Drag on Map to Size):", True, (56, 189, 248))
+        surface.blit(inst_txt, (mx + 24, btn_y))
+
+        self.permit_btn_rects = {}
+        btn_w = (self.modal_w - 75) // 4
+        housing_btn = pygame.Rect(mx + 24, btn_y + 26, btn_w - 6, 36)
+        storage_btn = pygame.Rect(mx + 24 + btn_w, btn_y + 26, btn_w - 6, 36)
+        farm_btn = pygame.Rect(mx + 24 + btn_w * 2, btn_y + 26, btn_w - 6, 36)
+        private_btn = pygame.Rect(mx + 24 + btn_w * 3, btn_y + 26, btn_w - 6, 36)
+
+        self.permit_btn_rects["housing"] = housing_btn
+        self.permit_btn_rects["storage"] = storage_btn
+        self.permit_btn_rects["farm"] = farm_btn
+        self.permit_btn_rects["landlord_private"] = private_btn
+
+        # Housing Permit Button
+        pygame.draw.rect(surface, (37, 99, 235), housing_btn, border_radius=6)
+        pygame.draw.rect(surface, (96, 165, 250), housing_btn, width=1, border_radius=6)
+        surface.blit(self.font_btn.render("+ Housing Permit", True, (255, 255, 255)), (housing_btn.x + 14, housing_btn.y + 8))
+
+        # Storage Permit Button
+        pygame.draw.rect(surface, (202, 138, 4), storage_btn, border_radius=6)
+        pygame.draw.rect(surface, (250, 204, 21), storage_btn, width=1, border_radius=6)
+        surface.blit(self.font_btn.render("+ Storage Permit", True, (255, 255, 255)), (storage_btn.x + 14, storage_btn.y + 8))
+
+        # Farm Permit Button
+        pygame.draw.rect(surface, (22, 101, 52), farm_btn, border_radius=6)
+        pygame.draw.rect(surface, (74, 222, 128), farm_btn, width=1, border_radius=6)
+        surface.blit(self.font_btn.render("+ Farm Permit", True, (255, 255, 255)), (farm_btn.x + 14, farm_btn.y + 8))
+
+        # Landlord Private Area Button
+        pygame.draw.rect(surface, (126, 34, 206), private_btn, border_radius=6)
+        pygame.draw.rect(surface, (234, 179, 8), private_btn, width=1, border_radius=6)
+        surface.blit(self.font_btn.render("+ Private Area", True, (255, 255, 255)), (private_btn.x + 12, private_btn.y + 8))
+
+        # Crop Selection Popup Dialog
+        self.crop_select_btn_rects = {}
+        if self.crop_picker_permit_id:
+            target_p = next((p for p in permit_manager.permits if p.id == self.crop_picker_permit_id), None)
+            pop_w = 480
+            pop_h = 240
+            pop_x = mx + (self.modal_w - pop_w) // 2
+            pop_y = cy + 10
+            self.crop_picker_bg_rect = pygame.Rect(pop_x, pop_y, pop_w, pop_h)
+
+            # Dim backdrop around popup inside modal
+            dim_pop = pygame.Surface((pop_w, pop_h), pygame.SRCALPHA)
+            pygame.draw.rect(dim_pop, (15, 23, 42, 250), (0, 0, pop_w, pop_h), border_radius=10)
+            pygame.draw.rect(dim_pop, (74, 222, 128), (0, 0, pop_w, pop_h), width=2, border_radius=10)
+            surface.blit(dim_pop, (pop_x, pop_y))
+
+            p_title_str = target_p.name if target_p else "Farm Lot"
+            head_txt = self.font_sub.render(f"Select Crop for {p_title_str}:", True, (74, 222, 128))
+            surface.blit(head_txt, (pop_x + 16, pop_y + 14))
+
+            # Close button
+            self.close_crop_picker_btn_rect = pygame.Rect(pop_x + pop_w - 30, pop_y + 12, 18, 18)
+            pygame.draw.rect(surface, (220, 38, 38), self.close_crop_picker_btn_rect, border_radius=3)
+            x_txt = self.font_badge.render("X", True, (255, 255, 255))
+            surface.blit(x_txt, (self.close_crop_picker_btn_rect.x + 4, self.close_crop_picker_btn_rect.y + 2))
+
+            crop_y = pop_y + 44
+            for c_id, c_cfg in CROP_TYPES.items():
+                is_wip = c_cfg.get("wip", False)
+                row_r = pygame.Rect(pop_x + 16, crop_y, pop_w - 32, 40)
+                pygame.draw.rect(surface, (30, 41, 59), row_r, border_radius=6)
+                pygame.draw.rect(surface, (51, 65, 85), row_r, width=1, border_radius=6)
+
+                # Icon & Name
+                c_title = self.font_sub.render(f"{c_cfg['icon']} {c_cfg['name']}", True, (255, 255, 255) if not is_wip else COLOR_TEXT_MUTED)
+                surface.blit(c_title, (row_r.x + 10, row_r.y + 4))
+
+                # Desc
+                c_desc = self.font_badge.render(c_cfg['desc'], True, (148, 163, 184) if not is_wip else (100, 116, 139))
+                surface.blit(c_desc, (row_r.x + 10, row_r.y + 22))
+
+                # Button
+                btn_r = pygame.Rect(row_r.right - 100, row_r.y + 8, 90, 24)
+                self.crop_select_btn_rects[c_id] = btn_r
+
+                if is_wip:
+                    pygame.draw.rect(surface, (51, 65, 85), btn_r, border_radius=4)
+                    b_txt = self.font_badge.render("WIP", True, (148, 163, 184))
+                else:
+                    is_active = (target_p and getattr(target_p, "crop", None) == c_cfg["name"])
+                    btn_col = (16, 185, 129) if not is_active else (37, 99, 235)
+                    pygame.draw.rect(surface, btn_col, btn_r, border_radius=4)
+                    b_txt = self.font_badge.render("PLANTED" if is_active else "PLANT", True, (255, 255, 255))
+
+                surface.blit(b_txt, (btn_r.x + (btn_r.w - b_txt.get_width()) // 2, btn_r.y + 5))
+
+                crop_y += 46
+
+    def _draw_priority_tab(self, surface, mx, cy, servant_manager):
+        """RimWorld-Style Work Priorities Grid (1=High, 4=Low, -=Off)"""
+        title = self.font_sub.render(" Servant Work Priorities (RimWorld Priority Matrix)", True, COLOR_TEXT_TITLE)
+        surface.blit(title, (mx + 24, cy))
+
+        sub_desc = self.font_body.render("Left-click each cell to cycle priority: 1 (High) → 2 → 3 → 4 (Low) → - (Off)", True, COLOR_TEXT_MUTED)
+        surface.blit(sub_desc, (mx + 24, cy + 20))
+
+        if not servant_manager or not servant_manager.servants:
+            none_s = self.font_body.render("- No servants currently assigned to manor.", True, COLOR_TEXT_MUTED)
+            surface.blit(none_s, (mx + 36, cy + 50))
+            return
+
+        table_x = mx + 24
+        table_y = cy + 48
+        name_col_w = 150
+        cell_w = 110
+        row_h = 36
+
+        self.priority_cell_rects = {}
+
+        # 1. Header Row
+        header_rect = pygame.Rect(table_x, table_y, name_col_w + len(WORK_TYPES) * cell_w, 28)
+        pygame.draw.rect(surface, (30, 41, 59), header_rect, border_radius=4)
+
+        h_name = self.font_badge.render("WORKER", True, COLOR_TEXT_TITLE)
+        surface.blit(h_name, (table_x + 10, table_y + 7))
+
+        for j, wt in enumerate(WORK_TYPES):
+            col_x = table_x + name_col_w + (j * cell_w)
+            w_col = COLOR_BADGE_WIP if wt["wip"] else (241, 245, 249)
+            h_lbl = self.font_badge.render(wt["name"], True, w_col)
+            surface.blit(h_lbl, (col_x + 8, table_y + 7))
+
+        # 2. Worker Rows
+        cur_y = table_y + 32
+        for s in servant_manager.servants:
+            row_rect = pygame.Rect(table_x, cur_y, name_col_w + len(WORK_TYPES) * cell_w, row_h)
+            pygame.draw.rect(surface, (15, 23, 42, 180), row_rect, border_radius=4)
+            pygame.draw.rect(surface, (51, 65, 85), row_rect, width=1, border_radius=4)
+
+            # Servant Avatar Dot & Name
+            pygame.draw.circle(surface, (245, 158, 11), (table_x + 18, cur_y + row_h // 2), 7)
+            pygame.draw.circle(surface, (120, 53, 15), (table_x + 18, cur_y + row_h // 2), 7, 1)
+            s_name = self.font_sub.render(s.name, True, (241, 245, 249))
+            surface.blit(s_name, (table_x + 32, cur_y + 9))
+
+            # Work Type Cells
+            for j, wt in enumerate(WORK_TYPES):
+                w_id = wt["id"]
+                col_x = table_x + name_col_w + (j * cell_w)
+                cell_rect = pygame.Rect(col_x + 6, cur_y + 4, cell_w - 12, row_h - 8)
+
+                if wt["wip"]:
+                    # Disabled WIP cell
+                    pygame.draw.rect(surface, (30, 41, 59, 140), cell_rect, border_radius=4)
+                    pygame.draw.rect(surface, (51, 65, 85), cell_rect, width=1, border_radius=4)
+                    txt = self.font_badge.render("- (WIP)", True, (100, 116, 139))
+                    surface.blit(txt, (cell_rect.centerx - txt.get_width() // 2, cell_rect.centery - txt.get_height() // 2))
+                else:
+                    self.priority_cell_rects[(s.id, w_id)] = cell_rect
+                    p_val = s.work_priorities.get(w_id, 1)
+                    p_col = PRIORITY_COLORS.get(p_val, (71, 85, 105))
+
+                    cell_hover = cell_rect.collidepoint(pygame.mouse.get_pos())
+                    bg_col = (45, 60, 80) if cell_hover else (24, 34, 52)
+
+                    pygame.draw.rect(surface, bg_col, cell_rect, border_radius=4)
+                    pygame.draw.rect(surface, p_col, cell_rect, width=2 if p_val > 0 else 1, border_radius=4)
+
+                    val_str = str(p_val) if p_val > 0 else "—"
+                    p_surf = self.font_priority.render(val_str, True, p_col if p_val > 0 else (100, 116, 139))
+                    surface.blit(p_surf, (cell_rect.centerx - p_surf.get_width() // 2, cell_rect.centery - p_surf.get_height() // 2))
+
+            cur_y += row_h + 6
+
+        # 3. Legend & Instructions Footer
+        leg_y = cur_y + 14
+        pygame.draw.line(surface, COLOR_MODAL_BORDER, (table_x, leg_y), (table_x + name_col_w + len(WORK_TYPES) * cell_w, leg_y))
+
+        leg_txt = self.font_body.render("Priority Levels: [ 1 ] Highest Priority  |  [ 2 ] Normal  |  [ 3 ] Low  |  [ 4 ] Lowest  |  [ — ] Disabled", True, (226, 232, 240))
+        surface.blit(leg_txt, (table_x, leg_y + 10))
+
+        rule_txt = self.font_badge.render("Servants automatically choose the lowest number task available. If tied, closest work is preferred.", True, COLOR_TEXT_MUTED)
+        surface.blit(rule_txt, (table_x, leg_y + 32))
+
+    def _draw_schedule_tab(self, surface, mx, cy, schedule_manager=None, day_cycle=None):
+        """RimWorld-Style 24-Hour Activity Schedule Tab"""
+        mouse_pos = pygame.mouse.get_pos()
+        cur_hour = getattr(day_cycle, "current_hour", 8.0) if day_cycle else 8.0
+
+        # =============================================================
+        # VIEW 1: Job Selection Directory
+        # =============================================================
+        if self.selected_schedule_job_id is None:
+            title = self.font_title.render("VILLAGE LABOR & SHIFT SCHEDULE", True, COLOR_TEXT_TITLE)
+            surface.blit(title, (mx + 24, cy - 4))
+
+            sub = self.font_body.render("Set daily 24-hour work shifts, recreation, and sleep hours for each guild profession:", True, COLOR_TEXT_MUTED)
+            surface.blit(sub, (mx + 24, cy + 22))
+
+            y_cur = cy + 46
+            self.schedule_job_select_btn_rects = {}
+
+            for job_id, job_cfg in DEDICATED_JOBS.items():
+                card_h = 58
+                card_rect = pygame.Rect(mx + 24, y_cur, self.modal_w - 48, card_h)
+
+                pygame.draw.rect(surface, (24, 34, 52), card_rect, border_radius=8)
+                pygame.draw.rect(surface, (51, 65, 85), card_rect, width=1, border_radius=8)
+
+                # Icon
+                icon_col = job_cfg.get("color", (34, 197, 94))
+                pygame.draw.circle(surface, icon_col, (card_rect.x + 24, card_rect.y + card_h // 2), 12)
+                pygame.draw.circle(surface, (15, 23, 42), (card_rect.x + 24, card_rect.y + card_h // 2), 12, 2)
+
+                # Title
+                j_title = self.font_sub.render(job_cfg["name"], True, (241, 245, 249))
+                surface.blit(j_title, (card_rect.x + 46, card_rect.y + 8))
+
+                # Mini schedule preview bar
+                if schedule_manager:
+                    sched = schedule_manager.get_schedule(job_id)
+                    bar_x = card_rect.x + 46
+                    bar_y = card_rect.y + 32
+                    bar_w = 260
+                    seg_w = bar_w / 24.0
+                    for h_idx in range(24):
+                        act = sched[h_idx]
+                        col = SCHEDULE_TYPES.get(act, {}).get("color", (100, 116, 139))
+                        pygame.draw.rect(surface, col, (bar_x + int(h_idx * seg_w), bar_y, int(seg_w) + 1, 14))
+
+                    # Count work hours
+                    work_hours = sum(1 for a in sched if a == "WORK")
+                    sleep_hours = sum(1 for a in sched if a == "SLEEP")
+                    summary_txt = f"{work_hours}h Work, {sleep_hours}h Sleep"
+                    surface.blit(self.font_badge.render(summary_txt, True, COLOR_TEXT_MUTED), (bar_x + bar_w + 14, bar_y + 1))
+
+                # Action Button: [Edit Schedule ➔]
+                btn_rect = pygame.Rect(card_rect.right - 140, card_rect.y + 13, 126, 32)
+                self.schedule_job_select_btn_rects[job_id] = btn_rect
+                b_hover = btn_rect.collidepoint(mouse_pos)
+                pygame.draw.rect(surface, (37, 99, 235) if b_hover else (30, 58, 138), btn_rect, border_radius=6)
+                pygame.draw.rect(surface, (96, 165, 250), btn_rect, width=1, border_radius=6)
+                btn_lbl = self.font_badge.render("Edit Schedule ->", True, (255, 255, 255))
+                surface.blit(btn_lbl, (btn_rect.centerx - btn_lbl.get_width() // 2, btn_rect.centery - btn_lbl.get_height() // 2))
+
+                y_cur += card_h + 8
+
+        # =============================================================
+        # VIEW 2: Detailed 24-Hour Matrix for Selected Job
+        # =============================================================
+        else:
+            job_cfg = DEDICATED_JOBS.get(self.selected_schedule_job_id, {})
+            job_name = job_cfg.get("name", self.selected_schedule_job_id)
+
+            # Header & Back Button
+            back_w = 140
+            self.schedule_back_btn_rect = pygame.Rect(mx + 24, cy - 4, back_w, 28)
+            b_hover = self.schedule_back_btn_rect.collidepoint(mouse_pos)
+            pygame.draw.rect(surface, (51, 65, 85) if b_hover else (30, 41, 59), self.schedule_back_btn_rect, border_radius=6)
+            pygame.draw.rect(surface, (96, 165, 250), self.schedule_back_btn_rect, width=1, border_radius=6)
+            b_lbl = self.font_badge.render("< Back to Jobs", True, (255, 255, 255))
+            surface.blit(b_lbl, (self.schedule_back_btn_rect.centerx - b_lbl.get_width() // 2, self.schedule_back_btn_rect.centery - b_lbl.get_height() // 2))
+
+            surface.blit(self.font_title.render(f"{job_name} 24-Hour Schedule", True, (241, 245, 249)), (mx + 24 + back_w + 14, cy - 4))
+
+            # Current Hour indicator
+            curr_str = f"Time: {int(cur_hour):02d}:00"
+            surface.blit(self.font_sub.render(curr_str, True, (250, 204, 21)), (mx + self.modal_w - 180, cy - 2))
+
+            # Paintbrush tools banner
+            tool_y = cy + 34
+            tool_rect = pygame.Rect(mx + 24, tool_y, self.modal_w - 48, 44)
+            pygame.draw.rect(surface, (24, 34, 52), tool_rect, border_radius=6)
+            pygame.draw.rect(surface, (71, 85, 105), tool_rect, width=1, border_radius=6)
+
+            surface.blit(self.font_badge.render("SELECT TOOL TO PAINT HOURS:", True, COLOR_TEXT_MUTED), (tool_rect.x + 12, tool_rect.y + 14))
+
+            self.schedule_brush_btn_rects = {}
+            bx = tool_rect.x + 200
+            for b_id, b_info in SCHEDULE_TYPES.items():
+                b_btn = pygame.Rect(bx, tool_rect.y + 7, 100, 30)
+                self.schedule_brush_btn_rects[b_id] = b_btn
+                is_sel = (self.selected_schedule_brush == b_id)
+                col = b_info["color"]
+                if is_sel:
+                    pygame.draw.rect(surface, col, b_btn, border_radius=5)
+                    pygame.draw.rect(surface, (255, 255, 255), b_btn, width=2, border_radius=5)
+                    lbl_col = (255, 255, 255)
+                else:
+                    pygame.draw.rect(surface, (30, 41, 59), b_btn, border_radius=5)
+                    pygame.draw.rect(surface, col, b_btn, width=1, border_radius=5)
+                    lbl_col = col
+
+                t_lbl = self.font_badge.render(f"{b_info['name']}", True, lbl_col)
+                surface.blit(t_lbl, (b_btn.centerx - t_lbl.get_width() // 2, b_btn.centery - t_lbl.get_height() // 2))
+                bx += 108
+
+            # Timetable Grid (24 boxes)
+            grid_y = tool_y + 58
+            surface.blit(self.font_sub.render("Daily 24-Hour Timeline (Left-click an hour slot to apply selected tool):", True, (241, 245, 249)), (mx + 24, grid_y))
+
+            sched = schedule_manager.get_schedule(self.selected_schedule_job_id) if schedule_manager else list(DEFAULT_JOB_SCHEDULE)
+            grid_bar_y = grid_y + 26
+            avail_grid_w = self.modal_w - 48
+            cell_w = avail_grid_w // 24
+            cell_h = 56
+
+            self.schedule_hour_cell_rects = {}
+            for h in range(24):
+                cx = mx + 24 + h * cell_w
+                cell_rect = pygame.Rect(cx, grid_bar_y, cell_w - 2, cell_h)
+                self.schedule_hour_cell_rects[h] = cell_rect
+
+                act = sched[h]
+                act_col = SCHEDULE_TYPES.get(act, {}).get("color", (100, 116, 139))
+                is_current = (int(cur_hour) == h)
+
+                pygame.draw.rect(surface, act_col, cell_rect, border_radius=4)
+                if is_current:
+                    pygame.draw.rect(surface, (250, 204, 21), cell_rect, width=2, border_radius=4)
+                else:
+                    pygame.draw.rect(surface, (15, 23, 42), cell_rect, width=1, border_radius=4)
+
+                # Hour text
+                h_txt = self.font_badge.render(f"{h:02d}", True, (255, 255, 255))
+                surface.blit(h_txt, (cell_rect.centerx - h_txt.get_width() // 2, cell_rect.y + 6))
+
+                # Activity abbreviation
+                abbrev = act[:1]  # 'W', 'L', 'S', 'A'
+                a_txt = self.font_sub.render(abbrev, True, (255, 255, 255))
+                surface.blit(a_txt, (cell_rect.centerx - a_txt.get_width() // 2, cell_rect.y + 24))
+
+                if is_current:
+                    pygame.draw.polygon(surface, (250, 204, 21), [
+                        (cell_rect.centerx, grid_bar_y - 2),
+                        (cell_rect.centerx - 4, grid_bar_y - 7),
+                        (cell_rect.centerx + 4, grid_bar_y - 7)
+                    ])
+
+            # Presets & Quick Fill Section
+            preset_y = grid_bar_y + cell_h + 16
+            surface.blit(self.font_sub.render("Quick Schedule Presets:", True, COLOR_TEXT_MUTED), (mx + 24, preset_y + 5))
+
+            self.schedule_preset_btn_rects = {}
+            presets = [
+                ("standard", "Standard (10h Work, 8h Sleep)", (59, 130, 246)),
+                ("hardwork", "Hardworking (15h Work, 6h Sleep)", (245, 158, 11)),
+                ("relaxed", "Relaxed (7h Work, 9h Sleep)", (34, 197, 94))
+            ]
+            px = mx + 200
+            for p_id, p_title, p_col in presets:
+                p_rect = pygame.Rect(px, preset_y, 160, 28)
+                self.schedule_preset_btn_rects[p_id] = p_rect
+                p_hover = p_rect.collidepoint(mouse_pos)
+                pygame.draw.rect(surface, p_col if p_hover else (30, 41, 59), p_rect, border_radius=5)
+                pygame.draw.rect(surface, p_col, p_rect, width=1, border_radius=5)
+                p_lbl = self.font_badge.render(p_title.split(' ')[0], True, (255, 255, 255))
+                surface.blit(p_lbl, (p_rect.centerx - p_lbl.get_width() // 2, p_rect.centery - p_lbl.get_height() // 2))
+                px += 170
+
+            # Explanation notes
+            note_y = preset_y + 38
+            note = self.font_body.render("• Workers follow their active hourly schedule. During WORK, farmers water unwatered tiles and harvest ripe crops.", True, COLOR_TEXT_MUTED)
+            surface.blit(note, (mx + 24, note_y))
+            note2 = self.font_body.render("• During SLEEP, villagers return to their family household. During LEISURE, they relax near Town Center.", True, COLOR_TEXT_MUTED)
+            surface.blit(note2, (mx + 24, note_y + 18))
+
+    def _draw_villagers_tab(self, surface, mx, cy, villager_manager, permit_manager, building_manager, furniture_manager=None, stockpile_manager=None, resources=None, servant_manager=None):
+        if villager_manager:
+            villager_manager.ensure_unique_family_ids()
+        mouse_pos = pygame.mouse.get_pos()
+        families = villager_manager.families if villager_manager else []
+        total_villagers = len(villager_manager.get_all_villagers()) if villager_manager else 0
+
+        # =============================================================
+        # VIEW 1: Family Clan Directory (List of All Families)
+        # =============================================================
+        if self.selected_family_id is None:
+            title = self.font_sub.render(f" Town Census & Family Directory ({total_villagers} Settlers | {len(families)} Families)", True, COLOR_TEXT_TITLE)
+            surface.blit(title, (mx + 24, cy))
+
+            # Button: [+ Add Family (Cheat)]
+            btn_w = 175
+            btn_h = 30
+            self.add_family_cheat_btn_rect = pygame.Rect(mx + self.modal_w - btn_w - 24, cy - 4, btn_w, btn_h)
+            btn_hover = self.add_family_cheat_btn_rect.collidepoint(mouse_pos)
+            btn_col = (126, 34, 206) if btn_hover else (107, 33, 168)
+
+            pygame.draw.rect(surface, btn_col, self.add_family_cheat_btn_rect, border_radius=6)
+            pygame.draw.rect(surface, (192, 132, 252), self.add_family_cheat_btn_rect, width=1, border_radius=6)
+            b_txt = self.font_badge.render("+ Add Family (Cheat)", True, (255, 255, 255))
+            surface.blit(b_txt, (self.add_family_cheat_btn_rect.centerx - b_txt.get_width() // 2, self.add_family_cheat_btn_rect.centery - b_txt.get_height() // 2))
+
+            sub = self.font_body.render("Settlers migrate in family clans (1–3 generations). Landlord grants Housing Deeds to each family:", True, COLOR_TEXT_MUTED)
+            surface.blit(sub, (mx + 24, cy + 22))
+
+            y_cur = cy + 48
+            self.view_family_btn_rects = []
+
+            if not families:
+                empty_card = pygame.Rect(mx + 24, y_cur, self.modal_w - 48, 80)
+                pygame.draw.rect(surface, (24, 34, 52), empty_card, border_radius=8)
+                pygame.draw.rect(surface, (51, 65, 85), empty_card, width=1, border_radius=8)
+
+                msg1 = self.font_body.render("• No settler families residing on your estate yet.", True, COLOR_TEXT_MUTED)
+                msg2 = self.font_body.render("Click [+ Add Family (Cheat)] above to welcome a new immigrant family to your land!", True, (56, 189, 248))
+                surface.blit(msg1, (empty_card.x + 20, empty_card.y + 18))
+                surface.blit(msg2, (empty_card.x + 20, empty_card.y + 42))
+
+            else:
+                card_h = 58
+                for fam in families:
+                    card_rect = pygame.Rect(mx + 24, y_cur, self.modal_w - 48, card_h)
+                    pygame.draw.rect(surface, (24, 34, 52), card_rect, border_radius=8)
+                    pygame.draw.rect(surface, (51, 65, 85), card_rect, width=1, border_radius=8)
+
+                    # Family Coat of Arms / Emblem Circle
+                    emblem_col = (34, 197, 94) if fam.assigned_permit_id else (245, 158, 11)
+                    pygame.draw.circle(surface, emblem_col, (card_rect.x + 24, card_rect.y + card_h // 2), 12)
+                    pygame.draw.circle(surface, (15, 23, 42), (card_rect.x + 24, card_rect.y + card_h // 2), 12, 2)
+
+                    # Family Title & Generations
+                    fam_name = self.font_sub.render(f"The {fam.surname} Family  ({fam.member_count} Members)", True, (241, 245, 249))
+                    surface.blit(fam_name, (card_rect.x + 46, card_rect.y + 8))
+
+                    # Generation badge
+                    gen_txt = self.font_badge.render(f"Generations: {fam.get_generation_label()}", True, (56, 189, 248))
+                    surface.blit(gen_txt, (card_rect.x + 46 + fam_name.get_width() + 12, card_rect.y + 10))
+
+                    # Dedicated Job & Assigned Deed Status
+                    if fam.assigned_permit_id:
+                        p_deed = next((p for p in permit_manager.permits if p.id == fam.assigned_permit_id), None)
+                        deed_label = f"Assigned Deed: {p_deed.name}" if p_deed else "Assigned Deed: Active Lot"
+                        deed_col = (34, 197, 94)
+                    else:
+                        deed_label = "Deed: Unassigned (Homeless Immigrants at Town Center)"
+                        deed_col = (245, 158, 11)
+
+                    sub_line = f"Dedicated Profession: Peasant Farmer   |   {deed_label}"
+                    surface.blit(self.font_body.render(sub_line, True, deed_col), (card_rect.x + 46, card_rect.y + 30))
+
+                    # Action Button: [👥 View Family]
+                    view_btn = pygame.Rect(card_rect.right - 120, card_rect.y + 13, 108, 32)
+                    self.view_family_btn_rects.append((fam.id, view_btn))
+                    v_hover = view_btn.collidepoint(mouse_pos)
+                    pygame.draw.rect(surface, (37, 99, 235) if v_hover else (30, 58, 138), view_btn, border_radius=6)
+                    pygame.draw.rect(surface, (96, 165, 250), view_btn, width=1, border_radius=6)
+
+                    lbl = self.font_badge.render("View Family", True, (255, 255, 255))
+                    surface.blit(lbl, (view_btn.centerx - lbl.get_width() // 2, view_btn.centery - lbl.get_height() // 2))
+
+                    y_cur += card_h + 8
+
+        # =============================================================
+        # VIEW 2: Detailed Family Roster & Deed Management
+        # =============================================================
+        else:
+            fam = villager_manager.get_family_by_id(self.selected_family_id) if villager_manager else None
+            if not fam:
+                self.selected_family_id = None
+                return
+
+            if self.show_household_possession:
+                # ---------------------------------------------------------
+                # VIEW 2B: Household Possessions Grid (3x3 with sekat)
+                # ---------------------------------------------------------
+                self.close_possession_btn_rect = pygame.Rect(mx + 24, cy - 4, 150, 28)
+                b_hover = self.close_possession_btn_rect.collidepoint(mouse_pos)
+                pygame.draw.rect(surface, (51, 65, 85) if b_hover else (30, 41, 59), self.close_possession_btn_rect, border_radius=6)
+                pygame.draw.rect(surface, (96, 165, 250), self.close_possession_btn_rect, width=1, border_radius=6)
+                back_lbl = self.font_badge.render("< Back to Roster", True, (255, 255, 255))
+                surface.blit(back_lbl, (self.close_possession_btn_rect.centerx - back_lbl.get_width() // 2, self.close_possession_btn_rect.centery - back_lbl.get_height() // 2))
+
+                f_title = self.font_title.render(f"Household Possessions: The {fam.surname} Family", True, (241, 245, 249))
+                surface.blit(f_title, (mx + 24 + 150 + 14, cy - 4))
+
+                # Button: [🎁 Grant Item]
+                grant_btn_w = 140
+                self.open_grant_dialog_btn_rect = pygame.Rect(mx + self.modal_w - 24 - grant_btn_w, cy - 4, grant_btn_w, 28)
+                g_hov = self.open_grant_dialog_btn_rect.collidepoint(mouse_pos)
+                pygame.draw.rect(surface, (22, 101, 52) if g_hov else (21, 128, 61), self.open_grant_dialog_btn_rect, border_radius=6)
+                pygame.draw.rect(surface, (74, 222, 128), self.open_grant_dialog_btn_rect, width=1, border_radius=6)
+                grant_lbl = self.font_badge.render("Grant Item", True, (255, 255, 255))
+                surface.blit(grant_lbl, (self.open_grant_dialog_btn_rect.centerx - grant_lbl.get_width() // 2, self.open_grant_dialog_btn_rect.centery - grant_lbl.get_height() // 2))
+
+                # Count Family Possessions (From chests, dropped ground items, and carried AI inventories)
+                potato_count = 0
+                hoe_count = 0
+                sickle_count = 0
+                water_can_count = 0
+
+                # 1. From Household Furniture Chests
+                if furniture_manager:
+                    furn_list = getattr(furniture_manager, "furnitures", getattr(furniture_manager, "furniture_list", []))
+                    for f in furn_list:
+                        if str(getattr(f, "family_id", "")) == str(fam.id) and hasattr(f, "inventory"):
+                            inv = f.inventory
+                            potato_count += inv.get("Potato", 0) + inv.get("potato", 0) + inv.get("Food", 0)
+                            hoe_count += inv.get("Hoe", 0) + inv.get("cangkul", 0)
+                            sickle_count += inv.get("Sickle", 0) + inv.get("sabit", 0)
+                            water_can_count += inv.get("Watering_Can", 0) + inv.get("Watering Can", 0) + inv.get("siraman", 0)
+
+                # 2. From Ground Item Stacks owned by this family (e.g. items granted before storage chest was built)
+                if stockpile_manager:
+                    for s in getattr(stockpile_manager, "stacks", []):
+                        if getattr(s, "owner_type", None) == "villager" and str(getattr(s, "owner_id", "")) == str(fam.id):
+                            rt = s.resource_type
+                            if rt in ("Food", "Potato", "potato"):
+                                potato_count += getattr(s, "amount", 0)
+                            elif rt == "Hoe":
+                                hoe_count += getattr(s, "amount", 0)
+                            elif rt == "Sickle":
+                                sickle_count += getattr(s, "amount", 0)
+                            elif rt in ("Watering_Can", "Watering Can", "WateringCan", "siraman"):
+                                water_can_count += getattr(s, "amount", 0)
+
+                # 3. From Personal AI Villager Inventory & Carried Items
+                for m in fam.members:
+                    potato_count += getattr(m, "carrying_crop", 0)
+                    m_inv = getattr(m, "inventory", {})
+                    potato_count += m_inv.get("Potato", 0) + m_inv.get("potato", 0) + m_inv.get("Food", 0)
+                    hoe_count += m_inv.get("Hoe", 0) + m_inv.get("cangkul", 0)
+                    sickle_count += m_inv.get("Sickle", 0) + m_inv.get("sabit", 0)
+                    water_can_count += m_inv.get("Watering_Can", 0) + m_inv.get("Watering Can", 0) + m_inv.get("siraman", 0)
+
+                # 4. From In-Transit Deliveries by Servants (Royal Grant)
+                if servant_manager:
+                    for s in getattr(servant_manager, "servants", []):
+                        if getattr(s, "state", "") == "GRANT_DELIVER" and str(getattr(s, "target_grant_fam_id", "")) == str(fam.id):
+                            res_name = getattr(s, "carried_res", "")
+                            amt = getattr(s, "carried_amount", 0)
+                            if res_name == "Hoe":
+                                hoe_count += amt
+                            elif res_name == "Sickle":
+                                sickle_count += amt
+                            elif res_name in ("Watering_Can", "Watering Can"):
+                                water_can_count += amt
+                            elif res_name in ("Food", "Potato", "potato"):
+                                potato_count += amt
+
+                items = [
+                    {"icon": "", "name": "Potato", "count": potato_count, "active": True},
+                    {"icon": "", "name": "Hoe", "count": hoe_count, "active": True},
+                    {"icon": "", "name": "Sickle", "count": sickle_count, "active": True},
+                    {"icon": "", "name": "Watering Can", "count": water_can_count, "active": True},
+                    {"icon": "", "name": "Bread (WIP)", "count": 0, "active": False},
+                    {"icon": "", "name": "Timber (WIP)", "count": 0, "active": False},
+                    {"icon": "", "name": "Carved Stone (WIP)", "count": 0, "active": False},
+                    {"icon": "", "name": "Linen Cloth (WIP)", "count": 0, "active": False},
+                    {"icon": "", "name": "Copper Coins (WIP)", "count": 0, "active": False},
+                ]
+
+                # 3x3 Grid Layout
+                grid_x = mx + 24
+                grid_y = cy + 34
+                grid_w = self.modal_w - 48
+                grid_h = 240
+                col_w = grid_w / 3.0
+                row_h = grid_h / 3.0
+
+                # Grid Background & Outer Border
+                grid_rect = pygame.Rect(grid_x, grid_y, grid_w, grid_h)
+                pygame.draw.rect(surface, (15, 23, 42), grid_rect, border_radius=8)
+                pygame.draw.rect(surface, (51, 65, 85), grid_rect, width=2, border_radius=8)
+
+                # Draw Cells
+                for idx, item in enumerate(items):
+                    c_col = idx % 3
+                    c_row = idx // 3
+                    cx_start = int(grid_x + c_col * col_w)
+                    cy_start = int(grid_y + c_row * row_h)
+                    cell_rect = pygame.Rect(cx_start, cy_start, int(col_w), int(row_h))
+
+                    # Cell hover highlight
+                    if cell_rect.collidepoint(mouse_pos):
+                        pygame.draw.rect(surface, (30, 41, 59, 120), cell_rect)
+
+                    # [Icon]  [Jumlah]  [Nama item]
+                    draw_item_icon(surface, item["name"], cx_start + 24, cy_start + int(row_h // 2), size=11)
+
+                    cnt_color = (34, 197, 94) if item["active"] and item["count"] > 0 else ((245, 158, 11) if item["active"] else (100, 116, 139))
+                    cnt_str = f"x {item['count']}"
+                    cnt_surf = self.font_sub.render(cnt_str, True, cnt_color)
+                    surface.blit(cnt_surf, (cx_start + 44, cy_start + int(row_h // 2) - 9))
+
+                    name_color = (241, 245, 249) if item["active"] else (148, 163, 184)
+                    name_surf = self.font_body.render(item["name"], True, name_color)
+                    surface.blit(name_surf, (cx_start + 98, cy_start + int(row_h // 2) - 8))
+
+                # Vertical Divider Lines (Sekat Vertikal)
+                pygame.draw.line(surface, (51, 65, 85), (grid_x + int(col_w), grid_y), (grid_x + int(col_w), grid_y + grid_h), 2)
+                pygame.draw.line(surface, (51, 65, 85), (grid_x + int(2 * col_w), grid_y), (grid_x + int(2 * col_w), grid_y + grid_h), 2)
+
+                # Horizontal Divider Lines (Sekat Horizontal)
+                pygame.draw.line(surface, (51, 65, 85), (grid_x, grid_y + int(row_h)), (grid_x + grid_w, grid_y + int(row_h)), 2)
+                pygame.draw.line(surface, (51, 65, 85), (grid_x, grid_y + int(2 * row_h)), (grid_x + grid_w, grid_y + int(2 * row_h)), 2)
+
+                # Subtitle & Notes below grid
+                note_y = grid_y + grid_h + 16
+                surface.blit(self.font_sub.render("Private Household Property Rules:", True, (245, 158, 11)), (mx + 24, note_y))
+                surface.blit(self.font_body.render("• Villagers store their private crop harvest in storage furniture (chests) placed inside their assigned Housing Lot.", True, (226, 232, 240)), (mx + 24, note_y + 20))
+                surface.blit(self.font_body.render("• Lord's servants cannot touch, haul, or seize peasant household possessions. Only landlord private stockpiles belong to the Lord.", True, COLOR_TEXT_MUTED), (mx + 24, note_y + 38))
+
+                # Draw Grant Item modal overlays if active
+                if self.show_grant_dialog:
+                    self._draw_grant_dialog(surface, fam, stockpile_manager, resources, mouse_pos)
+                if self.show_grant_confirm:
+                    self._draw_grant_confirm(surface, fam, mouse_pos)
+                return
+
+            # Header & Back Button
+            back_w = 150
+            self.back_to_families_btn_rect = pygame.Rect(mx + 24, cy - 4, back_w, 28)
+            b_hover = self.back_to_families_btn_rect.collidepoint(mouse_pos)
+            pygame.draw.rect(surface, (51, 65, 85) if b_hover else (30, 41, 59), self.back_to_families_btn_rect, border_radius=6)
+            pygame.draw.rect(surface, (96, 165, 250), self.back_to_families_btn_rect, width=1, border_radius=6)
+
+            back_lbl = self.font_badge.render("< Back to Families", True, (255, 255, 255))
+            surface.blit(back_lbl, (self.back_to_families_btn_rect.centerx - back_lbl.get_width() // 2, self.back_to_families_btn_rect.centery - back_lbl.get_height() // 2))
+
+            f_title = self.font_title.render(f"Household: The {fam.surname} Family", True, (241, 245, 249))
+            surface.blit(f_title, (mx + 24 + back_w + 14, cy - 4))
+
+            # Button: [📦 Household Possession]
+            self.household_possession_btn_rect = pygame.Rect(mx + self.modal_w - 24 - 180, cy - 4, 180, 28)
+            hp_hover = self.household_possession_btn_rect.collidepoint(mouse_pos)
+            pygame.draw.rect(surface, (202, 138, 4) if hp_hover else (161, 98, 7), self.household_possession_btn_rect, border_radius=6)
+            pygame.draw.rect(surface, (250, 204, 21), self.household_possession_btn_rect, width=1, border_radius=6)
+            hp_lbl = self.font_badge.render("Household Possession", True, (255, 255, 255))
+            surface.blit(hp_lbl, (self.household_possession_btn_rect.centerx - hp_lbl.get_width() // 2, self.household_possession_btn_rect.centery - hp_lbl.get_height() // 2))
+
+            # Land Deed Status Banner
+            banner_y = cy + 30
+            banner_rect = pygame.Rect(mx + 24, banner_y, self.modal_w - 48, 44)
+            pygame.draw.rect(surface, (24, 34, 52), banner_rect, border_radius=8)
+            pygame.draw.rect(surface, (71, 85, 105), banner_rect, width=1, border_radius=8)
+
+            p_assigned = next((p for p in permit_manager.permits if p.id == fam.assigned_permit_id), None)
+            if p_assigned:
+                d_txt = f"Land Deed: Assigned to {p_assigned.name} ({len(p_assigned.tiles)} tiles)"
+                d_col = (34, 197, 94)
+            else:
+                d_txt = "Land Deed: Unassigned — Living at Town Center"
+                d_col = (245, 158, 11)
+
+            surface.blit(self.font_sub.render(d_txt, True, d_col), (banner_rect.x + 14, banner_rect.y + 12))
+
+            # Button: [Assign / Change Deed]
+            self.assign_permit_btn_rects = {}
+            self.revoke_deed_btn_rect = None
+            self.open_assign_lot_btn_rect = pygame.Rect(banner_rect.right - 230, banner_rect.y + 7, 130, 28)
+            a_hover = self.open_assign_lot_btn_rect.collidepoint(mouse_pos)
+            pygame.draw.rect(surface, (16, 185, 129) if a_hover else (5, 150, 105), self.open_assign_lot_btn_rect, border_radius=5)
+            a_lbl = self.font_badge.render("Assign Deed" if not p_assigned else "Change Deed", True, (255, 255, 255))
+            surface.blit(a_lbl, (self.open_assign_lot_btn_rect.centerx - a_lbl.get_width() // 2, self.open_assign_lot_btn_rect.centery - a_lbl.get_height() // 2))
+
+            if p_assigned:
+                self.revoke_deed_btn_rect = pygame.Rect(banner_rect.right - 92, banner_rect.y + 7, 84, 28)
+                r_hover = self.revoke_deed_btn_rect.collidepoint(mouse_pos)
+                pygame.draw.rect(surface, (220, 38, 38) if r_hover else (153, 27, 27), self.revoke_deed_btn_rect, border_radius=5)
+                r_lbl = self.font_badge.render("Revoke", True, (255, 255, 255))
+                surface.blit(r_lbl, (self.revoke_deed_btn_rect.centerx - r_lbl.get_width() // 2, self.revoke_deed_btn_rect.centery - r_lbl.get_height() // 2))
+
+            # Member Roster Grouped by Generation
+            self.member_inventory_btn_rects.clear()
+            y_cur = banner_y + 54
+            m_header = self.font_sub.render(f"Household Members Roster ({fam.member_count} Members across {fam.get_generation_label()}):", True, COLOR_TEXT_TITLE)
+            surface.blit(m_header, (mx + 24, y_cur))
+
+            y_cur += 22
+            gen_names = {1: "Generation 1 (Elders / Grandparents)", 2: "Generation 2 (Core Couple / Parents)", 3: "Generation 3 (Adult Offspring)"}
+
+            for gen_idx in sorted(list({m.generation for m in fam.members})):
+                gen_title = self.font_badge.render(gen_names.get(gen_idx, f"Generation {gen_idx}"), True, (245, 158, 11))
+                surface.blit(gen_title, (mx + 28, y_cur))
+                y_cur += 16
+
+                for m in [mem for mem in fam.members if mem.generation == gen_idx]:
+                    m_card = pygame.Rect(mx + 24, y_cur, self.modal_w - 48, 30)
+                    pygame.draw.rect(surface, (15, 23, 42, 180), m_card, border_radius=5)
+                    pygame.draw.rect(surface, (51, 65, 85), m_card, width=1, border_radius=5)
+
+                    # Icon & Name
+                    m_info = f"{m.full_name}  ({m.role}, Age {m.age}, {m.gender})"
+                    surface.blit(self.font_body.render(m_info, True, (241, 245, 249)), (m_card.x + 12, m_card.y + 6))
+
+                    # Dedicated Job Badge
+                    job_cfg = DEDICATED_JOBS.get(getattr(m, "job", "Farmer"), {})
+                    job_title = job_cfg.get("title", getattr(m, "job", "Worker"))
+                    job_badge = pygame.Rect(m_card.right - 230, m_card.y + 4, 110, 22)
+                    pygame.draw.rect(surface, (20, 83, 45), job_badge, border_radius=4)
+                    pygame.draw.rect(surface, (34, 197, 94), job_badge, width=1, border_radius=4)
+                    j_txt = self.font_badge.render(job_title, True, (240, 253, 244))
+                    surface.blit(j_txt, (job_badge.centerx - j_txt.get_width() // 2, job_badge.centery - j_txt.get_height() // 2))
+
+                    # [🎒 Inventory] Button
+                    inv_btn = pygame.Rect(m_card.right - 114, m_card.y + 4, 106, 22)
+                    self.member_inventory_btn_rects[m.id] = inv_btn
+                    i_hov = inv_btn.collidepoint(mouse_pos)
+                    pygame.draw.rect(surface, (37, 99, 235) if i_hov else (30, 58, 138), inv_btn, border_radius=4)
+                    pygame.draw.rect(surface, (96, 165, 250), inv_btn, width=1, border_radius=4)
+                    i_txt = self.font_badge.render("Inventory", True, (255, 255, 255))
+                    surface.blit(i_txt, (inv_btn.centerx - i_txt.get_width() // 2, inv_btn.centery - i_txt.get_height() // 2))
+
+                    y_cur += 34
+                y_cur += 6
+
+            # Housing Lot Deed Picker Dropdown/Modal (Drawn as an Overlay on Top of the Roster)
+            self.assign_permit_btn_rects = {}
+            if self.show_assign_permit_picker:
+                picker_w = 420
+                housing_permits = [p for p in permit_manager.permits if p.permit_type in ["housing", "landlord_private"]]
+                picker_h = max(70, min(240, len(housing_permits) * 36 + 46))
+                picker_x = banner_rect.right - picker_w
+                picker_y = banner_rect.bottom + 4
+                self.deed_picker_bg_rect = pygame.Rect(picker_x, picker_y, picker_w, picker_h)
+
+                # Shadow
+                shadow_surf = pygame.Surface((picker_w, picker_h), pygame.SRCALPHA)
+                pygame.draw.rect(shadow_surf, (0, 0, 0, 180), (0, 0, picker_w, picker_h), border_radius=8)
+                surface.blit(shadow_surf, (picker_x + 4, picker_y + 4))
+
+                # Background & Border
+                pygame.draw.rect(surface, (15, 23, 42), self.deed_picker_bg_rect, border_radius=8)
+                pygame.draw.rect(surface, (59, 130, 246), self.deed_picker_bg_rect, width=2, border_radius=8)
+
+                p_header = self.font_badge.render("SELECT HOUSING PERMIT DEED FOR THIS FAMILY:", True, (56, 189, 248))
+                surface.blit(p_header, (picker_x + 14, picker_y + 12))
+
+                # Close [✕] button
+                self.close_deed_picker_btn_rect = pygame.Rect(picker_x + picker_w - 28, picker_y + 10, 18, 18)
+                pygame.draw.rect(surface, (220, 38, 38), self.close_deed_picker_btn_rect, border_radius=3)
+                x_lbl = self.font_badge.render("X", True, (255, 255, 255))
+                surface.blit(x_lbl, (self.close_deed_picker_btn_rect.x + 4, self.close_deed_picker_btn_rect.y + 2))
+
+                row_y = picker_y + 36
+                if not housing_permits:
+                    none_txt = self.font_body.render("- No Housing Permits issued. Issue one first in Area Permits tab!", True, (239, 68, 68))
+                    surface.blit(none_txt, (picker_x + 14, row_y + 4))
+                else:
+                    for p in housing_permits:
+                        occupant = next((f for f in villager_manager.families if f.assigned_permit_id == p.id and f.id != fam.id), None) if villager_manager else None
+                        p_btn = pygame.Rect(picker_x + 10, row_y, picker_w - 20, 28)
+
+                        if occupant:
+                            # Occupied by another family! Cannot be assigned unless revoked first!
+                            pygame.draw.rect(surface, (30, 20, 25), p_btn, border_radius=4)
+                            pygame.draw.rect(surface, (127, 29, 29), p_btn, width=1, border_radius=4)
+                            occ_txt = self.font_badge.render(f"[Occupied] {p.name} - Occupied by The {occupant.surname}s (Revoke first)", True, (248, 113, 113))
+                            surface.blit(occ_txt, (p_btn.x + 12, p_btn.y + 7))
+                        elif p.id == fam.assigned_permit_id:
+                            # Already this family's current permit
+                            pygame.draw.rect(surface, (20, 83, 45), p_btn, border_radius=4)
+                            pygame.draw.rect(surface, (34, 197, 94), p_btn, width=1, border_radius=4)
+                            curr_txt = self.font_badge.render(f"Current Deed: {p.name} ({len(p.tiles)} tiles)", True, (240, 253, 244))
+                            surface.blit(curr_txt, (p_btn.x + 12, p_btn.y + 7))
+                        else:
+                            # Vacant - can be assigned!
+                            self.assign_permit_btn_rects[p.id] = p_btn
+                            p_hov = p_btn.collidepoint(mouse_pos)
+                            pygame.draw.rect(surface, (37, 99, 235) if p_hov else (30, 41, 59), p_btn, border_radius=4)
+                            pygame.draw.rect(surface, (96, 165, 250), p_btn, width=1, border_radius=4)
+                            p_txt = self.font_badge.render(f"Grant {p.name} ({len(p.tiles)} tiles)", True, (255, 255, 255))
+                            surface.blit(p_txt, (p_btn.x + 12, p_btn.y + 7))
+
+                        row_y += 34
+
+            # Member Individual Inventory Modal Overlay
+            if self.selected_member_inventory_id is not None:
+                mem_obj = next((m for m in fam.members if m.id == self.selected_member_inventory_id), None)
+                if mem_obj:
+                    self._draw_member_inventory_dialog(surface, mem_obj, fam, furniture_manager, stockpile_manager, mouse_pos)
+
+    def _draw_member_inventory_dialog(self, surface, member, fam, furniture_manager, stockpile_manager, mouse_pos):
+        screen_w, screen_h = surface.get_size()
+        dim_surf = pygame.Surface((screen_w, screen_h), pygame.SRCALPHA)
+        dim_surf.fill((0, 0, 0, 160))
+        surface.blit(dim_surf, (0, 0))
+
+        dlg_w = 540
+        dlg_h = 360
+        dx = (screen_w - dlg_w) // 2
+        dy = (screen_h - dlg_h) // 2
+        self.member_inv_bg_rect = pygame.Rect(dx, dy, dlg_w, dlg_h)
+
+        pygame.draw.rect(surface, (15, 23, 42), self.member_inv_bg_rect, border_radius=10)
+        pygame.draw.rect(surface, (59, 130, 246), self.member_inv_bg_rect, width=2, border_radius=10)
+
+        # Title
+        title_surf = self.font_sub.render(f"Personal Inventory: {member.full_name}", True, (241, 245, 249))
+        surface.blit(title_surf, (dx + 20, dy + 16))
+
+        # Close [✕] button
+        self.close_member_inv_btn_rect = pygame.Rect(dx + dlg_w - 32, dy + 14, 20, 20)
+        c_hov = self.close_member_inv_btn_rect.collidepoint(mouse_pos)
+        pygame.draw.rect(surface, (239, 68, 68) if c_hov else (30, 41, 59), self.close_member_inv_btn_rect, border_radius=4)
+        c_txt = self.font_badge.render("X", True, (255, 255, 255))
+        surface.blit(c_txt, (self.close_member_inv_btn_rect.centerx - c_txt.get_width() // 2, self.close_member_inv_btn_rect.centery - c_txt.get_height() // 2))
+
+        # Member details banner
+        info_str = f"Role: {member.role}  |  Age: {member.age}  |  Household: The {fam.surname} Family"
+        surface.blit(self.font_body.render(info_str, True, (56, 189, 248)), (dx + 20, dy + 42))
+
+        # Bed Status & Active tool
+        bed_status = f"Assigned Bed:  {member.assigned_bed_id}" if getattr(member, 'assigned_bed_id', None) else " Bed: None (Sleeping on Floor)"
+        tool_status = f"Active Tool:  {member.active_tool or 'None'}"
+        water_status = "Water: Full" if member.has_water else "Water: Empty"
+        status_line = f"{bed_status}  •  {tool_status}  •  {water_status}"
+        surface.blit(self.font_badge.render(status_line, True, (148, 163, 184)), (dx + 20, dy + 62))
+
+        pygame.draw.line(surface, (51, 65, 85), (dx + 20, dy + 84), (dx + dlg_w - 20, dy + 84), 1)
+
+        # Inventory Items Table
+        inv = member.inventory
+        carrying = getattr(member, "carrying_crop", 0)
+        items = list(inv.items())
+        if carrying > 0:
+            items.insert(0, ("Potato (Harvest)", carrying))
+
+        self.member_deposit_btn_rects.clear()
+        self.member_drop_btn_rects.clear()
+
+        has_chest = (furniture_manager.get_storage_for_family(fam.id) is not None) if furniture_manager else False
+
+        y_item = dy + 96
+        if not items:
+            empty_lbl = self.font_body.render("— Personal inventory is currently empty (Hands/Bag free) —", True, (100, 116, 139))
+            surface.blit(empty_lbl, (dx + 20, y_item + 20))
+        else:
+            for item_name, count in items:
+                row_rect = pygame.Rect(dx + 20, y_item, dlg_w - 40, 36)
+                pygame.draw.rect(surface, (30, 41, 59), row_rect, border_radius=6)
+                pygame.draw.rect(surface, (51, 65, 85), row_rect, width=1, border_radius=6)
+
+                draw_item_icon(surface, item_name, row_rect.x + 24, row_rect.y + 18, size=10)
+                item_lbl = self.font_body.render(f"{item_name}  × {count}", True, (241, 245, 249))
+                surface.blit(item_lbl, (row_rect.x + 42, row_rect.y + 9))
+
+                # Buttons: [Deposit to Chest] & [Drop to Ground]
+                if item_name in inv and inv[item_name] > 0:
+                    btn_x = row_rect.right - 10
+                    # Drop button
+                    drop_btn = pygame.Rect(btn_x - 70, row_rect.y + 6, 70, 24)
+                    self.member_drop_btn_rects[item_name] = drop_btn
+                    d_hov = drop_btn.collidepoint(mouse_pos)
+                    pygame.draw.rect(surface, (185, 28, 28) if d_hov else (127, 29, 29), drop_btn, border_radius=4)
+                    d_txt = self.font_badge.render("Drop", True, (255, 255, 255))
+                    surface.blit(d_txt, (drop_btn.centerx - d_txt.get_width() // 2, drop_btn.centery - d_txt.get_height() // 2))
+
+                    # Deposit button
+                    if has_chest:
+                        dep_btn = pygame.Rect(drop_btn.x - 110, row_rect.y + 6, 102, 24)
+                        self.member_deposit_btn_rects[item_name] = dep_btn
+                        dp_hov = dep_btn.collidepoint(mouse_pos)
+                        pygame.draw.rect(surface, (16, 185, 129) if dp_hov else (5, 150, 105), dep_btn, border_radius=4)
+                        dp_txt = self.font_badge.render("To Chest", True, (255, 255, 255))
+                        surface.blit(dp_txt, (dep_btn.centerx - dp_txt.get_width() // 2, dep_btn.centery - dp_txt.get_height() // 2))
+
+                y_item += 42
+
+        # Footer explanation
+        foot_y = dy + dlg_h - 36
+        note = self.font_badge.render("Items in personal inventory are immediately available for this member to work with.", True, (148, 163, 184))
+        surface.blit(note, (dx + 20, foot_y))
+
+    def _draw_workers_tab(self, surface, mx, cy, villager_manager, permit_manager):
+        mouse_pos = pygame.mouse.get_pos()
+
+        # =============================================================
+        # VIEW 1: Dedicated Jobs Directory
+        # =============================================================
+        if self.selected_job_id is None:
+            # Title
+            w_title = self.font_title.render("VILLAGE WORKFORCE & JOBS DIRECTORY", True, COLOR_TEXT_TITLE)
+            surface.blit(w_title, (mx + 24, cy - 4))
+
+            # Auto Sort All Button (Top Right)
+            self.auto_sort_all_btn_rect = pygame.Rect(mx + self.modal_w - 200, cy - 6, 176, 28)
+            as_hover = self.auto_sort_all_btn_rect.collidepoint(mouse_pos)
+            pygame.draw.rect(surface, (16, 185, 129) if as_hover else (5, 150, 105), self.auto_sort_all_btn_rect, border_radius=6)
+            pygame.draw.rect(surface, (52, 211, 153), self.auto_sort_all_btn_rect, width=1, border_radius=6)
+            as_lbl = self.font_badge.render("Auto Sort All Workers", True, (255, 255, 255))
+            surface.blit(as_lbl, (self.auto_sort_all_btn_rect.centerx - as_lbl.get_width() // 2, self.auto_sort_all_btn_rect.centery - as_lbl.get_height() // 2))
+
+            sub_txt = self.font_body.render("Job roles dictate villager daily routines. Workers prioritize nearest designated lots.", True, COLOR_TEXT_MUTED)
+            surface.blit(sub_txt, (mx + 24, cy + 22))
+
+            y_cur = cy + 46
+            self.job_select_btn_rects = {}
+
+            all_vils = villager_manager.get_all_villagers() if villager_manager else []
+
+            for job_id, job_cfg in DEDICATED_JOBS.items():
+                card_h = 58
+                card_rect = pygame.Rect(mx + 24, y_cur, self.modal_w - 48, card_h)
+                is_wip = job_cfg.get("wip", False)
+
+                pygame.draw.rect(surface, (24, 34, 52), card_rect, border_radius=8)
+                pygame.draw.rect(surface, (51, 65, 85), card_rect, width=1, border_radius=8)
+
+                # Icon circle
+                icon_col = (71, 85, 105) if is_wip else (34, 197, 94)
+                pygame.draw.circle(surface, icon_col, (card_rect.x + 24, card_rect.y + card_h // 2), 12)
+                pygame.draw.circle(surface, (15, 23, 42), (card_rect.x + 24, card_rect.y + card_h // 2), 12, 2)
+
+                # Title
+                j_title = self.font_sub.render(job_cfg["name"], True, (241, 245, 249) if not is_wip else COLOR_TEXT_MUTED)
+                surface.blit(j_title, (card_rect.x + 46, card_rect.y + 8))
+
+                if is_wip:
+                    # WIP Badge
+                    wip_b = pygame.Rect(card_rect.x + 46 + j_title.get_width() + 12, card_rect.y + 10, 48, 16)
+                    pygame.draw.rect(surface, COLOR_BADGE_WIP, wip_b, border_radius=3)
+                    surface.blit(self.font_badge.render("WIP", True, (0, 0, 0)), (wip_b.x + 13, wip_b.y + 1))
+
+                    desc = self.font_body.render(job_cfg.get("desc", "Guild profession in development."), True, COLOR_TEXT_MUTED)
+                    surface.blit(desc, (card_rect.x + 46, card_rect.y + 30))
+                else:
+                    # Calculate active workers
+                    job_vils = [v for v in all_vils if v.job == job_id]
+                    assigned_vils = [v for v in job_vils if any(v.id in getattr(p, "assigned_workers", set()) for p in permit_manager.permits)]
+                    unassigned_count = len(job_vils) - len(assigned_vils)
+
+                    stat_str = f"Workforce: {len(assigned_vils)}/{len(job_vils)} Assigned ({unassigned_count} Idle) — Daily field watering & harvesting"
+                    surface.blit(self.font_body.render(stat_str, True, (34, 197, 94) if unassigned_count == 0 else (245, 158, 11)), (card_rect.x + 46, card_rect.y + 30))
+
+                    # Action Button: [View Workers ➔]
+                    view_btn = pygame.Rect(card_rect.right - 130, card_rect.y + 13, 118, 32)
+                    self.job_select_btn_rects[job_id] = view_btn
+                    v_hover = view_btn.collidepoint(mouse_pos)
+                    pygame.draw.rect(surface, (37, 99, 235) if v_hover else (30, 58, 138), view_btn, border_radius=6)
+                    pygame.draw.rect(surface, (96, 165, 250), view_btn, width=1, border_radius=6)
+
+                    lbl = self.font_badge.render("View Workers ->", True, (255, 255, 255))
+                    surface.blit(lbl, (view_btn.centerx - lbl.get_width() // 2, view_btn.centery - lbl.get_height() // 2))
+
+                y_cur += card_h + 8
+
+        # =============================================================
+        # VIEW 2: Individual Workers Roster for Selected Job
+        # =============================================================
+        else:
+            job_cfg = DEDICATED_JOBS.get(self.selected_job_id, {})
+            job_name = job_cfg.get("name", self.selected_job_id)
+
+            # Header & Back Button
+            back_w = 140
+            self.back_to_jobs_btn_rect = pygame.Rect(mx + 24, cy - 4, back_w, 28)
+            b_hover = self.back_to_jobs_btn_rect.collidepoint(mouse_pos)
+            pygame.draw.rect(surface, (51, 65, 85) if b_hover else (30, 41, 59), self.back_to_jobs_btn_rect, border_radius=6)
+            pygame.draw.rect(surface, (96, 165, 250), self.back_to_jobs_btn_rect, width=1, border_radius=6)
+
+            back_lbl = self.font_badge.render("< Back to Jobs", True, (255, 255, 255))
+            surface.blit(back_lbl, (self.back_to_jobs_btn_rect.centerx - back_lbl.get_width() // 2, self.back_to_jobs_btn_rect.centery - back_lbl.get_height() // 2))
+
+            j_title = self.font_title.render(f"{job_name} Workforce", True, (241, 245, 249))
+            surface.blit(j_title, (mx + 24 + back_w + 14, cy - 4))
+
+            # Auto Sort Button for this Job
+            self.auto_sort_all_btn_rect = pygame.Rect(mx + self.modal_w - 180, cy - 4, 156, 28)
+            as_hover = self.auto_sort_all_btn_rect.collidepoint(mouse_pos)
+            pygame.draw.rect(surface, (16, 185, 129) if as_hover else (5, 150, 105), self.auto_sort_all_btn_rect, border_radius=6)
+            pygame.draw.rect(surface, (52, 211, 153), self.auto_sort_all_btn_rect, width=1, border_radius=6)
+            as_lbl = self.font_badge.render("Auto Sort Closest", True, (255, 255, 255))
+            surface.blit(as_lbl, (self.auto_sort_all_btn_rect.centerx - as_lbl.get_width() // 2, self.auto_sort_all_btn_rect.centery - as_lbl.get_height() // 2))
+
+            all_vils = villager_manager.get_all_villagers() if villager_manager else []
+            job_vils = [v for v in all_vils if v.job == self.selected_job_id]
+
+            # Summary banner
+            assigned_vils = [v for v in job_vils if any(v.id in getattr(p, "assigned_workers", set()) for p in permit_manager.permits)]
+            unassigned_count = len(job_vils) - len(assigned_vils)
+
+            banner_y = cy + 32
+            banner_rect = pygame.Rect(mx + 24, banner_y, self.modal_w - 48, 32)
+            pygame.draw.rect(surface, (24, 34, 52), banner_rect, border_radius=6)
+            pygame.draw.rect(surface, (71, 85, 105), banner_rect, width=1, border_radius=6)
+
+            stat_txt = f"Total: {len(job_vils)} Workers   |   Assigned: {len(assigned_vils)}   |   Unassigned / Idle: {unassigned_count}"
+            surface.blit(self.font_sub.render(stat_txt, True, (56, 189, 248)), (banner_rect.x + 14, banner_rect.y + 8))
+
+            y_cur = banner_y + 40
+            self.worker_assign_btn_rects = {}
+            self.worker_unassign_btn_rects = {}
+
+            if not job_vils:
+                none_txt = self.font_body.render("- No villagers registered for this job yet. Add families in the Villagers tab!", True, COLOR_TEXT_MUTED)
+                surface.blit(none_txt, (mx + 36, y_cur + 10))
+            else:
+                for v in job_vils:
+                    card = pygame.Rect(mx + 24, y_cur, self.modal_w - 48, 32)
+                    pygame.draw.rect(surface, (15, 23, 42, 180), card, border_radius=5)
+                    pygame.draw.rect(surface, (51, 65, 85), card, width=1, border_radius=5)
+
+                    # Info
+                    fam = villager_manager.get_family_by_id(v.family_id) if villager_manager else None
+                    fam_name = f"The {fam.surname} Family" if fam else "No Family"
+                    info_str = f"{v.full_name} ({v.role}, {fam_name})"
+                    surface.blit(self.font_body.render(info_str, True, (241, 245, 249)), (card.x + 12, card.y + 7))
+
+                    # Find assigned permit
+                    p_assigned = next((p for p in permit_manager.permits if v.id in getattr(p, "assigned_workers", set())), None)
+                    if p_assigned:
+                        status_str = f"Assigned:  {p_assigned.name}"
+                        surface.blit(self.font_body.render(status_str, True, (34, 197, 94)), (card.x + 310, card.y + 7))
+
+                        # Unassign Button
+                        un_btn = pygame.Rect(card.right - 94, card.y + 4, 84, 24)
+                        self.worker_unassign_btn_rects[(p_assigned.id, v.id)] = un_btn
+                        u_hover = un_btn.collidepoint(mouse_pos)
+                        pygame.draw.rect(surface, (220, 38, 38) if u_hover else (153, 27, 27), un_btn, border_radius=4)
+                        u_lbl = self.font_badge.render("Unassign", True, (255, 255, 255))
+                        surface.blit(u_lbl, (un_btn.centerx - u_lbl.get_width() // 2, un_btn.centery - u_lbl.get_height() // 2))
+                    else:
+                        status_str = "Idle (Unassigned)"
+                        surface.blit(self.font_body.render(status_str, True, (245, 158, 11)), (card.x + 310, card.y + 7))
+
+                        # Assign Nearest Button
+                        as_btn = pygame.Rect(card.right - 110, card.y + 4, 100, 24)
+                        self.worker_assign_btn_rects[v.id] = as_btn
+                        a_hover = as_btn.collidepoint(mouse_pos)
+                        pygame.draw.rect(surface, (37, 99, 235) if a_hover else (30, 58, 138), as_btn, border_radius=4)
+                        a_lbl = self.font_badge.render("+ Assign Slot", True, (255, 255, 255))
+                        surface.blit(a_lbl, (as_btn.centerx - a_lbl.get_width() // 2, as_btn.centery - a_lbl.get_height() // 2))
+
+                    y_cur += 36
+
+    def _draw_grant_dialog(self, surface, fam, stockpile_manager, resources, mouse_pos):
+        sm = stockpile_manager or self.cached_stockpile_manager
+        stock = self.get_landlord_stock(sm, resources)
+
+        # Dark overlay backdrop
+        overlay = pygame.Surface((surface.get_width(), surface.get_height()), pygame.SRCALPHA)
+        overlay.fill((0, 0, 0, 160))
+        surface.blit(overlay, (0, 0))
+
+        dlg_w = 580
+        dlg_h = 440
+        dlg_x = surface.get_width() // 2 - dlg_w // 2
+        dlg_y = surface.get_height() // 2 - dlg_h // 2
+        dlg_rect = pygame.Rect(dlg_x, dlg_y, dlg_w, dlg_h)
+
+        pygame.draw.rect(surface, (15, 23, 42), dlg_rect, border_radius=10)
+        pygame.draw.rect(surface, (59, 130, 246), dlg_rect, width=2, border_radius=10)
+
+        # Title & Subtitle
+        t_surf = self.font_title.render(f"Grant Supplies:  The {fam.surname} Family", True, (241, 245, 249))
+        surface.blit(t_surf, (dlg_x + 24, dlg_y + 18))
+        sub_surf = self.font_body.render("Select supplies from Landlord Storage for AI Servants to haul & deliver.", True, (148, 163, 184))
+        surface.blit(sub_surf, (dlg_x + 24, dlg_y + 46))
+
+        # Item List
+        self.grant_dec_btn_rects.clear()
+        self.grant_inc_btn_rects.clear()
+        self.grant_max_btn_rects.clear()
+        self.grant_item_qty_rects.clear()
+
+        row_y = dlg_y + 76
+        row_h = 44
+
+        for item_data in GRANTABLE_ITEMS:
+            it_type = item_data["type"]
+            it_name = item_data["name"]
+            avail = stock.get(it_type, 0)
+            qty = self.grant_amounts.get(it_type, 0)
+
+            row_rect = pygame.Rect(dlg_x + 20, row_y, dlg_w - 40, row_h)
+            pygame.draw.rect(surface, (30, 41, 59), row_rect, border_radius=6)
+            pygame.draw.rect(surface, (51, 65, 85), row_rect, width=1, border_radius=6)
+
+            # Icon & Name
+            draw_item_icon(surface, it_name, dlg_x + 40, row_y + 22, size=11)
+            name_s = self.font_sub.render(it_name, True, (241, 245, 249))
+            surface.blit(name_s, (dlg_x + 64, row_y + 11))
+
+            # Available in Stockpile
+            stk_color = (34, 197, 94) if avail > 0 else (148, 163, 184)
+            stk_s = self.font_body.render(f"In Storage: {avail}", True, stk_color)
+            surface.blit(stk_s, (dlg_x + 200, row_y + 13))
+
+            # Controls: [-] [ QTY ] [+] [Max]
+            ctrl_rx = dlg_x + dlg_w - 20 - 240
+            
+            # Minus button
+            minus_r = pygame.Rect(ctrl_rx, row_y + 8, 30, 28)
+            self.grant_dec_btn_rects[it_type] = minus_r
+            m_hov = minus_r.collidepoint(mouse_pos)
+            pygame.draw.rect(surface, (51, 65, 85) if m_hov else (30, 41, 59), minus_r, border_radius=4)
+            pygame.draw.rect(surface, (96, 165, 250), minus_r, width=1, border_radius=4)
+            m_txt = self.font_sub.render("-", True, (255, 255, 255))
+            surface.blit(m_txt, (minus_r.centerx - m_txt.get_width() // 2, minus_r.centery - m_txt.get_height() // 2))
+
+            # Quantity Display / Input box
+            qty_r = pygame.Rect(ctrl_rx + 36, row_y + 8, 60, 28)
+            self.grant_item_qty_rects[it_type] = qty_r
+            is_active_input = (self.active_grant_input_item == it_type)
+            box_bg = (15, 23, 42) if not is_active_input else (30, 58, 138)
+            border_c = (250, 204, 21) if is_active_input else (71, 85, 105)
+            pygame.draw.rect(surface, box_bg, qty_r, border_radius=4)
+            pygame.draw.rect(surface, border_c, qty_r, width=2 if is_active_input else 1, border_radius=4)
+            
+            disp_txt = str(qty) if not is_active_input else (self.grant_input_text or "0")
+            q_color = (250, 204, 21) if qty > 0 else (148, 163, 184)
+            q_txt = self.font_sub.render(disp_txt, True, q_color)
+            surface.blit(q_txt, (qty_r.centerx - q_txt.get_width() // 2, qty_r.centery - q_txt.get_height() // 2))
+
+            # Plus button
+            plus_r = pygame.Rect(ctrl_rx + 102, row_y + 8, 30, 28)
+            self.grant_inc_btn_rects[it_type] = plus_r
+            p_hov = plus_r.collidepoint(mouse_pos)
+            pygame.draw.rect(surface, (51, 65, 85) if p_hov else (30, 41, 59), plus_r, border_radius=4)
+            pygame.draw.rect(surface, (96, 165, 250), plus_r, width=1, border_radius=4)
+            p_txt = self.font_sub.render("+", True, (255, 255, 255))
+            surface.blit(p_txt, (plus_r.centerx - p_txt.get_width() // 2, plus_r.centery - p_txt.get_height() // 2))
+
+            # Max button
+            max_r = pygame.Rect(ctrl_rx + 138, row_y + 8, 52, 28)
+            self.grant_max_btn_rects[it_type] = max_r
+            max_hov = max_r.collidepoint(mouse_pos)
+            pygame.draw.rect(surface, (71, 85, 105) if max_hov else (51, 65, 85), max_r, border_radius=4)
+            pygame.draw.rect(surface, (148, 163, 184), max_r, width=1, border_radius=4)
+            max_txt = self.font_badge.render("Max", True, (241, 245, 249))
+            surface.blit(max_txt, (max_r.centerx - max_txt.get_width() // 2, max_r.centery - max_txt.get_height() // 2))
+
+            row_y += row_h + 8
+
+        # Footer Actions: [Grant Supplies] and [Cancel]
+        total_grant = sum(self.grant_amounts.values())
+        btn_y = dlg_y + dlg_h - 52
+        
+        # Grant Button
+        self.grant_submit_btn_rect = pygame.Rect(dlg_x + 20, btn_y, 240, 36)
+        s_hov = self.grant_submit_btn_rect.collidepoint(mouse_pos)
+        can_grant = total_grant > 0
+        s_bg = (22, 101, 52) if (can_grant and not s_hov) else ((21, 128, 61) if can_grant else (51, 65, 85))
+        pygame.draw.rect(surface, s_bg, self.grant_submit_btn_rect, border_radius=6)
+        pygame.draw.rect(surface, (74, 222, 128) if can_grant else (71, 85, 105), self.grant_submit_btn_rect, width=1, border_radius=6)
+        sub_lbl = self.font_sub.render(f"Grant ({total_grant} items)", True, (255, 255, 255) if can_grant else (148, 163, 184))
+        surface.blit(sub_lbl, (self.grant_submit_btn_rect.centerx - sub_lbl.get_width() // 2, self.grant_submit_btn_rect.centery - sub_lbl.get_height() // 2))
+
+        # Cancel Button
+        self.grant_close_btn_rect = pygame.Rect(dlg_x + dlg_w - 20 - 130, btn_y, 130, 36)
+        c_hov = self.grant_close_btn_rect.collidepoint(mouse_pos)
+        pygame.draw.rect(surface, (71, 85, 105) if c_hov else (30, 41, 59), self.grant_close_btn_rect, border_radius=6)
+        pygame.draw.rect(surface, (148, 163, 184), self.grant_close_btn_rect, width=1, border_radius=6)
+        c_lbl = self.font_sub.render("Cancel", True, (241, 245, 249))
+        surface.blit(c_lbl, (self.grant_close_btn_rect.centerx - c_lbl.get_width() // 2, self.grant_close_btn_rect.centery - c_lbl.get_height() // 2))
+
+    def _draw_grant_confirm(self, surface, fam, mouse_pos):
+        overlay = pygame.Surface((surface.get_width(), surface.get_height()), pygame.SRCALPHA)
+        overlay.fill((0, 0, 0, 180))
+        surface.blit(overlay, (0, 0))
+
+        cf_w = 480
+        cf_h = 260
+        cf_x = surface.get_width() // 2 - cf_w // 2
+        cf_y = surface.get_height() // 2 - cf_h // 2
+        cf_rect = pygame.Rect(cf_x, cf_y, cf_w, cf_h)
+
+        pygame.draw.rect(surface, (15, 23, 42), cf_rect, border_radius=10)
+        pygame.draw.rect(surface, (245, 158, 11), cf_rect, width=2, border_radius=10)
+
+        # Title
+        t_s = self.font_title.render("Confirm Royal Grant Decree", True, (250, 204, 21))
+        surface.blit(t_s, (cf_x + 24, cf_y + 20))
+
+        # Question
+        q_s = self.font_sub.render(f"Are you sure you want to grant these items to The {fam.surname} Family?", True, (241, 245, 249))
+        surface.blit(q_s, (cf_x + 24, cf_y + 54))
+
+        # Summary of items
+        items_summary = []
+        for it_type, qty in self.grant_amounts.items():
+            if qty > 0:
+                name = it_type.replace("_", " ")
+                items_summary.append(f"{qty}x {name}")
+        summary_txt = "Items: " + (", ".join(items_summary) if items_summary else "None")
+        sum_s = self.font_body.render(summary_txt, True, (34, 197, 94))
+        surface.blit(sum_s, (cf_x + 24, cf_y + 90))
+
+        # Hauling notice
+        notice_s = self.font_body.render("• AI Servants will fetch items from Landlord storage and haul them to the household.", True, (148, 163, 184))
+        surface.blit(notice_s, (cf_x + 24, cf_y + 120))
+
+        # Action Buttons: [✓ Yes, Grant] and [✕ Cancel]
+        btn_y = cf_y + cf_h - 54
+
+        self.grant_confirm_btn_rect = pygame.Rect(cf_x + 24, btn_y, 180, 36)
+        yes_hov = self.grant_confirm_btn_rect.collidepoint(mouse_pos)
+        pygame.draw.rect(surface, (22, 101, 52) if yes_hov else (21, 128, 61), self.grant_confirm_btn_rect, border_radius=6)
+        pygame.draw.rect(surface, (74, 222, 128), self.grant_confirm_btn_rect, width=1, border_radius=6)
+        yes_s = self.font_sub.render("Yes, Grant", True, (255, 255, 255))
+        surface.blit(yes_s, (self.grant_confirm_btn_rect.centerx - yes_s.get_width() // 2, self.grant_confirm_btn_rect.centery - yes_s.get_height() // 2))
+
+        self.grant_cancel_btn_rect = pygame.Rect(cf_x + cf_w - 24 - 130, btn_y, 130, 36)
+        no_hov = self.grant_cancel_btn_rect.collidepoint(mouse_pos)
+        pygame.draw.rect(surface, (71, 85, 105) if no_hov else (30, 41, 59), self.grant_cancel_btn_rect, border_radius=6)
+        pygame.draw.rect(surface, (148, 163, 184), self.grant_cancel_btn_rect, width=1, border_radius=6)
+        no_s = self.font_sub.render("Cancel", True, (241, 245, 249))
+        surface.blit(no_s, (self.grant_cancel_btn_rect.centerx - no_s.get_width() // 2, self.grant_cancel_btn_rect.centery - no_s.get_height() // 2))

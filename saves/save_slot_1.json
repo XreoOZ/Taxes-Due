@@ -1,0 +1,1386 @@
+{
+  "timestamp": "2026-11-18 14:11",
+  "day_number": 12,
+  "time_str": "15:30",
+  "population": 5,
+  "resources": {
+    "Wood": 875,
+    "Food": 1000,
+    "Stone": 956,
+    "Water": 1000
+  },
+  "day_cycle": {
+    "day_number": 12,
+    "time_seconds": 387.59300000001195,
+    "day_length_index": 0,
+    "time_str": "15:30"
+  },
+  "player": {
+    "x": 210.2020014856732,
+    "y": -117.75999999999989
+  },
+  "permits": [
+    {
+      "id": "permit_1",
+      "name": "Starter Housing Lot",
+      "permit_type": "housing",
+      "tiles": [
+        [
+          3,
+          4
+        ],
+        [
+          4,
+          3
+        ],
+        [
+          3,
+          7
+        ],
+        [
+          5,
+          4
+        ],
+        [
+          4,
+          6
+        ],
+        [
+          5,
+          7
+        ],
+        [
+          2,
+          2
+        ],
+        [
+          2,
+          5
+        ],
+        [
+          7,
+          4
+        ],
+        [
+          6,
+          2
+        ],
+        [
+          7,
+          7
+        ],
+        [
+          6,
+          5
+        ],
+        [
+          4,
+          2
+        ],
+        [
+          4,
+          5
+        ],
+        [
+          3,
+          3
+        ],
+        [
+          5,
+          6
+        ],
+        [
+          3,
+          6
+        ],
+        [
+          5,
+          3
+        ],
+        [
+          2,
+          4
+        ],
+        [
+          2,
+          7
+        ],
+        [
+          6,
+          4
+        ],
+        [
+          7,
+          3
+        ],
+        [
+          6,
+          7
+        ],
+        [
+          7,
+          6
+        ],
+        [
+          3,
+          2
+        ],
+        [
+          4,
+          7
+        ],
+        [
+          3,
+          5
+        ],
+        [
+          5,
+          2
+        ],
+        [
+          4,
+          4
+        ],
+        [
+          5,
+          5
+        ],
+        [
+          2,
+          3
+        ],
+        [
+          2,
+          6
+        ],
+        [
+          7,
+          2
+        ],
+        [
+          6,
+          6
+        ],
+        [
+          7,
+          5
+        ],
+        [
+          6,
+          3
+        ]
+      ],
+      "max_workers": 2,
+      "assigned_workers": [],
+      "crop": null,
+      "growth_days": 0.0,
+      "watered_today": false,
+      "tile_crops": {}
+    },
+    {
+      "id": "permit_2",
+      "name": "Starter Storage Lot",
+      "permit_type": "storage",
+      "tiles": [
+        [
+          3,
+          -5
+        ],
+        [
+          2,
+          -2
+        ],
+        [
+          4,
+          -6
+        ],
+        [
+          3,
+          -2
+        ],
+        [
+          5,
+          -5
+        ],
+        [
+          4,
+          -3
+        ],
+        [
+          6,
+          -5
+        ],
+        [
+          5,
+          -2
+        ],
+        [
+          6,
+          -2
+        ],
+        [
+          4,
+          -5
+        ],
+        [
+          2,
+          -4
+        ],
+        [
+          4,
+          -2
+        ],
+        [
+          3,
+          -4
+        ],
+        [
+          5,
+          -4
+        ],
+        [
+          6,
+          -4
+        ],
+        [
+          2,
+          -3
+        ],
+        [
+          3,
+          -3
+        ],
+        [
+          5,
+          -6
+        ],
+        [
+          4,
+          -4
+        ],
+        [
+          3,
+          -6
+        ],
+        [
+          2,
+          -6
+        ],
+        [
+          5,
+          -3
+        ],
+        [
+          6,
+          -6
+        ],
+        [
+          6,
+          -3
+        ],
+        [
+          2,
+          -5
+        ]
+      ],
+      "max_workers": 2,
+      "assigned_workers": [],
+      "crop": null,
+      "growth_days": 0.0,
+      "watered_today": false,
+      "tile_crops": {}
+    },
+    {
+      "id": "permit_3",
+      "name": "Starter Farm Lot",
+      "permit_type": "farm",
+      "tiles": [
+        [
+          -1,
+          -3
+        ],
+        [
+          0,
+          -7
+        ],
+        [
+          0,
+          -2
+        ],
+        [
+          -2,
+          -3
+        ],
+        [
+          -2,
+          -6
+        ],
+        [
+          0,
+          -4
+        ],
+        [
+          -1,
+          -6
+        ],
+        [
+          -2,
+          -8
+        ],
+        [
+          -1,
+          -8
+        ],
+        [
+          -2,
+          -5
+        ],
+        [
+          -1,
+          -5
+        ],
+        [
+          0,
+          -3
+        ],
+        [
+          -2,
+          -2
+        ],
+        [
+          -2,
+          -1
+        ],
+        [
+          -1,
+          -2
+        ],
+        [
+          -1,
+          -1
+        ],
+        [
+          0,
+          -6
+        ],
+        [
+          -1,
+          -4
+        ],
+        [
+          -2,
+          -7
+        ],
+        [
+          -1,
+          -7
+        ],
+        [
+          0,
+          -5
+        ],
+        [
+          -2,
+          -4
+        ],
+        [
+          0,
+          -8
+        ],
+        [
+          0,
+          -1
+        ]
+      ],
+      "max_workers": 3,
+      "assigned_workers": [
+        "vil_1",
+        "vil_2",
+        "vil_3"
+      ],
+      "crop": "Potato",
+      "growth_days": 0.002902118055555552,
+      "watered_today": true,
+      "tile_crops": {
+        "-2,-3": {
+          "crop": "Potato",
+          "growth_days": 0.0,
+          "watered_today": false,
+          "unwatered_days": 0,
+          "is_dead": false
+        },
+        "0,-7": {
+          "crop": "Potato",
+          "growth_days": 0.0,
+          "watered_today": false,
+          "unwatered_days": 0,
+          "is_dead": false
+        },
+        "0,-1": {
+          "crop": "Potato",
+          "growth_days": 0.0,
+          "watered_today": false,
+          "unwatered_days": 0,
+          "is_dead": false
+        },
+        "-1,-3": {
+          "crop": "Potato",
+          "growth_days": 0.0,
+          "watered_today": false,
+          "unwatered_days": 0,
+          "is_dead": false
+        },
+        "-2,-6": {
+          "crop": "Potato",
+          "growth_days": 0.0,
+          "watered_today": false,
+          "unwatered_days": 0,
+          "is_dead": false
+        },
+        "0,-4": {
+          "crop": "Potato",
+          "growth_days": 0.0,
+          "watered_today": false,
+          "unwatered_days": 0,
+          "is_dead": false
+        },
+        "-1,-6": {
+          "crop": "Potato",
+          "growth_days": 0.0,
+          "watered_today": false,
+          "unwatered_days": 0,
+          "is_dead": false
+        },
+        "-1,-8": {
+          "crop": "Potato",
+          "growth_days": 0.0,
+          "watered_today": false,
+          "unwatered_days": 0,
+          "is_dead": false
+        },
+        "-2,-8": {
+          "crop": "Potato",
+          "growth_days": 0.0,
+          "watered_today": false,
+          "unwatered_days": 0,
+          "is_dead": false
+        },
+        "-2,-5": {
+          "crop": "Potato",
+          "growth_days": 0.0,
+          "watered_today": false,
+          "unwatered_days": 0,
+          "is_dead": false
+        },
+        "-1,-5": {
+          "crop": "Potato",
+          "growth_days": 0.0,
+          "watered_today": false,
+          "unwatered_days": 0,
+          "is_dead": false
+        },
+        "0,-3": {
+          "crop": "Potato",
+          "growth_days": 0.0,
+          "watered_today": false,
+          "unwatered_days": 0,
+          "is_dead": false
+        },
+        "-2,-2": {
+          "crop": "Potato",
+          "growth_days": 0.001944166666666667,
+          "watered_today": true,
+          "unwatered_days": 0,
+          "is_dead": false
+        },
+        "-2,-1": {
+          "crop": "Potato",
+          "growth_days": 0.023159999999999993,
+          "watered_today": true,
+          "unwatered_days": 0,
+          "is_dead": false
+        },
+        "-1,-2": {
+          "crop": "Potato",
+          "growth_days": 0.0,
+          "watered_today": false,
+          "unwatered_days": 0,
+          "is_dead": false
+        },
+        "-1,-1": {
+          "crop": "Potato",
+          "growth_days": 0.04454666666666658,
+          "watered_today": true,
+          "unwatered_days": 0,
+          "is_dead": false
+        },
+        "0,-6": {
+          "crop": "Potato",
+          "growth_days": 0.0,
+          "watered_today": false,
+          "unwatered_days": 0,
+          "is_dead": false
+        },
+        "-1,-4": {
+          "crop": "Potato",
+          "growth_days": 0.0,
+          "watered_today": false,
+          "unwatered_days": 0,
+          "is_dead": false
+        },
+        "-2,-7": {
+          "crop": "Potato",
+          "growth_days": 0.0,
+          "watered_today": false,
+          "unwatered_days": 0,
+          "is_dead": false
+        },
+        "-1,-7": {
+          "crop": "Potato",
+          "growth_days": 0.0,
+          "watered_today": false,
+          "unwatered_days": 0,
+          "is_dead": false
+        },
+        "0,-5": {
+          "crop": "Potato",
+          "growth_days": 0.0,
+          "watered_today": false,
+          "unwatered_days": 0,
+          "is_dead": false
+        },
+        "-2,-4": {
+          "crop": "Potato",
+          "growth_days": 0.0,
+          "watered_today": false,
+          "unwatered_days": 0,
+          "is_dead": false
+        },
+        "0,-8": {
+          "crop": "Potato",
+          "growth_days": 0.0,
+          "watered_today": false,
+          "unwatered_days": 0,
+          "is_dead": false
+        },
+        "0,-2": {
+          "crop": "Potato",
+          "growth_days": 0.0,
+          "watered_today": false,
+          "unwatered_days": 0,
+          "is_dead": false
+        }
+      }
+    },
+    {
+      "id": "permit_4",
+      "name": "Landlord Private Grounds",
+      "permit_type": "landlord_private",
+      "tiles": [
+        [
+          -6,
+          4
+        ],
+        [
+          -5,
+          3
+        ],
+        [
+          -3,
+          9
+        ],
+        [
+          -3,
+          6
+        ],
+        [
+          -9,
+          2
+        ],
+        [
+          -9,
+          8
+        ],
+        [
+          -7,
+          5
+        ],
+        [
+          -4,
+          4
+        ],
+        [
+          -10,
+          3
+        ],
+        [
+          -6,
+          6
+        ],
+        [
+          -5,
+          5
+        ],
+        [
+          -3,
+          2
+        ],
+        [
+          -6,
+          3
+        ],
+        [
+          -3,
+          8
+        ],
+        [
+          -9,
+          4
+        ],
+        [
+          -8,
+          3
+        ],
+        [
+          -7,
+          7
+        ],
+        [
+          -8,
+          9
+        ],
+        [
+          -4,
+          3
+        ],
+        [
+          -10,
+          5
+        ],
+        [
+          -5,
+          7
+        ],
+        [
+          -6,
+          5
+        ],
+        [
+          -3,
+          4
+        ],
+        [
+          -5,
+          4
+        ],
+        [
+          -8,
+          5
+        ],
+        [
+          -9,
+          3
+        ],
+        [
+          -7,
+          9
+        ],
+        [
+          -7,
+          6
+        ],
+        [
+          -4,
+          5
+        ],
+        [
+          -10,
+          7
+        ],
+        [
+          -5,
+          9
+        ],
+        [
+          -6,
+          7
+        ],
+        [
+          -5,
+          6
+        ],
+        [
+          -3,
+          3
+        ],
+        [
+          -8,
+          7
+        ],
+        [
+          -9,
+          5
+        ],
+        [
+          -7,
+          2
+        ],
+        [
+          -8,
+          4
+        ],
+        [
+          -7,
+          8
+        ],
+        [
+          -4,
+          7
+        ],
+        [
+          -10,
+          9
+        ],
+        [
+          -10,
+          6
+        ],
+        [
+          -5,
+          2
+        ],
+        [
+          -6,
+          9
+        ],
+        [
+          -5,
+          8
+        ],
+        [
+          -3,
+          5
+        ],
+        [
+          -9,
+          7
+        ],
+        [
+          -7,
+          4
+        ],
+        [
+          -8,
+          6
+        ],
+        [
+          -4,
+          9
+        ],
+        [
+          -4,
+          6
+        ],
+        [
+          -10,
+          2
+        ],
+        [
+          -10,
+          8
+        ],
+        [
+          -6,
+          2
+        ],
+        [
+          -6,
+          8
+        ],
+        [
+          -3,
+          7
+        ],
+        [
+          -8,
+          2
+        ],
+        [
+          -9,
+          9
+        ],
+        [
+          -8,
+          8
+        ],
+        [
+          -9,
+          6
+        ],
+        [
+          -7,
+          3
+        ],
+        [
+          -4,
+          2
+        ],
+        [
+          -4,
+          8
+        ],
+        [
+          -10,
+          4
+        ]
+      ],
+      "max_workers": 2,
+      "assigned_workers": [],
+      "crop": null,
+      "growth_days": 0.0,
+      "watered_today": false,
+      "tile_crops": {}
+    }
+  ],
+  "buildings": [
+    {
+      "building_type": "wooden_structure",
+      "tiles": [
+        [
+          2,
+          4
+        ],
+        [
+          3,
+          4
+        ],
+        [
+          4,
+          3
+        ],
+        [
+          5,
+          4
+        ],
+        [
+          6,
+          4
+        ],
+        [
+          7,
+          3
+        ],
+        [
+          2,
+          2
+        ],
+        [
+          3,
+          2
+        ],
+        [
+          2,
+          5
+        ],
+        [
+          3,
+          5
+        ],
+        [
+          5,
+          2
+        ],
+        [
+          4,
+          4
+        ],
+        [
+          7,
+          4
+        ],
+        [
+          6,
+          2
+        ],
+        [
+          5,
+          5
+        ],
+        [
+          6,
+          5
+        ],
+        [
+          4,
+          2
+        ],
+        [
+          2,
+          3
+        ],
+        [
+          4,
+          5
+        ],
+        [
+          3,
+          3
+        ],
+        [
+          7,
+          2
+        ],
+        [
+          5,
+          3
+        ],
+        [
+          7,
+          5
+        ],
+        [
+          6,
+          3
+        ]
+      ],
+      "door_pos": [
+        3,
+        5
+      ],
+      "door_side": "bottom"
+    },
+    {
+      "building_type": "well",
+      "tiles": [
+        [
+          0,
+          1
+        ],
+        [
+          -1,
+          1
+        ],
+        [
+          0,
+          2
+        ],
+        [
+          -1,
+          2
+        ]
+      ],
+      "door_pos": null,
+      "door_side": null
+    }
+  ],
+  "construction_sites": [],
+  "stockpile": [
+    {
+      "resource_type": "Wood",
+      "amount": 875,
+      "grid_x": 2,
+      "grid_y": -6,
+      "owner_type": "landlord",
+      "owner_id": null
+    },
+    {
+      "resource_type": "Food",
+      "amount": 1000,
+      "grid_x": 3,
+      "grid_y": -6,
+      "owner_type": "landlord",
+      "owner_id": null
+    },
+    {
+      "resource_type": "Stone",
+      "amount": 956,
+      "grid_x": 4,
+      "grid_y": -6,
+      "owner_type": "landlord",
+      "owner_id": null
+    },
+    {
+      "resource_type": "Water",
+      "amount": 1000,
+      "grid_x": 5,
+      "grid_y": -6,
+      "owner_type": "landlord",
+      "owner_id": null
+    },
+    {
+      "resource_type": "Hoe",
+      "amount": 7,
+      "grid_x": 6,
+      "grid_y": -6,
+      "owner_type": "landlord",
+      "owner_id": null
+    },
+    {
+      "resource_type": "Sickle",
+      "amount": 7,
+      "grid_x": 2,
+      "grid_y": -5,
+      "owner_type": "landlord",
+      "owner_id": null
+    },
+    {
+      "resource_type": "Watering_Can",
+      "amount": 7,
+      "grid_x": 3,
+      "grid_y": -5,
+      "owner_type": "landlord",
+      "owner_id": null
+    },
+    {
+      "resource_type": "Hammer",
+      "amount": 5,
+      "grid_x": 4,
+      "grid_y": -5,
+      "owner_type": "landlord",
+      "owner_id": null
+    }
+  ],
+  "furniture": [
+    {
+      "id": "furn_1",
+      "furniture_type": "bed",
+      "gx": 6,
+      "gy": 5,
+      "permit_id": "permit_1",
+      "family_id": "fam_1",
+      "assigned_villager_id": "vil_1",
+      "is_dropped": false,
+      "designated_target": null,
+      "carrier_id": null,
+      "condition": 1.0,
+      "inventory": {}
+    },
+    {
+      "id": "furn_2",
+      "furniture_type": "bed",
+      "gx": 7,
+      "gy": 5,
+      "permit_id": "permit_1",
+      "family_id": "fam_1",
+      "assigned_villager_id": "vil_2",
+      "is_dropped": false,
+      "designated_target": null,
+      "carrier_id": null,
+      "condition": 1.0,
+      "inventory": {}
+    },
+    {
+      "id": "furn_3",
+      "furniture_type": "bed",
+      "gx": 5,
+      "gy": 5,
+      "permit_id": "permit_1",
+      "family_id": "fam_1",
+      "assigned_villager_id": "vil_3",
+      "is_dropped": false,
+      "designated_target": null,
+      "carrier_id": null,
+      "condition": 1.0,
+      "inventory": {}
+    },
+    {
+      "id": "furn_4",
+      "furniture_type": "household_storage",
+      "gx": 7,
+      "gy": 3,
+      "permit_id": "permit_1",
+      "family_id": "fam_1",
+      "assigned_villager_id": null,
+      "is_dropped": false,
+      "designated_target": null,
+      "carrier_id": null,
+      "condition": 1.0,
+      "inventory": {}
+    }
+  ],
+  "families": [
+    {
+      "id": "fam_1",
+      "surname": "Brewer",
+      "assigned_permit_id": "permit_1",
+      "generations_present": [
+        2,
+        3
+      ],
+      "members": [
+        {
+          "id": "vil_1",
+          "first_name": "Hugh",
+          "last_name": "Brewer",
+          "gender": "Male",
+          "age": 43,
+          "generation": 2,
+          "role": "Father",
+          "family_id": "fam_1",
+          "job": "Farmer",
+          "x": -50.289453816563274,
+          "y": -90.15185718702307,
+          "task": "WATERING",
+          "carrying_crop": 0,
+          "inventory": {
+            "Hoe": 1,
+            "Watering_Can": 1,
+            "Sickle": 1
+          },
+          "active_tool": "Watering_Can",
+          "has_water": true,
+          "water_day": 12,
+          "water_charges": 9999,
+          "assigned_bed_id": "furn_1",
+          "carrying_furniture_id": null,
+          "watering_timer": 0.9290000000000003,
+          "tilling_timer": 0.0
+        },
+        {
+          "id": "vil_2",
+          "first_name": "Agnes",
+          "last_name": "Brewer",
+          "gender": "Female",
+          "age": 50,
+          "generation": 2,
+          "role": "Mother",
+          "family_id": "fam_1",
+          "job": "Farmer",
+          "x": -94.2537100919468,
+          "y": -370.15643256781607,
+          "task": "FETCHING_WATER",
+          "carrying_crop": 0,
+          "inventory": {
+            "Hoe": 1,
+            "Watering_Can": 1,
+            "Sickle": 1
+          },
+          "active_tool": "Watering_Can",
+          "has_water": false,
+          "water_day": -1,
+          "water_charges": 0,
+          "assigned_bed_id": "furn_2",
+          "carrying_furniture_id": null,
+          "watering_timer": 0.0,
+          "tilling_timer": 0.0
+        },
+        {
+          "id": "vil_3",
+          "first_name": "Alice",
+          "last_name": "Brewer",
+          "gender": "Female",
+          "age": 25,
+          "generation": 3,
+          "role": "Adult Daughter",
+          "family_id": "fam_1",
+          "job": "Farmer",
+          "x": -159.25738713348954,
+          "y": 85.22945322177944,
+          "task": "FETCHING_WATER",
+          "carrying_crop": 0,
+          "inventory": {
+            "Hoe": 1,
+            "Watering_Can": 1,
+            "Sickle": 1
+          },
+          "active_tool": "Watering_Can",
+          "has_water": false,
+          "water_day": -1,
+          "water_charges": 0,
+          "assigned_bed_id": "furn_3",
+          "carrying_furniture_id": null,
+          "watering_timer": 0.0,
+          "tilling_timer": 0.0
+        }
+      ]
+    }
+  ],
+  "servants": [
+    {
+      "id": "servant_1",
+      "name": "Servant Alden",
+      "x": 277.4813136043561,
+      "y": -45.31592586225792,
+      "work_priorities": {
+        "Building": 1,
+        "Hauling": 1,
+        "Cleaning": 0,
+        "Crafting": 0,
+        "Cooking": 0
+      },
+      "carrying_furniture_id": null
+    },
+    {
+      "id": "servant_2",
+      "name": "Servant Barnaby",
+      "x": 147.35645308623637,
+      "y": -48.524432525465414,
+      "work_priorities": {
+        "Building": 1,
+        "Hauling": 1,
+        "Cleaning": 0,
+        "Crafting": 0,
+        "Cooking": 0
+      },
+      "carrying_furniture_id": null
+    }
+  ],
+  "schedules": {
+    "Farmer": [
+      "SLEEP",
+      "SLEEP",
+      "SLEEP",
+      "SLEEP",
+      "SLEEP",
+      "SLEEP",
+      "WORK",
+      "WORK",
+      "WORK",
+      "WORK",
+      "WORK",
+      "WORK",
+      "WORK",
+      "WORK",
+      "WORK",
+      "WORK",
+      "WORK",
+      "WORK",
+      "WORK",
+      "WORK",
+      "WORK",
+      "WORK",
+      "WORK",
+      "WORK"
+    ],
+    "Builder": [
+      "SLEEP",
+      "SLEEP",
+      "SLEEP",
+      "SLEEP",
+      "SLEEP",
+      "SLEEP",
+      "LEISURE",
+      "LEISURE",
+      "WORK",
+      "WORK",
+      "WORK",
+      "WORK",
+      "WORK",
+      "WORK",
+      "WORK",
+      "WORK",
+      "WORK",
+      "WORK",
+      "LEISURE",
+      "LEISURE",
+      "LEISURE",
+      "LEISURE",
+      "SLEEP",
+      "SLEEP"
+    ],
+    "Blacksmith": [
+      "SLEEP",
+      "SLEEP",
+      "SLEEP",
+      "SLEEP",
+      "SLEEP",
+      "SLEEP",
+      "LEISURE",
+      "LEISURE",
+      "WORK",
+      "WORK",
+      "WORK",
+      "WORK",
+      "WORK",
+      "WORK",
+      "WORK",
+      "WORK",
+      "WORK",
+      "WORK",
+      "LEISURE",
+      "LEISURE",
+      "LEISURE",
+      "LEISURE",
+      "SLEEP",
+      "SLEEP"
+    ],
+    "Carpenter": [
+      "SLEEP",
+      "SLEEP",
+      "SLEEP",
+      "SLEEP",
+      "SLEEP",
+      "SLEEP",
+      "LEISURE",
+      "LEISURE",
+      "WORK",
+      "WORK",
+      "WORK",
+      "WORK",
+      "WORK",
+      "WORK",
+      "WORK",
+      "WORK",
+      "WORK",
+      "WORK",
+      "LEISURE",
+      "LEISURE",
+      "LEISURE",
+      "LEISURE",
+      "SLEEP",
+      "SLEEP"
+    ],
+    "Baker": [
+      "SLEEP",
+      "SLEEP",
+      "SLEEP",
+      "SLEEP",
+      "SLEEP",
+      "SLEEP",
+      "LEISURE",
+      "LEISURE",
+      "WORK",
+      "WORK",
+      "WORK",
+      "WORK",
+      "WORK",
+      "WORK",
+      "WORK",
+      "WORK",
+      "WORK",
+      "WORK",
+      "LEISURE",
+      "LEISURE",
+      "LEISURE",
+      "LEISURE",
+      "SLEEP",
+      "SLEEP"
+    ],
+    "Fisherman": [
+      "SLEEP",
+      "SLEEP",
+      "SLEEP",
+      "SLEEP",
+      "SLEEP",
+      "SLEEP",
+      "LEISURE",
+      "LEISURE",
+      "WORK",
+      "WORK",
+      "WORK",
+      "WORK",
+      "WORK",
+      "WORK",
+      "WORK",
+      "WORK",
+      "WORK",
+      "WORK",
+      "LEISURE",
+      "LEISURE",
+      "LEISURE",
+      "LEISURE",
+      "SLEEP",
+      "SLEEP"
+    ]
+  }
+}
