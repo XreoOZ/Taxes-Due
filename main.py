@@ -52,6 +52,7 @@ from game.villagers import VillagerManager
 from game.furniture import FurnitureManager
 from game.ui_raport import RaportUI
 from game.ui.market_modal import MarketProfileModal
+from game.ui.add_item_modal import AddItemModal
 from game.systems.production_distribution import ProductionDistributionSystem
 from game.speed_control import SpeedController
 from game.day_cycle import DayCycleSystem
@@ -59,7 +60,7 @@ from game.settings import SettingsModal
 from game.schedule import ScheduleManager
 from game.save_modal import SaveLoadModal
 from game.save_system import save_to_slot, load_from_slot
-from game.systems.cheat_system import apply_add_item_cheat
+from game.systems.cheat_system import apply_add_item_cheat, clean_resources_dictionary, spawn_item_physically
 
 STATE_MENU = "menu"
 STATE_PLAYING = "playing"
@@ -93,6 +94,7 @@ def main():
     resource_hud = ResourceHUD()
     raport_ui = RaportUI()
     market_modal = MarketProfileModal()
+    add_item_modal = AddItemModal()
     production_system = ProductionDistributionSystem.get_instance()
     speed_controller = SpeedController()
     settings_modal = SettingsModal()
@@ -162,6 +164,7 @@ def main():
         camera.target_y = 0.0
         camera.zoom = 1.0
         resources = dict(DEFAULT_RESOURCES)
+        clean_resources_dictionary(resources)
         building_manager = BuildingManager()
         permit_manager = PermitManager()
         stockpile_manager = StockpileManager()
@@ -175,6 +178,7 @@ def main():
         schedule_manager = ScheduleManager()
         raport_ui.close()
         market_modal.close()
+        add_item_modal.close()
         settings_modal.close()
         save_modal.close()
         planning_mode = "NONE"
@@ -278,6 +282,8 @@ def main():
                                 settings_modal.close()
                                 raport_ui.close()
                                 market_modal.close()
+                                add_item_modal.close()
+                                clean_resources_dictionary(resources)
                                 planning_mode = "NONE"
                                 session_planned_furniture.clear()
                                 selected_planned_furniture = None
@@ -318,9 +324,7 @@ def main():
                         continue
                     if not raport_ui.is_open and btn_add_item_cheat_rect.collidepoint(event.pos):
                         tgt = selected_furniture if (selected_furniture and getattr(selected_furniture, "furniture_type", "") == "household_storage") else None
-                        success, msg = apply_add_item_cheat(target_storage=tgt, amount=50, resources=resources, stockpile_manager=stockpile_manager)
-                        cheat_notice = msg
-                        cheat_notice_timer = 3.0
+                        add_item_modal.open(target_storage=tgt)
                         continue
                 # -------------------------------------------------------------
                 # 1. PERMIT PLANNING MODE
@@ -745,6 +749,16 @@ def main():
                         market_modal.handle_event(event, resources, stockpile_manager, servant_manager=servant_manager, villager_manager=villager_manager, furniture_manager=furniture_manager)
 
                 # -------------------------------------------------------------
+                # 4.6. ADD ITEM CHEAT MODAL OPEN (AGENT 2)
+                # -------------------------------------------------------------
+                elif add_item_modal.is_open:
+                    res = add_item_modal.handle_event(event, resources=resources, stockpile_manager=stockpile_manager, permit_manager=permit_manager, building_manager=building_manager)
+                    if res is not None:
+                        success, msg = res
+                        cheat_notice = msg
+                        cheat_notice_timer = 4.0
+
+                # -------------------------------------------------------------
                 # 5. NORMAL GAMEPLAY
                 # -------------------------------------------------------------
                 else:
@@ -968,7 +982,7 @@ def main():
             # Substep physics/entities so high speed multiplier (Fast 2x, Very Fast 4x) never tunnels through walls
             MAX_PHYSICS_SUB_DT = 0.02  # Maximum 20ms per physics integration step
             sub_time = game_dt
-            is_modal_open = raport_ui.is_open or settings_modal.is_open or save_modal.is_open or market_modal.is_open
+            is_modal_open = raport_ui.is_open or settings_modal.is_open or save_modal.is_open or market_modal.is_open or add_item_modal.is_open
             keys = pygame.key.get_pressed() if not is_modal_open else None
 
             while sub_time > 0.0:
@@ -1794,6 +1808,9 @@ def main():
 
             # 11.5. Market Profile Modal Dialog (AGENT 2)
             market_modal.draw(screen, resources, stockpile_manager, servant_manager=servant_manager, villager_manager=villager_manager, furniture_manager=furniture_manager)
+
+            # 11.6. Add Item Cheat Modal Dialog (AGENT 2)
+            add_item_modal.draw(screen, permit_manager, stockpile_manager)
 
             # 12. Speed Control HUD (Bottom Right)
             speed_controller.draw(screen)
