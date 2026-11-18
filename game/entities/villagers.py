@@ -1965,6 +1965,14 @@ class Family:
                         total += getattr(s, "amount", 0)
         return total
 
+    def get_possessions(self, furniture_manager=None, stockpile_manager=None, servant_manager=None):
+        """
+        Single Source of Truth: returns dict of {canonical_item_name: quantity}
+        for all actual possessions currently owned by this household.
+        """
+        from game.systems.household_inventory import get_household_possessions
+        return get_household_possessions(self, furniture_manager=furniture_manager, stockpile_manager=stockpile_manager, servant_manager=servant_manager)
+
     @property
     def generations_present(self):
         gens = sorted(list({m.generation for m in self.members}))

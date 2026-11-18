@@ -42,6 +42,10 @@ from game.data.planning import (
     STATUS_PLANNED
 )
 from game.systems.production_distribution import ProductionDistributionSystem
+from game.systems.household_inventory import (
+    get_household_possessions,
+    sort_possession_items
+)
 
 GRANTABLE_ITEMS = [
     {"type": "Hoe", "name": "Hoe"},
@@ -81,7 +85,7 @@ def draw_item_icon(surface, item_name, cx, cy, size=12):
         pygame.draw.line(surface, (139, 90, 43), (cx - 4, cy + 2), (cx - 7, cy + size - 2), 2)
         arc_rect = pygame.Rect(cx - 6, cy - size + 2, size * 2 - 2, size * 2 - 2)
         pygame.draw.arc(surface, (200, 210, 225), arc_rect, 0.4, 3.2, 2)
-    elif "water" in name_low or "can" in name_low:
+    elif "can" in name_low or "watering" in name_low:
         # Medieval Watering Pot (Chantepleure / terracotta vessel)
         pygame.draw.circle(surface, (180, 105, 55), (cx, cy + 2), int(size * 0.75))
         pygame.draw.circle(surface, (120, 65, 30), (cx, cy + 2), int(size * 0.75), 1)
@@ -89,6 +93,14 @@ def draw_item_icon(surface, item_name, cx, cy, size=12):
         pygame.draw.arc(surface, (100, 50, 20), (cx - int(size * 0.9), cy - int(size * 0.7), int(size * 1.8), int(size * 1.4)), 0.3, 2.8, 2)
         pygame.draw.line(surface, (190, 120, 60), (cx + int(size * 0.5), cy), (cx + size, cy - int(size * 0.6)), 2)
         pygame.draw.circle(surface, (217, 149, 44), (cx + size, cy - int(size * 0.6)), 2)
+    elif "water" in name_low:
+        # Fresh Drinking Water droplet
+        r = max(4, int(size * 0.65))
+        pygame.draw.circle(surface, (56, 189, 248), (cx, cy + 2), r)
+        pts = [(cx, cy - r - 2), (cx - r, cy + 1), (cx + r, cy + 1)]
+        pygame.draw.polygon(surface, (56, 189, 248), pts)
+        pygame.draw.circle(surface, (186, 230, 253), (cx - 1, cy), max(1, r // 2))
+        pygame.draw.circle(surface, (14, 116, 144), (cx, cy + 2), r, 1)
     elif "wood" in name_low or "timber" in name_low:
         pygame.draw.rect(surface, (160, 105, 55), (cx - size + 1, cy - 3, size * 2 - 2, 7), border_radius=2)
         pygame.draw.rect(surface, (100, 60, 25), (cx - size + 1, cy - 3, size * 2 - 2, 7), 1, border_radius=2)
@@ -173,6 +185,9 @@ class RaportUI:
         self.show_household_possession = False
         self.household_possession_btn_rect = None
         self.close_possession_btn_rect = None
+        self.possession_page = 0
+        self.possession_prev_btn_rect = None
+        self.possession_next_btn_rect = None
 
         # Royal Grant Item to Household State
         self.show_grant_dialog = False
@@ -189,6 +204,14 @@ class RaportUI:
         self.grant_item_qty_rects = {}
         self.active_grant_input_item = None
         self.grant_input_text = ""
+        self.grant_header_close_btn_rect = None
+        self.grant_dlg_rect = None
+        self.grant_viewport_rect = None
+        self.grant_scrollbar_rect = None
+        self.grant_thumb_rect = None
+        self.grant_scroll_y = 0
+        self.grant_max_scroll = 0
+        self.grant_is_dragging_scrollbar = False
         self.cached_stockpile_manager = None
 
         self.modal_w = RAPORT_MODAL_WIDTH
@@ -274,6 +297,8 @@ class RaportUI:
         self.show_grant_dialog = False
         self.show_grant_confirm = False
         self.grant_amounts = {}
+        self.grant_scroll_y = 0
+        self.grant_is_dragging_scrollbar = False
         self.active_grant_input_item = None
         self.grant_input_text = ""
         self.selected_family_id = None
@@ -342,7 +367,39 @@ class RaportUI:
                     return "grant_input_edit"
             return None
 
-        if event.type != pygame.MOUSEBUTTONDOWN or event.button != 1:
+        # Mousewheel Scrolling (e.g. Grant Supplies modal list)
+        if event.type == pygame.MOUSEWHEEL:
+            if self.show_grant_dialog and getattr(self, "grant_max_scroll", 0) > 0:
+                self.grant_scroll_y = max(0, min(self.grant_scroll_y - event.y * 36, self.grant_max_scroll))
+                return "grant_scroll"
+            return None
+
+        # Scrollbar Dragging with Mouse Motion
+        if event.type == pygame.MOUSEMOTION:
+            if self.show_grant_dialog and self.grant_is_dragging_scrollbar and self.grant_scrollbar_rect and getattr(self, "grant_max_scroll", 0) > 0:
+                rel_y = event.pos[1] - self.grant_scrollbar_rect.y
+                ratio = max(0.0, min(1.0, rel_y / max(1, self.grant_scrollbar_rect.h)))
+                self.grant_scroll_y = max(0, min(int(ratio * self.grant_max_scroll), self.grant_max_scroll))
+                return "grant_scroll"
+            return None
+
+        # End of Scrollbar Drag
+        if event.type == pygame.MOUSEBUTTONUP:
+            if self.grant_is_dragging_scrollbar:
+                self.grant_is_dragging_scrollbar = False
+                return "grant_drag_end"
+            return None
+
+        # Mouse Button Press
+        if event.type == pygame.MOUSEBUTTONDOWN:
+            # Handle legacy button 4/5 mouse wheel
+            if event.button in (4, 5) and self.show_grant_dialog and getattr(self, "grant_max_scroll", 0) > 0:
+                scroll_step = -36 if event.button == 4 else 36
+                self.grant_scroll_y = max(0, min(self.grant_scroll_y + scroll_step, self.grant_max_scroll))
+                return "grant_scroll"
+            if event.button != 1:
+                return None
+        else:
             return None
 
         mouse_pos = event.pos
@@ -354,6 +411,92 @@ class RaportUI:
 
         if not self.is_open:
             return None
+
+        # -------------------------------------------------------------
+        # MODAL OVERLAYS (Priority 0: Topmost modal capture)
+        # -------------------------------------------------------------
+        if self.show_grant_confirm:
+            if self.grant_confirm_btn_rect and self.grant_confirm_btn_rect.collidepoint(mouse_pos):
+                if servant_manager and self.selected_family_id is not None:
+                    for item_type, qty in list(self.grant_amounts.items()):
+                        if qty > 0:
+                            servant_manager.add_grant_order(self.selected_family_id, item_type, qty)
+                self.show_grant_confirm = False
+                self.show_grant_dialog = False
+                self.grant_amounts = {}
+                self.grant_scroll_y = 0
+                self.grant_is_dragging_scrollbar = False
+                self.active_grant_input_item = None
+                return "grant_items_confirmed"
+
+            if self.grant_cancel_btn_rect and self.grant_cancel_btn_rect.collidepoint(mouse_pos):
+                self.show_grant_confirm = False
+                return "grant_items_cancelled"
+            return "modal_blocked"
+
+        if self.show_grant_dialog:
+            # 1. Close modal (either Header [X] button or Footer [Cancel] button)
+            if (self.grant_header_close_btn_rect and self.grant_header_close_btn_rect.collidepoint(mouse_pos)) or \
+               (self.grant_close_btn_rect and self.grant_close_btn_rect.collidepoint(mouse_pos)):
+                self.show_grant_dialog = False
+                self.grant_amounts = {}
+                self.grant_scroll_y = 0
+                self.grant_is_dragging_scrollbar = False
+                self.active_grant_input_item = None
+                return "close_grant_dialog"
+
+            # 2. Grant Submit [Grant (X items)]
+            if self.grant_submit_btn_rect and self.grant_submit_btn_rect.collidepoint(mouse_pos):
+                if sum(self.grant_amounts.values()) > 0:
+                    self.show_grant_confirm = True
+                    self.active_grant_input_item = None
+                    return "open_grant_confirm"
+
+            # 3. Scrollbar Thumb click
+            if self.grant_thumb_rect and self.grant_thumb_rect.collidepoint(mouse_pos):
+                self.grant_is_dragging_scrollbar = True
+                return "grant_scroll"
+
+            # 4. Scrollbar Track click (jump scroll)
+            if self.grant_scrollbar_rect and self.grant_scrollbar_rect.collidepoint(mouse_pos):
+                rel_y = mouse_pos[1] - self.grant_scrollbar_rect.y
+                ratio = max(0.0, min(1.0, rel_y / max(1, self.grant_scrollbar_rect.h)))
+                self.grant_scroll_y = max(0, min(int(ratio * self.grant_max_scroll), self.grant_max_scroll))
+                self.grant_is_dragging_scrollbar = True
+                return "grant_scroll"
+
+            # 5. Controls inside Viewport
+            if self.grant_viewport_rect and self.grant_viewport_rect.collidepoint(mouse_pos):
+                stock = self.get_landlord_stock(sm, resources)
+                for it_type, rect in list(self.grant_dec_btn_rects.items()):
+                    if rect.collidepoint(mouse_pos):
+                        self.grant_amounts[it_type] = max(0, self.grant_amounts.get(it_type, 0) - 1)
+                        return f"grant_dec_{it_type}"
+
+                for it_type, rect in list(self.grant_inc_btn_rects.items()):
+                    if rect.collidepoint(mouse_pos):
+                        avail = stock.get(it_type, 0)
+                        self.grant_amounts[it_type] = min(avail, self.grant_amounts.get(it_type, 0) + 1)
+                        return f"grant_inc_{it_type}"
+
+                for it_type, rect in list(self.grant_max_btn_rects.items()):
+                    if rect.collidepoint(mouse_pos):
+                        avail = stock.get(it_type, 0)
+                        self.grant_amounts[it_type] = avail
+                        return f"grant_max_{it_type}"
+
+                for it_type, rect in list(self.grant_item_qty_rects.items()):
+                    if rect.collidepoint(mouse_pos):
+                        self.active_grant_input_item = it_type
+                        self.grant_input_text = str(self.grant_amounts.get(it_type, 0))
+                        return f"grant_input_focus_{it_type}"
+
+            # 6. Click inside dialog rect but outside buttons (unfocus text input)
+            if self.grant_dlg_rect and self.grant_dlg_rect.collidepoint(mouse_pos):
+                self.active_grant_input_item = None
+                return "modal_blocked"
+
+            return "modal_blocked"
 
         # 2. Close Button (X)
         if self.close_btn_rect and self.close_btn_rect.collidepoint(mouse_pos):
@@ -567,74 +710,28 @@ class RaportUI:
 
                 # View 2: Family Roster & Deed Management
                 else:
-                    # Priority A: Confirmation modal clicks
-                    if self.show_grant_confirm:
-                        if self.grant_confirm_btn_rect and self.grant_confirm_btn_rect.collidepoint(mouse_pos):
-                            if servant_manager and self.selected_family_id is not None:
-                                for item_type, qty in list(self.grant_amounts.items()):
-                                    if qty > 0:
-                                        servant_manager.add_grant_order(self.selected_family_id, item_type, qty)
-                            self.show_grant_confirm = False
-                            self.show_grant_dialog = False
-                            self.grant_amounts = {}
-                            self.active_grant_input_item = None
-                            return "grant_items_confirmed"
-
-                        if self.grant_cancel_btn_rect and self.grant_cancel_btn_rect.collidepoint(mouse_pos):
-                            self.show_grant_confirm = False
-                            return "grant_items_cancelled"
-                        return "modal_blocked"
-
-                    # Priority B: Grant Dialog clicks
-                    if self.show_grant_dialog:
-                        if self.grant_close_btn_rect and self.grant_close_btn_rect.collidepoint(mouse_pos):
-                            self.show_grant_dialog = False
-                            self.grant_amounts = {}
-                            self.active_grant_input_item = None
-                            return "close_grant_dialog"
-
-                        if self.grant_submit_btn_rect and self.grant_submit_btn_rect.collidepoint(mouse_pos):
-                            if sum(self.grant_amounts.values()) > 0:
-                                self.show_grant_confirm = True
-                                self.active_grant_input_item = None
-                                return "open_grant_confirm"
-
-                        stock = self.get_landlord_stock(sm, resources)
-                        for it_type, rect in list(self.grant_dec_btn_rects.items()):
-                            if rect.collidepoint(mouse_pos):
-                                self.grant_amounts[it_type] = max(0, self.grant_amounts.get(it_type, 0) - 1)
-                                return f"grant_dec_{it_type}"
-
-                        for it_type, rect in list(self.grant_inc_btn_rects.items()):
-                            if rect.collidepoint(mouse_pos):
-                                avail = stock.get(it_type, 0)
-                                self.grant_amounts[it_type] = min(avail, self.grant_amounts.get(it_type, 0) + 1)
-                                return f"grant_inc_{it_type}"
-
-                        for it_type, rect in list(self.grant_max_btn_rects.items()):
-                            if rect.collidepoint(mouse_pos):
-                                avail = stock.get(it_type, 0)
-                                self.grant_amounts[it_type] = avail
-                                return f"grant_max_{it_type}"
-
-                        for it_type, rect in list(self.grant_item_qty_rects.items()):
-                            if rect.collidepoint(mouse_pos):
-                                self.active_grant_input_item = it_type
-                                self.grant_input_text = str(self.grant_amounts.get(it_type, 0))
-                                return f"grant_input_focus_{it_type}"
-
-                        return "modal_blocked"
-
                     if self.show_household_possession:
                         if self.close_possession_btn_rect and self.close_possession_btn_rect.collidepoint(mouse_pos):
                             self.show_household_possession = False
+                            self.possession_page = 0
                             return "close_household_possession"
 
                         if self.open_grant_dialog_btn_rect and self.open_grant_dialog_btn_rect.collidepoint(mouse_pos):
                             self.show_grant_dialog = True
                             self.grant_amounts = {}
+                            self.grant_scroll_y = 0
+                            self.grant_is_dragging_scrollbar = False
                             self.active_grant_input_item = None
                             return "open_grant_dialog"
+
+                        if self.possession_prev_btn_rect and self.possession_prev_btn_rect.collidepoint(mouse_pos):
+                            if getattr(self, "possession_page", 0) > 0:
+                                self.possession_page -= 1
+                                return "possession_page_prev"
+
+                        if self.possession_next_btn_rect and self.possession_next_btn_rect.collidepoint(mouse_pos):
+                            self.possession_page = getattr(self, "possession_page", 0) + 1
+                            return "possession_page_next"
 
                         return None
 
@@ -674,6 +771,7 @@ class RaportUI:
 
                     if self.household_possession_btn_rect and self.household_possession_btn_rect.collidepoint(mouse_pos):
                         self.show_household_possession = True
+                        self.possession_page = 0
                         return "open_household_possession"
 
                     if self.back_to_families_btn_rect and self.back_to_families_btn_rect.collidepoint(mouse_pos):
@@ -1694,72 +1792,16 @@ class RaportUI:
                 grant_lbl = self.font_badge.render("Grant Item", True, (255, 255, 255))
                 surface.blit(grant_lbl, (self.open_grant_dialog_btn_rect.centerx - grant_lbl.get_width() // 2, self.open_grant_dialog_btn_rect.centery - grant_lbl.get_height() // 2))
 
-                # Count Family Possessions (From chests, dropped ground items, and carried AI inventories)
-                potato_count = 0
-                hoe_count = 0
-                sickle_count = 0
-                water_can_count = 0
+                # Dynamically retrieve and sort actual household possessions (Single Source of Truth)
+                possessions = get_household_possessions(fam, furniture_manager, stockpile_manager, servant_manager)
+                items = sort_possession_items(possessions)
 
-                # 1. From Household Furniture Chests
-                if furniture_manager:
-                    furn_list = getattr(furniture_manager, "furnitures", getattr(furniture_manager, "furniture_list", []))
-                    for f in furn_list:
-                        if str(getattr(f, "family_id", "")) == str(fam.id) and hasattr(f, "inventory"):
-                            inv = f.inventory
-                            potato_count += inv.get("Potato", 0) + inv.get("potato", 0) + inv.get("Food", 0)
-                            hoe_count += inv.get("Hoe", 0) + inv.get("cangkul", 0)
-                            sickle_count += inv.get("Sickle", 0) + inv.get("sabit", 0)
-                            water_can_count += inv.get("Watering_Can", 0) + inv.get("Watering Can", 0) + inv.get("siraman", 0)
-
-                # 2. From Ground Item Stacks owned by this family (e.g. items granted before storage chest was built)
-                if stockpile_manager:
-                    for s in getattr(stockpile_manager, "stacks", []):
-                        if getattr(s, "owner_type", None) == "villager" and str(getattr(s, "owner_id", "")) == str(fam.id):
-                            rt = s.resource_type
-                            if rt in ("Food", "Potato", "potato"):
-                                potato_count += getattr(s, "amount", 0)
-                            elif rt == "Hoe":
-                                hoe_count += getattr(s, "amount", 0)
-                            elif rt == "Sickle":
-                                sickle_count += getattr(s, "amount", 0)
-                            elif rt in ("Watering_Can", "Watering Can", "WateringCan", "siraman"):
-                                water_can_count += getattr(s, "amount", 0)
-
-                # 3. From Personal AI Villager Inventory & Carried Items
-                for m in fam.members:
-                    potato_count += getattr(m, "carrying_crop", 0)
-                    m_inv = getattr(m, "inventory", {})
-                    potato_count += m_inv.get("Potato", 0) + m_inv.get("potato", 0) + m_inv.get("Food", 0)
-                    hoe_count += m_inv.get("Hoe", 0) + m_inv.get("cangkul", 0)
-                    sickle_count += m_inv.get("Sickle", 0) + m_inv.get("sabit", 0)
-                    water_can_count += m_inv.get("Watering_Can", 0) + m_inv.get("Watering Can", 0) + m_inv.get("siraman", 0)
-
-                # 4. From In-Transit Deliveries by Servants (Royal Grant)
-                if servant_manager:
-                    for s in getattr(servant_manager, "servants", []):
-                        if getattr(s, "state", "") == "GRANT_DELIVER" and str(getattr(s, "target_grant_fam_id", "")) == str(fam.id):
-                            res_name = getattr(s, "carried_res", "")
-                            amt = getattr(s, "carried_amount", 0)
-                            if res_name == "Hoe":
-                                hoe_count += amt
-                            elif res_name == "Sickle":
-                                sickle_count += amt
-                            elif res_name in ("Watering_Can", "Watering Can"):
-                                water_can_count += amt
-                            elif res_name in ("Food", "Potato", "potato"):
-                                potato_count += amt
-
-                items = [
-                    {"icon": "", "name": "Potato", "count": potato_count, "active": True},
-                    {"icon": "", "name": "Hoe", "count": hoe_count, "active": True},
-                    {"icon": "", "name": "Sickle", "count": sickle_count, "active": True},
-                    {"icon": "", "name": "Watering Can", "count": water_can_count, "active": True},
-                    {"icon": "", "name": "Bread (WIP)", "count": 0, "active": False},
-                    {"icon": "", "name": "Timber (WIP)", "count": 0, "active": False},
-                    {"icon": "", "name": "Carved Stone (WIP)", "count": 0, "active": False},
-                    {"icon": "", "name": "Linen Cloth (WIP)", "count": 0, "active": False},
-                    {"icon": "", "name": "Copper Coins (WIP)", "count": 0, "active": False},
-                ]
+                # Pagination parameters
+                per_page = 9
+                total_items = len(items)
+                max_page = max(0, (total_items - 1) // per_page)
+                self.possession_page = max(0, min(getattr(self, "possession_page", 0), max_page))
+                page_items = items[self.possession_page * per_page : (self.possession_page + 1) * per_page]
 
                 # 3x3 Grid Layout
                 grid_x = mx + 24
@@ -1774,43 +1816,86 @@ class RaportUI:
                 pygame.draw.rect(surface, (15, 23, 42), grid_rect, border_radius=8)
                 pygame.draw.rect(surface, (51, 65, 85), grid_rect, width=2, border_radius=8)
 
-                # Draw Cells
-                for idx, item in enumerate(items):
-                    c_col = idx % 3
-                    c_row = idx // 3
-                    cx_start = int(grid_x + c_col * col_w)
-                    cy_start = int(grid_y + c_row * row_h)
-                    cell_rect = pygame.Rect(cx_start, cy_start, int(col_w), int(row_h))
+                if total_items == 0:
+                    # Empty state display: No WIP, no placeholders, no fake zero items
+                    empty_lbl = self.font_body.render("— Household storage and inventory are currently empty —", True, (148, 163, 184))
+                    surface.blit(empty_lbl, (grid_rect.centerx - empty_lbl.get_width() // 2, grid_rect.centery - 12))
+                    sub_lbl = self.font_badge.render("Items produced, harvested, granted, or purchased will appear here.", True, (100, 116, 139))
+                    surface.blit(sub_lbl, (grid_rect.centerx - sub_lbl.get_width() // 2, grid_rect.centery + 12))
+                else:
+                    # Draw Cells for possessed items
+                    for idx, item in enumerate(page_items):
+                        c_col = idx % 3
+                        c_row = idx // 3
+                        cx_start = int(grid_x + c_col * col_w)
+                        cy_start = int(grid_y + c_row * row_h)
+                        cell_rect = pygame.Rect(cx_start, cy_start, int(col_w), int(row_h))
 
-                    # Cell hover highlight
-                    if cell_rect.collidepoint(mouse_pos):
-                        pygame.draw.rect(surface, (30, 41, 59, 120), cell_rect)
+                        # Cell hover highlight
+                        if cell_rect.collidepoint(mouse_pos):
+                            pygame.draw.rect(surface, (30, 41, 59, 120), cell_rect)
 
-                    # [Icon]  [Jumlah]  [Nama item]
-                    draw_item_icon(surface, item["name"], cx_start + 24, cy_start + int(row_h // 2), size=11)
+                        # [Icon]  [Jumlah]  [Nama item]
+                        draw_item_icon(surface, item["name"], cx_start + 24, cy_start + int(row_h // 2), size=11)
 
-                    cnt_color = (34, 197, 94) if item["active"] and item["count"] > 0 else ((245, 158, 11) if item["active"] else (100, 116, 139))
-                    cnt_str = f"x {item['count']}"
-                    cnt_surf = self.font_sub.render(cnt_str, True, cnt_color)
-                    surface.blit(cnt_surf, (cx_start + 44, cy_start + int(row_h // 2) - 9))
+                        cnt_color = (34, 197, 94)  # Vibrant green for actual possessed items
+                        cnt_str = f"x {item['count']}"
+                        cnt_surf = self.font_sub.render(cnt_str, True, cnt_color)
+                        surface.blit(cnt_surf, (cx_start + 44, cy_start + int(row_h // 2) - 9))
 
-                    name_color = (241, 245, 249) if item["active"] else (148, 163, 184)
-                    name_surf = self.font_body.render(item["name"], True, name_color)
-                    surface.blit(name_surf, (cx_start + 98, cy_start + int(row_h // 2) - 8))
+                        name_color = (241, 245, 249)
+                        name_surf = self.font_body.render(item["name"], True, name_color)
+                        surface.blit(name_surf, (cx_start + 98, cy_start + int(row_h // 2) - 8))
 
-                # Vertical Divider Lines (Sekat Vertikal)
-                pygame.draw.line(surface, (51, 65, 85), (grid_x + int(col_w), grid_y), (grid_x + int(col_w), grid_y + grid_h), 2)
-                pygame.draw.line(surface, (51, 65, 85), (grid_x + int(2 * col_w), grid_y), (grid_x + int(2 * col_w), grid_y + grid_h), 2)
+                    # Divider Lines (Sekat) matching actual content rows
+                    num_rows = (len(page_items) + 2) // 3
+                    if num_rows >= 2:
+                        pygame.draw.line(surface, (51, 65, 85), (grid_x, grid_y + int(row_h)), (grid_x + grid_w, grid_y + int(row_h)), 2)
+                    if num_rows >= 3:
+                        pygame.draw.line(surface, (51, 65, 85), (grid_x, grid_y + int(2 * row_h)), (grid_x + grid_w, grid_y + int(2 * row_h)), 2)
 
-                # Horizontal Divider Lines (Sekat Horizontal)
-                pygame.draw.line(surface, (51, 65, 85), (grid_x, grid_y + int(row_h)), (grid_x + grid_w, grid_y + int(row_h)), 2)
-                pygame.draw.line(surface, (51, 65, 85), (grid_x, grid_y + int(2 * row_h)), (grid_x + grid_w, grid_y + int(2 * row_h)), 2)
+                    active_h = int(num_rows * row_h)
+                    pygame.draw.line(surface, (51, 65, 85), (grid_x + int(col_w), grid_y), (grid_x + int(col_w), grid_y + active_h), 2)
+                    pygame.draw.line(surface, (51, 65, 85), (grid_x + int(2 * col_w), grid_y), (grid_x + int(2 * col_w), grid_y + active_h), 2)
 
                 # Subtitle & Notes below grid
                 note_y = grid_y + grid_h + 16
                 surface.blit(self.font_sub.render("Private Household Property Rules:", True, (245, 158, 11)), (mx + 24, note_y))
                 surface.blit(self.font_body.render("• Villagers store their private crop harvest in storage furniture (chests) placed inside their assigned Housing Lot.", True, (226, 232, 240)), (mx + 24, note_y + 20))
                 surface.blit(self.font_body.render("• Lord's servants cannot touch, haul, or seize peasant household possessions. Only landlord private stockpiles belong to the Lord.", True, COLOR_TEXT_MUTED), (mx + 24, note_y + 38))
+
+                # Pagination controls if total items exceed 1 page
+                if max_page > 0:
+                    pag_w = 70
+                    pag_h = 24
+                    pag_x = mx + grid_w - 180
+                    pag_y = note_y
+
+                    # Page Indicator
+                    page_str = f"Page {self.possession_page + 1}/{max_page + 1}"
+                    page_surf = self.font_badge.render(page_str, True, (148, 163, 184))
+                    surface.blit(page_surf, (pag_x - page_surf.get_width() - 10, pag_y + 4))
+
+                    # Prev Button
+                    self.possession_prev_btn_rect = pygame.Rect(pag_x, pag_y, pag_w, pag_h)
+                    p_hov = self.possession_prev_btn_rect.collidepoint(mouse_pos)
+                    can_prev = (self.possession_page > 0)
+                    pygame.draw.rect(surface, (51, 65, 85) if (p_hov and can_prev) else (30, 41, 59), self.possession_prev_btn_rect, border_radius=4)
+                    pygame.draw.rect(surface, (96, 165, 250) if can_prev else (71, 85, 105), self.possession_prev_btn_rect, width=1, border_radius=4)
+                    prev_txt = self.font_badge.render("< Prev", True, (255, 255, 255) if can_prev else (100, 116, 139))
+                    surface.blit(prev_txt, (self.possession_prev_btn_rect.centerx - prev_txt.get_width() // 2, self.possession_prev_btn_rect.centery - prev_txt.get_height() // 2))
+
+                    # Next Button
+                    self.possession_next_btn_rect = pygame.Rect(pag_x + pag_w + 8, pag_y, pag_w, pag_h)
+                    n_hov = self.possession_next_btn_rect.collidepoint(mouse_pos)
+                    can_next = (self.possession_page < max_page)
+                    pygame.draw.rect(surface, (51, 65, 85) if (n_hov and can_next) else (30, 41, 59), self.possession_next_btn_rect, border_radius=4)
+                    pygame.draw.rect(surface, (96, 165, 250) if can_next else (71, 85, 105), self.possession_next_btn_rect, width=1, border_radius=4)
+                    next_txt = self.font_badge.render("Next >", True, (255, 255, 255) if can_next else (100, 116, 139))
+                    surface.blit(next_txt, (self.possession_next_btn_rect.centerx - next_txt.get_width() // 2, self.possession_next_btn_rect.centery - next_txt.get_height() // 2))
+                else:
+                    self.possession_prev_btn_rect = None
+                    self.possession_next_btn_rect = None
 
                 # Draw Grant Item modal overlays if active
                 if self.show_grant_dialog:
@@ -2020,8 +2105,16 @@ class RaportUI:
         dim_surf.fill((0, 0, 0, 160))
         surface.blit(dim_surf, (0, 0))
 
-        dlg_w = 540
-        dlg_h = 400
+        inv = member.inventory
+        carrying = getattr(member, "carrying_crop", 0)
+        items = list(inv.items())
+        if carrying > 0:
+            items.insert(0, ("Potato (Harvest)", carrying))
+
+        dlg_w = min(540, screen_w - 40)
+        items_cnt = len(items) if items else 1
+        needed_h = 150 + items_cnt * 44 + 36
+        dlg_h = min(max(320, needed_h), int(screen_h * 0.85))
         dx = (screen_w - dlg_w) // 2
         dy = (screen_h - dlg_h) // 2
         self.member_inv_bg_rect = pygame.Rect(dx, dy, dlg_w, dlg_h)
@@ -2089,13 +2182,6 @@ class RaportUI:
         surface.blit(self.font_badge.render(status_line, True, (148, 163, 184)), (dx + 20, dy + 78))
 
         pygame.draw.line(surface, (51, 65, 85), (dx + 20, dy + 98), (dx + dlg_w - 20, dy + 98), 1)
-
-        # Inventory Items Table
-        inv = member.inventory
-        carrying = getattr(member, "carrying_crop", 0)
-        items = list(inv.items())
-        if carrying > 0:
-            items.insert(0, ("Potato (Harvest)", carrying))
 
         self.member_deposit_btn_rects.clear()
         self.member_drop_btn_rects.clear()
@@ -2307,73 +2393,138 @@ class RaportUI:
                     y_cur += 36
 
     def _draw_grant_dialog(self, surface, fam, stockpile_manager, resources, mouse_pos):
+        self._init_fonts()
         sm = stockpile_manager or self.cached_stockpile_manager
         stock = self.get_landlord_stock(sm, resources)
 
+        screen_w, screen_h = surface.get_size()
+
         # Dark overlay backdrop
-        overlay = pygame.Surface((surface.get_width(), surface.get_height()), pygame.SRCALPHA)
+        overlay = pygame.Surface((screen_w, screen_h), pygame.SRCALPHA)
         overlay.fill((0, 0, 0, 160))
         surface.blit(overlay, (0, 0))
 
-        dlg_w = 580
-        dlg_h = 440
-        dlg_x = surface.get_width() // 2 - dlg_w // 2
-        dlg_y = surface.get_height() // 2 - dlg_h // 2
-        dlg_rect = pygame.Rect(dlg_x, dlg_y, dlg_w, dlg_h)
+        # Responsive Dimensions:
+        dlg_w = min(600, max(460, screen_w - 40))
 
+        # Layout metrics
+        header_h = 76
+        footer_h = 66
+        row_h = 44
+        row_gap = 8
+        row_step = row_h + row_gap
+        num_items = len(GRANTABLE_ITEMS)
+        total_items_h = num_items * row_step
+
+        # Max modal height allowed relative to viewport
+        max_dlg_h = min(int(screen_h * 0.88), 680)
+
+        # Dynamic height calculation
+        needed_dlg_h = header_h + total_items_h + footer_h + 8
+        if needed_dlg_h <= max_dlg_h:
+            dlg_h = needed_dlg_h
+            viewport_h = total_items_h + 8
+        else:
+            dlg_h = max_dlg_h
+            viewport_h = dlg_h - header_h - footer_h
+
+        dlg_x = (screen_w - dlg_w) // 2
+        dlg_y = (screen_h - dlg_h) // 2
+        dlg_rect = pygame.Rect(dlg_x, dlg_y, dlg_w, dlg_h)
+        self.grant_dlg_rect = dlg_rect
+
+        # Draw Modal Container Box
         pygame.draw.rect(surface, (15, 23, 42), dlg_rect, border_radius=10)
         pygame.draw.rect(surface, (59, 130, 246), dlg_rect, width=2, border_radius=10)
 
-        # Title & Subtitle
+        # -------------------------------------------------------------
+        # 1. HEADER (Title, Subtitle & Header Close [X] Button)
+        # -------------------------------------------------------------
         t_surf = self.font_title.render(f"Grant Supplies:  The {fam.surname} Family", True, (241, 245, 249))
         surface.blit(t_surf, (dlg_x + 24, dlg_y + 18))
         sub_surf = self.font_body.render("Select supplies from Landlord Storage for AI Servants to haul & deliver.", True, (148, 163, 184))
         surface.blit(sub_surf, (dlg_x + 24, dlg_y + 46))
 
-        # Item List
+        # Header Close [X] Button
+        self.grant_header_close_btn_rect = pygame.Rect(dlg_x + dlg_w - 36, dlg_y + 16, 22, 22)
+        x_hov = self.grant_header_close_btn_rect.collidepoint(mouse_pos)
+        pygame.draw.rect(surface, (239, 68, 68) if x_hov else (30, 41, 59), self.grant_header_close_btn_rect, border_radius=4)
+        x_lbl = self.font_badge.render("X", True, (255, 255, 255))
+        surface.blit(x_lbl, (self.grant_header_close_btn_rect.centerx - x_lbl.get_width() // 2, self.grant_header_close_btn_rect.centery - x_lbl.get_height() // 2))
+
+        # Header Separator
+        pygame.draw.line(surface, (51, 65, 85), (dlg_x + 20, dlg_y + header_h - 4), (dlg_x + dlg_w - 20, dlg_y + header_h - 4), 1)
+
+        # -------------------------------------------------------------
+        # 2. SCROLLABLE CONTENT VIEWPORT
+        # -------------------------------------------------------------
+        viewport_y = dlg_y + header_h
+        viewport_rect = pygame.Rect(dlg_x + 16, viewport_y, dlg_w - 32, viewport_h)
+        self.grant_viewport_rect = viewport_rect
+
+        # Max scroll calculation
+        max_scroll = max(0, total_items_h - viewport_h + 8)
+        self.grant_max_scroll = max_scroll
+        self.grant_scroll_y = max(0, min(self.grant_scroll_y, max_scroll))
+
+        has_scrollbar = (max_scroll > 0)
+        content_margin_right = 16 if has_scrollbar else 4
+        item_row_w = viewport_rect.w - 8 - content_margin_right
+
         self.grant_dec_btn_rects.clear()
         self.grant_inc_btn_rects.clear()
         self.grant_max_btn_rects.clear()
         self.grant_item_qty_rects.clear()
 
-        row_y = dlg_y + 76
-        row_h = 44
+        # Scissor clipping to parent container: no item row can render outside viewport!
+        old_clip = surface.get_clip()
+        surface.set_clip(viewport_rect)
 
-        for item_data in GRANTABLE_ITEMS:
+        start_row_y = viewport_y + 4 - self.grant_scroll_y
+
+        for idx, item_data in enumerate(GRANTABLE_ITEMS):
             it_type = item_data["type"]
             it_name = item_data["name"]
             avail = stock.get(it_type, 0)
             qty = self.grant_amounts.get(it_type, 0)
 
-            row_rect = pygame.Rect(dlg_x + 20, row_y, dlg_w - 40, row_h)
+            cur_row_y = start_row_y + idx * row_step
+
+            # Culling optimization: skip rows completely outside the visible viewport
+            if cur_row_y + row_h < viewport_y or cur_row_y > viewport_y + viewport_h:
+                continue
+
+            row_rect = pygame.Rect(viewport_rect.x + 4, cur_row_y, item_row_w, row_h)
             pygame.draw.rect(surface, (30, 41, 59), row_rect, border_radius=6)
             pygame.draw.rect(surface, (51, 65, 85), row_rect, width=1, border_radius=6)
 
             # Icon & Name
-            draw_item_icon(surface, it_name, dlg_x + 40, row_y + 22, size=11)
+            draw_item_icon(surface, it_name, row_rect.x + 20, cur_row_y + 22, size=11)
             name_s = self.font_sub.render(it_name, True, (241, 245, 249))
-            surface.blit(name_s, (dlg_x + 64, row_y + 11))
+            surface.blit(name_s, (row_rect.x + 44, cur_row_y + 11))
 
             # Available in Stockpile
             stk_color = (34, 197, 94) if avail > 0 else (148, 163, 184)
             stk_s = self.font_body.render(f"In Storage: {avail}", True, stk_color)
-            surface.blit(stk_s, (dlg_x + 200, row_y + 13))
+            surface.blit(stk_s, (row_rect.x + 180, cur_row_y + 13))
 
             # Controls: [-] [ QTY ] [+] [Max]
-            ctrl_rx = dlg_x + dlg_w - 20 - 240
+            ctrl_rx = row_rect.right - 240
             
             # Minus button
-            minus_r = pygame.Rect(ctrl_rx, row_y + 8, 30, 28)
-            self.grant_dec_btn_rects[it_type] = minus_r
-            m_hov = minus_r.collidepoint(mouse_pos)
+            minus_r = pygame.Rect(ctrl_rx, cur_row_y + 8, 30, 28)
+            if viewport_rect.collidepoint(minus_r.center):
+                self.grant_dec_btn_rects[it_type] = minus_r
+            m_hov = minus_r.collidepoint(mouse_pos) if viewport_rect.collidepoint(mouse_pos) else False
             pygame.draw.rect(surface, (51, 65, 85) if m_hov else (30, 41, 59), minus_r, border_radius=4)
             pygame.draw.rect(surface, (96, 165, 250), minus_r, width=1, border_radius=4)
             m_txt = self.font_sub.render("-", True, (255, 255, 255))
             surface.blit(m_txt, (minus_r.centerx - m_txt.get_width() // 2, minus_r.centery - m_txt.get_height() // 2))
 
             # Quantity Display / Input box
-            qty_r = pygame.Rect(ctrl_rx + 36, row_y + 8, 60, 28)
-            self.grant_item_qty_rects[it_type] = qty_r
+            qty_r = pygame.Rect(ctrl_rx + 36, cur_row_y + 8, 60, 28)
+            if viewport_rect.collidepoint(qty_r.center):
+                self.grant_item_qty_rects[it_type] = qty_r
             is_active_input = (self.active_grant_input_item == it_type)
             box_bg = (15, 23, 42) if not is_active_input else (30, 58, 138)
             border_c = (250, 204, 21) if is_active_input else (71, 85, 105)
@@ -2386,29 +2537,61 @@ class RaportUI:
             surface.blit(q_txt, (qty_r.centerx - q_txt.get_width() // 2, qty_r.centery - q_txt.get_height() // 2))
 
             # Plus button
-            plus_r = pygame.Rect(ctrl_rx + 102, row_y + 8, 30, 28)
-            self.grant_inc_btn_rects[it_type] = plus_r
-            p_hov = plus_r.collidepoint(mouse_pos)
+            plus_r = pygame.Rect(ctrl_rx + 102, cur_row_y + 8, 30, 28)
+            if viewport_rect.collidepoint(plus_r.center):
+                self.grant_inc_btn_rects[it_type] = plus_r
+            p_hov = plus_r.collidepoint(mouse_pos) if viewport_rect.collidepoint(mouse_pos) else False
             pygame.draw.rect(surface, (51, 65, 85) if p_hov else (30, 41, 59), plus_r, border_radius=4)
             pygame.draw.rect(surface, (96, 165, 250), plus_r, width=1, border_radius=4)
             p_txt = self.font_sub.render("+", True, (255, 255, 255))
             surface.blit(p_txt, (plus_r.centerx - p_txt.get_width() // 2, plus_r.centery - p_txt.get_height() // 2))
 
             # Max button
-            max_r = pygame.Rect(ctrl_rx + 138, row_y + 8, 52, 28)
-            self.grant_max_btn_rects[it_type] = max_r
-            max_hov = max_r.collidepoint(mouse_pos)
+            max_r = pygame.Rect(ctrl_rx + 138, cur_row_y + 8, 52, 28)
+            if viewport_rect.collidepoint(max_r.center):
+                self.grant_max_btn_rects[it_type] = max_r
+            max_hov = max_r.collidepoint(mouse_pos) if viewport_rect.collidepoint(mouse_pos) else False
             pygame.draw.rect(surface, (71, 85, 105) if max_hov else (51, 65, 85), max_r, border_radius=4)
             pygame.draw.rect(surface, (148, 163, 184), max_r, width=1, border_radius=4)
             max_txt = self.font_badge.render("Max", True, (241, 245, 249))
             surface.blit(max_txt, (max_r.centerx - max_txt.get_width() // 2, max_r.centery - max_txt.get_height() // 2))
 
-            row_y += row_h + 8
+        # Restore normal clipping
+        surface.set_clip(old_clip)
 
-        # Footer Actions: [Grant Supplies] and [Cancel]
+        # -------------------------------------------------------------
+        # 3. SCROLLBAR (if content exceeds viewport)
+        # -------------------------------------------------------------
+        if has_scrollbar:
+            sb_x = dlg_x + dlg_w - 24
+            sb_y = viewport_y + 4
+            sb_w = 6
+            sb_h = viewport_h - 8
+            self.grant_scrollbar_rect = pygame.Rect(sb_x - 3, sb_y, sb_w + 6, sb_h)
+            pygame.draw.rect(surface, (30, 41, 59), (sb_x, sb_y, sb_w, sb_h), border_radius=3)
+            
+            thumb_h = max(24, int(sb_h * (viewport_h / total_items_h)))
+            thumb_ratio = self.grant_scroll_y / max_scroll if max_scroll > 0 else 0
+            thumb_y = sb_y + int((sb_h - thumb_h) * thumb_ratio)
+            self.grant_thumb_rect = pygame.Rect(sb_x, thumb_y, sb_w, thumb_h)
+            
+            sb_hov = self.grant_scrollbar_rect.collidepoint(mouse_pos) or self.grant_is_dragging_scrollbar
+            pygame.draw.rect(surface, (96, 165, 250) if sb_hov else (71, 85, 105), (sb_x, thumb_y, sb_w, thumb_h), border_radius=3)
+        else:
+            self.grant_scrollbar_rect = None
+            self.grant_thumb_rect = None
+
+        # -------------------------------------------------------------
+        # 4. STICKY FOOTER (Solid backdrop, Grant & Cancel buttons)
+        # -------------------------------------------------------------
+        footer_y = dlg_y + dlg_h - footer_h
+        footer_bg = pygame.Rect(dlg_x + 2, footer_y, dlg_w - 4, footer_h - 2)
+        pygame.draw.rect(surface, (15, 23, 42), footer_bg, border_bottom_left_radius=10, border_bottom_right_radius=10)
+        pygame.draw.line(surface, (51, 65, 85), (dlg_x + 20, footer_y), (dlg_x + dlg_w - 20, footer_y), 1)
+
         total_grant = sum(self.grant_amounts.values())
-        btn_y = dlg_y + dlg_h - 52
-        
+        btn_y = footer_y + 15
+
         # Grant Button
         self.grant_submit_btn_rect = pygame.Rect(dlg_x + 20, btn_y, 240, 36)
         s_hov = self.grant_submit_btn_rect.collidepoint(mouse_pos)
@@ -2428,14 +2611,38 @@ class RaportUI:
         surface.blit(c_lbl, (self.grant_close_btn_rect.centerx - c_lbl.get_width() // 2, self.grant_close_btn_rect.centery - c_lbl.get_height() // 2))
 
     def _draw_grant_confirm(self, surface, fam, mouse_pos):
-        overlay = pygame.Surface((surface.get_width(), surface.get_height()), pygame.SRCALPHA)
+        self._init_fonts()
+        screen_w, screen_h = surface.get_size()
+        overlay = pygame.Surface((screen_w, screen_h), pygame.SRCALPHA)
         overlay.fill((0, 0, 0, 180))
         surface.blit(overlay, (0, 0))
 
-        cf_w = 480
-        cf_h = 260
-        cf_x = surface.get_width() // 2 - cf_w // 2
-        cf_y = surface.get_height() // 2 - cf_h // 2
+        cf_w = min(520, max(440, screen_w - 40))
+
+        # Summary of items with multi-line wrapping
+        items_summary = []
+        for it_type, qty in self.grant_amounts.items():
+            if qty > 0:
+                name = it_type.replace("_", " ")
+                items_summary.append(f"{qty}x {name}")
+
+        summary_lines = []
+        cur_line = "Items: "
+        for idx, itm_txt in enumerate(items_summary):
+            sep = ", " if idx > 0 else ""
+            if len(cur_line + sep + itm_txt) > 48:
+                summary_lines.append(cur_line)
+                cur_line = "       " + itm_txt
+            else:
+                cur_line += sep + itm_txt
+        if cur_line:
+            summary_lines.append(cur_line)
+        if not summary_lines:
+            summary_lines = ["Items: None"]
+
+        cf_h = 190 + len(summary_lines) * 22
+        cf_x = (screen_w - cf_w) // 2
+        cf_y = (screen_h - cf_h) // 2
         cf_rect = pygame.Rect(cf_x, cf_y, cf_w, cf_h)
 
         pygame.draw.rect(surface, (15, 23, 42), cf_rect, border_radius=10)
@@ -2443,28 +2650,25 @@ class RaportUI:
 
         # Title
         t_s = self.font_title.render("Confirm Royal Grant Decree", True, (250, 204, 21))
-        surface.blit(t_s, (cf_x + 24, cf_y + 20))
+        surface.blit(t_s, (cf_x + 24, cf_y + 18))
 
         # Question
         q_s = self.font_sub.render(f"Are you sure you want to grant these items to The {fam.surname} Family?", True, (241, 245, 249))
-        surface.blit(q_s, (cf_x + 24, cf_y + 54))
+        surface.blit(q_s, (cf_x + 24, cf_y + 48))
 
-        # Summary of items
-        items_summary = []
-        for it_type, qty in self.grant_amounts.items():
-            if qty > 0:
-                name = it_type.replace("_", " ")
-                items_summary.append(f"{qty}x {name}")
-        summary_txt = "Items: " + (", ".join(items_summary) if items_summary else "None")
-        sum_s = self.font_body.render(summary_txt, True, (34, 197, 94))
-        surface.blit(sum_s, (cf_x + 24, cf_y + 90))
+        # Summary lines
+        line_y = cf_y + 78
+        for s_line in summary_lines:
+            sum_s = self.font_body.render(s_line, True, (34, 197, 94))
+            surface.blit(sum_s, (cf_x + 24, line_y))
+            line_y += 20
 
         # Hauling notice
         notice_s = self.font_body.render("• AI Servants will fetch items from Landlord storage and haul them to the household.", True, (148, 163, 184))
-        surface.blit(notice_s, (cf_x + 24, cf_y + 120))
+        surface.blit(notice_s, (cf_x + 24, line_y + 6))
 
         # Action Buttons: [✓ Yes, Grant] and [✕ Cancel]
-        btn_y = cf_y + cf_h - 54
+        btn_y = cf_y + cf_h - 52
 
         self.grant_confirm_btn_rect = pygame.Rect(cf_x + 24, btn_y, 180, 36)
         yes_hov = self.grant_confirm_btn_rect.collidepoint(mouse_pos)

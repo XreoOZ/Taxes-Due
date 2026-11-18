@@ -36,6 +36,7 @@ _LEGACY_MODULE_MAP = {
     'game.market_service': 'game.systems.market_service',
     'game.market_modal': 'game.ui.market_modal',
     'game.market_interface': 'game.systems.market_service',
+    'game.household_inventory': 'game.systems.household_inventory',
 }
 
 class _LegacyImportFinder:
