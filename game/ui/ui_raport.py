@@ -96,7 +96,7 @@ class RaportUI:
             {"id": "villagers", "title": "Household", "wip": False},
             {"id": "workers", "title": "Jobs", "wip": False},
             {"id": "production", "title": "Production", "wip": False},
-            {"id": "tax", "title": "Taxes", "wip": False},
+            {"id": "tax", "title": "Taxes", "wip": True},
             {"id": "planning", "title": "Roadmap", "wip": True},
         ]
 

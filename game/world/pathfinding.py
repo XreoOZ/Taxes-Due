@@ -862,6 +862,17 @@ class GlobalPathRegistry:
                     conflicts.append((other_eid, "TARGET_CONFLICT", res))
                     continue
 
+            # 2. Celah pintu sempit (Doorway bottleneck) arah berlawanan
+            shared_tiles = candidate_tiles.intersection(res.reserved_tiles)
+            shared_doors = shared_tiles.intersection(door_tiles)
+            if shared_doors:
+                door = next(iter(shared_doors))
+                my_dir = self._get_door_direction(candidate_pts, door, bm)
+                other_dir = self._get_door_direction(res.waypoints, door, bm)
+                if my_dir and other_dir and my_dir != other_dir:
+                    conflicts.append((other_eid, "DOORWAY_CONFLICT", res))
+                    continue
+
         # AI-to-AI pass-through: tidak ada antrean atau pemblokiran rute antar-AI
         return conflicts
 

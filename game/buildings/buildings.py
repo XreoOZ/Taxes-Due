@@ -328,19 +328,25 @@ class Building:
             self.door_pos, self.door_side = self._resolve_door(door_pos, door_side)
             self.is_solid = False
 
-        # Market-specific economy and inventory properties (AGENT 2)
+        # Market-specific economy and inventory properties (AGENT 2 & AGENT 3)
         if self.building_type == "market":
             self.owner = "landlord"
-            self.inventory = {"Potato": 100}  # Initial market inventory
+            self.inventory = {}  # Newly created Market starts with zero stock (Requirement 1)
             self.currency = {"Copper": 0, "Silver": 0, "Gold": 0}
-            self.prices = dict(DEFAULT_ITEM_PRICES)  # Potato: 3 Copper
+            self.prices = dict(DEFAULT_ITEM_PRICES)
             self.capacity = float("inf")  # UNLIMITED STORAGE CAPACITY (Not 6 slots)
+            self.assigned_family_id = None
+            self.item_allocations = {}
+            self.auto_pricing = True
         else:
             self.owner = "landlord"
             self.inventory = {}
             self.currency = {"Copper": 0, "Silver": 0, "Gold": 0}
             self.prices = {}
             self.capacity = 1000
+            self.assigned_family_id = None
+            self.item_allocations = {}
+            self.auto_pricing = False
         self.wall_thickness = 10
         self._cached_oriented_walls = None
         self._cached_wall_rects = None
@@ -352,6 +358,14 @@ class Building:
         self.door_transit_elapsed = 0.0
         self.door_outside_queue = []
         self.door_inside_queue = []
+
+    @property
+    def assigned_household_id(self):
+        return getattr(self, "assigned_family_id", None)
+
+    @assigned_household_id.setter
+    def assigned_household_id(self, value):
+        self.assigned_family_id = value
 
     def request_door_passage(self, entity_id, is_outside, tile_size=TILE_SIZE):
         """
@@ -1171,17 +1185,74 @@ class BuildingManager:
         return None
 
     def complete_demolition(self, site, resources, stockpile_manager=None):
-        """Menyelesaikan pembongkaran dan menjatuhkan 50% resource secara fisik di tanah"""
-        if stockpile_manager and site.tiles:
-            sorted_tiles = sorted(site.tiles, key=lambda t: (t[1], t[0]))
+        """
+        Menyelesaikan pembongkaran dan menjatuhkan 50% refund material secara fisik di tanah.
+        RECOVER ALL MARKET CONTENTS (Requirement 5):
+        Menjatuhkan seluruh barang tersimpan dan seluruh koin (Copper, Silver, Gold)
+        pada petak pembongkaran dengan kepemilikan utuh (villager jika assigned household,
+        landlord jika unassigned).
+        """
+        b = getattr(site, "building", None)
+        sorted_tiles = sorted(site.tiles, key=lambda t: (t[1], t[0])) if site.tiles else []
+
+        if stockpile_manager and sorted_tiles:
             tile_w = sorted_tiles[0]
             tile_s = sorted_tiles[1] if len(sorted_tiles) > 1 else sorted_tiles[0]
             stockpile_manager.drop_resource("Wood", site.refund_wood, tile_w[0], tile_w[1])
             stockpile_manager.drop_resource("Stone", site.refund_stone, tile_s[0], tile_s[1])
+
+            # Drop all building contents (items & currency) with preserved ownership
+            if b:
+                assigned_fam = getattr(b, "assigned_household_id", None) or getattr(b, "assigned_family_id", None)
+                owner_type = "villager" if assigned_fam else "landlord"
+                owner_id = str(assigned_fam) if assigned_fam else None
+
+                t_idx = 0
+                num_tiles = len(sorted_tiles)
+
+                # 1. Drop stored items
+                if hasattr(b, "inventory") and isinstance(b.inventory, dict):
+                    for it_name, it_count in list(b.inventory.items()):
+                        if it_count > 0:
+                            drop_t = sorted_tiles[t_idx % num_tiles]
+                            stockpile_manager.drop_resource(it_name, it_count, drop_t[0], drop_t[1], owner_type=owner_type, owner_id=owner_id)
+                            t_idx += 1
+                    b.inventory.clear()
+
+                # 2. Drop stored currency
+                if hasattr(b, "currency") and isinstance(b.currency, dict):
+                    for denom in ("Copper", "Silver", "Gold"):
+                        c_amt = b.currency.get(denom, 0)
+                        if c_amt > 0:
+                            drop_t = sorted_tiles[t_idx % num_tiles]
+                            stockpile_manager.drop_resource(denom, c_amt, drop_t[0], drop_t[1], owner_type=owner_type, owner_id=owner_id)
+                            t_idx += 1
+                    b.currency.clear()
+
             stockpile_manager.refresh_stacks(resources, None)
         else:
-            resources["Wood"] += site.refund_wood
-            resources["Stone"] += site.refund_stone
+            resources["Wood"] = resources.get("Wood", 0) + site.refund_wood
+            resources["Stone"] = resources.get("Stone", 0) + site.refund_stone
+            if b:
+                if hasattr(b, "inventory") and isinstance(b.inventory, dict):
+                    for it_name, it_count in list(b.inventory.items()):
+                        if it_count > 0:
+                            resources[it_name] = resources.get(it_name, 0) + it_count
+                    b.inventory.clear()
+                if hasattr(b, "currency") and isinstance(b.currency, dict):
+                    for denom in ("Copper", "Silver", "Gold"):
+                        c_amt = b.currency.get(denom, 0)
+                        if c_amt > 0:
+                            resources[denom] = resources.get(denom, 0) + c_amt
+                    b.currency.clear()
+
+        # Invalidate village wealth cache
+        try:
+            from game.systems.wealth_system import VillageWealthSystem
+            VillageWealthSystem.mark_dirty()
+        except ImportError:
+            pass
+
         if site in self.demolition_sites:
             self.demolition_sites.remove(site)
             self.rebuild_tile_cache()

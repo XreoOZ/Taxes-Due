@@ -966,12 +966,11 @@ class Servant:
 
     def _move_towards(self, tx, ty, dt, arrival_dist=10, all_servants=None, player=None, building_manager=None, all_entities=None, furniture_manager=None, exclusive_target=False):
         reg = GlobalPathRegistry.get_instance()
-        stuck_accrued = False
 
-        if getattr(self, "collision_bypass_timer", 0.0) > 0.0:
-            self.collision_bypass_timer = max(0.0, self.collision_bypass_timer - dt)
+        if getattr(self, "player_avoid_speech_cooldown", 0.0) > 0.0:
+            self.player_avoid_speech_cooldown = max(0.0, self.player_avoid_speech_cooldown - dt)
 
-        # 0. Penanganan Antrean Menunggu Jalur (Waiting for Route Clearance) & Route Lifecycle Recovery
+        # 0. Route Lifecycle Tracking
         if not hasattr(self, "route_state"):
             self.route_state = ROUTE_STATE_NONE
         if not hasattr(self, "route_request_timer"):
@@ -979,58 +978,18 @@ class Servant:
         if not hasattr(self, "route_retry_count"):
             self.route_retry_count = 0
 
-        if getattr(self, "repath_cooldown", 0.0) > 0.0:
-            self.repath_cooldown -= dt
+        # Doorway passage yield when door_waypoints is explicitly configured
+        if getattr(self, "door_waypoints", None) and building_manager and all_servants:
+            for other_s in all_servants:
+                if other_s != self:
+                    for b in getattr(building_manager, "buildings", []):
+                        if getattr(b, "door_pos", None) and b.is_in_door_threshold(other_s.x, other_s.y, TILE_SIZE):
+                            self.is_moving = False
+                            return False
 
-        if getattr(self, "route_state", None) == ROUTE_STATE_FAILED:
-            if getattr(self, "repath_cooldown", 0.0) <= 0.0:
-                self.route_state = ROUTE_STATE_NONE
-                self.is_waiting_for_path = False
-
-        if self.wait_timer > 0.0 or getattr(self, "is_waiting_for_path", False):
-            self.route_request_timer += dt
-            self.hard_stuck_timer += dt
-            stuck_accrued = True
-            if self.hard_stuck_timer >= EMERGENCY_STUCK_TIMEOUT:
-                self.collision_bypass_timer = EMERGENCY_COLLISION_BYPASS_DURATION
-                self.hard_stuck_timer = 0.0
-                self.wait_timer = 0.0
-                self.is_waiting_for_path = False
-
-            if self.wait_timer > 0.0:
-                self.wait_timer -= dt
-                self.is_moving = False
-
-            if self.route_request_timer >= ROUTE_REQUEST_TIMEOUT:
-                # AUTOMATIC ROUTE RECOVERY TIMEOUT TRIGGERED!
-                reg.cancel_waiting(self.id)
-                reg.release_reservation(self.id)
-                if hasattr(self, "stuck_blocked_tiles"):
-                    self.stuck_blocked_tiles.clear()
-                self.wait_timer = 0.0
-                self.is_waiting_for_path = False
-                self.route_request_timer = 0.0
-                self.route_retry_count += 1
-
-                if self.route_retry_count > ROUTE_MAX_RETRIES:
-                    self.route_state = ROUTE_STATE_FAILED
-                    self.is_moving = False
-                    self.repath_cooldown = ROUTE_FALLBACK_COOLDOWN
-                    self.route_retry_count = 0
-                    return False
-                else:
-                    self.route_state = ROUTE_STATE_REQUESTED
-                    self.repath_cooldown = 0.0
-                    return False
-            elif self.wait_timer > 0.0:
-                if not reg.is_path_blocked_for(self.id, (self.x, self.y), (tx, ty)):
-                    self.wait_timer = 0.0
-                else:
-                    return False
-
-        # Validasi langsung: jika sudah berada di dalam jarak kedatangan / jangkauan interaksi target
-        direct_dist_to_target = math.hypot(tx - self.x, ty - self.y)
-        if direct_dist_to_target <= arrival_dist:
+        # Direct arrival check
+        direct_dist = math.hypot(tx - self.x, ty - self.y)
+        if direct_dist <= arrival_dist:
             self.is_moving = False
             self.current_path = []
             self.path_index = 0
@@ -1040,191 +999,92 @@ class Servant:
             self.route_request_timer = 0.0
             self.route_retry_count = 0
             reg.release_reservation(self.id)
-            if building_manager:
-                for b in getattr(building_manager, "buildings", []):
-                    b.release_door_passage(self.id)
             return True
 
-        # 1. Rute Predetermined Pathfinding A* (Jalur Garis yang Ditentukan)
-        target_dist = math.hypot(tx - (self.path_target[0] if self.path_target else 999999),
-                                 ty - (self.path_target[1] if self.path_target else 999999))
-        needs_new_path = (self.path_target is None or target_dist > 18.0 or not self.current_path or self.path_index >= len(self.current_path))
-
-        if needs_new_path:
-            if getattr(self, "repath_cooldown", 0.0) > 0.0:
+        if getattr(self, "route_state", None) == ROUTE_STATE_FAILED:
+            if self.path_target and math.hypot(tx - self.path_target[0], ty - self.path_target[1]) > 16.0:
+                self.route_state = ROUTE_STATE_NONE
+                self.route_retry_count = 0
+                self.route_request_timer = 0.0
+            else:
                 self.is_moving = False
+                self.is_waiting_for_path = False
                 return False
 
+        # 1. Path Calculation / Re-pathing
+        target_dist = math.hypot(tx - (self.path_target[0] if self.path_target else 999999),
+                                 ty - (self.path_target[1] if self.path_target else 999999))
+        needs_new_path = (self.path_target is None or target_dist > 16.0 or not self.current_path or self.path_index >= len(self.current_path))
+
+        if needs_new_path:
             self.path_target = (tx, ty)
             tgt_gx = int(math.floor(tx / TILE_SIZE))
             tgt_gy = int(math.floor(ty / TILE_SIZE))
             self.path_target_tile = (tgt_gx, tgt_gy)
             self.path_seq = reg.register_claim(self.id, self.path_target_tile)
 
-            now = time.time()
-            if hasattr(self, "stuck_blocked_tiles"):
-                self.stuck_blocked_tiles = {t: exp for t, exp in self.stuck_blocked_tiles.items() if exp > now}
-            else:
-                self.stuck_blocked_tiles = {}
-
-            avoid_set = set(self.stuck_blocked_tiles.keys())
-
-            # Hindari target eksklusif milik AI lain (Hanya yang exclusive_target=True, misal ranjang atau petak ladang)
-            for other_eid, other_res in reg.reservations.items():
-                if other_eid != str(self.id) and getattr(other_res, "exclusive_target", False) and other_res.target_tile:
-                    avoid_set.add(other_res.target_tile)
-
-            # Hindari perabotan terpasang (Beds lain, Chest lain) kecuali petak target tujuan
+            furn_avoid = set()
             if furniture_manager and hasattr(furniture_manager, "get_occupied_tiles"):
-                avoid_set.update(furniture_manager.get_occupied_tiles(exclude_tile=self.path_target_tile))
+                furn_avoid.update(furniture_manager.get_occupied_tiles(exclude_tile=self.path_target_tile))
+            furn_avoid.discard(self.path_target_tile)
 
-            # Hindari HANYA entitas yang sedang tidur pulas di ranjang (rintangan fisik padat)
-            check_ents = all_entities or all_servants or []
-            for other in check_ents:
-                if other != self and getattr(other, "task", "") == "SLEEPING":
-                    avoid_set.add((int(math.floor(other.x / TILE_SIZE)), int(math.floor(other.y / TILE_SIZE))))
-
-            cur_gx = int(math.floor(self.x / TILE_SIZE))
-            cur_gy = int(math.floor(self.y / TILE_SIZE))
-            avoid_set.discard((cur_gx, cur_gy))
-            avoid_set.discard(self.path_target_tile)
-
-            # Celah pintu bangunan jangan pernah diblokir saat perancangan rute agar AI bisa mendekat
+            cand_path = None
             if building_manager:
-                for b in getattr(building_manager, "buildings", []):
-                    if getattr(b, "door_pos", None):
-                        avoid_set.discard(b.door_pos)
-
-            if building_manager:
-                cand_path = building_manager.find_path((self.x, self.y), (tx, ty), TILE_SIZE, furniture_manager=furniture_manager, avoid_tiles=avoid_set)
+                cand_path = building_manager.find_path((self.x, self.y), (tx, ty), TILE_SIZE, furniture_manager=furniture_manager, avoid_tiles=furn_avoid)
                 if not cand_path:
-                    # Cari di petak-petak sekitarnya (jarak 1 hingga 2 petak)
-                    candidates = []
-                    for dist in (1, 2):
-                        for (adx, ady) in ((0, dist), (dist, 0), (0, -dist), (-dist, 0), (dist, dist), (-dist, -dist), (dist, -dist), (-dist, dist)):
-                            adj_tx = tx + adx * TILE_SIZE
-                            adj_ty = ty + ady * TILE_SIZE
-                            adj_cand = building_manager.find_path((self.x, self.y), (adj_tx, adj_ty), TILE_SIZE, furniture_manager=furniture_manager, avoid_tiles=avoid_set)
-                            if adj_cand:
-                                candidates.append((len(adj_cand), adj_cand))
-                        if candidates:
+                    for adx, ady in ((0, 1), (1, 0), (0, -1), (-1, 0), (1, 1), (-1, -1), (1, -1), (-1, 1)):
+                        adj_x = (tgt_gx + adx + 0.5) * TILE_SIZE
+                        adj_y = (tgt_gy + ady + 0.5) * TILE_SIZE
+                        adj_cand = building_manager.find_path((self.x, self.y), (adj_x, adj_y), TILE_SIZE, furniture_manager=furniture_manager, avoid_tiles=furn_avoid)
+                        if adj_cand:
+                            cand_path = adj_cand
                             break
-                    if candidates:
-                        candidates.sort(key=lambda c: c[0])
-                        cand_path = candidates[0][1]
             else:
                 cand_path = [(tx, ty)]
 
             if cand_path:
-                success, res_or_conf = reg.request_path_reservation(self.id, cand_path, (self.x, self.y), self.path_target_tile, building_manager=building_manager, exclusive_target=exclusive_target)
-                if success:
-                    self.current_path = cand_path
-                    self.path_index = 0
-                    self.path_seq = res_or_conf.seq
-                    self.is_waiting_for_path = False
-                    self.wait_timer = 0.0
-                    self.repath_cooldown = 0.0
-                    self.route_state = ROUTE_STATE_ASSIGNED
-                    self.route_request_timer = 0.0
-                    self.route_retry_count = 0
-                else:
-                    self.current_path = []
-                    self.path_index = 0
-                    self.is_moving = False
-                    has_blocker = any(c[1] in ("DOORWAY_CONFLICT", "DOORWAY_THRESHOLD_JAM", "TARGET_CONFLICT", "QUEUE_PRIORITY", "NARROW_PASSAGE_CONFLICT") for c in res_or_conf) if isinstance(res_or_conf, list) else False
-                    if exclusive_target or has_blocker:
-                        self.is_waiting_for_path = True
-                        self.wait_timer = PATH_WAIT_RECHECK_INTERVAL
-                        reg.register_waiting(self.id, self.path_target_tile)
-                    else:
-                        self.is_waiting_for_path = False
-                        self.wait_timer = 0.3
-                    return False
+                self.current_path = cand_path
+                self.path_index = 0
+                self.is_waiting_for_path = False
+                self.wait_timer = 0.0
+                self.route_state = ROUTE_STATE_ASSIGNED
+                self.route_request_timer = 0.0
+                self.route_retry_count = 0
+                reg.request_path_reservation(self.id, cand_path, (self.x, self.y), self.path_target_tile, building_manager=building_manager, exclusive_target=exclusive_target)
             else:
-                self.current_path = []
-                self.path_index = 0
+                self.route_retry_count += 1
+                if self.route_retry_count >= ROUTE_MAX_RETRIES:
+                    self.route_state = ROUTE_STATE_FAILED
+                    self.is_waiting_for_path = False
+                    self.is_moving = False
+                    self.current_path = []
+                    self.route_request_timer = 0.0
+                    return False
+                self.route_request_timer += dt
+                if self.route_request_timer >= ROUTE_REQUEST_TIMEOUT:
+                    self.route_state = ROUTE_STATE_FAILED
+                    self.is_waiting_for_path = False
+                    self.is_moving = False
+                    self.current_path = []
+                    self.route_request_timer = 0.0
+                    return False
                 self.is_moving = False
-                self.is_waiting_for_path = True
-                self.wait_timer = PATH_WAIT_RECHECK_INTERVAL
-                if exclusive_target:
-                    reg.register_waiting(self.id, self.path_target_tile)
-                self.repath_cooldown = 0.2
                 return False
-
-        # 2. Prioritas Target Bersama:
-        # "kalau kedua AI itu pathfindingnya ke tile yg sama, maka prioritaskan yg pertama pathfinding garisnya muncul"
-        if not reg.has_priority(self.id, self.path_target_tile, self.path_seq, exclusive_target=exclusive_target):
-            if getattr(self, "target_loose_stack", None) and (getattr(self.target_loose_stack, "grid_x", None), getattr(self.target_loose_stack, "grid_y", None)) == self.path_target_tile:
-                self.target_loose_stack = None
-                self.current_path = []
-                self.path_index = 0
-                self.is_moving = False
-                reg.release_reservation(self.id)
-                return False
-
-        # 3. Yielding Pause (Mengalah jika sedang berpapasan dengan entitas berprioritas lebih tinggi)
-        if getattr(self, "yield_timer", 0.0) > 0.0:
-            self.yield_timer -= dt
-            self.is_moving = False
-            return False
 
         if not self.current_path or self.path_index >= len(self.current_path):
             self.is_moving = False
             return False
 
-        # Daftarkan okupansi fisik petak saat ini ke GlobalPathRegistry
-        cur_gx = int(math.floor(self.x / TILE_SIZE))
-        cur_gy = int(math.floor(self.y / TILE_SIZE))
-        reg.occupy_tile(self.id, (cur_gx, cur_gy))
-
-        # 4. Melangkah Mengikuti Waypoint Jalur Garis & Update Reservasi
+        # 2. Waypoint stepping
         target_wp = self.current_path[self.path_index]
         wp_dx = target_wp[0] - self.x
         wp_dy = target_wp[1] - self.y
         dist_to_wp = math.hypot(wp_dx, wp_dy)
         is_last_wp = (self.path_index == len(self.current_path) - 1)
-        tol = arrival_dist if is_last_wp else PATH_WAYPOINT_TOLERANCE
-
-        # Koordinasi Okupansi & Reservasi Langkah (Step Reservation)
-        next_gx = int(math.floor(target_wp[0] / TILE_SIZE))
-        next_gy = int(math.floor(target_wp[1] / TILE_SIZE))
-        if (next_gx, next_gy) != (cur_gx, cur_gy):
-            is_narrow = is_narrow_passage_tile((next_gx, next_gy), building_manager=building_manager, furniture_manager=furniture_manager)
-            occ_eid = reg.get_tile_occupant((next_gx, next_gy))
-            if occ_eid and occ_eid != str(self.id):
-                if is_narrow or exclusive_target:
-                    if getattr(self, "collision_bypass_timer", 0.0) <= 0.0:
-                        self.is_moving = False
-                        self.wait_timer = PATH_WAIT_RECHECK_INTERVAL
-                        if not stuck_accrued:
-                            self.hard_stuck_timer += dt
-                            stuck_accrued = True
-                        if self.hard_stuck_timer >= EMERGENCY_STUCK_TIMEOUT:
-                            self.collision_bypass_timer = EMERGENCY_COLLISION_BYPASS_DURATION
-                            self.hard_stuck_timer = 0.0
-                            self.wait_timer = 0.0
-                            self.is_waiting_for_path = False
-                        else:
-                            return False
-            reserved_step = reg.reserve_step_tile(self.id, (next_gx, next_gy))
-            if not reserved_step and (is_narrow or exclusive_target):
-                if getattr(self, "collision_bypass_timer", 0.0) <= 0.0:
-                    self.is_moving = False
-                    self.wait_timer = PATH_WAIT_RECHECK_INTERVAL
-                    if not stuck_accrued:
-                        self.hard_stuck_timer += dt
-                        stuck_accrued = True
-                    if self.hard_stuck_timer >= EMERGENCY_STUCK_TIMEOUT:
-                        self.collision_bypass_timer = EMERGENCY_COLLISION_BYPASS_DURATION
-                        self.hard_stuck_timer = 0.0
-                        self.wait_timer = 0.0
-                        self.is_waiting_for_path = False
-                    else:
-                        return False
+        tol = arrival_dist if is_last_wp else 8.0
 
         if dist_to_wp <= tol:
             if is_last_wp:
-                # Tiba di tujuan akhir -> Bebaskan seluruh reservasi rute untuk AI lain
                 self.is_moving = False
                 self.current_path = []
                 self.path_index = 0
@@ -1234,9 +1094,6 @@ class Servant:
                 self.route_request_timer = 0.0
                 self.route_retry_count = 0
                 reg.release_reservation(self.id)
-                if building_manager:
-                    for b in getattr(building_manager, "buildings", []):
-                        b.release_door_passage(self.id)
                 return True
             else:
                 self.path_index += 1
@@ -1244,15 +1101,7 @@ class Servant:
                     self.is_moving = False
                     self.current_path = []
                     self.path_index = 0
-                    self.path_target = None
-                    self.is_waiting_for_path = False
                     self.route_state = ROUTE_STATE_COMPLETED
-                    self.route_request_timer = 0.0
-                    self.route_retry_count = 0
-                    reg.release_reservation(self.id)
-                    if building_manager:
-                        for b in getattr(building_manager, "buildings", []):
-                            b.release_door_passage(self.id)
                     return True
                 target_wp = self.current_path[self.path_index]
                 wp_dx = target_wp[0] - self.x
@@ -1264,155 +1113,88 @@ class Servant:
 
         self.is_moving = True
         self.route_state = ROUTE_STATE_ACTIVE
+        self.is_waiting_for_path = False
+
+        move_dist = min(self.speed * dt, dist_to_wp)
         dir_x = wp_dx / dist_to_wp
         dir_y = wp_dy / dist_to_wp
+        vx = dir_x * move_dist
+        vy = dir_y * move_dist
 
-        # Perbarui geometri segmen reservasi di GlobalPathRegistry (menyusutkan rute yang sudah dilewati)
-        reg.update_entity_progress(self.id, (self.x, self.y), self.current_path, self.path_index)
+        # 3. Player / Landlord Avoidance & Speech Bubble
+        if player:
+            p_dx = player.x - self.x
+            p_dy = player.y - self.y
+            p_dist = math.hypot(p_dx, p_dy)
+            min_p_dist = self.radius + getattr(player, "radius", 14) + 6.0
+            if p_dist < min_p_dist and p_dist > 0.001:
+                nx = -p_dx / p_dist
+                ny = -p_dy / p_dist
+                tx_dir = -ny
+                ty_dir = nx
+                if (vx * tx_dir + vy * ty_dir) < 0:
+                    tx_dir, ty_dir = -tx_dir, -ty_dir
 
-        # 5. Antrean Celah Pintu (Doorway Approach & Transit Queueing)
-        cur_gx = int(math.floor(self.x / TILE_SIZE))
-        cur_gy = int(math.floor(self.y / TILE_SIZE))
-        b_at = building_manager.get_building_at(cur_gx, cur_gy) if building_manager else None
-        check_ents = all_entities if all_entities else (all_servants or [])
+                overlap = min_p_dist - p_dist
+                push_dist = max(overlap * 0.6, move_dist * 0.5)
+                vx = nx * push_dist + tx_dir * move_dist * 0.9
+                vy = ny * push_dist + ty_dir * move_dist * 0.9
+
+                if getattr(self, "player_avoid_speech_cooldown", 0.0) <= 0.0:
+                    polite_msgs = [
+                        "Sorry, my lord.",
+                        "Pardon me, my lord.",
+                        "Excuse me, my lord.",
+                        "My apologies, my lord.",
+                        "Coming through, my lord."
+                    ]
+                    self.say(random.choice(polite_msgs), duration=2.2)
+                    self.player_avoid_speech_cooldown = 4.5
+
+        # 4. Movement execution with substepping & collision
+        old_x, old_y = self.x, self.y
+        max_step = 6.0
+        step_len = math.hypot(vx, vy)
+        steps = max(1, math.ceil(step_len / max_step))
+        sub_vx = vx / steps
+        sub_vy = vy / steps
+
+        for _ in range(steps):
+            step_ox, step_oy = self.x, self.y
+            self.x += sub_vx
+            self.y += sub_vy
+            if building_manager:
+                self.x, self.y = building_manager.resolve_collision(self.x, self.y, self.radius, TILE_SIZE, old_x=step_ox, old_y=step_oy)
+
         if building_manager:
             for b in getattr(building_manager, "buildings", []):
-                if not getattr(b, "door_pos", None):
-                    continue
-                d_out = b.get_door_world_outside(TILE_SIZE)
-                d_in = b.get_door_world_inside(TILE_SIZE)
-                dist_out = math.hypot(self.x - d_out[0], self.y - d_out[1])
-                dist_in = math.hypot(self.x - d_in[0], self.y - d_in[1])
-                in_threshold = b.is_in_door_threshold(self.x, self.y, TILE_SIZE)
-                near_door = dist_out < 64.0 or dist_in < 64.0 or in_threshold
+                if getattr(b, "door_pos", None) and (b.is_in_door_threshold(self.x, self.y, TILE_SIZE) or b.is_in_door_threshold(old_x, old_y, TILE_SIZE)):
+                    b.door_active_user = str(self.id)
+                    break
 
-                if near_door:
-                    tar_gx = int(math.floor(tx / TILE_SIZE))
-                    tar_gy = int(math.floor(ty / TILE_SIZE))
-                    b_tgt = building_manager.get_building_at(tar_gx, tar_gy)
-                    crosses_door = (b_at != b and b_tgt == b) or (b_at == b and b_tgt != b) or \
-                                   (getattr(self, "door_waypoints", None) and any(b.occupies_tile(int(wp[0]//TILE_SIZE), int(wp[1]//TILE_SIZE)) for wp in self.door_waypoints)) or \
-                                   (self.current_path and any(b.occupies_tile(int(wp[0]//TILE_SIZE), int(wp[1]//TILE_SIZE)) for wp in self.current_path[self.path_index:]))
-                    if crosses_door:
-                        if in_threshold:
-                            # Selesaikan langkah melintasi celah kusen pintu; jangan berhenti di tengah kusen
-                            b.door_active_user = str(self.id)
-                            self.is_waiting_for_path = False
-                        else:
-                            door_phys = building_manager.is_door_occupied(b.door_pos, check_ents, exclude_entity=self, tile_size=TILE_SIZE)
-                            is_outside = (dist_out <= dist_in) and not b.occupies_tile(cur_gx, cur_gy)
-                            can_pass, q_pos = b.request_door_passage(self.id, is_outside, tile_size=TILE_SIZE)
-                            if door_phys or not can_pass:
-                                # Pintu sedang dipakai AI lain -> Bergerak ke posisi antrean lateral di samping pintu jika posisi tersedia
-                                if q_pos and len(q_pos) >= 2 and q_pos[0] is not None:
-                                    q_dist = math.hypot(self.x - q_pos[0], self.y - q_pos[1])
-                                    if q_dist > 12.0:
-                                        q_dx = (q_pos[0] - self.x) / q_dist
-                                        q_dy = (q_pos[1] - self.y) / q_dist
-                                        self.x += q_dx * self.speed * dt * 0.7
-                                        self.y += q_dy * self.speed * dt * 0.7
-                                        if building_manager:
-                                            self.x, self.y = building_manager.resolve_collision(self.x, self.y, self.radius, TILE_SIZE)
-                                self.is_waiting_for_path = True
-                                self.is_moving = False
-                                return False
-                            else:
-                                self.is_waiting_for_path = False
-                else:
-                    if b.door_active_user == str(self.id):
-                        b.release_door_passage(self.id)
-
-        # 6. Collision Sliding: Smooth tangential sliding past other AI (No deadlock, no stuck)
-        slide_dir_x, slide_dir_y, did_slide = calculate_collision_slide(
-            self, dir_x, dir_y, check_ents,
-            building_manager=building_manager,
-            furniture_manager=furniture_manager,
-            tile_size=TILE_SIZE
-        )
-        move_dir_x = slide_dir_x if did_slide else dir_x
-        move_dir_y = slide_dir_y if did_slide else dir_y
-
-        # 7. Pergerakan Fisik dengan Substepping & Resolusi Benturan Dinding
-        old_x, old_y = self.x, self.y
-        total_dist = self.speed * dt
-        max_step_dist = 6.0
-        num_steps = max(1, math.ceil(total_dist / max_step_dist))
-        sub_dt = dt / num_steps
-
-        for _ in range(num_steps):
-            old_step_x, old_step_y = self.x, self.y
-            self.x += move_dir_x * self.speed * sub_dt
-            self.y += move_dir_y * self.speed * sub_dt
-            if building_manager:
-                self.x, self.y = building_manager.resolve_collision(self.x, self.y, self.radius, TILE_SIZE, old_x=old_step_x, old_y=old_step_y)
-
-        # 8. Stuck Detection & Dynamic Obstacle Recovery
-        actual_moved = math.hypot(self.x - old_x, self.y - old_y)
-        expected_moved = self.speed * dt * 0.20
-
-        # Continuous 3-second hard stuck recovery: bypass collision blocking
-        if actual_moved < expected_moved and dist_to_wp > tol:
-            if not stuck_accrued:
-                self.hard_stuck_timer += dt
-                stuck_accrued = True
-            if self.hard_stuck_timer >= EMERGENCY_STUCK_TIMEOUT:
-                self.collision_bypass_timer = EMERGENCY_COLLISION_BYPASS_DURATION
-                self.hard_stuck_timer = 0.0
-                self.stuck_timer = 0.0
-                self.wait_timer = 0.0
-                self.is_waiting_for_path = False
-        else:
-            self.hard_stuck_timer = max(0.0, self.hard_stuck_timer - dt * 2.0)
-
-        # Jika sedang meluncur melewati AI lain, jangan anggap macet pada dinding
-        if actual_moved < expected_moved and dist_to_wp > tol and not did_slide:
+        # 5. Stuck Recovery
+        actual_dist = math.hypot(self.x - old_x, self.y - old_y)
+        if actual_dist < (move_dist * 0.15) and dist_to_wp > tol:
             self.stuck_timer += dt
-            if self.stuck_timer >= STUCK_THRESHOLD_SECONDS:
+            if self.stuck_timer >= 0.5:
                 cur_gx = int(math.floor(self.x / TILE_SIZE))
                 cur_gy = int(math.floor(self.y / TILE_SIZE))
                 blocked_gx = int(math.floor((self.x + dir_x * 24.0) / TILE_SIZE))
                 blocked_gy = int(math.floor((self.y + dir_y * 24.0) / TILE_SIZE))
-
-                now = time.time()
-                self.stuck_blocked_tiles[(blocked_gx, blocked_gy)] = now + STUCK_AVOIDANCE_DURATION
-
-                # Nudge ke arah tengah petak saat ini agar tidak lengket pada dinding/kolider
-                center_x = (cur_gx + 0.5) * TILE_SIZE
-                center_y = (cur_gy + 0.5) * TILE_SIZE
-                nudge_dx = center_x - self.x
-                nudge_dy = center_y - self.y
-                nudge_dist = math.hypot(nudge_dx, nudge_dy)
-                if nudge_dist > 0.1:
-                    self.x += (nudge_dx / nudge_dist) * min(4.0, nudge_dist)
-                    self.y += (nudge_dy / nudge_dist) * min(4.0, nudge_dist)
-
-                # Batalkan rute lama dan bebaskan reservasi
-                reg.release_reservation(self.id)
+                if not hasattr(self, "stuck_blocked_tiles") or not isinstance(self.stuck_blocked_tiles, dict):
+                    self.stuck_blocked_tiles = {}
+                self.stuck_blocked_tiles[(blocked_gx, blocked_gy)] = time.time() + 5.0
+                self.stuck_timer = 0.0
                 self.current_path = []
                 self.path_index = 0
-                self.stuck_timer = 0.0
-
-                avoid_set = set(self.stuck_blocked_tiles.keys())
-                avoid_set.update(reg.get_all_reserved_tiles(exclude_entity=self.id))
-                if furniture_manager and hasattr(furniture_manager, "get_occupied_tiles"):
-                    avoid_set.update(furniture_manager.get_occupied_tiles(exclude_tile=self.path_target_tile))
-                cur_gx = int(math.floor(self.x / TILE_SIZE))
-                cur_gy = int(math.floor(self.y / TILE_SIZE))
-                avoid_set.discard((cur_gx, cur_gy))
-                avoid_set.discard(self.path_target_tile)
-
-                if building_manager:
-                    cand_path = building_manager.find_path((self.x, self.y), (tx, ty), TILE_SIZE, furniture_manager=furniture_manager, avoid_tiles=avoid_set)
-                    if cand_path:
-                        success, res = reg.request_path_reservation(self.id, cand_path, (self.x, self.y), self.path_target_tile)
-                        if success:
-                            self.current_path = cand_path
-                return False
+                self.path_target = None
         else:
             self.stuck_timer = max(0.0, self.stuck_timer - dt * 2.0)
 
-        self.facing_angle = math.atan2(move_dir_y, move_dir_x)
-        self.walk_cycle += dt * 14.0
+        if vx != 0 or vy != 0:
+            self.facing_angle = math.atan2(vy, vx)
+            self.walk_cycle += dt * 10.0
+
         return False
 
     def _get_site_work_pos(self, site, all_servants=None):
@@ -1602,41 +1384,9 @@ class ServantManager:
             s.update(dt, building_manager, permit_manager, stockpile_manager, resources, player, self.servants,
                      furniture_manager=furniture_manager, villager_manager=villager_manager, servant_manager=self, all_entities=all_entities)
 
-        # 2. Hard Entity Collision Resolution: Servant vs Servant (Solid Physical Separation)
-        min_gap = MIN_ENTITY_SEPARATION
+        # AI entities pass freely through each other.
+        # AI must never pass through the Landlord/player.
         old_serv_pos = [(s.x, s.y) for s in self.servants]
-        for i in range(len(self.servants)):
-            s1 = self.servants[i]
-            for j in range(i + 1, len(self.servants)):
-                s2 = self.servants[j]
-                dx = s2.x - s1.x
-                dy = s2.y - s1.y
-                dist = math.hypot(dx, dy)
-                min_dist = s1.radius + s2.radius + min_gap
-                if dist < min_dist:
-                    if dist < 0.001:
-                        dx = random.uniform(-1.0, 1.0)
-                        dy = random.uniform(-1.0, 1.0)
-                        dist = math.hypot(dx, dy) or 1.0
-
-                    overlap = min_dist - dist
-                    nx = dx / dist
-                    ny = dy / dist
-
-                    # Push apart symmetrically along collision normal
-                    s1.x -= nx * overlap * 0.5
-                    s1.y -= ny * overlap * 0.5
-                    s2.x += nx * overlap * 0.5
-                    s2.y += ny * overlap * 0.5
-
-                    # Tangential slip: jika salah satu atau kedua AI bergerak, dorong juga ke samping agar saling menyelinap
-                    if getattr(s1, "is_moving", False) or getattr(s2, "is_moving", False):
-                        tx, ty = -ny, nx
-                        slip = overlap * 0.25
-                        s1.x += tx * slip
-                        s1.y += ty * slip
-                        s2.x -= tx * slip
-                        s2.y -= ty * slip
 
         # 3. Hard Entity Collision Resolution: Servant vs Player (Servant Yields & Steps Aside)
         if player:

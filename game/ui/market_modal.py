@@ -28,6 +28,7 @@ from game.systems.currency import (
     canonical_denomination
 )
 from game.systems.household_inventory import get_household_possessions
+from game.systems.market_service import MarketService
 from game.ui.item_icons import draw_item_icon
 
 class MarketProfileModal:
@@ -108,13 +109,15 @@ class MarketProfileModal:
             if not hasattr(market_building, "prices") or not market_building.prices:
                 market_building.prices = dict(DEFAULT_ITEM_PRICES)
             if not hasattr(market_building, "inventory") or market_building.inventory is None:
-                market_building.inventory = {"Potato": 100}
+                market_building.inventory = {}
             if not hasattr(market_building, "currency") or not market_building.currency:
                 market_building.currency = {"Copper": 0, "Silver": 0, "Gold": 0}
             if not hasattr(market_building, "assigned_family_id"):
                 market_building.assigned_family_id = None
             if not hasattr(market_building, "item_allocations") or not isinstance(market_building.item_allocations, dict):
-                market_building.item_allocations = {"Potato": 50}
+                market_building.item_allocations = {}
+            if not hasattr(market_building, "auto_pricing"):
+                market_building.auto_pricing = True
 
     def close(self):
         self.is_open = False
@@ -156,15 +159,27 @@ class MarketProfileModal:
 
                 if self.unassign_stall_btn_rect and self.unassign_stall_btn_rect.collidepoint(mouse_pos):
                     mkt.assigned_family_id = None
+                    mkt.assigned_household_id = None
                     mkt.owner = "landlord"
                     self.show_assign_dialog = False
+                    try:
+                        from game.systems.wealth_system import VillageWealthSystem
+                        VillageWealthSystem.mark_dirty()
+                    except ImportError:
+                        pass
                     return "stall_unassigned"
 
                 for fam_id, btn_rect in self.family_assign_btn_rects.items():
                     if btn_rect.collidepoint(mouse_pos):
                         mkt.assigned_family_id = fam_id
+                        mkt.assigned_household_id = fam_id
                         mkt.owner = fam_id
                         self.show_assign_dialog = False
+                        try:
+                            from game.systems.wealth_system import VillageWealthSystem
+                            VillageWealthSystem.mark_dirty()
+                        except ImportError:
+                            pass
                         return f"stall_assigned_{fam_id}"
                 return None
 
@@ -516,8 +531,8 @@ class MarketProfileModal:
         for it_name in market_items[:5]:
             stock_qty = mkt.inventory.get(it_name, 0)
 
-            # Selling Price: Read directly from market prices (scarcity adjusted by Agent 3)
-            active_price = mkt.prices.get(it_name, DEFAULT_ITEM_PRICES.get(it_name, 3))
+            # Selling Price: Read dynamic scarcity price (AGENT 3)
+            active_price = MarketService.get_item_price(it_name, mkt)
             active_price = max(1, int(active_price))
             d_price = from_copper(active_price)
 

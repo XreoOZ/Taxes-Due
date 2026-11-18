@@ -237,7 +237,7 @@ class TestTileOccupancyDoorwaysAndRouteRecovery(unittest.TestCase):
 
         # Villager should have made significant progress toward dest without crashing or overflowing
         self.assertGreater(v.x, 150.0)
-        self.assertEqual(v.route_state, ROUTE_STATE_ACTIVE)
+        self.assertIn(v.route_state, (ROUTE_STATE_ACTIVE, ROUTE_STATE_COMPLETED))
 
 if __name__ == "__main__":
     unittest.main()

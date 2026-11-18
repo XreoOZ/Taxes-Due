@@ -281,6 +281,8 @@ class AIMarketPurchasingSystem:
     Universal Market Purchasing System for AI (Agent 3).
     Handles needed materials purchasing (e.g. Wood and Stone restocking for Gravedigger).
     """
+    execute_market_transaction = AIFoodPurchasingSystem.execute_market_transaction
+    find_nearest_eligible_market = AIFoodPurchasingSystem.find_nearest_eligible_market
 
     @classmethod
     def check_gravedigger_stock(cls, villager, furniture_manager=None):

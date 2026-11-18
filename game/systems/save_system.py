@@ -103,7 +103,11 @@ def serialize_game_state(day_cycle, resources, player, permit_manager, building_
             "owner": getattr(b, "owner", "landlord"),
             "inventory": dict(getattr(b, "inventory", {})),
             "currency": dict(getattr(b, "currency", {})),
-            "prices": dict(getattr(b, "prices", {}))
+            "prices": dict(getattr(b, "prices", {})),
+            "assigned_family_id": getattr(b, "assigned_family_id", None),
+            "assigned_household_id": getattr(b, "assigned_household_id", None),
+            "item_allocations": dict(getattr(b, "item_allocations", {})),
+            "auto_pricing": getattr(b, "auto_pricing", True)
         })
 
     sites_data = []
@@ -116,6 +120,29 @@ def serialize_game_state(day_cycle, resources, player, permit_manager, building_
             "build_progress": getattr(s, "build_progress", 0.0),
             "delivered_cost": dict(getattr(s, "delivered_cost", {})),
             "required_cost": dict(getattr(s, "required_cost", {}))
+        })
+
+    demolition_data = []
+    for d in getattr(building_manager, "demolition_sites", []):
+        b = d.building
+        demolition_data.append({
+            "progress": d.progress,
+            "refund_wood": d.refund_wood,
+            "refund_stone": d.refund_stone,
+            "building": {
+                "building_type": b.building_type,
+                "tiles": [[gx, gy] for gx, gy in b.tiles],
+                "door_pos": list(b.door_pos) if b.door_pos else None,
+                "door_side": getattr(b, "door_side", "bottom"),
+                "owner": getattr(b, "owner", "landlord"),
+                "inventory": dict(getattr(b, "inventory", {})),
+                "currency": dict(getattr(b, "currency", {})),
+                "prices": dict(getattr(b, "prices", {})),
+                "assigned_family_id": getattr(b, "assigned_family_id", None),
+                "assigned_household_id": getattr(b, "assigned_household_id", None),
+                "item_allocations": dict(getattr(b, "item_allocations", {})),
+                "auto_pricing": getattr(b, "auto_pricing", True)
+            }
         })
 
     # 5. Stockpile
@@ -250,6 +277,7 @@ def serialize_game_state(day_cycle, resources, player, permit_manager, building_
         "permits": permits_data,
         "buildings": buildings_data,
         "construction_sites": sites_data,
+        "demolition_sites": demolition_data,
         "stockpile": stacks_data,
         "furniture": furniture_data,
         "families": families_data,
@@ -375,6 +403,14 @@ def deserialize_game_state(data, day_cycle, resources, player, permit_manager, b
             b.currency = dict(b_d["currency"])
         if "prices" in b_d:
             b.prices = dict(b_d["prices"])
+        if "assigned_family_id" in b_d:
+            b.assigned_family_id = b_d["assigned_family_id"]
+        if "assigned_household_id" in b_d:
+            b.assigned_household_id = b_d["assigned_household_id"]
+        if "item_allocations" in b_d:
+            b.item_allocations = dict(b_d["item_allocations"])
+        if "auto_pricing" in b_d:
+            b.auto_pricing = b_d["auto_pricing"]
         building_manager.buildings.append(b)
 
     building_manager.construction_sites.clear()
@@ -386,6 +422,27 @@ def deserialize_game_state(data, day_cycle, resources, player, permit_manager, b
         s.delivered_cost = dict(s_d.get("delivered_cost", {}))
         s.required_cost = dict(s_d.get("required_cost", {}))
         building_manager.construction_sites.append(s)
+
+    building_manager.demolition_sites.clear()
+    for d_d in data.get("demolition_sites", []):
+        b_d = d_d.get("building", {})
+        tiles = {(t[0], t[1]) for t in b_d.get("tiles", [])}
+        door_pos = tuple(b_d["door_pos"]) if b_d.get("door_pos") else None
+        b = Building(b_d.get("building_type", "wooden_structure"), tiles, door_pos=door_pos, door_side=b_d.get("door_side", "bottom"))
+        b.owner = b_d.get("owner", "landlord")
+        b.inventory = dict(b_d.get("inventory", {}))
+        b.currency = dict(b_d.get("currency", {}))
+        b.prices = dict(b_d.get("prices", {}))
+        b.assigned_family_id = b_d.get("assigned_family_id")
+        b.assigned_household_id = b_d.get("assigned_household_id")
+        b.item_allocations = dict(b_d.get("item_allocations", {}))
+        b.auto_pricing = b_d.get("auto_pricing", True)
+        from game.buildings.buildings import DemolitionSite
+        site = DemolitionSite(b)
+        site.progress = d_d.get("progress", 0.0)
+        site.refund_wood = d_d.get("refund_wood", site.refund_wood)
+        site.refund_stone = d_d.get("refund_stone", site.refund_stone)
+        building_manager.demolition_sites.append(site)
 
     # 6. Stockpile
     stockpile_manager.stacks.clear()
@@ -562,6 +619,9 @@ def deserialize_game_state(data, day_cycle, resources, player, permit_manager, b
 
     from game.world.pathfinding import GlobalPathRegistry
     GlobalPathRegistry.get_instance().reset()
+
+    from game.systems.wealth_system import VillageWealthSystem
+    VillageWealthSystem.mark_dirty()
     return True
 
 def load_from_slot(slot_id, day_cycle, resources, player, permit_manager, building_manager, stockpile_manager, furniture_manager, villager_manager, servant_manager, schedule_manager):

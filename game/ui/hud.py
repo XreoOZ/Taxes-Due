@@ -36,8 +36,12 @@ class ResourceHUD:
         self._init_fonts()
         screen_w, _ = surface.get_size()
 
-        # Hitung tinggi kartu berdasarkan jumlah resource
-        num_items = len(resources)
+        # Strict core resources filter: never overflow HUD with non-core items
+        core_keys = ["Wood", "Food", "Stone", "Water", "Copper", "Silver", "Gold"]
+        core_resources = {k: resources.get(k, 0) for k in core_keys}
+
+        # Hitung tinggi kartu berdasarkan jumlah core resource
+        num_items = len(core_resources)
         card_h = self.header_height + (num_items * self.row_height) + self.padding
 
         # Posisi di pojok kanan atas
@@ -64,7 +68,7 @@ class ResourceHUD:
 
         # 3. List Resource Items
         start_y = card_y + 36
-        for i, (name, amount) in enumerate(resources.items()):
+        for i, (name, amount) in enumerate(core_resources.items()):
             row_y = start_y + (i * self.row_height)
 
             # Unified procedural vector item icon (AGENT 2)

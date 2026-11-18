@@ -316,6 +316,14 @@ class Villager:
             return "Burying deceased in Cemetery"
         elif task == "CARRYING_CORPSE":
             return "Transporting corpse to Cemetery"
+        elif task == "HAULING_STALL_COINS_FETCH":
+            return "Collecting market stall earnings"
+        elif task == "HAULING_STALL_COINS_DELIVER":
+            return "Depositing market stall coins to chest"
+        elif task == "HAULING_STALL_GOODS_FETCH":
+            return "Fetching allocated goods for market stall"
+        elif task == "HAULING_STALL_GOODS_DELIVER":
+            return "Hauling goods to market stall"
         elif task == "SLEEPING":
             if getattr(self, "assigned_bed_id", None):
                 return "Sleeping in Bed"
@@ -1448,6 +1456,18 @@ class Villager:
                 return
 
         # -------------------------------------------------------------
+        # Rutinitas 1.55: Household Stall Tasks (Hauling allocated goods / collecting earnings)
+        # -------------------------------------------------------------
+        if self.task.startswith("HAULING_STALL_"):
+            from game.systems.household_stall_system import HouseholdStallSystem
+            handled = HouseholdStallSystem.execute_stall_chores_tick(
+                self, dt, building_manager, furniture_manager,
+                all_entities=all_entities, player=player, tile_size=TILE_SIZE
+            )
+            if handled:
+                return
+
+        # -------------------------------------------------------------
         # Rutinitas 1.6: Pengamanan & Pengangkutan Barang Milik Keluarga (Household Possession Retrieval)
         # -------------------------------------------------------------
         if sched_activity != "SLEEP" and stockpile_manager:
@@ -2203,6 +2223,15 @@ class Villager:
                     self.task = "SEEKING_WATER"
                     return
 
+        # Evaluasi Household Market Stall (Stall Chores during Leisure Time)
+        if sched_activity in ("LEISURE", "ANY") and self.task in ("IDLE", "LEISURE", "STROLLING"):
+            from game.systems.household_stall_system import HouseholdStallSystem
+            started = HouseholdStallSystem.check_and_start_stall_chores(
+                self, building_manager, furniture_manager, all_entities=all_entities
+            )
+            if started:
+                return
+
         self._idle_behavior(dt, player=player, all_entities=all_entities, building_manager=building_manager, permit_manager=permit_manager, furniture_manager=furniture_manager)
 
     def _idle_behavior(self, dt, player=None, all_entities=None, building_manager=None, permit_manager=None, furniture_manager=None):
@@ -2306,6 +2335,9 @@ class Villager:
         if getattr(self, "player_avoid_speech_cooldown", 0.0) > 0.0:
             self.player_avoid_speech_cooldown = max(0.0, self.player_avoid_speech_cooldown - dt)
 
+        if getattr(self, "collision_bypass_timer", 0.0) > 0.0:
+            self.collision_bypass_timer = max(0.0, self.collision_bypass_timer - dt)
+
         # 0. Route Lifecycle Tracking
         if not hasattr(self, "route_state"):
             self.route_state = ROUTE_STATE_NONE
@@ -2313,6 +2345,23 @@ class Villager:
             self.route_request_timer = 0.0
         if not hasattr(self, "route_retry_count"):
             self.route_retry_count = 0
+        if not hasattr(self, "hard_stuck_timer"):
+            self.hard_stuck_timer = 0.0
+
+        # Check exclusive target occupancy
+        tgt_gx = int(math.floor(tx / TILE_SIZE))
+        tgt_gy = int(math.floor(ty / TILE_SIZE))
+        self.path_target_tile = (tgt_gx, tgt_gy)
+        if exclusive_target and self.path_target_tile:
+            occ = reg.get_tile_occupant(self.path_target_tile)
+            if occ and occ != str(self.id):
+                if getattr(self, "collision_bypass_timer", 0.0) <= 0.0:
+                    self.hard_stuck_timer += dt
+                    if self.hard_stuck_timer >= EMERGENCY_STUCK_TIMEOUT:
+                        self.collision_bypass_timer = EMERGENCY_COLLISION_BYPASS_DURATION
+                        self.hard_stuck_timer = 0.0
+                        self.is_waiting_for_path = False
+                    return False
 
         # Direct arrival check
         direct_dist = math.hypot(tx - self.x, ty - self.y)
@@ -2372,14 +2421,22 @@ class Villager:
                 cand_path = [(tx, ty)]
 
             if cand_path:
-                self.current_path = cand_path
-                self.path_index = 0
-                self.is_waiting_for_path = False
-                self.wait_timer = 0.0
-                self.route_state = ROUTE_STATE_ASSIGNED
-                self.route_request_timer = 0.0
-                self.route_retry_count = 0
-                reg.request_path_reservation(self.id, cand_path, (self.x, self.y), self.path_target_tile, building_manager=building_manager, exclusive_target=exclusive_target)
+                success, res_or_conf = reg.request_path_reservation(self.id, cand_path, (self.x, self.y), self.path_target_tile, building_manager=building_manager, exclusive_target=exclusive_target)
+                if success:
+                    self.current_path = cand_path
+                    self.path_index = 0
+                    self.is_waiting_for_path = False
+                    self.wait_timer = 0.0
+                    self.route_state = ROUTE_STATE_ASSIGNED
+                    self.route_request_timer = 0.0
+                    self.route_retry_count = 0
+                else:
+                    self.current_path = []
+                    self.path_index = 0
+                    self.is_moving = False
+                    self.is_waiting_for_path = True
+                    self.wait_timer = 0.2
+                    return False
             else:
                 self.route_retry_count += 1
                 if self.route_retry_count >= ROUTE_MAX_RETRIES:
@@ -2387,6 +2444,7 @@ class Villager:
                     self.is_waiting_for_path = False
                     self.is_moving = False
                     self.current_path = []
+                    self.route_request_timer = 0.0
                     return False
                 self.route_request_timer += dt
                 if self.route_request_timer >= ROUTE_REQUEST_TIMEOUT:
@@ -2394,6 +2452,7 @@ class Villager:
                     self.is_waiting_for_path = False
                     self.is_moving = False
                     self.current_path = []
+                    self.route_request_timer = 0.0
                     return False
                 self.is_moving = False
                 return False
@@ -2450,6 +2509,56 @@ class Villager:
         vx = dir_x * move_dist
         vy = dir_y * move_dist
 
+        # Doorway coordination
+        cur_gx = int(math.floor(self.x / TILE_SIZE))
+        cur_gy = int(math.floor(self.y / TILE_SIZE))
+        b_at = building_manager.get_building_at(cur_gx, cur_gy) if building_manager else None
+        if building_manager:
+            for b in getattr(building_manager, "buildings", []):
+                if not getattr(b, "door_pos", None):
+                    continue
+                d_out = b.get_door_world_outside(TILE_SIZE)
+                d_in = b.get_door_world_inside(TILE_SIZE)
+                dist_out = math.hypot(self.x - d_out[0], self.y - d_out[1])
+                dist_in = math.hypot(self.x - d_in[0], self.y - d_in[1])
+                in_threshold = b.is_in_door_threshold(self.x, self.y, TILE_SIZE)
+                near_door = dist_out < 64.0 or dist_in < 64.0 or in_threshold
+
+                if near_door:
+                    tar_gx = int(math.floor(tx / TILE_SIZE))
+                    tar_gy = int(math.floor(ty / TILE_SIZE))
+                    b_tgt = building_manager.get_building_at(tar_gx, tar_gy)
+                    crosses_door = (b_at != b and b_tgt == b) or (b_at == b and b_tgt != b) or \
+                                   (getattr(self, "door_waypoints", None) and any(b.occupies_tile(int(wp[0]//TILE_SIZE), int(wp[1]//TILE_SIZE)) for wp in self.door_waypoints)) or \
+                                   (self.current_path and any(b.occupies_tile(int(wp[0]//TILE_SIZE), int(wp[1]//TILE_SIZE)) for wp in self.current_path[self.path_index:]))
+                    if crosses_door:
+                        if in_threshold:
+                            b.door_active_user = str(self.id)
+                            self.is_waiting_for_path = False
+                        else:
+                            door_phys = building_manager.is_door_occupied(b.door_pos, all_entities, exclude_entity=self, tile_size=TILE_SIZE)
+                            is_outside = (dist_out <= dist_in) and not b.occupies_tile(cur_gx, cur_gy)
+                            can_pass, q_pos = b.request_door_passage(self.id, is_outside, tile_size=TILE_SIZE)
+                            if door_phys or not can_pass:
+                                if q_pos:
+                                    q_dist = math.hypot(self.x - q_pos[0], self.y - q_pos[1])
+                                    if q_dist > 12.0:
+                                        q_dx = (q_pos[0] - self.x) / q_dist
+                                        q_dy = (q_pos[1] - self.y) / q_dist
+                                        self.x += q_dx * self.speed * dt * 0.7
+                                        self.y += q_dy * self.speed * dt * 0.7
+                                        if building_manager:
+                                            self.x, self.y = building_manager.resolve_collision(self.x, self.y, self.radius, TILE_SIZE)
+                                self.is_waiting_for_path = True
+                                self.is_moving = False
+                                return False
+                            else:
+                                b.door_active_user = str(self.id)
+                                self.is_waiting_for_path = False
+                else:
+                    if b.door_active_user == str(self.id):
+                        b.release_door_passage(self.id)
+
         # 3. Player / Landlord Avoidance & Speech Bubble
         if player:
             p_dx = player.x - self.x
@@ -2494,6 +2603,12 @@ class Villager:
             self.y += sub_vy
             if building_manager:
                 self.x, self.y = building_manager.resolve_collision(self.x, self.y, self.radius, TILE_SIZE, old_x=step_ox, old_y=step_oy)
+
+        if building_manager:
+            for b in getattr(building_manager, "buildings", []):
+                if getattr(b, "door_pos", None) and (b.is_in_door_threshold(self.x, self.y, TILE_SIZE) or b.is_in_door_threshold(old_x, old_y, TILE_SIZE)):
+                    b.door_active_user = str(self.id)
+                    break
 
         # 5. Stuck Recovery
         actual_dist = math.hypot(self.x - old_x, self.y - old_y)
@@ -3135,10 +3250,34 @@ class VillagerManager:
 
         # Minimum personal space separation (MIN_ENTITY_SEPARATION gap) antar seluruh individu AI
         # Mencegah AI bertumpuk/bergerombol pada satu titik
-        # AI entities pass freely through each other.
-        # AI must never pass through the Landlord/player.
+        # AI entities pass freely through each other while moving.
+        # Stationary/sleeping AI gently relax apart so they don't visually overlap on one pixel.
         old_vil_pos = [(v.x, v.y) for v in all_vils]
         old_serv_pos = [(s.x, s.y) for s in all_servants] if all_servants else []
+
+        min_gap = MIN_ENTITY_SEPARATION
+        for i in range(len(all_vils)):
+            v1 = all_vils[i]
+            if not getattr(v1, "is_alive", True):
+                continue
+            for j in range(i + 1, len(all_vils)):
+                v2 = all_vils[j]
+                if not getattr(v2, "is_alive", True):
+                    continue
+                dx = v2.x - v1.x
+                dy = v2.y - v1.y
+                dist = math.hypot(dx, dy)
+                min_dist = v1.radius + v2.radius + min_gap
+                if dist < min_dist:
+                    if dist <= 0.001:
+                        dx, dy = 0.1, 0.0
+                        dist = 0.1
+                    overlap = min_dist - dist
+                    nx, ny = dx / dist, dy / dist
+                    v1.x -= nx * overlap * 0.5
+                    v1.y -= ny * overlap * 0.5
+                    v2.x += nx * overlap * 0.5
+                    v2.y += ny * overlap * 0.5
 
         if player:
             min_p_gap = 2.0
