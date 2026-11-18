@@ -851,64 +851,21 @@ class GlobalPathRegistry:
                 if getattr(b, "door_pos", None):
                     door_tiles.add(b.door_pos)
 
-        conflicts = []
-        for other_eid, res in self.reservations.items():
-            if other_eid == eid_str:
-                continue
-
-            # 1. Target collision (Hanya untuk petak eksklusif, misal ranjang tidur)
-            if target_tile and res.target_tile and target_tile == res.target_tile:
-                if exclusive_target and getattr(res, "exclusive_target", False):
-                    conflicts.append((other_eid, "TARGET_CONFLICT", res))
-                    continue
-
-            # 2. Celah pintu sempit (Doorway bottleneck) arah berlawanan
-            shared_tiles = candidate_tiles.intersection(res.reserved_tiles)
-            shared_doors = shared_tiles.intersection(door_tiles)
-            if shared_doors:
-                door = next(iter(shared_doors))
-                my_dir = self._get_door_direction(candidate_pts, door, bm)
-                other_dir = self._get_door_direction(res.waypoints, door, bm)
-                if my_dir and other_dir and my_dir != other_dir:
-                    conflicts.append((other_eid, "DOORWAY_CONFLICT", res))
-                    continue
-
         # AI-to-AI pass-through: tidak ada antrean atau pemblokiran rute antar-AI
-        return conflicts
+        return []
 
     def request_path_reservation(self, entity_id, waypoints, current_pos, target_tile, building_manager=None, exclusive_target=False):
         """
-        Meminta reservasi rute secara atomik dengan First-Come, First-Served priority.
-        Mengembalikan (True, reservation) jika berhasil, atau (False, conflicts) jika gagal.
+        Meminta reservasi rute untuk visualisasi dan tracking jalur. Seluruh AI bebas lewat tanpa antrean.
         """
         eid_str = str(entity_id)
         self.clean_stale_reservations()
 
-        # Bersihkan entri lama milik diri sendiri dari antrean sebelum mengevaluasi antrean
-        self.waiting_queue = [w for w in self.waiting_queue if w[0] != eid_str]
-
-        # Prioritas antrean menunggu: jika ada entitas lain yang mendahului dalam antrean menuju petak sama
-        if exclusive_target and target_tile and self.waiting_queue:
-            for w in self.waiting_queue:
-                w_eid, w_target, _ = w
-                if w_eid != eid_str and w_target == target_tile:
-                    return False, [("QUEUE_PRIORITY", w_eid)]
-
-        conflicts = self.find_conflicts(eid_str, waypoints, current_pos, target_tile, building_manager=building_manager, exclusive_target=exclusive_target)
-        if conflicts:
-            if exclusive_target:
-                self.register_waiting(eid_str, target_tile)
-            return False, conflicts
-
-        # Tidak ada konflik! Daftarkan reservasi baru
+        # Daftarkan reservasi baru
         self.seq_counter += 1
         res = PathReservation(eid_str, self.seq_counter, waypoints, current_pos, target_tile, exclusive_target=exclusive_target)
         self.reservations[eid_str] = res
 
-        # Hapus dari antrean menunggu jika sebelumnya sedang menunggu
-        self.waiting_queue = [w for w in self.waiting_queue if w[0] != eid_str]
-
-        # Juga catat claim target untuk kompatibilitas jika eksklusif
         if target_tile and exclusive_target:
             self.register_claim(eid_str, target_tile)
 
@@ -1025,24 +982,6 @@ def draw_ai_paths(surface, camera, villagers=None, servants=None, show_lines=Tru
     for actor, color, label in all_actors:
         waypoints = getattr(actor, "current_path", None)
         path_idx = getattr(actor, "path_index", 0)
-        is_waiting = getattr(actor, "is_waiting_for_path", False)
-        is_idle = (getattr(actor, "state", "") == "IDLE" or
-                   getattr(actor, "task", "") in ("IDLE", "LEISURE") or
-                   not getattr(actor, "is_alive", True))
-
-        # Jika sedang menunggu jalur dibebaskan oleh AI lain, tampilkan tag [WAITING ROUTE]
-        # Hanya untuk pekerja aktif yang sedang menunggu rute, bukan karakter santai/idle
-        if is_waiting and not is_idle and (not waypoints or path_idx >= len(waypoints)):
-            screen_pos = camera.world_to_screen(actor.x, actor.y)
-            wait_tag = f"{getattr(actor, 'first_name', 'Servant')} [WAITING ROUTE]"
-            tag_surf = font_tag.render(wait_tag, True, (255, 230, 120))
-            tag_w = tag_surf.get_width() + 8
-            tag_h = 16
-            tag_bg = pygame.Rect(int(screen_pos[0] - tag_w // 2), int(screen_pos[1] - 28), tag_w, tag_h)
-            pygame.draw.rect(surface, (15, 23, 42, 220), tag_bg, border_radius=4)
-            pygame.draw.rect(surface, (234, 179, 8), tag_bg, width=1, border_radius=4)
-            surface.blit(tag_surf, (tag_bg.x + 4, tag_bg.y + 1))
-            continue
 
         if not waypoints or path_idx >= len(waypoints):
             continue

@@ -1382,18 +1382,21 @@ class Villager:
                 self.assigned_bed_id = None
                 # Perilaku alternatif: Tidur di lantai rumah secara tersebar pada petak berbeda (64px separation)
                 p = next((p for p in permit_manager.permits if p.id == self.assigned_permit_id), None) if permit_manager else None
+                id_str = str(self.id)
+                num_part = id_str.split("_")[-1] if "_" in id_str else ""
+                fallback_idx = int(num_part) if num_part.isdigit() else abs(hash(id_str))
                 fam_members = [e for e in all_entities if getattr(e, "family_id", None) == self.family_id] if all_entities else []
                 if not fam_members and getattr(self, "villager_manager", None):
                     fam_members = [v for v in self.villager_manager.get_all_villagers() if getattr(v, "family_id", None) == self.family_id]
-                m_idx = fam_members.index(self) if self in fam_members else (abs(hash(str(self.id))) % 8)
+                m_idx = fam_members.index(self) if self in fam_members else fallback_idx
 
                 if p and p.tiles:
                     sorted_tiles = sorted(list(p.tiles), key=lambda t: (t[1], t[0]))
                     floor_tile = sorted_tiles[m_idx % len(sorted_tiles)]
-                    offset_x = ((m_idx * 17) % 21) - 10.0
-                    offset_y = ((m_idx * 23) % 21) - 10.0
-                    floor_x = (floor_tile[0] + 0.5) * TILE_SIZE + offset_x
-                    floor_y = (floor_tile[1] + 0.5) * TILE_SIZE + offset_y
+                    slot_ox = ((m_idx % 3) - 1) * 18.0
+                    slot_oy = (((m_idx // 3) % 3) - 1) * 18.0
+                    floor_x = (floor_tile[0] + 0.5) * TILE_SIZE + slot_ox
+                    floor_y = (floor_tile[1] + 0.5) * TILE_SIZE + slot_oy
                 else:
                     # Homeless at Town Center: spread out radially with generous spacing
                     total_m = max(1, len(fam_members) or 6)
@@ -1401,7 +1404,7 @@ class Villager:
                     floor_x = math.cos(ang) * 75.0
                     floor_y = math.sin(ang) * 75.0
 
-                arrived = self._move_towards(floor_x, floor_y, dt, arrival_dist=14, all_entities=all_entities, player=player, building_manager=building_manager, furniture_manager=furniture_manager)
+                arrived = self._move_towards(floor_x, floor_y, dt, arrival_dist=6, all_entities=all_entities, player=player, building_manager=building_manager, furniture_manager=furniture_manager)
                 if not self.speech_text and random.random() < 0.015:
                     self.say("Sleeping on the floor... I wish we had a Bed!", duration=2.5)
             return
@@ -2425,22 +2428,14 @@ class Villager:
                 cand_path = [(tx, ty)]
 
             if cand_path:
-                success, res_or_conf = reg.request_path_reservation(self.id, cand_path, (self.x, self.y), self.path_target_tile, building_manager=building_manager, exclusive_target=exclusive_target)
-                if success:
-                    self.current_path = cand_path
-                    self.path_index = 0
-                    self.is_waiting_for_path = False
-                    self.wait_timer = 0.0
-                    self.route_state = ROUTE_STATE_ASSIGNED
-                    self.route_request_timer = 0.0
-                    self.route_retry_count = 0
-                else:
-                    self.current_path = []
-                    self.path_index = 0
-                    self.is_moving = False
-                    self.is_waiting_for_path = True
-                    self.wait_timer = 0.2
-                    return False
+                self.current_path = cand_path
+                self.path_index = 0
+                self.is_waiting_for_path = False
+                self.wait_timer = 0.0
+                self.route_state = ROUTE_STATE_ASSIGNED
+                self.route_request_timer = 0.0
+                self.route_retry_count = 0
+                reg.request_path_reservation(self.id, cand_path, (self.x, self.y), self.path_target_tile, building_manager=building_manager, exclusive_target=exclusive_target)
             else:
                 self.route_retry_count += 1
                 if self.route_retry_count >= ROUTE_MAX_RETRIES:
@@ -3202,8 +3197,31 @@ class VillagerManager:
         for v in all_vils:
             v.update(dt, permit_manager, building_manager, all_entities, player, stockpile_manager=stockpile_manager, furniture_manager=furniture_manager, day_cycle=day_cycle, schedule_manager=schedule_manager, production_system=production_system, villager_manager=self)
 
-        # AI entities pass freely through each other.
+        # AI entities pass freely through each other while moving.
         # AI must never pass through the Landlord/player.
+        # Stationary AI sleeping on the floor gently separate if on the exact same coordinate (< 8px).
+        for i in range(len(all_vils)):
+            v1 = all_vils[i]
+            if not getattr(v1, "is_alive", True) or getattr(v1, "is_moving", False):
+                continue
+            for j in range(i + 1, len(all_vils)):
+                v2 = all_vils[j]
+                if not getattr(v2, "is_alive", True) or getattr(v2, "is_moving", False):
+                    continue
+                if getattr(v1, "task", "") == "SLEEPING" and getattr(v2, "task", "") == "SLEEPING":
+                    dx = v2.x - v1.x
+                    dy = v2.y - v1.y
+                    dist = math.hypot(dx, dy)
+                    if dist < 8.0:
+                        if dist <= 0.001:
+                            dx, dy = 1.0, 0.0
+                            dist = 1.0
+                        push = (8.0 - dist) * 0.5
+                        v1.x -= (dx / dist) * push
+                        v1.y -= (dy / dist) * push
+                        v2.x += (dx / dist) * push
+                        v2.y += (dy / dist) * push
+
         old_vil_pos = [(v.x, v.y) for v in all_vils]
         old_serv_pos = [(s.x, s.y) for s in all_servants] if all_servants else []
 

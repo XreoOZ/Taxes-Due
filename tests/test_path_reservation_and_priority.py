@@ -73,12 +73,12 @@ class TestPathReservationAndPriority(unittest.TestCase):
         v2._move_towards(v2_tgt_x, v2_tgt_y, dt=0.02, all_entities=[v1, v2],
                          building_manager=self.bm, furniture_manager=self.fm)
 
-        # v2 detects conflicting doorway reservation and must wait
-        self.assertTrue(v2.is_waiting_for_path, "Second AI attempting to use reserved doorway must wait")
-        self.assertEqual(len(v2.current_path), 0, "Second AI must not move along conflicting path")
+        # In the abolished pathfinding system, AI entities pass freely through each other and doorways
+        self.assertFalse(v2.is_waiting_for_path, "AI passes through without waiting at doorway")
+        self.assertTrue(len(v2.current_path) > 0, "Second AI moves freely along its path")
 
     def test_clearing_doorway_releases_reservation_and_waiting_ai_proceeds(self):
-        """Once first AI clears the reserved route, waiting AI automatically acquires the route"""
+        """AI entities pass through doorways simultaneously without waiting or blockage"""
         v1 = Villager("vil_1", "Alice", "Ward", "female", 24, 1, "Peasant Farmer", "fam1",
                       x=(12 + 0.5) * TILE_SIZE, y=(9 + 0.5) * TILE_SIZE)
         v2 = Villager("vil_2", "Bob", "Ward", "male", 26, 1, "Peasant Farmer", "fam1",
@@ -93,7 +93,8 @@ class TestPathReservationAndPriority(unittest.TestCase):
         v2_tgt_y = (8 + 0.5) * TILE_SIZE
         v2._move_towards(v2_tgt_x, v2_tgt_y, dt=0.02, all_entities=[v1, v2],
                          building_manager=self.bm, furniture_manager=self.fm)
-        self.assertTrue(v2.is_waiting_for_path)
+        self.assertFalse(v2.is_waiting_for_path)
+        self.assertTrue(len(v2.current_path) > 0)
 
         # v1 finishes its path or releases its reservation
         self.reg.release_reservation(v1.id)
