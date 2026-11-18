@@ -1482,6 +1482,22 @@ class Servant:
             else:
                 pygame.draw.rect(surface, (234, 179, 8), (carry_x + box_w // 2 - 2, carry_y + box_h // 2 - 2, 4, 4))
 
+        # 4.6. Animasi Membangun (Building Hammer Tool)
+        elif getattr(self, "state", "") == "BUILDING" and not getattr(self, "is_moving", False):
+            hx = sx + int(math.cos(self.facing_angle + 0.45) * (r * 0.85))
+            hy = char_y + int(math.sin(self.facing_angle + 0.45) * (r * 0.85))
+            shaft_len = int(14 * camera.zoom)
+            strike_swing = math.sin(time.time() * 8.0) * 0.6
+            h_angle = self.facing_angle + strike_swing
+            end_x = hx + int(math.cos(h_angle) * shaft_len)
+            end_y = hy + int(math.sin(h_angle) * shaft_len)
+            pygame.draw.line(surface, (180, 120, 70), (hx, hy), (end_x, end_y), max(2, int(3 * camera.zoom)))
+            head_w = max(4, int(8 * camera.zoom))
+            head_h = max(3, int(5 * camera.zoom))
+            pygame.draw.rect(surface, (148, 163, 184), (end_x - head_w // 2, end_y - head_h // 2, head_w, head_h))
+            if strike_swing < -0.3:
+                pygame.draw.circle(surface, (253, 224, 71), (end_x, end_y), max(1, int(2 * camera.zoom)))
+
         # 5. Speech Bubble (Pesan kepada Landlord)
         if self.speech_text and font_bubble:
             txt_surf = font_bubble.render(self.speech_text, True, (15, 23, 42))

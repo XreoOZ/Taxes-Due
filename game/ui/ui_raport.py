@@ -51,6 +51,8 @@ from game.systems.household_inventory import (
     sort_possession_items,
     canonical_item_name
 )
+from game.systems.wealth_system import VillageWealthSystem
+from game.ui.item_icons import draw_item_icon
 
 GRANTABLE_ITEMS = [
     {"type": "Hoe", "name": "Hoe"},
@@ -64,78 +66,6 @@ GRANTABLE_ITEMS = [
     {"type": "Silver", "name": "Silver Coin"},
     {"type": "Gold", "name": "Gold Coin"},
 ]
-
-def draw_item_icon(surface, item_name, cx, cy, size=12):
-    """Draws crisp medieval procedural vector icons for items without relying on OS emoji fonts"""
-    name_low = str(item_name).lower()
-    if "gold" in name_low:
-        pygame.draw.circle(surface, (250, 204, 21), (cx, cy), 6)
-        pygame.draw.circle(surface, (161, 98, 7), (cx, cy), 6, 1)
-    elif "silver" in name_low:
-        pygame.draw.circle(surface, (203, 213, 225), (cx, cy), 6)
-        pygame.draw.circle(surface, (100, 116, 139), (cx, cy), 6, 1)
-    elif "coin" in name_low or "copper" in name_low:
-        pygame.draw.circle(surface, (184, 115, 51), (cx, cy), 6)
-        pygame.draw.circle(surface, (120, 53, 15), (cx, cy), 6, 1)
-    elif "potato" in name_low or "spud" in name_low:
-        r = pygame.Rect(cx - size, cy - int(size * 0.7), size * 2, int(size * 1.4))
-        pygame.draw.ellipse(surface, (180, 115, 60), r)
-        pygame.draw.ellipse(surface, (120, 70, 30), r, 1)
-        pygame.draw.circle(surface, (100, 50, 20), (cx - 4, cy - 2), 1)
-        pygame.draw.circle(surface, (100, 50, 20), (cx + 3, cy + 1), 1)
-    elif "hoe" in name_low:
-        pygame.draw.line(surface, (139, 90, 43), (cx - size + 2, cy + size - 2), (cx + 4, cy - 4), 2)
-        pygame.draw.line(surface, (170, 175, 185), (cx + 1, cy - 8), (cx + 8, cy - 2), 3)
-        pygame.draw.line(surface, (220, 225, 235), (cx + 2, cy - 7), (cx + 7, cy - 3), 1)
-    elif "sickle" in name_low:
-        pygame.draw.line(surface, (139, 90, 43), (cx - 4, cy + 2), (cx - 7, cy + size - 2), 2)
-        arc_rect = pygame.Rect(cx - 6, cy - size + 2, size * 2 - 2, size * 2 - 2)
-        pygame.draw.arc(surface, (200, 210, 225), arc_rect, 0.4, 3.2, 2)
-    elif "can" in name_low or "watering" in name_low:
-        # Medieval Watering Pot (Chantepleure / terracotta vessel)
-        pygame.draw.circle(surface, (180, 105, 55), (cx, cy + 2), int(size * 0.75))
-        pygame.draw.circle(surface, (120, 65, 30), (cx, cy + 2), int(size * 0.75), 1)
-        pygame.draw.rect(surface, (160, 90, 45), (cx - 3, cy - int(size * 0.8), 6, int(size * 0.6)))
-        pygame.draw.arc(surface, (100, 50, 20), (cx - int(size * 0.9), cy - int(size * 0.7), int(size * 1.8), int(size * 1.4)), 0.3, 2.8, 2)
-        pygame.draw.line(surface, (190, 120, 60), (cx + int(size * 0.5), cy), (cx + size, cy - int(size * 0.6)), 2)
-        pygame.draw.circle(surface, (217, 149, 44), (cx + size, cy - int(size * 0.6)), 2)
-    elif "water" in name_low:
-        # Fresh Drinking Water droplet
-        r = max(4, int(size * 0.65))
-        pygame.draw.circle(surface, (56, 189, 248), (cx, cy + 2), r)
-        pts = [(cx, cy - r - 2), (cx - r, cy + 1), (cx + r, cy + 1)]
-        pygame.draw.polygon(surface, (56, 189, 248), pts)
-        pygame.draw.circle(surface, (186, 230, 253), (cx - 1, cy), max(1, r // 2))
-        pygame.draw.circle(surface, (14, 116, 144), (cx, cy + 2), r, 1)
-    elif "wood" in name_low or "timber" in name_low:
-        pygame.draw.rect(surface, (160, 105, 55), (cx - size + 1, cy - 3, size * 2 - 2, 7), border_radius=2)
-        pygame.draw.rect(surface, (100, 60, 25), (cx - size + 1, cy - 3, size * 2 - 2, 7), 1, border_radius=2)
-        pygame.draw.circle(surface, (200, 150, 90), (cx + size - 3, cy), 3)
-    elif "stone" in name_low:
-        r = pygame.Rect(cx - int(size * 0.8), cy - int(size * 0.6), int(size * 1.6), int(size * 1.2))
-        pygame.draw.rect(surface, (148, 163, 184), r, border_radius=2)
-        pygame.draw.rect(surface, (100, 116, 139), r, 1, border_radius=2)
-        pygame.draw.line(surface, (226, 232, 240), (r.left + 1, r.top + 1), (r.right - 2, r.top + 1), 1)
-    elif "bread" in name_low:
-        r = pygame.Rect(cx - size, cy - int(size * 0.6), size * 2, int(size * 1.2))
-        pygame.draw.ellipse(surface, (217, 149, 44), r)
-        pygame.draw.ellipse(surface, (146, 64, 14), r, 1)
-        pygame.draw.line(surface, (254, 243, 199), (cx - 4, cy - 2), (cx - 1, cy + 2), 1)
-        pygame.draw.line(surface, (254, 243, 199), (cx + 1, cy - 2), (cx + 4, cy + 2), 1)
-    elif "cloth" in name_low or "linen" in name_low:
-        r = pygame.Rect(cx - int(size * 0.8), cy - int(size * 0.6), int(size * 1.6), int(size * 1.2))
-        pygame.draw.rect(surface, (226, 232, 240), r, border_radius=2)
-        pygame.draw.rect(surface, (148, 163, 184), r, 1, border_radius=2)
-        pygame.draw.line(surface, (203, 213, 225), (r.left + 2, r.centery), (r.right - 2, r.centery), 1)
-    elif "coin" in name_low or "copper" in name_low:
-        pygame.draw.circle(surface, (180, 83, 9), (cx - 3, cy), 6)
-        pygame.draw.circle(surface, (120, 53, 15), (cx - 3, cy), 6, 1)
-        pygame.draw.circle(surface, (217, 119, 6), (cx + 3, cy), 6)
-        pygame.draw.circle(surface, (146, 64, 14), (cx + 3, cy), 6, 1)
-    else:
-        r = pygame.Rect(cx - 7, cy - 6, 14, 12)
-        pygame.draw.rect(surface, (139, 92, 246), r, border_radius=2)
-        pygame.draw.rect(surface, (91, 33, 182), r, 1, border_radius=2)
 
 class RaportUI:
     def __init__(self):
@@ -166,7 +96,7 @@ class RaportUI:
             {"id": "villagers", "title": "Household", "wip": False},
             {"id": "workers", "title": "Jobs", "wip": False},
             {"id": "production", "title": "Production", "wip": False},
-            {"id": "tax", "title": "Taxes", "wip": True},
+            {"id": "tax", "title": "Taxes", "wip": False},
             {"id": "planning", "title": "Roadmap", "wip": True},
         ]
 
@@ -219,6 +149,11 @@ class RaportUI:
         self.church_tax_s_inc_rect = None
         self.church_tax_c_dec_rect = None
         self.church_tax_c_inc_rect = None
+
+        # Village Wealth State
+        self.show_wealth_detail_dialog = False
+        self.check_wealth_detail_btn_rect = None
+        self.close_wealth_dlg_btn_rect = None
 
         # Household Possession State
         self.show_household_possession = False
@@ -343,6 +278,7 @@ class RaportUI:
         self.show_structures_menu = False
         self.show_furniture_menu = False
         self.show_household_possession = False
+        self.show_wealth_detail_dialog = False
         self.show_grant_dialog = False
         self.show_grant_confirm = False
         self.grant_amounts = {}
@@ -363,6 +299,7 @@ class RaportUI:
         self.active_tab = 4  # Tab Household
         self.selected_family_id = family_id
         self.show_household_possession = False
+        self.show_wealth_detail_dialog = False
         self.show_grant_dialog = False
         self.show_grant_confirm = False
         self.show_assign_permit_picker = False
@@ -1132,6 +1069,16 @@ class RaportUI:
 
         # 8.5. Tab 7: Taxation & Tithes
         elif self.active_tab == 7:
+            if self.show_wealth_detail_dialog:
+                if self.close_wealth_dlg_btn_rect and self.close_wealth_dlg_btn_rect.collidepoint(mouse_pos):
+                    self.show_wealth_detail_dialog = False
+                    return "close_wealth_dialog"
+                return None
+
+            if self.check_wealth_detail_btn_rect and self.check_wealth_detail_btn_rect.collidepoint(mouse_pos):
+                self.show_wealth_detail_dialog = True
+                return "open_wealth_dialog"
+
             if not hasattr(self, "church_tax") or not isinstance(self.church_tax, dict):
                 self.church_tax = {"Gold": 0, "Silver": 0, "Copper": 1}
             if self.church_tax_g_dec_rect and self.church_tax_g_dec_rect.collidepoint(mouse_pos):
@@ -1278,7 +1225,7 @@ class RaportUI:
         elif self.active_tab == 6:
             self._draw_production_tab(surface, mx, content_y, villager_manager, permit_manager, furniture_manager=furniture_manager, stockpile_manager=stockpile_manager, production_system=production_system)
         elif self.active_tab == 7:
-            self._draw_tax_tab(surface, mx, content_y, villager_manager, permit_manager, furniture_manager=furniture_manager, production_system=production_system)
+            self._draw_tax_tab(surface, mx, content_y, villager_manager, permit_manager, furniture_manager=furniture_manager, production_system=production_system, resources=resources, building_manager=building_manager, stockpile_manager=stockpile_manager)
         elif self.active_tab == 8:
             self._draw_planning_tab(surface, mx, content_y)
 
@@ -3575,8 +3522,8 @@ class RaportUI:
 
                 y_cur += 40
 
-    def _draw_tax_tab(self, surface, mx, cy, villager_manager, permit_manager, furniture_manager=None, production_system=None):
-        """Tax System UI & Reporting Structure (WIP - No Active Deductions)"""
+    def _draw_tax_tab(self, surface, mx, cy, villager_manager, permit_manager, furniture_manager=None, production_system=None, resources=None, building_manager=None, stockpile_manager=None):
+        """Tax System UI, Church Tithes & Village Wealth Distribution (AGENT 2)"""
         ps = production_system or ProductionDistributionSystem.get_instance()
         mouse_pos = pygame.mouse.get_pos()
 
@@ -3634,13 +3581,42 @@ class RaportUI:
         pygame.draw.rect(surface, (51, 65, 85), self.church_tax_c_inc_rect, border_radius=3)
         surface.blit(self.font_badge.render("+", True, (255, 255, 255)), (self.church_tax_c_inc_rect.x + 6, self.church_tax_c_inc_rect.y + 3))
 
-        # Proposed Taxation Policies Structure (3 cards)
-        y_cur = cy + 88
+        # 2. Village Wealth Section (AGENT 2)
+        wealth_data = VillageWealthSystem.calculate_village_wealth(
+            resources=resources,
+            villager_manager=villager_manager,
+            furniture_manager=furniture_manager,
+            building_manager=building_manager,
+            stockpile_manager=stockpile_manager
+        )
+        self.cached_wealth_data = wealth_data
+
+        wealth_card = pygame.Rect(mx + 24, cy + 84, self.modal_w - 48, 52)
+        pygame.draw.rect(surface, (24, 34, 52), wealth_card, border_radius=6)
+        pygame.draw.rect(surface, (234, 179, 8), wealth_card, width=1, border_radius=6)
+
+        tw = wealth_data["total_wallet"]
+        tot_c = wealth_data["total_wealth_copper"]
+
+        surface.blit(self.font_sub.render("💰 Village Wealth & Coin Distribution:", True, (250, 204, 21)), (wealth_card.x + 14, wealth_card.y + 8))
+        wealth_sub = f"Total Village Wealth: {tw['Gold']} Gold, {tw['Silver']} Silver, {tw['Copper']} Copper  (Total: {tot_c}c)"
+        surface.blit(self.font_body.render(wealth_sub, True, (241, 245, 249)), (wealth_card.x + 14, wealth_card.y + 28))
+
+        # 'Check Wealth Detail' Button
+        self.check_wealth_detail_btn_rect = pygame.Rect(wealth_card.right - 170, wealth_card.y + 11, 156, 30)
+        wd_hov = self.check_wealth_detail_btn_rect.collidepoint(mouse_pos)
+        pygame.draw.rect(surface, (217, 119, 6) if wd_hov else (180, 83, 9), self.check_wealth_detail_btn_rect, border_radius=5)
+        pygame.draw.rect(surface, (251, 191, 36), self.check_wealth_detail_btn_rect, width=1, border_radius=5)
+        wd_txt = self.font_badge.render("Check Wealth Detail", True, (255, 255, 255))
+        surface.blit(wd_txt, (self.check_wealth_detail_btn_rect.centerx - wd_txt.get_width() // 2, self.check_wealth_detail_btn_rect.centery - wd_txt.get_height() // 2))
+
+        # 3. Proposed Taxation Policies Structure (3 cards)
+        y_cur = cy + 144
         surface.blit(self.font_sub.render("Proposed Village Tax Policies (Future Implementation Framework):", True, (241, 245, 249)), (mx + 24, y_cur))
-        y_cur += 22
+        y_cur += 20
 
         policy_w = (self.modal_w - 48 - 16) // 3
-        policy_h = 76
+        policy_h = 68
         policies = [
             ("🌾 Agricultural Crop Tithe", "Tithe on peasant potato harvest.", "10% of Harvest", "INACTIVE (WIP)", (34, 197, 94)),
             ("⚒️ Craft & Artisan Duty", "Tithe on produced tools & wares.", "5% of Craft Output", "INACTIVE (WIP)", (56, 189, 248)),
@@ -3653,50 +3629,156 @@ class RaportUI:
             pygame.draw.rect(surface, (24, 34, 52), pr, border_radius=6)
             pygame.draw.rect(surface, (51, 65, 85), pr, width=1, border_radius=6)
 
-            surface.blit(self.font_sub.render(p_title, True, p_col), (pr.x + 10, pr.y + 8))
-            surface.blit(self.font_body.render(p_desc, True, COLOR_TEXT_MUTED), (pr.x + 10, pr.y + 28))
-            surface.blit(self.font_badge.render(f"Rate: {p_rate}", True, (241, 245, 249)), (pr.x + 10, pr.y + 50))
+            surface.blit(self.font_sub.render(p_title, True, p_col), (pr.x + 10, pr.y + 6))
+            surface.blit(self.font_body.render(p_desc, True, COLOR_TEXT_MUTED), (pr.x + 10, pr.y + 24))
+            surface.blit(self.font_badge.render(f"Rate: {p_rate}", True, (241, 245, 249)), (pr.x + 10, pr.y + 44))
 
-            stat_badge = pygame.Rect(pr.right - 96, pr.y + 50, 88, 18)
+            stat_badge = pygame.Rect(pr.right - 96, pr.y + 44, 88, 18)
             pygame.draw.rect(surface, (71, 85, 105), stat_badge, border_radius=3)
             b_txt = self.font_badge.render(p_stat, True, (203, 213, 225))
             surface.blit(b_txt, (stat_badge.centerx - b_txt.get_width() // 2, stat_badge.centery - b_txt.get_height() // 2))
 
-        y_cur += policy_h + 16
+        y_cur += policy_h + 12
 
-        # Projected Household Assessment Table
+        # 4. Projected Household Assessment Table
         surface.blit(self.font_sub.render("Projected Household Tax Assessment Table (Zero Active Deductions):", True, (241, 245, 249)), (mx + 24, y_cur))
-        y_cur += 22
+        y_cur += 20
 
         all_families = villager_manager.families if villager_manager else []
         if not all_families:
-            none_r = pygame.Rect(mx + 24, y_cur, self.modal_w - 48, 44)
+            none_r = pygame.Rect(mx + 24, y_cur, self.modal_w - 48, 38)
             pygame.draw.rect(surface, (24, 34, 52), none_r, border_radius=6)
-            surface.blit(self.font_body.render("• No households registered in census.", True, COLOR_TEXT_MUTED), (none_r.x + 16, none_r.y + 14))
+            surface.blit(self.font_body.render("• No households registered in census.", True, COLOR_TEXT_MUTED), (none_r.x + 16, none_r.y + 11))
         else:
             for f in all_families[:4]:
-                row_r = pygame.Rect(mx + 24, y_cur, self.modal_w - 48, 36)
+                row_r = pygame.Rect(mx + 24, y_cur, self.modal_w - 48, 32)
                 pygame.draw.rect(surface, (15, 23, 42), row_r, border_radius=6)
                 pygame.draw.rect(surface, (51, 65, 85), row_r, width=1, border_radius=6)
 
-                surface.blit(self.font_sub.render(f"The {f.surname} Family", True, (241, 245, 249)), (row_r.x + 12, row_r.y + 8))
+                surface.blit(self.font_sub.render(f"The {f.surname} Family", True, (241, 245, 249)), (row_r.x + 12, row_r.y + 6))
 
                 f_workers = len(f.members)
-                surface.blit(self.font_body.render(f"{f_workers} Members", True, COLOR_TEXT_MUTED), (row_r.x + 200, row_r.y + 10))
+                surface.blit(self.font_body.render(f"{f_workers} Members", True, COLOR_TEXT_MUTED), (row_r.x + 200, row_r.y + 8))
 
                 p_sum = ps.get_household_production_summary(f.id)
                 potatoes = p_sum["total_produced"].get("Potato", 0)
-                surface.blit(self.font_body.render(f"Est. Production: {potatoes} Potatoes", True, (56, 189, 248)), (row_r.x + 310, row_r.y + 10))
+                surface.blit(self.font_body.render(f"Est. Production: {potatoes} Potatoes", True, (56, 189, 248)), (row_r.x + 310, row_r.y + 8))
 
-                surface.blit(self.font_body.render(f"Projected Due: {int(potatoes * 0.10)} Pot.", True, (245, 158, 11)), (row_r.x + 510, row_r.y + 10))
+                surface.blit(self.font_body.render(f"Projected Due: {int(potatoes * 0.10)} Pot.", True, (245, 158, 11)), (row_r.x + 510, row_r.y + 8))
 
-                st_b = pygame.Rect(row_r.right - 180, row_r.y + 6, 168, 22)
+                st_b = pygame.Rect(row_r.right - 180, row_r.y + 5, 168, 22)
                 pygame.draw.rect(surface, (20, 83, 45), st_b, border_radius=4)
                 pygame.draw.rect(surface, (34, 197, 94), st_b, width=1, border_radius=4)
                 st_txt = self.font_badge.render("EXEMPT (WIP - No Deductions)", True, (240, 253, 244))
                 surface.blit(st_txt, (st_b.centerx - st_txt.get_width() // 2, st_b.centery - st_txt.get_height() // 2))
 
-                y_cur += 40
+                y_cur += 36
+
+        # 5. Wealth Detail & Pie Chart Dialog Modal (if active)
+        if self.show_wealth_detail_dialog:
+            self._draw_wealth_pie_chart_dialog(surface, mx, cy, wealth_data, mouse_pos)
+
+    def _draw_wealth_pie_chart_dialog(self, surface, mx, cy, wealth_data, mouse_pos):
+        """Displays procedural Pie Chart & Breakdown Dialog for Village Wealth (AGENT 2)"""
+        sw, sh = surface.get_size()
+
+        # Modal backdrop
+        overlay = pygame.Surface((sw, sh), pygame.SRCALPHA)
+        overlay.fill((0, 0, 0, 160))
+        surface.blit(overlay, (0, 0))
+
+        dlg_w = 640
+        dlg_h = 360
+        dlg_x = (sw - dlg_w) // 2
+        dlg_y = (sh - dlg_h) // 2
+
+        pygame.draw.rect(surface, (15, 23, 42), (dlg_x, dlg_y, dlg_w, dlg_h), border_radius=10)
+        pygame.draw.rect(surface, (234, 179, 8), (dlg_x, dlg_y, dlg_w, dlg_h), width=2, border_radius=10)
+
+        # Header
+        surface.blit(self.font_title.render("Village Wealth Distribution", True, (250, 204, 21)), (dlg_x + 24, dlg_y + 16))
+        surface.blit(self.font_body.render("Proportional pie chart of circulating coin wealth across Landlord and Households:", True, COLOR_TEXT_MUTED), (dlg_x + 24, dlg_y + 42))
+
+        # Close [X]
+        self.close_wealth_dlg_btn_rect = pygame.Rect(dlg_x + dlg_w - 36, dlg_y + 14, 22, 22)
+        pygame.draw.rect(surface, (51, 65, 85), self.close_wealth_dlg_btn_rect, border_radius=4)
+        surface.blit(self.font_badge.render("X", True, (255, 255, 255)), (self.close_wealth_dlg_btn_rect.x + 6, self.close_wealth_dlg_btn_rect.y + 3))
+
+        # -------------------------------------------------------------
+        # LEFT: PROCEDURAL PIE CHART (Pure trigonometry, KaTeX / math safe)
+        # -------------------------------------------------------------
+        chart_cx = dlg_x + 130
+        chart_cy = dlg_y + 185
+        chart_radius = 80
+
+        # Collect entities: Landlord + all households
+        entities = [wealth_data["landlord"]] + wealth_data["households"]
+        total_copper = wealth_data["total_wealth_copper"]
+
+        if total_copper <= 0:
+            pygame.draw.circle(surface, (51, 65, 85), (chart_cx, chart_cy), chart_radius)
+            pygame.draw.circle(surface, (100, 116, 139), (chart_cx, chart_cy), chart_radius, 2)
+            n_txt = self.font_badge.render("No Coins", True, (148, 163, 184))
+            surface.blit(n_txt, (chart_cx - n_txt.get_width() // 2, chart_cy - n_txt.get_height() // 2))
+        else:
+            current_angle = -math.pi / 2.0  # Start from top (12 o'clock)
+            for ent in entities:
+                pct = ent["percentage"]
+                if pct <= 0.0:
+                    continue
+                slice_angle = (pct / 100.0) * (2.0 * math.pi)
+                end_angle = current_angle + slice_angle
+
+                # Draw polygon slice
+                num_steps = max(6, int(math.ceil(slice_angle * 16)))
+                points = [(chart_cx, chart_cy)]
+                for st in range(num_steps + 1):
+                    a = current_angle + (slice_angle * (st / num_steps))
+                    px = chart_cx + chart_radius * math.cos(a)
+                    py = chart_cy + chart_radius * math.sin(a)
+                    points.append((px, py))
+
+                if len(points) >= 3:
+                    pygame.draw.polygon(surface, ent["color"], points)
+                    pygame.draw.polygon(surface, (15, 23, 42), points, 1)
+
+                current_angle = end_angle
+
+            # Outer border ring
+            pygame.draw.circle(surface, (71, 85, 105), (chart_cx, chart_cy), chart_radius, 2)
+
+        # -------------------------------------------------------------
+        # RIGHT: DETAILED BREAKDOWN & LEGEND
+        # -------------------------------------------------------------
+        leg_x = dlg_x + 250
+        leg_y = dlg_y + 75
+
+        for ent in entities[:6]:
+            w_box = pygame.Rect(leg_x, leg_y, dlg_w - 275, 40)
+            pygame.draw.rect(surface, (24, 34, 52), w_box, border_radius=5)
+            pygame.draw.rect(surface, (51, 65, 85), w_box, width=1, border_radius=5)
+
+            # Color Swatch
+            swatch_r = pygame.Rect(w_box.x + 10, w_box.y + 12, 16, 16)
+            pygame.draw.rect(surface, ent["color"], swatch_r, border_radius=3)
+
+            # Name & Percentage
+            surface.blit(self.font_sub.render(ent["name"], True, (241, 245, 249)), (w_box.x + 34, w_box.y + 6))
+            pct_badge = f"{ent['percentage']}%"
+            surface.blit(self.font_sub.render(pct_badge, True, (250, 204, 21)), (w_box.right - 55, w_box.y + 6))
+
+            # Absolute Wealth
+            w = ent["wallet"]
+            c_val = ent["wealth_copper"]
+            bal_str = f"{w['Gold']}g  {w['Silver']}s  {w['Copper']}c   ({c_val}c)"
+            surface.blit(self.font_body.render(bal_str, True, COLOR_TEXT_MUTED), (w_box.x + 34, w_box.y + 22))
+
+            leg_y += 44
+
+        # Footer Summary
+        tw = wealth_data["total_wallet"]
+        f_txt = f"Total Village Coin Pool: {tw['Gold']} Gold, {tw['Silver']} Silver, {tw['Copper']} Copper ({total_copper}c)"
+        surface.blit(self.font_badge.render(f_txt, True, (250, 204, 21)), (dlg_x + 24, dlg_y + dlg_h - 26))
 
     def _draw_planning_tab(self, surface, mx, cy):
         """In-game WIP Planning Overview and Roadmap"""

@@ -609,8 +609,8 @@ BUILDING_TYPES = {
     "wooden_structure": {
         "id": "wooden_structure",
         "name": "Wooden Structure",
-        "category": "Residential & Timber",
-        "category_id": "wooden_structure",
+        "category": "Structure",
+        "category_id": "structure",
         "desc": "Timber-framed building constructed from logs and wooden planks.",
         "cost_wood": 5,
         "cost_stone": 1,
@@ -622,8 +622,8 @@ BUILDING_TYPES = {
     "stone_structure": {
         "id": "stone_structure",
         "name": "Stone Structure",
-        "category": "Stone Masonry & Manor",
-        "category_id": "stone_structure",
+        "category": "Structure",
+        "category_id": "structure",
         "desc": "Heavy masonry structure built from carved stones and mortar.",
         "cost_wood": 1,
         "cost_stone": 5,
@@ -635,8 +635,8 @@ BUILDING_TYPES = {
     "well": {
         "id": "well",
         "name": "Well",
-        "category": "Civic & Water Infrastructure",
-        "category_id": "well",
+        "category": "Structure",
+        "category_id": "structure",
         "desc": "Fresh water well built of masonry and timber. Impenetrable 4-tile solid structure.",
         "cost_wood": 5,
         "cost_stone": 20,
@@ -652,8 +652,8 @@ BUILDING_TYPES = {
     "market": {
         "id": "market",
         "name": "Market",
-        "category": "Commercial & Trade",
-        "category_id": "market",
+        "category": "Structure",
+        "category_id": "structure",
         "desc": "Medieval marketplace stall for trading food, goods, and currency. Footprint: 3x2 tiles.",
         "cost_wood": 15,
         "cost_stone": 5,
@@ -671,8 +671,8 @@ BUILDING_TYPES = {
     "toilet": {
         "id": "toilet",
         "name": "Toilet",
-        "category": "Sanitation & Latrine",
-        "category_id": "toilet",
+        "category": "Structure",
+        "category_id": "structure",
         "desc": "Medieval wooden outhouse latrine. Footprint: 1x1 tile. Does not require a Permit.",
         "cost_wood": 5,
         "cost_stone": 0,
@@ -695,37 +695,29 @@ BUILDING_TYPES["manor"] = BUILDING_TYPES["stone_structure"]
 
 def get_building_categories():
     """
-    Returns dynamically discovered building and structure categories from BUILDING_TYPES and FURNITURE_TYPES.
+    Returns the two primary building and furnishings categories: Structure and Furniture.
     Preserves config-driven architecture: zero hardcoding in UI.
-    Automatically incorporates newly registered building and structure types.
+    Automatically incorporates newly registered building and structure types into Structure.
     """
-    categories = {}
-    for b_id, b_cfg in BUILDING_TYPES.items():
-        if b_id in ("house", "storage", "manor"):
-            continue
-        cat_id = b_cfg.get("category_id", b_id)
-        if cat_id not in categories:
-            categories[cat_id] = {
-                "id": cat_id,
-                "name": b_cfg.get("category", b_cfg.get("name", cat_id.capitalize())),
-                "desc": b_cfg.get("desc", ""),
-                "color": b_cfg.get("border_color", (59, 130, 246)),
-                "kind": "structure",
-                "building_types": []
-            }
-        if b_id not in categories[cat_id]["building_types"]:
-            categories[cat_id]["building_types"].append(b_id)
-
-    # Furniture Category
-    categories["furniture"] = {
-        "id": "furniture",
-        "name": "Furniture & Furnishings",
-        "desc": "Household storage chests, beds, and interior living fixtures.",
-        "color": (250, 204, 21),
-        "kind": "furniture",
-        "building_types": list(FURNITURE_TYPES.keys())
-    }
-    return list(categories.values())
+    structure_types = [b_id for b_id in BUILDING_TYPES if b_id not in ("house", "storage", "manor")]
+    return [
+        {
+            "id": "structure",
+            "name": "Structure",
+            "desc": "All building blueprints including Wooden, Stone, Water Well, Market, Toilet, and civic structures.",
+            "color": (59, 130, 246),
+            "kind": "structure",
+            "building_types": structure_types
+        },
+        {
+            "id": "furniture",
+            "name": "Furniture",
+            "desc": "All furniture blueprints including storage chests, beds, and interior living fixtures.",
+            "color": (250, 204, 21),
+            "kind": "furniture",
+            "building_types": list(FURNITURE_TYPES.keys())
+        }
+    ]
 
 # Area Permit Types (Landlord Zoning)
 PERMIT_TYPES = {

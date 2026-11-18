@@ -12,6 +12,7 @@ from game.config import (
     RES_HUD_WIDTH,
     RES_HUD_MARGIN
 )
+from game.ui.item_icons import draw_item_icon
 
 class ResourceHUD:
     def __init__(self):
@@ -66,15 +67,14 @@ class ResourceHUD:
         for i, (name, amount) in enumerate(resources.items()):
             row_y = start_y + (i * self.row_height)
 
-            # Titik warna indikator resource
-            dot_color = RESOURCE_COLORS.get(name, (200, 200, 200))
-            dot_x = card_x + self.padding + 5
-            dot_y = row_y + 8
-            pygame.draw.circle(surface, dot_color, (dot_x, dot_y), 4)
+            # Unified procedural vector item icon (AGENT 2)
+            icon_x = card_x + self.padding + 8
+            icon_y = row_y + 10
+            draw_item_icon(surface, name, icon_x, icon_y, size=8)
 
             # Label nama resource
             lbl_surf = self.font_item.render(name, True, COLOR_TEXT_MAIN)
-            surface.blit(lbl_surf, (card_x + self.padding + 16, row_y))
+            surface.blit(lbl_surf, (card_x + self.padding + 22, row_y))
 
             # Jumlah resource (rata kanan)
             val_surf = self.font_val.render(str(amount), True, COLOR_TEXT_MAIN)

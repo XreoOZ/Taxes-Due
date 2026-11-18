@@ -59,6 +59,7 @@ from game.settings import SettingsModal
 from game.schedule import ScheduleManager
 from game.save_modal import SaveLoadModal
 from game.save_system import save_to_slot, load_from_slot
+from game.systems.cheat_system import apply_add_item_cheat
 
 STATE_MENU = "menu"
 STATE_PLAYING = "playing"
@@ -142,6 +143,9 @@ def main():
 
     show_debug_paths = True
     btn_path_toggle_rect = pygame.Rect(0, 0, PATH_TOGGLE_BTN_WIDTH, PATH_TOGGLE_BTN_HEIGHT)
+    btn_add_item_cheat_rect = pygame.Rect(0, 0, PATH_TOGGLE_BTN_WIDTH, PATH_TOGGLE_BTN_HEIGHT)
+    cheat_notice = ""
+    cheat_notice_timer = 0.0
 
     def start_fresh_game(day_length_index=None):
         nonlocal player, resources, building_manager, permit_manager, stockpile_manager
@@ -311,6 +315,12 @@ def main():
                 if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                     if not raport_ui.is_open and btn_path_toggle_rect.collidepoint(event.pos):
                         show_debug_paths = not show_debug_paths
+                        continue
+                    if not raport_ui.is_open and btn_add_item_cheat_rect.collidepoint(event.pos):
+                        tgt = selected_furniture if (selected_furniture and getattr(selected_furniture, "furniture_type", "") == "household_storage") else None
+                        success, msg = apply_add_item_cheat(target_storage=tgt, amount=50, resources=resources, stockpile_manager=stockpile_manager)
+                        cheat_notice = msg
+                        cheat_notice_timer = 3.0
                         continue
                 # -------------------------------------------------------------
                 # 1. PERMIT PLANNING MODE
@@ -732,7 +742,7 @@ def main():
                     if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
                         market_modal.close()
                     else:
-                        market_modal.handle_event(event, resources, stockpile_manager, servant_manager=servant_manager)
+                        market_modal.handle_event(event, resources, stockpile_manager, servant_manager=servant_manager, villager_manager=villager_manager, furniture_manager=furniture_manager)
 
                 # -------------------------------------------------------------
                 # 5. NORMAL GAMEPLAY
@@ -1763,11 +1773,27 @@ def main():
             txt_rect = btn_surf.get_rect(center=btn_path_toggle_rect.center)
             screen.blit(btn_surf, txt_rect)
 
+            # 10.6. Add Item Cheat Button (Directly below AI Path Lines toggle)
+            btn_add_item_cheat_rect.x = btn_path_toggle_rect.x
+            btn_add_item_cheat_rect.y = btn_path_toggle_rect.bottom + 8
+            cheat_hover = btn_add_item_cheat_rect.collidepoint(m_pos)
+            cheat_bg = (180, 83, 9) if cheat_hover else (120, 53, 15)
+            pygame.draw.rect(screen, cheat_bg, btn_add_item_cheat_rect, border_radius=6)
+            pygame.draw.rect(screen, (245, 158, 11), btn_add_item_cheat_rect, width=1, border_radius=6)
+            cheat_txt = font_btn.render("Add Item", True, (255, 255, 255))
+            screen.blit(cheat_txt, cheat_txt.get_rect(center=btn_add_item_cheat_rect.center))
+
+            if cheat_notice_timer > 0.0:
+                cheat_notice_timer = max(0.0, cheat_notice_timer - game_dt)
+                not_surf = font_badge.render(cheat_notice, True, (250, 204, 21))
+                not_rect = not_surf.get_rect(right=screen_w - resource_hud.margin, top=btn_add_item_cheat_rect.bottom + 6)
+                screen.blit(not_surf, not_rect)
+
             # 11. Left Raport Button & Modal
             raport_ui.draw(screen, building_manager, permit_manager, resources, servant_manager, villager_manager, schedule_manager=schedule_manager, day_cycle=day_cycle, furniture_manager=furniture_manager, stockpile_manager=stockpile_manager, production_system=production_system)
 
             # 11.5. Market Profile Modal Dialog (AGENT 2)
-            market_modal.draw(screen, resources, stockpile_manager, servant_manager=servant_manager)
+            market_modal.draw(screen, resources, stockpile_manager, servant_manager=servant_manager, villager_manager=villager_manager, furniture_manager=furniture_manager)
 
             # 12. Speed Control HUD (Bottom Right)
             speed_controller.draw(screen)

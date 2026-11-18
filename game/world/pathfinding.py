@@ -856,45 +856,13 @@ class GlobalPathRegistry:
             if other_eid == eid_str:
                 continue
 
-            # 1. Target collision (Hanya untuk petak eksklusif, misal ranjang, petak ladang tunggal)
+            # 1. Target collision (Hanya untuk petak eksklusif, misal ranjang tidur)
             if target_tile and res.target_tile and target_tile == res.target_tile:
-                if exclusive_target or getattr(res, "exclusive_target", False):
+                if exclusive_target and getattr(res, "exclusive_target", False):
                     conflicts.append((other_eid, "TARGET_CONFLICT", res))
                     continue
 
-            # 2. Celah pintu sempit (Doorway bottleneck)
-            shared_tiles = candidate_tiles.intersection(res.reserved_tiles)
-            shared_doors = shared_tiles.intersection(door_tiles)
-            if shared_doors:
-                door = next(iter(shared_doors))
-                my_dir = self._get_door_direction(candidate_pts, door, bm)
-                other_dir = self._get_door_direction(res.waypoints, door, bm)
-                # Jika berpapasan arah berlawanan di celah kusen pintu yang sama (head-on collision):
-                if my_dir and other_dir and my_dir != other_dir:
-                    conflicts.append((other_eid, "DOORWAY_CONFLICT", res))
-                    continue
-                # Jika entitas lain sudah sangat dekat/sedang melangkah di kusen pintu:
-                d_cx = (door[0] + 0.5) * TILE_SIZE
-                d_cy = (door[1] + 0.5) * TILE_SIZE
-                if math.hypot(res.current_pos[0] - d_cx, res.current_pos[1] - d_cy) < 28.0 and \
-                   math.hypot(current_pos[0] - d_cx, current_pos[1] - d_cy) < 28.0:
-                    conflicts.append((other_eid, "DOORWAY_THRESHOLD_JAM", res))
-                    continue
-
-            # 3. Lorong sempit 1-petak berlawanan arah (Narrow passage bottleneck)
-            for st in shared_tiles:
-                if is_narrow_passage_tile(st, building_manager=bm):
-                    # Pintu bangunan telah dikelola tersendiri oleh Doorway Conflict & request_door_passage di ambang pintu
-                    if any(getattr(b, "door_pos", None) == st for b in getattr(bm, "buildings", [])):
-                        continue
-                    st_cx = (st[0] + 0.5) * TILE_SIZE
-                    st_cy = (st[1] + 0.5) * TILE_SIZE
-                    dist_other = math.hypot(res.current_pos[0] - st_cx, res.current_pos[1] - st_cy)
-                    dist_me = math.hypot(current_pos[0] - st_cx, current_pos[1] - st_cy)
-                    if dist_other < (TILE_SIZE * 1.5) and dist_me > dist_other:
-                        conflicts.append((other_eid, "NARROW_PASSAGE_CONFLICT", res))
-                        break
-
+        # AI-to-AI pass-through: tidak ada antrean atau pemblokiran rute antar-AI
         return conflicts
 
     def request_path_reservation(self, entity_id, waypoints, current_pos, target_tile, building_manager=None, exclusive_target=False):
