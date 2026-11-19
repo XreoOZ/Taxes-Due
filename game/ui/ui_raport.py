@@ -3528,7 +3528,7 @@ class RaportUI:
                 shares = ps.calculate_shares(assigned_w, villager_manager)
 
                 crop_type = getattr(p, "crop", "Potato") or "Potato"
-                yield_txt = "2 Potatoes / tile every 10 days" if crop_type == "Potato" else "Standard Yield"
+                yield_txt = "2-5 Potatoes / tile every 10 days" if crop_type == "Potato" else "Standard Yield"
                 surface.blit(self.font_sub.render(f"🌾 {p.name} ({len(p.tiles)} tiles) — Crop: {crop_type} ({yield_txt})", True, (241, 245, 249)), (lot_r.x + 12, lot_r.y + 6))
 
                 if total_w > 0:

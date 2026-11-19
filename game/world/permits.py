@@ -3,6 +3,7 @@ Area Permit System (Free-form Landlord Zoning Deeds, Multi-drag & Arbitrary Conn
 """
 
 import math
+import random
 import pygame
 from game.config import (
     PERMIT_TYPES,
@@ -402,7 +403,15 @@ class AreaPermit:
             if tc.get("crop") and not tc["is_dead"] and is_harvestable:
                 crop_key = str(tc.get("crop") or "potato").lower()
                 c_cfg = CROP_TYPES.get(crop_key, crop_cfg)
-                yield_val = int(c_cfg.get("yield_per_tile", c_cfg.get("yield", 2)))
+                yield_distribution = c_cfg.get("yield_distribution", [])
+                if yield_distribution:
+                    yield_val = random.choices(
+                        [int(entry["amount"]) for entry in yield_distribution],
+                        weights=[float(entry["weight"]) for entry in yield_distribution],
+                        k=1,
+                    )[0]
+                else:
+                    yield_val = int(c_cfg.get("yield_per_tile", c_cfg.get("yield", 2)))
 
                 # Hapus tile dari batch
                 if batch:

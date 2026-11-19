@@ -109,12 +109,12 @@ PLANNING_FEATURES = [
     },
     {
         "id": "potato_farming_2x",
-        "name": "Potato Farming Yield (2 / Tile)",
+        "name": "Potato Farming Yield (2-5 / Tile)",
         "status": STATUS_IMPLEMENTED,
         "category": "Agriculture & Food",
         "owner_agent": "Agent 3",
-        "summary": "Each harvested potato tile yields exactly 2 Potatoes every 10 days.",
-        "description": "Updated harvest mechanics yielding exactly 2 potatoes per tile every 10-day growth cycle without duplicate multipliers."
+        "summary": "Each harvested potato tile yields 2, 4, or 5 Potatoes every 10 days (60%, 30%, 10%).",
+        "description": "Potato yield is selected from configurable weighted outcomes per tile harvest."
     },
     {
         "id": "work_priorities",

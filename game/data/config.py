@@ -290,6 +290,15 @@ SCHEDULE_TYPES = {
     }
 }
 
+# Task states that represent needs or rest, rather than unfinished work.
+# Any other active task is allowed to finish before the schedule changes activity.
+SCHEDULE_NON_WORK_TASKS = frozenset({
+    "IDLE", "DECEASED", "SEEKING_FOOD", "SEEKING_WATER", "SEEKING_TOILET",
+    "RECOVER_DEATH_ITEMS", "SLEEPING", "LEISURE", "STROLLING",
+    "LEADING_PRAYER", "ATTENDING_PRAYER", "PRAYING", "PREACHING",
+    "RETURNING_TITHES_HOME",
+})
+
 DEFAULT_JOB_SCHEDULE = [
     # 00:00 - 05:00: Night Sleep
     "SLEEP", "SLEEP", "SLEEP", "SLEEP", "SLEEP", "SLEEP",
@@ -861,14 +870,18 @@ CROP_TYPES = {
         "name": "Potato",
         "icon": "🥔",
         "wip": False,
-        "desc": "Hearty staple tuber crop. Produces exactly 2 potatoes per tile every 10 days.",
+        "desc": "Hearty staple tuber crop. Produces 2-5 potatoes per tile every 10 days.",
         "growth_days": 10.0,
         "sprout_day": 2.0,
         "leaf_day": 4.0,
         "harvest_day": 10.0,
+        "yield_distribution": [
+            {"amount": 2, "weight": 0.60},
+            {"amount": 4, "weight": 0.30},
+            {"amount": 5, "weight": 0.10},
+        ],
         "yield_per_tile": 2,
-        "yield": 2,
-        "yield_chance_2": 0.0
+        "yield": 2
     },
     "wheat": {
         "id": "wheat",

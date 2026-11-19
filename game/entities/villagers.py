@@ -62,6 +62,7 @@ from game.config import (
     COLOR_CORPSE_BODY,
     COLOR_CORPSE_OUTLINE,
     CORPSE_CARRY_SPEED_RATIO,
+    SCHEDULE_NON_WORK_TASKS,
     is_food_item,
     is_water_item,
     get_item_category,
@@ -1019,6 +1020,19 @@ class Villager:
             else:
                 sched_activity = "LEISURE"
 
+        # Finish an active task before honoring the next scheduled activity.
+        # Cargo is also considered active work so older saves with a carried
+        # corpse but an IDLE task resume correctly.
+        has_pending_work = (
+            self.task not in SCHEDULE_NON_WORK_TASKS
+            or bool(getattr(self, "carrying_crop", 0))
+            or bool(getattr(self, "carrying_res", None))
+            or bool(getattr(self, "carrying_furniture", None))
+            or bool(getattr(self, "carrying_corpse_id", None))
+        )
+        if has_pending_work:
+            sched_activity = "WORK"
+
         # -------------------------------------------------------------
         # Rutinitas Kebutuhan Pokok: Critical Needs (<= 20%) & Evening Dinner
         # -------------------------------------------------------------
@@ -1420,7 +1434,7 @@ class Villager:
         from game.systems.church_system import ChurchSystem
         church_p = ChurchSystem.get_church_permit(permit_manager)
         priest_worker = ChurchSystem.get_assigned_priest(permit_manager, villager_manager)
-        is_prayer = ChurchSystem.is_prayer_time(cur_hour, schedule_manager)
+        is_prayer = ChurchSystem.is_prayer_time(cur_hour, schedule_manager) and not has_pending_work
 
         if is_prayer:
             if self == priest_worker:
@@ -1902,7 +1916,7 @@ class Villager:
         # -------------------------------------------------------------
         # Rutinitas 2: Jam Kerja (WORK / ANY)
         # -------------------------------------------------------------
-        if sched_activity in ("WORK", "ANY") or self.job == "Gravedigger":
+        if sched_activity in ("WORK", "ANY"):
             # Jika sedang membawa hasil panen di tangan, antar langsung ke Household Storage keluarga
             if self.carrying_crop > 0:
                 self.task = "HAULING_HOME"
@@ -2290,6 +2304,7 @@ class Villager:
 
                 # A. Sedang mengangkut jenazah -> Menuju pemakaman
                 if getattr(self, "carrying_corpse_id", None) and self.task not in ("DIGGING_GRAVE", "BURYING_GRAVE"):
+                    self.task = "CARRYING_CORPSE"
                     target_cid = self.carrying_corpse_id
                     grave_tile = getattr(self, "gravedigger_target_grave_tile", None)
                     if not grave_tile and cemetery_p:
@@ -2413,12 +2428,14 @@ class Villager:
                     # Menuju jenazah untuk diangkat
                     self.active_tool = "Hoe"
                     self.gravedigger_target_corpse_id = target_corpse.id
+                    self.task = "FETCHING_CORPSE"
                     arrived = self._move_towards(target_corpse.x, target_corpse.y, dt, arrival_dist=16, all_entities=all_entities, player=player, building_manager=building_manager, furniture_manager=furniture_manager)
                     if arrived:
                         target_corpse.is_picked_up = True
                         target_corpse.is_cemetery_overflow = False
                         self.carrying_corpse_id = target_corpse.id
                         self.carrying_corpse_name = target_corpse.full_name
+                        self.task = "CARRYING_CORPSE"
                         self.say(f"Carrying {target_corpse.first_name}'s body to the cemetery...", duration=2.5)
                     return
 
