@@ -10,7 +10,6 @@ Manages the gameplay logic for the Toilet building:
 6. Robust fault tolerance: destroyed toilets, full queues, or missing facilities.
 """
 
-import math
 import time
 from game.config import (
     TILE_SIZE,
@@ -21,6 +20,7 @@ from game.config import (
     AI_NEED_TOILET_RESTORE,
     TOILET_USE_DURATION_SECONDS,
 )
+from game.world.navigation import find_nearest_target
 
 TOILET_INTERACTION_RADIUS = 28.0
 
@@ -50,45 +50,28 @@ class ToiletSystem:
         ]
 
     @classmethod
-    def find_best_toilet(cls, villager, building_manager):
+    def find_best_toilet(cls, villager, building_manager, furniture_manager=None):
         """
         Finds the most suitable toilet for a villager:
-        - Prioritizes unoccupied toilets by shortest walking distance.
-        - If all are occupied, selects the toilet with the shortest queue.
+        - Selects the closest toilet; the existing queue handles occupancy.
         Returns: (toilet_building, is_free) or (None, False)
         """
         toilets = cls.get_completed_toilets(building_manager)
         if not toilets:
             return None, False
 
-        # 1. Unoccupied toilets (no active user and no waiting queue)
-        free_toilets = []
-        for t in toilets:
-            active_u = getattr(t, "toilet_active_user", None)
-            queue = getattr(t, "toilet_queue", [])
-            if active_u is None and len(queue) == 0:
-                free_toilets.append(t)
-
-        if free_toilets:
-            free_toilets.sort(
-                key=lambda b: math.hypot(
-                    b.get_center_world(TILE_SIZE)[0] - villager.x,
-                    b.get_center_world(TILE_SIZE)[1] - villager.y
-                )
-            )
-            return free_toilets[0], True
-
-        # 2. All toilets are occupied: pick the one with the shortest queue
-        toilets.sort(
-            key=lambda b: (
-                len(getattr(b, "toilet_queue", [])),
-                math.hypot(
-                    b.get_center_world(TILE_SIZE)[0] - villager.x,
-                    b.get_center_world(TILE_SIZE)[1] - villager.y
-                )
-            )
+        toilet, _, _ = find_nearest_target(
+            (villager.x, villager.y), toilets,
+            lambda building: building.get_center_world(TILE_SIZE),
+            building_manager=building_manager, furniture_manager=furniture_manager,
         )
-        return toilets[0], False
+        if not toilet:
+            return None, False
+        is_free = (
+            getattr(toilet, "toilet_active_user", None) is None
+            and not getattr(toilet, "toilet_queue", [])
+        )
+        return toilet, is_free
 
     @classmethod
     def get_queue_position(cls, toilet, queue_idx, tile_size=TILE_SIZE):
@@ -204,7 +187,7 @@ class ToiletSystem:
         # Validate targeted toilet still exists
         all_toilets = cls.get_completed_toilets(building_manager)
         if toilet not in all_toilets:
-            toilet, _ = cls.find_best_toilet(villager, building_manager)
+            toilet, _ = cls.find_best_toilet(villager, building_manager, furniture_manager)
             villager.target_toilet = toilet
             if not toilet:
                 # No toilet facility available in settlement: preserve need, wait/idle politely

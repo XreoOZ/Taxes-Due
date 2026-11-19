@@ -87,7 +87,7 @@ from game.config import (
     NARROW_PASSAGE_WAIT_DISTANCE
 )
 from game.world.pathfinding import GlobalPathRegistry, calculate_collision_slide, is_narrow_passage_tile
-from game.world.navigation import find_navigation_path
+from game.world.navigation import find_navigation_path, find_nearest_target
 from game.systems.market_interface import request_market_food_purchase
 from game.systems.market_purchasing import AIFoodPurchasingSystem, AIMarketPurchasingSystem
 from game.systems.market_service import MarketService
@@ -555,8 +555,58 @@ class Villager:
         wells = [b for b in building_manager.buildings if b.building_type == "well"]
         if not wells:
             return None
-        wells.sort(key=lambda w: math.hypot(w.get_center_world(TILE_SIZE)[0] - self.x, w.get_center_world(TILE_SIZE)[1] - self.y))
-        return wells[0]
+        well, _, _ = find_nearest_target(
+            (self.x, self.y), wells,
+            lambda building: building.get_approach_point(
+                self.x, self.y, worker_id=self.id, tile_size=TILE_SIZE, bm=building_manager
+            ),
+            building_manager=building_manager,
+            furniture_manager=getattr(self, "furniture_manager", None),
+            tile_size=TILE_SIZE,
+        )
+        return well
+
+    def _find_nearest_household_item_source(self, matches_item, furniture_manager,
+                                           stockpile_manager, building_manager,
+                                           all_entities=None):
+        """Choose the closest chest or ground stack holding a household item."""
+        family_id = str(self.family_id)
+        candidates = []
+        chest = furniture_manager.get_storage_for_family(family_id) if furniture_manager else None
+        if chest and isinstance(getattr(chest, "inventory", None), dict):
+            candidates.extend(
+                ("chest", chest, item_name)
+                for item_name, amount in chest.inventory.items()
+                if amount > 0 and matches_item(item_name)
+            )
+        if stockpile_manager:
+            candidates.extend(
+                ("ground", stack, stack.resource_type)
+                for stack in getattr(stockpile_manager, "stacks", [])
+                if getattr(stack, "owner_type", None) == "villager"
+                and str(getattr(stack, "owner_id", "")) == family_id
+                and getattr(stack, "amount", 0) > 0
+                and matches_item(getattr(stack, "resource_type", ""))
+            )
+        if not candidates:
+            return None, None
+
+        def get_position(source):
+            source_type, obj, _ = source
+            if source_type == "chest":
+                return obj.get_approach_point(
+                    self.x, self.y, worker_id=self.id, all_entities=all_entities,
+                    tile_size=TILE_SIZE, bm=building_manager,
+                )
+            return ((obj.grid_x + 0.5) * TILE_SIZE, (obj.grid_y + 0.5) * TILE_SIZE)
+
+        source, position, _ = find_nearest_target(
+            (self.x, self.y), candidates, get_position,
+            building_manager=building_manager,
+            furniture_manager=furniture_manager,
+            tile_size=TILE_SIZE,
+        )
+        return source, position
 
     def _find_family_tool_source(self, tool_name, furniture_manager, stockpile_manager):
         """Mencari lokasi penyimpanan atau tumpukan alat milik keluarga di tanah"""
@@ -627,9 +677,16 @@ class Villager:
         if not avail_candidates:
             return None
 
-        # 4. Pilih yang terdekat
-        avail_candidates.sort(key=lambda s: math.hypot((s.grid_x + 0.5) * TILE_SIZE - self.x, (s.grid_y + 0.5) * TILE_SIZE - self.y))
-        return avail_candidates[0]
+        # 4. Choose the nearest household-owned stack.
+        nearest, _, _ = find_nearest_target(
+            (self.x, self.y), avail_candidates,
+            lambda stack: ((stack.grid_x + 0.5) * TILE_SIZE,
+                           (stack.grid_y + 0.5) * TILE_SIZE),
+            building_manager=building_manager,
+            furniture_manager=furniture_manager,
+            tile_size=TILE_SIZE,
+        )
+        return nearest
 
     def _family_has_tool(self, tool_name, furniture_manager, stockpile_manager):
         """Mengecek apakah keluarga memiliki alat tersebut (di inventory, peti rumah, atau lantai rumah)"""
@@ -717,7 +774,6 @@ class Villager:
         sm = getattr(self, "stockpile_manager", None)
         if fm or sm:
             self.deposit_irrelevant_tools(fm, sm)
-            self.collect_all_job_tools(fm, sm)
 
     def _get_unused_tools(self, assigned_farm=None, sched_activity=None):
         """
@@ -726,21 +782,58 @@ class Villager:
         """
         return self.get_irrelevant_tools()
 
-    def _find_tool_storage(self, furniture_manager, stockpile_manager, all_entities=None, building_manager=None):
+    def _find_tool_storage(self, furniture_manager, stockpile_manager, all_entities=None,
+                           building_manager=None, required_items=None):
         """Mencari lokasi penyimpanan alat keluarga (peti atau tumpukan tanah)"""
         fam_str = str(self.family_id)
+        required = set(required_items or ())
+        candidates = []
         if furniture_manager:
             chest = furniture_manager.get_storage_for_family(fam_str)
-            if chest:
-                if hasattr(chest, "get_approach_point"):
-                    pos = chest.get_approach_point(self.x, self.y, worker_id=self.id, all_entities=all_entities, tile_size=TILE_SIZE, bm=building_manager)
-                    return pos, "chest", chest
-                return chest.get_world_pos(TILE_SIZE), "chest", chest
+            chest_has_needed_item = chest and (
+                not required or any(chest.inventory.get(item, 0) > 0 for item in required)
+            )
+            if chest_has_needed_item:
+                pos = chest.get_approach_point(
+                    self.x, self.y, worker_id=self.id, all_entities=all_entities,
+                    tile_size=TILE_SIZE, bm=building_manager,
+                ) if hasattr(chest, "get_approach_point") else chest.get_world_pos(TILE_SIZE)
+                candidates.append((pos, "chest", chest))
         if stockpile_manager:
             for s in stockpile_manager.stacks:
-                if getattr(s, "owner_type", None) == "villager" and str(getattr(s, "owner_id", "")) == fam_str:
-                    return ((s.grid_x + 0.5) * TILE_SIZE, (s.grid_y + 0.5) * TILE_SIZE), "ground", s
+                if (getattr(s, "owner_type", None) == "villager"
+                        and str(getattr(s, "owner_id", "")) == fam_str
+                        and getattr(s, "amount", 0) > 0
+                        and (not required or s.resource_type in required)):
+                    pos = ((s.grid_x + 0.5) * TILE_SIZE, (s.grid_y + 0.5) * TILE_SIZE)
+                    candidates.append((pos, "ground", s))
+        if not required:
+            return candidates[0] if candidates else (None, None, None)
+        source, position, _ = find_nearest_target(
+            (self.x, self.y), candidates,
+            lambda candidate: candidate[0],
+            building_manager=building_manager,
+            furniture_manager=furniture_manager,
+            tile_size=TILE_SIZE,
+        )
+        if source:
+            return position, source[1], source[2]
         return None, None, None
+
+    def _collect_job_tools_from_source(self, source_type, source, stockpile_manager):
+        """Collect only missing tools available at the storage location the worker reached."""
+        collected = []
+        for tool_name, count in self.get_missing_job_tools():
+            if source_type == "chest":
+                amount = source.take_item(tool_name, count)
+            elif getattr(source, "resource_type", None) == tool_name and stockpile_manager:
+                amount = stockpile_manager.take_from_stack(source, count)
+            else:
+                amount = 0
+            if amount > 0:
+                self.inventory[tool_name] = self.inventory.get(tool_name, 0) + amount
+                collected.extend([tool_name] * amount)
+        return collected
 
     def _has_tool_in_storage(self, tool_name, furniture_manager, stockpile_manager):
         """Mengecek apakah alat kerja tersebut tersedia di peti atau tumpukan keluarga"""
@@ -1189,49 +1282,30 @@ class Villager:
                 self._resume_or_idle_after_need()
                 return
 
-            # 2. Dari peti penyimpanan keluarga (household_storage chest)
-            chest = furniture_manager.get_storage_for_family(self.family_id) if furniture_manager else None
-            chest_food = None
-            if chest and hasattr(chest, "inventory") and isinstance(chest.inventory, dict):
-                chest_food = next((it for it, c in chest.inventory.items() if is_food_item(it) and c > 0), None)
-
-            if chest and chest_food and not needs_household_restock:
-                cx, cy = chest.get_world_pos(TILE_SIZE)
-                arrived = self._move_towards(cx, cy, dt, arrival_dist=CHEST_INTERACTION_RADIUS, all_entities=all_entities, player=player, building_manager=building_manager, furniture_manager=furniture_manager, exclusive_target=False)
+            # 2. Compare family chest and loose food by distance from the villager.
+            food_source, food_pos = self._find_nearest_household_item_source(
+                is_food_item, furniture_manager, stockpile_manager,
+                building_manager, all_entities,
+            )
+            if food_source and not needs_household_restock:
+                source_type, source_obj, food_name = food_source
+                arrival_dist = CHEST_INTERACTION_RADIUS if source_type == "chest" else LOOSE_ITEM_ARRIVAL_DIST
+                arrived = self._move_towards(
+                    food_pos[0], food_pos[1], dt, arrival_dist=arrival_dist,
+                    all_entities=all_entities, player=player, building_manager=building_manager,
+                    furniture_manager=furniture_manager, exclusive_target=False,
+                )
                 if arrived:
-                    taken = chest.take_item(chest_food, 1)
+                    if source_type == "chest":
+                        taken = source_obj.take_item(food_name, 1)
+                    else:
+                        taken = stockpile_manager.take_from_stack(source_obj, 1)
                     if taken > 0:
                         self.hunger = min(AI_NEED_MAX, self.hunger + AI_NEED_FOOD_RESTORE)
                         self.hunger_death_timer = None
                         self.daily_food_consumed += 1
-                        self.say(f"Ate hearty meal of {chest_food} from household chest!", duration=2.5)
+                        self.say(f"Ate {food_name} from household supplies!", duration=2.5)
                         self._resume_or_idle_after_need()
-                return
-
-            # 3. Dari tumpukan di tanah milik keluarga (ground stockpile stack)
-            ground_food = None
-            if stockpile_manager:
-                fam_str = str(self.family_id)
-                for s in getattr(stockpile_manager, "stacks", []):
-                    if getattr(s, "owner_type", None) == "villager" and str(getattr(s, "owner_id", "")) == fam_str:
-                        if is_food_item(getattr(s, "resource_type", "")) and getattr(s, "amount", 0) > 0:
-                            ground_food = s
-                            break
-
-            if ground_food and not needs_household_restock:
-                gx_pos = (ground_food.grid_x + 0.5) * TILE_SIZE
-                gy_pos = (ground_food.grid_y + 0.5) * TILE_SIZE
-                arrived = self._move_towards(gx_pos, gy_pos, dt, arrival_dist=LOOSE_ITEM_ARRIVAL_DIST, all_entities=all_entities, player=player, building_manager=building_manager, furniture_manager=furniture_manager, exclusive_target=False)
-                if arrived:
-                    f_name = ground_food.resource_type
-                    ground_food.amount -= 1
-                    if ground_food.amount <= 0:
-                        stockpile_manager.stacks = [st for st in stockpile_manager.stacks if st != ground_food]
-                    self.hunger = min(AI_NEED_MAX, self.hunger + AI_NEED_FOOD_RESTORE)
-                    self.hunger_death_timer = None
-                    self.daily_food_consumed += 1
-                    self.say(f"Ate {f_name} from family stockpile!", duration=2.5)
-                    self._resume_or_idle_after_need()
                 return
 
             # 4. Inisiasi proses belanja makanan fisik ke pasar jika makanan di rumah kosong (Agent 3)
@@ -1305,7 +1379,9 @@ class Villager:
                 chest = furniture_manager.get_storage_for_family(self.family_id) if furniture_manager else None
                 chest_wallet = normalize_wallet(getattr(chest, "inventory", {})) if chest else {}
                 remaining_cost = self.purchase_target_price - my_coins
-                ground_stack = AIFoodPurchasingSystem.find_nearest_household_currency_stack(self, stockpile_manager)
+                ground_stack = AIFoodPurchasingSystem.find_nearest_household_currency_stack(
+                    self, stockpile_manager, building_manager, furniture_manager
+                )
                 if ground_stack and to_copper(chest_wallet) < remaining_cost:
                     self.target_loose_stack = ground_stack
                     self.task = "BUYING_FOOD_RETRIEVE_GROUND_COINS"
@@ -1347,7 +1423,9 @@ class Villager:
             self.active_tool = None
             stack = getattr(self, "target_loose_stack", None)
             if not stockpile_manager or stack not in getattr(stockpile_manager, "stacks", []):
-                stack = AIFoodPurchasingSystem.find_nearest_household_currency_stack(self, stockpile_manager)
+                stack = AIFoodPurchasingSystem.find_nearest_household_currency_stack(
+                    self, stockpile_manager, building_manager, furniture_manager
+                )
                 self.target_loose_stack = stack
             if not stack:
                 chest = furniture_manager.get_storage_for_family(self.family_id) if furniture_manager else None
@@ -1371,7 +1449,9 @@ class Villager:
                 if to_copper(normalize_wallet(self.inventory)) >= getattr(self, "purchase_target_price", 0):
                     self.task = "BUYING_FOOD_TRAVEL_TO_MARKET"
                 else:
-                    self.target_loose_stack = AIFoodPurchasingSystem.find_nearest_household_currency_stack(self, stockpile_manager)
+                    self.target_loose_stack = AIFoodPurchasingSystem.find_nearest_household_currency_stack(
+                        self, stockpile_manager, building_manager, furniture_manager
+                    )
                     self.task = "BUYING_FOOD_RETRIEVE_GROUND_COINS" if self.target_loose_stack else "BUYING_FOOD_RETRIEVE_COINS"
             return
 
@@ -1440,46 +1520,29 @@ class Villager:
                 self._resume_or_idle_after_need()
                 return
 
-            # 2. Dari peti penyimpanan keluarga
-            chest = furniture_manager.get_storage_for_family(self.family_id) if furniture_manager else None
-            chest_water = None
-            if chest and hasattr(chest, "inventory") and isinstance(chest.inventory, dict):
-                chest_water = next((it for it, c in chest.inventory.items() if is_water_item(it) and c > 0), None)
-            if chest and chest_water:
-                cx, cy = chest.get_world_pos(TILE_SIZE)
-                arrived = self._move_towards(cx, cy, dt, arrival_dist=CHEST_INTERACTION_RADIUS, all_entities=all_entities, player=player, building_manager=building_manager, furniture_manager=furniture_manager, exclusive_target=False)
+            water_source, water_pos = self._find_nearest_household_item_source(
+                is_water_item, furniture_manager, stockpile_manager,
+                building_manager, all_entities,
+            )
+            if water_source:
+                source_type, source_obj, water_name = water_source
+                arrival_dist = CHEST_INTERACTION_RADIUS if source_type == "chest" else LOOSE_ITEM_ARRIVAL_DIST
+                arrived = self._move_towards(
+                    water_pos[0], water_pos[1], dt, arrival_dist=arrival_dist,
+                    all_entities=all_entities, player=player, building_manager=building_manager,
+                    furniture_manager=furniture_manager, exclusive_target=False,
+                )
                 if arrived:
-                    taken = chest.take_item(chest_water, 1)
+                    if source_type == "chest":
+                        taken = source_obj.take_item(water_name, 1)
+                    else:
+                        taken = stockpile_manager.take_from_stack(source_obj, 1)
                     if taken > 0:
                         self.thirst = min(AI_NEED_MAX, self.thirst + AI_NEED_WATER_RESTORE)
                         self.thirst_death_timer = None
                         self.daily_water_consumed += 1
-                        self.say("Drank fresh water from storage chest!", duration=2.5)
+                        self.say(f"Drank {water_name} from household supplies!", duration=2.5)
                         self._resume_or_idle_after_need()
-                return
-
-            # 2.5. Dari stockpile tanah milik keluarga
-            ground_water = None
-            if stockpile_manager:
-                fam_str = str(self.family_id)
-                for s in getattr(stockpile_manager, "stacks", []):
-                    if getattr(s, "owner_type", None) == "villager" and str(getattr(s, "owner_id", "")) == fam_str:
-                        if is_water_item(getattr(s, "resource_type", "")) and getattr(s, "amount", 0) > 0:
-                            ground_water = s
-                            break
-            if ground_water:
-                gx_pos = (ground_water.grid_x + 0.5) * TILE_SIZE
-                gy_pos = (ground_water.grid_y + 0.5) * TILE_SIZE
-                arrived = self._move_towards(gx_pos, gy_pos, dt, arrival_dist=LOOSE_ITEM_ARRIVAL_DIST, all_entities=all_entities, player=player, building_manager=building_manager, furniture_manager=furniture_manager, exclusive_target=False)
-                if arrived:
-                    ground_water.amount -= 1
-                    if ground_water.amount <= 0:
-                        stockpile_manager.stacks = [st for st in stockpile_manager.stacks if st != ground_water]
-                    self.thirst = min(AI_NEED_MAX, self.thirst + AI_NEED_WATER_RESTORE)
-                    self.thirst_death_timer = None
-                    self.daily_water_consumed += 1
-                    self.say("Drank water from family stockpile!", duration=2.5)
-                    self._resume_or_idle_after_need()
                 return
 
             # 3. Dari sumur desa (jika air di rumah habis, ambil minum di sumur)
@@ -1988,7 +2051,10 @@ class Villager:
             if missing_tools:
                 available_to_fetch = [t for t, _ in missing_tools if self._has_tool_in_storage(t, furniture_manager, stockpile_manager)]
                 if available_to_fetch:
-                    storage_pos, storage_type, storage_obj = self._find_tool_storage(furniture_manager, stockpile_manager)
+                    storage_pos, storage_type, storage_obj = self._find_tool_storage(
+                        furniture_manager, stockpile_manager, required_items=available_to_fetch,
+                        building_manager=building_manager,
+                    )
                     if storage_pos:
                         dist = math.hypot(storage_pos[0] - self.x, storage_pos[1] - self.y)
                         cur_vgx = int(math.floor(self.x / TILE_SIZE))
@@ -1998,7 +2064,9 @@ class Villager:
                         is_near = (dist <= CHEST_INTERACTION_RADIUS) or (abs(cur_vgx - st_gx) <= 1 and abs(cur_vgy - st_gy) <= 1)
 
                         if is_near:
-                            col = self.collect_all_job_tools(furniture_manager, stockpile_manager)
+                            col = self._collect_job_tools_from_source(
+                                storage_type, storage_obj, stockpile_manager
+                            )
                             if col:
                                 self.say(f"Equipped {', '.join(col)} for {self.job}!", duration=2.0)
                             self.task = "IDLE"

@@ -43,3 +43,24 @@ def find_navigation_path(start, target, building_manager=None, furniture_manager
             best_route = route
             best_route_length = route_length
     return best_route or []
+
+
+def find_nearest_target(start, candidates, get_position, building_manager=None,
+                        furniture_manager=None, tile_size=TILE_SIZE):
+    """Choose the closest target point; movement uses the normal obstacle-aware route."""
+    best = None
+    best_position = None
+    best_distance = float("inf")
+    for candidate in candidates:
+        try:
+            position = get_position(candidate)
+        except (AttributeError, TypeError, ValueError):
+            continue
+        if not position or len(position) < 2:
+            continue
+        distance = math.hypot(position[0] - start[0], position[1] - start[1])
+        if distance < best_distance:
+            best = candidate
+            best_position = position
+            best_distance = distance
+    return best, best_position, best_distance

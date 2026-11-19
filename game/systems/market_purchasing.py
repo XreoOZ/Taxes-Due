@@ -24,6 +24,7 @@ from game.systems.currency import (
     canonical_denomination,
 )
 from game.systems.market_service import MarketService
+from game.world.navigation import find_nearest_target
 
 
 class AIFoodPurchasingSystem:
@@ -48,7 +49,8 @@ class AIFoodPurchasingSystem:
         return wallet
 
     @classmethod
-    def find_nearest_household_currency_stack(cls, villager, stockpile_manager=None):
+    def find_nearest_household_currency_stack(cls, villager, stockpile_manager=None,
+                                               building_manager=None, furniture_manager=None):
         manager = stockpile_manager or getattr(villager, "stockpile_manager", None)
         family_id = str(getattr(villager, "family_id", ""))
         candidates = [
@@ -58,11 +60,15 @@ class AIFoodPurchasingSystem:
             and canonical_denomination(getattr(stack, "resource_type", ""))
             and getattr(stack, "amount", 0) > 0
         ] if manager and family_id else []
-        candidates.sort(key=lambda stack: math.hypot(
-            (stack.grid_x + 0.5) * TILE_SIZE - villager.x,
-            (stack.grid_y + 0.5) * TILE_SIZE - villager.y,
-        ))
-        return candidates[0] if candidates else None
+        stack, _, _ = find_nearest_target(
+            (villager.x, villager.y), candidates,
+            lambda candidate: ((candidate.grid_x + 0.5) * TILE_SIZE,
+                               (candidate.grid_y + 0.5) * TILE_SIZE),
+            building_manager=building_manager,
+            furniture_manager=furniture_manager,
+            tile_size=TILE_SIZE,
+        )
+        return stack
 
     @classmethod
     def check_household_has_food(cls, villager, furniture_manager=None, villager_manager=None, stockpile_manager=None):
@@ -176,12 +182,20 @@ class AIFoodPurchasingSystem:
                     continue  # Food is never free! Must have configured price > 0
 
                 if total_funds_copper >= unit_price:
-                    # Calculate distance to market interaction approach point
                     try:
-                        approach_pt = m.get_approach_point((villager.x, villager.y), TILE_SIZE, building_manager)
+                        _, _, dist = find_nearest_target(
+                            (villager.x, villager.y), [m],
+                            lambda market: market.get_approach_point(
+                                (villager.x, villager.y), TILE_SIZE, building_manager
+                            ),
+                            building_manager=building_manager,
+                            furniture_manager=furniture_manager,
+                            tile_size=TILE_SIZE,
+                        )
                     except Exception:
-                        approach_pt = m.get_center_world(TILE_SIZE)
-                    dist = math.hypot(approach_pt[0] - villager.x, approach_pt[1] - villager.y)
+                        dist = float("inf")
+                    if not math.isfinite(dist):
+                        continue
                     candidates.append((dist, m, food_item, unit_price))
 
         if not candidates:
@@ -436,8 +450,17 @@ class AIMarketPurchasingSystem:
             if not can_supply_all or total_cost <= 0 or available_funds < total_cost:
                 continue
 
-            market_x, market_y = market.get_center_world(TILE_SIZE)
-            distance = math.hypot(villager.x - market_x, villager.y - market_y)
+            _, _, distance = find_nearest_target(
+                (villager.x, villager.y), [market],
+                lambda candidate: candidate.get_approach_point(
+                    (villager.x, villager.y), TILE_SIZE, building_manager
+                ),
+                building_manager=building_manager,
+                furniture_manager=furniture_manager,
+                tile_size=TILE_SIZE,
+            )
+            if not math.isfinite(distance):
+                continue
             if distance < best_distance:
                 best_market = market
                 best_cost = total_cost
@@ -550,8 +573,17 @@ class AIMarketPurchasingSystem:
             if affordable_qty <= 0:
                 continue
 
-            mx, my = m.get_center_world(TILE_SIZE)
-            d = math.hypot(villager.x - mx, villager.y - my)
+            _, _, d = find_nearest_target(
+                (villager.x, villager.y), [m],
+                lambda market: market.get_approach_point(
+                    (villager.x, villager.y), TILE_SIZE, building_manager
+                ),
+                building_manager=building_manager,
+                furniture_manager=furniture_manager,
+                tile_size=TILE_SIZE,
+            )
+            if not math.isfinite(d):
+                continue
             if d < min_dist:
                 min_dist = d
                 best_mkt = m
