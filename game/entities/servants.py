@@ -561,6 +561,8 @@ class Servant:
                     if not isinstance(getattr(mkt, "currency", None), dict):
                         mkt.currency = {denom: 0 for denom in MARKET_CURRENCY_DENOMINATIONS}
                     mkt.currency[self.carried_res] = mkt.currency.get(self.carried_res, 0) + self.carried_amount
+                    from game.systems.currency import compact_currency_wallet
+                    compact_currency_wallet(mkt.currency)
                 else:
                     mkt.inventory[self.carried_res] = mkt.inventory.get(self.carried_res, 0) + self.carried_amount
                     from game.systems.market_pricing import MarketPricingSystem
@@ -802,8 +804,10 @@ class Servant:
                             self.say(f"Hauling loose {stack.resource_type} to storage!")
                             return True
 
-                # B. Hauling materials to construction site ONLY IF no loose items are left on the ground!
-                if pending_site and not pending_site.is_materials_complete() and not loose_stacks:
+                # B. Construction supply is still eligible when loose goods exist.
+                # Loose goods can remain un-haulable (for example, when storage is full),
+                # and must not block workers from supplying an active construction site.
+                if pending_site and not pending_site.is_materials_complete():
                     assigned = self._assign_construction_task(pending_site, stockpile_manager, resources, player, all_servants=all_servants)
                     if assigned:
                         return True
@@ -1033,7 +1037,7 @@ class Servant:
         wp_dy = target_wp[1] - self.y
         dist_to_wp = math.hypot(wp_dx, wp_dy)
         is_last_wp = (self.path_index == len(self.current_path) - 1)
-        tol = arrival_dist if is_last_wp else 8.0
+        tol = arrival_dist if is_last_wp else PATH_WAYPOINT_TOLERANCE
 
         if dist_to_wp <= tol:
             if is_last_wp:

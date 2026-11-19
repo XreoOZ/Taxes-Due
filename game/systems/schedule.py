@@ -6,6 +6,8 @@ from game.config import (
     DEDICATED_JOBS,
     SCHEDULE_PRAYER,
     SCHEDULE_WORK,
+    DEFAULT_PRAYER_START_HOUR,
+    DEFAULT_PRAYER_END_HOUR,
 )
 
 
@@ -14,8 +16,8 @@ class ScheduleManager:
 
     def __init__(self):
         self.default_schedule = list(DEFAULT_JOB_SCHEDULE)
-        self.prayer_start_hour = 12
-        self.prayer_end_hour = 14
+        self.prayer_start_hour = DEFAULT_PRAYER_START_HOUR
+        self.prayer_end_hour = DEFAULT_PRAYER_END_HOUR
         self.prayer_override_all = True
         self.job_schedules = {
             job_id: list(self.default_schedule) for job_id in DEDICATED_JOBS
@@ -34,6 +36,10 @@ class ScheduleManager:
 
     def get_prayer_hours(self):
         return self.prayer_start_hour, self.prayer_end_hour
+
+    def is_prayer_hour(self, hour):
+        hour = int(hour) % 24
+        return self.prayer_start_hour <= hour < self.prayer_end_hour
 
     def set_prayer_time(self, start_hour, end_hour):
         start = max(0, min(23, int(start_hour)))
@@ -56,22 +62,29 @@ class ScheduleManager:
     def get_schedule_view(self, job_id):
         """Return a display copy with the enforced Prayer Time block applied."""
         schedule = list(self.get_schedule(job_id))
-        for hour in range(self.prayer_start_hour, self.prayer_end_hour):
-            schedule[hour] = SCHEDULE_PRAYER
+        for hour in range(len(schedule)):
+            if self.is_prayer_hour(hour):
+                schedule[hour] = SCHEDULE_PRAYER
         return schedule
 
     def get_current_activity(self, job_id, current_hour, day=None):
         hour = int(current_hour) % 24
-        if self.prayer_start_hour <= hour < self.prayer_end_hour:
+        if self.is_prayer_hour(hour):
             return SCHEDULE_PRAYER
-        return self.get_schedule(job_id)[hour]
+        return self.get_scheduled_activity(job_id, current_hour)
+
+    def get_scheduled_activity(self, job_id, current_hour):
+        """Return a job's own activity without applying the shared prayer override."""
+        schedule = self.get_schedule(job_id)
+        hour = int(current_hour) % len(schedule)
+        return schedule[hour]
 
     def set_hour_activity(self, job_id, hour_idx, activity_type, day=None):
         if activity_type not in SCHEDULE_TYPES or not 0 <= hour_idx < 24:
             return False
         if activity_type == SCHEDULE_PRAYER:
             return False
-        if job_id == "Priest" and self.prayer_start_hour <= hour_idx < self.prayer_end_hour:
+        if self.is_prayer_hour(hour_idx):
             return False
         self.get_schedule(job_id)[hour_idx] = activity_type
         return True
@@ -84,7 +97,7 @@ class ScheduleManager:
             return False
         schedule = self.get_schedule(job_id)
         for hour in range(24):
-            if job_id == "Priest" and self.prayer_start_hour <= hour < self.prayer_end_hour:
+            if self.is_prayer_hour(hour):
                 continue
             schedule[hour] = activity_type
         return True

@@ -9,11 +9,6 @@ import time
 import pygame
 from game.config import (
     TILE_SIZE,
-    COLOR_PATH_VILLAGER,
-    COLOR_PATH_SERVANT,
-    COLOR_PATH_TARGET_RING,
-    PATH_LINE_WIDTH,
-    PATH_ARROW_SPACING,
     PATH_WAYPOINT_TOLERANCE,
     PATH_SEGMENT_COLLISION_RADIUS,
     PATH_MAX_ASTAR_ITERATIONS,
@@ -144,8 +139,14 @@ class Pathfinder:
             if all_walls:
                 # Abaikan benturan jika segmen berada tepat di koridor celah kusen pintu bangunan
                 is_door_transit = any(
-                    b.is_in_door_threshold(x1, y1, tile_size) and b.is_in_door_threshold(x2, y2, tile_size)
-                    for b in getattr(bm, "buildings", []) if getattr(b, "door_pos", None)
+                    getattr(b, "door_pos", None)
+                    and (
+                        (math.hypot(x1 - b.get_door_world_outside(tile_size)[0], y1 - b.get_door_world_outside(tile_size)[1]) <= PATH_WAYPOINT_TOLERANCE
+                         and math.hypot(x2 - b.get_door_world_inside(tile_size)[0], y2 - b.get_door_world_inside(tile_size)[1]) <= PATH_WAYPOINT_TOLERANCE)
+                        or (math.hypot(x1 - b.get_door_world_inside(tile_size)[0], y1 - b.get_door_world_inside(tile_size)[1]) <= PATH_WAYPOINT_TOLERANCE
+                            and math.hypot(x2 - b.get_door_world_outside(tile_size)[0], y2 - b.get_door_world_outside(tile_size)[1]) <= PATH_WAYPOINT_TOLERANCE)
+                    )
+                    for b in getattr(bm, "buildings", [])
                 )
                 if not is_door_transit:
                     for wr in all_walls:
@@ -344,18 +345,14 @@ class Pathfinder:
             if b_cur and not b_prev and pt == getattr(b_cur, "door_pos", None):
                 # Masuk pintu: lewati titik outside pintu, threshold tengah, lalu inside pintu
                 d_out = b_cur.get_door_world_outside(tile_size)
-                d_thresh = b_cur.get_door_world_threshold(tile_size)
                 d_in = b_cur.get_door_world_inside(tile_size)
                 raw_waypoints.append(d_out)
-                raw_waypoints.append(d_thresh)
                 raw_waypoints.append(d_in)
             elif b_prev and not b_cur and prev_pt == getattr(b_prev, "door_pos", None):
                 # Keluar pintu: lewati titik inside pintu, threshold tengah, lalu outside pintu
                 d_in = b_prev.get_door_world_inside(tile_size)
-                d_thresh = b_prev.get_door_world_threshold(tile_size)
                 d_out = b_prev.get_door_world_outside(tile_size)
                 raw_waypoints.append(d_in)
-                raw_waypoints.append(d_thresh)
                 raw_waypoints.append(d_out)
             else:
                 raw_waypoints.append(((pt[0] + 0.5) * tile_size, (pt[1] + 0.5) * tile_size))
@@ -961,85 +958,3 @@ class GlobalPathRegistry:
         if first_claimant == str(entity_id):
             return True
         return my_seq <= min_seq
-
-
-def draw_ai_paths(surface, camera, villagers=None, servants=None, show_lines=True):
-    """
-    Merender jalur garis predetermined pathfinding lengkap dengan panah penunjuk arah 
-    dan target destination reticle. Sinkron 100% dengan reservasi rute GlobalPathRegistry.
-    Dapat diaktifkan / dimatikan lewat tombol ON/OFF HUD.
-    """
-    if not show_lines:
-        return
-
-    all_actors = []
-    if villagers:
-        for v in villagers:
-            all_actors.append((v, COLOR_PATH_VILLAGER, f"{v.first_name} [{getattr(v, 'task', 'MOVE')}]"))
-    if servants:
-        for s in servants:
-            all_actors.append((s, COLOR_PATH_SERVANT, f"Servant [{getattr(s, 'state', 'MOVE')}]"))
-
-    font_tag = pygame.font.SysFont("Segoe UI", 10, bold=True)
-
-    for actor, color, label in all_actors:
-        waypoints = getattr(actor, "current_path", None)
-        path_idx = getattr(actor, "path_index", 0)
-
-        if not waypoints or path_idx >= len(waypoints):
-            continue
-
-        # Titik-titik rute: dari posisi karakter saat ini ke waypoint yang tersisa (persis reservasi aktif)
-        points = [(actor.x, actor.y)] + waypoints[path_idx:]
-        if len(points) < 2:
-            continue
-
-        screen_pts = [camera.world_to_screen(px, py) for px, py in points]
-
-        # 1. Gambar garis rute predetermined berkesinambungan
-        if len(screen_pts) >= 2:
-            pygame.draw.lines(surface, color, False, screen_pts, PATH_LINE_WIDTH)
-
-        # 2. Gambar panah penunjuk arah sepanjang segmen garis
-        for i in range(len(screen_pts) - 1):
-            p1 = screen_pts[i]
-            p2 = screen_pts[i + 1]
-            seg_dx = p2[0] - p1[0]
-            seg_dy = p2[1] - p1[1]
-            seg_len = math.hypot(seg_dx, seg_dy)
-            if seg_len < 16.0:
-                continue
-
-            ux = seg_dx / seg_len
-            uy = seg_dy / seg_len
-            nx = -uy
-            ny = ux
-
-            arrow_spacing = PATH_ARROW_SPACING
-            num_arrows = max(1, int(seg_len // arrow_spacing))
-            for a_idx in range(1, num_arrows + 1):
-                dist_on_seg = (a_idx - 0.5) * (seg_len / num_arrows)
-                ax = p1[0] + ux * dist_on_seg
-                ay = p1[1] + uy * dist_on_seg
-
-                tip = (ax + ux * 6, ay + uy * 6)
-                left_barb = (ax - ux * 5 + nx * 5, ay - uy * 5 + ny * 5)
-                right_barb = (ax - ux * 5 - nx * 5, ay - uy * 5 - ny * 5)
-                center_notch = (ax - ux * 2, ay - uy * 2)
-
-                pygame.draw.polygon(surface, color, [tip, left_barb, center_notch, right_barb])
-
-        # 3. Gambar Reticle / Target Pin di titik tujuan akhir
-        target_s = screen_pts[-1]
-        pygame.draw.circle(surface, COLOR_PATH_TARGET_RING, (int(target_s[0]), int(target_s[1])), 8, width=2)
-        pygame.draw.circle(surface, (255, 255, 255), (int(target_s[0]), int(target_s[1])), 3)
-
-        # Label tag kecil di atas target
-        tag_surf = font_tag.render(label, True, (255, 255, 255))
-        tag_w = tag_surf.get_width() + 8
-        tag_h = 16
-        tag_bg = pygame.Rect(int(target_s[0] - tag_w // 2), int(target_s[1] - 24), tag_w, tag_h)
-        pygame.draw.rect(surface, (15, 23, 42, 220), tag_bg, border_radius=4)
-        pygame.draw.rect(surface, color, tag_bg, width=1, border_radius=4)
-        surface.blit(tag_surf, (tag_bg.x + 4, tag_bg.y + 1))
-

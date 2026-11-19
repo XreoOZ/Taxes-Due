@@ -33,6 +33,10 @@ class ChurchSystem:
         self.tax_paid_households_today = set()  # set of family_ids that paid tax today
         self.last_tax_day = 1
         self.occupied_prayer_tiles = {}         # (gx, gy) -> villager_id
+        self.prayer_tile_by_villager = {}       # villager_id -> (gx, gy), for constant-time lookup/release
+        self.church_walkable_cache = {}         # permit_id -> (layout signature, walkable tiles)
+        self.church_permit_by_manager = {}      # manager id -> (permit list signature, church permit)
+        self.priest_by_villager_manager = {}    # manager id -> (priest object or None, cache valid)
         self.configured_tax = {"Gold": 0, "Silver": 0, "Copper": 1}
 
     @classmethod
@@ -46,9 +50,18 @@ class ChurchSystem:
         """Returns the first active Church permit."""
         if not permit_manager:
             return None
+        inst = cls.get_instance()
+        manager_key = id(permit_manager)
+        permits = getattr(permit_manager, "permits", [])
+        signature = (id(permits), len(permits))
+        cached = inst.church_permit_by_manager.get(manager_key)
+        if cached and cached[0] == signature:
+            return cached[1]
         for p in getattr(permit_manager, "permits", []):
             if getattr(p, "permit_type", "") == "church":
+                inst.church_permit_by_manager[manager_key] = (signature, p)
                 return p
+        inst.church_permit_by_manager[manager_key] = (signature, None)
         return None
 
     @classmethod
@@ -65,6 +78,13 @@ class ChurchSystem:
         """
         if not villager_manager:
             return None
+        inst = cls.get_instance()
+        manager_key = id(villager_manager)
+        cached = inst.priest_by_villager_manager.get(manager_key)
+        if cached and cached[1]:
+            priest = cached[0]
+            if priest is None or (getattr(priest, "is_alive", True) and getattr(priest, "job", "") == "Priest"):
+                return priest
         all_vils = villager_manager.get_all_villagers() if hasattr(villager_manager, "get_all_villagers") else getattr(villager_manager, "villagers", [])
         
         # 1. From active Church permit
@@ -73,10 +93,13 @@ class ChurchSystem:
             priest_id = church.assigned_workers[0]
             p_vil = next((v for v in all_vils if str(v.id) == str(priest_id) and getattr(v, "is_alive", True)), None)
             if p_vil:
+                inst.priest_by_villager_manager[manager_key] = (p_vil, True)
                 return p_vil
 
         # 2. Any active villager with Priest job
-        return next((v for v in all_vils if getattr(v, "job", "") == "Priest" and getattr(v, "is_alive", True)), None)
+        priest = next((v for v in all_vils if getattr(v, "job", "") == "Priest" and getattr(v, "is_alive", True)), None)
+        inst.priest_by_villager_manager[manager_key] = (priest, True)
+        return priest
 
     @classmethod
     def assign_priest(cls, permit_manager, villager_manager, target_permit=None, furniture_manager=None):
@@ -116,6 +139,7 @@ class ChurchSystem:
         # Assign job and title
         chosen.set_job("Priest")
         chosen.title = "Village Priest"
+        cls.get_instance().priest_by_villager_manager[id(villager_manager)] = (chosen, True)
 
         if church:
             if not hasattr(church, "assigned_workers"):
@@ -155,6 +179,7 @@ class ChurchSystem:
                 released_vil.job = "Unassigned"
                 released_vil.title = "Peasant Farmer"
             released_vil.say("I have stepped down from the priesthood.", duration=2.5)
+            cls.get_instance().priest_by_villager_manager[id(villager_manager)] = (None, True)
             return True, released_vil
 
         return False, "No Priest currently assigned."
@@ -234,6 +259,10 @@ class ChurchSystem:
         inst.tax_paid_households_today.clear()
         inst.last_tax_day = current_day
         inst.occupied_prayer_tiles.clear()
+        inst.prayer_tile_by_villager.clear()
+        inst.church_walkable_cache.clear()
+        inst.church_permit_by_manager.clear()
+        inst.priest_by_villager_manager.clear()
         if permit_manager:
             for p in cls.get_all_church_permits(permit_manager):
                 if hasattr(p, "tax_paid_households_today"):
@@ -323,13 +352,30 @@ class ChurchSystem:
         """
         if not church_permit:
             return []
-        church_blds = [b for b in getattr(building_manager, "buildings", []) if church_permit.overlaps_building(b)]
+        if not hasattr(church_permit, "tiles"):
+            return []
+        buildings = getattr(building_manager, "buildings", []) if building_manager else []
+        permit_id = str(getattr(church_permit, "id", id(church_permit)))
+        signature = (
+            len(church_permit.tiles),
+            id(church_permit.tiles),
+            len(buildings),
+            id(getattr(building_manager, "_tile_to_building", None)),
+        )
+        inst = cls.get_instance()
+        cached = inst.church_walkable_cache.get(permit_id)
+        if cached and cached[0] == signature:
+            return cached[1]
+        church_blds = [b for b in buildings if church_permit.overlaps_building(b)]
         if church_blds:
             tiles = set()
             for b in church_blds:
                 tiles.update(b.tiles)
-            return sorted(list(tiles))
-        return sorted(list(church_permit.tiles))
+            walkable = sorted(tiles)
+        else:
+            walkable = sorted(church_permit.tiles)
+        inst.church_walkable_cache[permit_id] = (signature, walkable, set(walkable))
+        return walkable
 
     @classmethod
     def find_free_church_tile(cls, villager, church_permit, building_manager):
@@ -341,10 +387,22 @@ class ChurchSystem:
         inst = cls.get_instance()
         vid_str = str(villager.id)
 
+        permit_id = str(getattr(church_permit, "id", id(church_permit)))
+        cached_walkable = inst.church_walkable_cache.get(permit_id)
+        walkable_set = cached_walkable[2] if cached_walkable and len(cached_walkable) > 2 else set(tiles)
+        assigned = inst.prayer_tile_by_villager.get(vid_str)
+        if assigned in walkable_set and inst.occupied_prayer_tiles.get(assigned) == vid_str:
+            return assigned
+        if assigned is not None:
+            if inst.occupied_prayer_tiles.get(assigned) == vid_str:
+                del inst.occupied_prayer_tiles[assigned]
+            inst.prayer_tile_by_villager.pop(vid_str, None)
+
         for t in tiles:
             occupant = inst.occupied_prayer_tiles.get(t)
             if occupant is None or occupant == vid_str:
                 inst.occupied_prayer_tiles[t] = vid_str
+                inst.prayer_tile_by_villager[vid_str] = t
                 return t
         return None
 
@@ -352,9 +410,9 @@ class ChurchSystem:
     def release_church_tile(cls, villager):
         inst = cls.get_instance()
         vid_str = str(villager.id)
-        to_del = [t for t, occupant in inst.occupied_prayer_tiles.items() if occupant == vid_str]
-        for t in to_del:
-            del inst.occupied_prayer_tiles[t]
+        tile = inst.prayer_tile_by_villager.pop(vid_str, None)
+        if tile is not None and inst.occupied_prayer_tiles.get(tile) == vid_str:
+            del inst.occupied_prayer_tiles[tile]
 
     @classmethod
     def priest_deposit_tithes_home(cls, priest, furniture_manager):
@@ -382,6 +440,9 @@ class ChurchSystem:
             if amt > 0:
                 chest.currency[den] = chest.currency.get(den, 0) + amt
                 priest.currency[den] = 0
+        from game.systems.currency import compact_currency_wallet
+        compact_currency_wallet(chest.currency)
+        compact_currency_wallet(priest.currency)
 
         priest.say(f"Deposited {total_deposited_copper}c tithes into household chest.", duration=2.5)
         return total_deposited_copper

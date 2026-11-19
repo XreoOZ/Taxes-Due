@@ -107,13 +107,12 @@ class FarmingBatch:
         if current_day is not None:
             self.close_day = float(current_day)
 
-    def update_growth(self, day_dt):
+    def update_growth(self, current_day):
         if not self.tiles or self.is_dead:
             return
         crop_cfg = CROP_TYPES.get(str(self.crop).lower(), CROP_TYPES.get("potato", {}))
         target = float(crop_cfg.get("growth_days", FARMING_BATCH_GROWTH_DAYS))
-        if self.watered_today:
-            self.growth_days = min(target, self.growth_days + day_dt)
+        self.growth_days = min(target, max(0.0, float(current_day) - self.start_day))
 
     def to_dict(self):
         return {
@@ -372,9 +371,6 @@ class AreaPermit:
         """Mendapatkan petak ladang yang siap panen berbasis sinkronisasi batch"""
         self.ensure_tile_crops()
         ready = []
-        crop_cfg = CROP_TYPES.get("potato", {})
-        growth_target = crop_cfg.get("growth_days", FARMING_BATCH_GROWTH_DAYS)
-
         # Batch-based harvest readiness: seluruh tile dalam batch siap panen serempak
         for batch in self.batches.values():
             if batch.is_harvestable and not batch.is_dead:
@@ -386,6 +382,8 @@ class AreaPermit:
 
         # Fallback untuk tile tanpa batch
         for t, tc in self.tile_crops.items():
+            crop_cfg = CROP_TYPES.get(str(tc.get("crop", "potato")).lower(), CROP_TYPES.get("potato", {}))
+            growth_target = crop_cfg.get("growth_days", FARMING_BATCH_GROWTH_DAYS)
             if tc.get("crop") and not tc.get("is_dead") and tc.get("growth_days", 0.0) >= growth_target:
                 if t not in ready:
                     ready.append(t)
@@ -396,7 +394,7 @@ class AreaPermit:
         if (gx, gy) in self.tile_crops:
             tc = self.tile_crops[(gx, gy)]
             batch = self.get_tile_batch(gx, gy)
-            crop_cfg = CROP_TYPES.get("potato", {})
+            crop_cfg = CROP_TYPES.get(str(tc.get("crop", "potato")).lower(), CROP_TYPES.get("potato", {}))
             growth_target = crop_cfg.get("growth_days", FARMING_BATCH_GROWTH_DAYS)
             is_harvestable = (batch.is_harvestable if batch else False) or (tc.get("growth_days", 0.0) >= growth_target)
 
@@ -439,9 +437,6 @@ class AreaPermit:
             self.current_day_time += float(day_dt)
 
         self.ensure_tile_crops()
-        crop_cfg = CROP_TYPES.get("potato", {})
-        growth_target = crop_cfg.get("growth_days", FARMING_BATCH_GROWTH_DAYS)
-
         # Cek jika window batch aktif telah kadaluarsa
         if self.active_batch_id and self.active_batch_id in self.batches:
             act_b = self.batches[self.active_batch_id]
@@ -452,9 +447,7 @@ class AreaPermit:
         for batch in list(self.batches.values()):
             if batch.is_dead or len(batch.tiles) == 0:
                 continue
-            has_watered = any(self.tile_crops.get(t, {}).get("watered_today", False) for t in batch.tiles)
-            batch.watered_today = has_watered
-            batch.update_growth(day_dt)
+            batch.update_growth(self.current_day_time)
             # Sinkronisasi growth_days ke seluruh tile anggota batch
             for t in batch.tiles:
                 if t in self.tile_crops:
@@ -463,6 +456,8 @@ class AreaPermit:
         # Fallback untuk tile tanpa batch (legacy safety)
         for tc in self.tile_crops.values():
             if tc.get("crop") and not tc.get("is_dead") and not tc.get("batch_id"):
+                crop_cfg = CROP_TYPES.get(str(tc.get("crop", "potato")).lower(), CROP_TYPES.get("potato", {}))
+                growth_target = crop_cfg.get("growth_days", FARMING_BATCH_GROWTH_DAYS)
                 if tc.get("watered_today"):
                     tc["growth_days"] = min(growth_target, tc["growth_days"] + day_dt)
 
@@ -937,6 +932,14 @@ class PermitManager:
                 return p
         return None
 
+    def get_farm_permit_for_villager(self, villager):
+        """Return the farm workplace assigned to this villager, if one exists."""
+        villager_id = str(getattr(villager, "id", ""))
+        return next((permit for permit in self.permits
+                     if getattr(permit, "permit_type", None) == "farm"
+                     and any(str(worker_id) == villager_id
+                             for worker_id in getattr(permit, "assigned_workers", []))), None)
+
     def delete_permit(self, permit_id, building_manager, furniture_manager=None, stockpile_manager=None):
         """Menghapus surat tanah jika tidak ada bangunan atau konstruksi di atasnya"""
         for p in self.permits:
@@ -1070,23 +1073,31 @@ class PermitManager:
 
         jobs_to_process = [job_filter] if job_filter else list(DEDICATED_JOBS.keys())
         total_assigned_overall = 0
+        cleared_workplace_permits = set()
 
         for job_id in jobs_to_process:
             job_cfg = DEDICATED_JOBS.get(job_id)
             if not job_cfg:
                 continue
             permit_type_needed = job_cfg.get("workplace_permit", "farm")
-            workers = [v for v in all_villagers if getattr(v, "job", "") == job_id or (job_id == "Farmer" and getattr(v, "job", "") in ("Farmer", "Unassigned", "Peasant", None, ""))]
+            workers = [v for v in all_villagers if getattr(v, "is_alive", True) and (getattr(v, "job", "") == job_id or (job_id == "Farmer" and getattr(v, "job", "") in ("Farmer", "Unassigned", "Peasant", None, "")))]
             work_permits = [p for p in self.permits if getattr(p, "permit_type", "") == permit_type_needed]
 
-            if not work_permits or not workers:
+            if not work_permits:
                 continue
 
-            # Clear assignments for this job's workplace permits
+            # Several jobs can share one workplace type (for example Builder and Carpenter).
+            # Clear each permit once, then let each job add its own workers to the shared roster.
             for p in work_permits:
-                if not hasattr(p, "assigned_workers"):
-                    p.assigned_workers = []
-                p.assigned_workers.clear()
+                permit_key = str(getattr(p, "id", id(p)))
+                if permit_key not in cleared_workplace_permits:
+                    if not hasattr(p, "assigned_workers"):
+                        p.assigned_workers = []
+                    p.assigned_workers.clear()
+                    cleared_workplace_permits.add(permit_key)
+
+            if not workers:
+                continue
 
             # Calculate distance between worker's household home and workplace
             candidates = []
@@ -1175,6 +1186,11 @@ class PermitManager:
                     # Tanaman jika sudah ditanam
                     if t_crop and t_crop.get("crop") == "Potato":
                         sprout_offsets = [(0.25, 0.28), (0.72, 0.30), (0.48, 0.58), (0.24, 0.86), (0.76, 0.86)]
+                        crop_cfg = CROP_TYPES.get(str(t_crop.get("crop", "potato")).lower(), {})
+                        growth_target = float(crop_cfg.get("growth_days", FARMING_BATCH_GROWTH_DAYS))
+                        sprout_day = float(crop_cfg.get("sprout_day", 0.0))
+                        leaf_day = float(crop_cfg.get("leaf_day", sprout_day))
+                        harvest_day = float(crop_cfg.get("harvest_day", growth_target))
 
                         if is_dead:
                             # Tanaman layu / mati mengering karena tidak disiram
@@ -1186,7 +1202,7 @@ class PermitManager:
                                 pygame.draw.line(surface, (80, 70, 50), (px - 2, py - 2), (px + 2, py + 2), 1)
 
                         # Tahap 1: Hari 0-1 (Benih dalam alur tanah)
-                        elif g_days < 2.0:
+                        elif g_days < sprout_day:
                             seed_r = max(1, int(2 * camera.zoom))
                             for ox, oy in sprout_offsets:
                                 px = sx + int(scaled_tile * ox)
@@ -1194,7 +1210,7 @@ class PermitManager:
                                 pygame.draw.circle(surface, (180, 140, 100), (px, py), seed_r)
 
                         # Tahap 2: Hari 2-3 (Tunas mulai muncul)
-                        elif g_days < 4.0:
+                        elif g_days < leaf_day:
                             sprout_r = max(2, int(3 * camera.zoom))
                             for ox, oy in sprout_offsets:
                                 px = sx + int(scaled_tile * ox)
@@ -1203,7 +1219,7 @@ class PermitManager:
                                 pygame.draw.circle(surface, (20, 83, 45), (px, py), sprout_r, 1)
 
                         # Tahap 3: Hari 4-9 (Tumbuh daun dan batang)
-                        elif g_days < 10.0:
+                        elif g_days < harvest_day:
                             leaf_r = max(3, int(5 * camera.zoom))
                             for ox, oy in sprout_offsets:
                                 px = sx + int(scaled_tile * ox)
@@ -1333,14 +1349,19 @@ class PermitManager:
 
                     if getattr(p, "crop", None):
                         g_days = getattr(p, "growth_days", 0.0)
-                        if g_days >= 10.0:
+                        crop_cfg = CROP_TYPES.get(str(p.crop).lower(), {})
+                        growth_target = float(crop_cfg.get("growth_days", FARMING_BATCH_GROWTH_DAYS))
+                        sprout_day = float(crop_cfg.get("sprout_day", 0.0))
+                        leaf_day = float(crop_cfg.get("leaf_day", sprout_day))
+                        harvest_day = float(crop_cfg.get("harvest_day", growth_target))
+                        if g_days >= harvest_day:
                             stage_txt = "READY TO HARVEST!"
-                        elif g_days >= 4.0:
-                            stage_txt = f"Day {int(g_days)}/10 Leaves & Stems"
-                        elif g_days >= 2.0:
-                            stage_txt = f"Day {int(g_days)}/10 Sprouting"
+                        elif g_days >= leaf_day:
+                            stage_txt = f"Day {int(g_days)}/{int(growth_target)} Leaves & Stems"
+                        elif g_days >= sprout_day:
+                            stage_txt = f"Day {int(g_days)}/{int(growth_target)} Sprouting"
                         else:
-                            stage_txt = f"Day {int(g_days)}/10 Planted"
+                            stage_txt = f"Day {int(g_days)}/{int(growth_target)} Planted"
                         crop_lbl = f" | {p.crop} [{stage_txt}]"
                     else:
                         crop_lbl = " | Unplanted"

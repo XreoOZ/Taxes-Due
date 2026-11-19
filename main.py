@@ -33,14 +33,10 @@ from game.config import (
     COST_PER_BLOCK_STONE,
     PATH_TOGGLE_BTN_WIDTH,
     PATH_TOGGLE_BTN_HEIGHT,
-    COLOR_PATH_TOGGLE_ON,
-    COLOR_PATH_TOGGLE_OFF,
-    COLOR_PATH_TOGGLE_BORDER
 )
 from game.camera import Camera
 from game.player import Player
 from game.world import World
-from game.world.pathfinding import draw_ai_paths
 from game.menu import MainMenu
 from game.hud import ResourceHUD
 from game.buildings import BuildingManager
@@ -52,6 +48,7 @@ from game.furniture import FurnitureManager
 from game.ui_raport import RaportUI
 from game.ui.market_modal import MarketProfileModal
 from game.ui.add_item_modal import AddItemModal
+from game.ui.carpenter_catalog_modal import CarpenterCatalogModal
 from game.systems.production_distribution import ProductionDistributionSystem
 from game.speed_control import SpeedController
 from game.day_cycle import DayCycleSystem
@@ -59,6 +56,10 @@ from game.settings import SettingsModal
 from game.schedule import ScheduleManager
 from game.save_modal import SaveLoadModal
 from game.save_system import save_to_slot, load_from_slot
+from game.systems.currency import from_copper
+from game.systems.market_pricing import MarketPricingSystem
+from game.systems.market_service import MarketService
+from game.systems.wealth_system import VillageWealthSystem
 from game.systems.cheat_system import apply_add_item_cheat, clean_resources_dictionary, spawn_item_physically
 
 STATE_MENU = "menu"
@@ -94,6 +95,7 @@ def main():
     raport_ui = RaportUI()
     market_modal = MarketProfileModal()
     add_item_modal = AddItemModal()
+    carpenter_catalog_modal = CarpenterCatalogModal()
     production_system = ProductionDistributionSystem.get_instance()
     speed_controller = SpeedController()
     settings_modal = SettingsModal()
@@ -137,13 +139,12 @@ def main():
     btn_furn_close_rect = pygame.Rect(0, 0, 22, 22)
     btn_furn_house_rect = pygame.Rect(0, 0, 116, 26)
     btn_furn_poss_rect = pygame.Rect(0, 0, 116, 26)
+    btn_furn_store_rect = pygame.Rect(0, 0, 252, 24)
 
     entity_card_rect = pygame.Rect(0, 0, 310, 180)
     btn_entity_close_rect = pygame.Rect(0, 0, 22, 22)
     btn_entity_household_rect = pygame.Rect(0, 0, 96, 22)
 
-    show_debug_paths = True
-    btn_path_toggle_rect = pygame.Rect(0, 0, PATH_TOGGLE_BTN_WIDTH, PATH_TOGGLE_BTN_HEIGHT)
     btn_add_item_cheat_rect = pygame.Rect(0, 0, PATH_TOGGLE_BTN_WIDTH, PATH_TOGGLE_BTN_HEIGHT)
     cheat_notice = ""
     cheat_notice_timer = 0.0
@@ -192,6 +193,7 @@ def main():
         editing_permit_id = None
         selected_furniture = None
         moving_furniture = None
+        carpenter_catalog_modal.close()
         original_permit_tiles.clear()
 
     start_fresh_game()
@@ -235,6 +237,7 @@ def main():
                             settings_modal.close()
                             raport_ui.close()
                             market_modal.close()
+                            carpenter_catalog_modal.close()
                             planning_mode = "NONE"
                             session_planned_furniture.clear()
                             selected_planned_furniture = None
@@ -328,14 +331,21 @@ def main():
                     )
                     continue
 
+                if carpenter_catalog_modal.is_open:
+                    catalog_action = carpenter_catalog_modal.handle_event(event)
+                    if catalog_action and catalog_action.startswith("commission_"):
+                        planning_mode = "FURNITURE"
+                        planning_furniture_type = catalog_action.removeprefix("commission_")
+                        session_planned_furniture.clear()
+                        selected_planned_furniture = None
+                        selected_furniture = None
+                    continue
+
                 speed_action = speed_controller.handle_event(event)
                 if speed_action is not None:
                     continue
 
                 if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-                    if not raport_ui.is_open and btn_path_toggle_rect.collidepoint(event.pos):
-                        show_debug_paths = not show_debug_paths
-                        continue
                     if not raport_ui.is_open and btn_add_item_cheat_rect.collidepoint(event.pos):
                         tgt = selected_furniture if (selected_furniture and getattr(selected_furniture, "furniture_type", "") == "household_storage") else None
                         add_item_modal.open(target_storage=tgt)
@@ -577,18 +587,20 @@ def main():
                 # -------------------------------------------------------------
                 elif planning_mode == "FURNITURE":
                     f_cfg = FURNITURE_TYPES.get(planning_furniture_type, FURNITURE_TYPES["household_storage"])
-                    target_permit = permit_manager.get_permit_at(m_gx, m_gy)
-                    b_at = building_manager.get_building_at(m_gx, m_gy)
-                    is_occupied_existing = (furniture_manager.get_furniture_at(m_gx, m_gy) is not None)
-                    is_inside_house = (b_at is not None and not getattr(b_at, "is_solid", False) and getattr(b_at, "building_type", "") != "well" and (m_gx, m_gy) != getattr(b_at, "door_pos", None))
-                    planned_coords = {(pf["gx"], pf["gy"]) for pf in session_planned_furniture}
-                    is_occupied_planned = (m_gx, m_gy) in planned_coords
-                    is_valid_place = (target_permit is not None or is_inside_house) and not is_occupied_existing and not is_occupied_planned
+                    footprint = {(m_gx + dx, m_gy + dy) for dx in range(max(1, int(f_cfg.get("width_tiles", 1)))) for dy in range(max(1, int(f_cfg.get("height_tiles", 1))))}
+                    footprint_context = []
+                    for tx, ty in footprint:
+                        target_permit = permit_manager.get_permit_at(tx, ty)
+                        b_at = building_manager.get_building_at(tx, ty)
+                        inside = b_at is not None and not getattr(b_at, "is_solid", False) and getattr(b_at, "building_type", "") != "well" and (tx, ty) != getattr(b_at, "door_pos", None)
+                        footprint_context.append((target_permit is not None or inside, furniture_manager.get_furniture_at(tx, ty) is not None))
+                    planned_tiles = set()
+                    for pf in session_planned_furniture:
+                        p_cfg = FURNITURE_TYPES.get(pf.get("type", planning_furniture_type), f_cfg)
+                        planned_tiles.update((pf["gx"] + dx, pf["gy"] + dy) for dx in range(max(1, int(p_cfg.get("width_tiles", 1)))) for dy in range(max(1, int(p_cfg.get("height_tiles", 1)))))
+                    is_valid_place = all(valid and not occupied for valid, occupied in footprint_context) and not (footprint & planned_tiles)
 
-                    cost_w = len(session_planned_furniture) * f_cfg.get("cost_wood", 10)
-                    cost_s = len(session_planned_furniture) * f_cfg.get("cost_stone", 0)
-                    can_afford_build = (resources.get("Wood", 0) >= cost_w and resources.get("Stone", 0) >= cost_s)
-                    is_valid_build = len(session_planned_furniture) > 0 and can_afford_build
+                    is_valid_build = bool(session_planned_furniture)
 
                     if event.type == pygame.KEYDOWN:
                         if event.key == pygame.K_ESCAPE:
@@ -851,6 +863,10 @@ def main():
                                     )
                                     selected_furniture = None
                                     continue
+                                elif btn_furn_store_rect and btn_furn_store_rect.collidepoint(event.pos):
+                                    furniture_manager.store_uninstalled_furniture(selected_furniture.id)
+                                    selected_furniture = None
+                                    continue
                                 elif btn_furn_house_rect and btn_furn_house_rect.collidepoint(event.pos):
                                     if selected_furniture.family_id:
                                         raport_ui.open_household_directly(selected_furniture.family_id)
@@ -876,6 +892,15 @@ def main():
                                         raport_ui.open_household_directly(fam_id)
                                         selected_entity = None
                                         continue
+
+                            # Let workbenches open their catalogue even when a worker stands on them.
+                            clicked_f = furniture_manager.get_furniture_at(m_gx, m_gy)
+                            if (clicked_f and clicked_f.furniture_type == "carpenter_workbench"
+                                    and clicked_f.is_available_for_use):
+                                selected_furniture = clicked_f
+                                selected_entity = None
+                                carpenter_catalog_modal.open(clicked_f)
+                                continue
 
                             # 0A3. Cek apakah pemain mengklik entitas AI di peta (Villager / Servant)
                             clicked_ai = None
@@ -990,6 +1015,22 @@ def main():
 
             day_dt = game_dt / max(1.0, day_cycle.day_length_seconds)
             cur_day_time = day_cycle.day_number + (day_cycle.current_hour / 24.0)
+            wealth_data = VillageWealthSystem.calculate_village_wealth(
+                resources=resources,
+                villager_manager=villager_manager,
+                furniture_manager=furniture_manager,
+                building_manager=building_manager,
+                stockpile_manager=stockpile_manager,
+            )
+            living_population = sum(
+                1 for villager in villager_manager.get_all_villagers()
+                if getattr(villager, "is_alive", True)
+            )
+            wealth_factor = MarketPricingSystem.get_village_wealth_factor(
+                wealth_data["total_wealth_copper"], living_population
+            )
+            for market in MarketService.get_all_markets(building_manager):
+                market.village_wealth_factor = wealth_factor
             for p in permit_manager.permits:
                 p.update_growth(day_dt, current_day=cur_day_time)
 
@@ -1016,22 +1057,19 @@ def main():
             # 2. Area Permits (Fixed, Permanent Boundaries)
             permit_manager.draw(screen, camera, TILE_SIZE, building_manager)
 
-            # 3. Stockpile Stacks
-            stockpile_manager.draw(screen, camera, TILE_SIZE, permit_manager)
-
-            # 4. Buildings & Construction Sites
+            # 3. Buildings & Construction Sites
             building_manager.draw(screen, camera, TILE_SIZE)
 
-            # 4.5. Household Furniture (Chests & Storages)
+            # 4. Household Furniture (Chests & Storages)
             furniture_manager.draw(screen, camera, TILE_SIZE)
+
+            # 4.5. Ground items render above home floors and furniture.
+            stockpile_manager.draw(screen, camera, TILE_SIZE, permit_manager)
 
             # 5. Characters (Villagers, Servants & Player)
             villager_manager.draw(screen, camera)
             servant_manager.draw(screen, camera)
             player.draw(screen, camera)
-
-            # 5.5. AI Predetermined Path Lines & Directional Arrow Trails
-            draw_ai_paths(screen, camera, villagers=villager_manager.get_all_villagers(), servants=servant_manager.servants, show_lines=show_debug_paths)
 
             # 6. Ambient Day & Night Lighting Overlay
             ambient_surf = day_cycle.get_ambient_overlay(screen.get_width(), screen.get_height())
@@ -1321,7 +1359,7 @@ def main():
                 # Confirm Build Button
                 c_col = (16, 185, 129) if is_valid else (71, 85, 105)
                 pygame.draw.rect(screen, c_col, btn_confirm_rect, border_radius=6)
-                screen.blit(font_btn.render("BUILD", True, (255, 255, 255)), (btn_confirm_rect.x + 46, btn_confirm_rect.y + 8))
+                screen.blit(font_btn.render("ORDER", True, (255, 255, 255)), (btn_confirm_rect.x + 46, btn_confirm_rect.y + 8))
 
                 # Clear Button
                 pygame.draw.rect(screen, (71, 85, 105), btn_clear_rect, border_radius=6)
@@ -1337,38 +1375,50 @@ def main():
             elif planning_mode == "FURNITURE":
                 f_cfg = FURNITURE_TYPES.get(planning_furniture_type, FURNITURE_TYPES["household_storage"])
                 scaled_t = int(TILE_SIZE * camera.zoom)
-                planned_coords = {(pf["gx"], pf["gy"]) for pf in session_planned_furniture}
+                fw, fh = max(1, int(f_cfg.get("width_tiles", 1))), max(1, int(f_cfg.get("height_tiles", 1)))
+                planned_coords = set()
+                for pf in session_planned_furniture:
+                    p_cfg = FURNITURE_TYPES.get(pf.get("type", planning_furniture_type), f_cfg)
+                    planned_coords.update((pf["gx"] + dx, pf["gy"] + dy) for dx in range(max(1, int(p_cfg.get("width_tiles", 1)))) for dy in range(max(1, int(p_cfg.get("height_tiles", 1)))))
 
                 # 1. Render all planned unbuilt furniture objects in the current session
                 for pf in session_planned_furniture:
                     psx, psy = camera.world_to_screen(pf["gx"] * TILE_SIZE, pf["gy"] * TILE_SIZE)
                     if -scaled_t <= psx <= screen.get_width() and -scaled_t <= psy <= screen.get_height():
-                        p_surf = pygame.Surface((scaled_t, scaled_t), pygame.SRCALPHA)
+                        p_w = scaled_t * max(1, int(FURNITURE_TYPES.get(pf.get("type", planning_furniture_type), f_cfg).get("width_tiles", 1)))
+                        p_h = scaled_t * max(1, int(FURNITURE_TYPES.get(pf.get("type", planning_furniture_type), f_cfg).get("height_tiles", 1)))
+                        p_surf = pygame.Surface((p_w, p_h), pygame.SRCALPHA)
                         is_sel = (selected_planned_furniture == (pf["gx"], pf["gy"]))
                         p_tint = (250, 204, 21, 140) if is_sel else (34, 197, 94, 120)
                         p_surf.fill(p_tint)
                         screen.blit(p_surf, (psx, psy))
                         p_border_c = (250, 204, 21) if is_sel else (34, 197, 94)
-                        pygame.draw.rect(screen, p_border_c, (psx, psy, scaled_t, scaled_t), width=3 if is_sel else 2, border_radius=4)
+                        pygame.draw.rect(screen, p_border_c, (psx, psy, p_w, p_h), width=3 if is_sel else 2, border_radius=4)
 
                         lbl = font_badge.render("PLAN", True, (255, 255, 255))
                         screen.blit(lbl, (psx + 4, psy + 4))
 
                 # 2. Ghost Preview at Mouse Tile (if not already planned)
                 fsx, fsy = camera.world_to_screen(m_gx * TILE_SIZE, m_gy * TILE_SIZE)
+                footprint = {(m_gx + dx, m_gy + dy) for dx in range(fw) for dy in range(fh)}
                 target_permit = permit_manager.get_permit_at(m_gx, m_gy)
-                b_at = building_manager.get_building_at(m_gx, m_gy)
-                is_occupied_existing = (furniture_manager.get_furniture_at(m_gx, m_gy) is not None)
-                is_occupied_planned = (m_gx, m_gy) in planned_coords
-                is_inside_house = (b_at is not None and not getattr(b_at, "is_solid", False) and getattr(b_at, "building_type", "") != "well" and (m_gx, m_gy) != getattr(b_at, "door_pos", None))
-                is_valid_place = (target_permit is not None or is_inside_house) and not is_occupied_existing and not is_occupied_planned
+                valid_cells = []
+                for tx, ty in footprint:
+                    target_permit = permit_manager.get_permit_at(tx, ty)
+                    b_at = building_manager.get_building_at(tx, ty)
+                    inside = b_at is not None and not getattr(b_at, "is_solid", False) and getattr(b_at, "building_type", "") != "well" and (tx, ty) != getattr(b_at, "door_pos", None)
+                    valid_cells.append((target_permit is not None or inside, furniture_manager.get_furniture_at(tx, ty) is not None))
+                is_occupied_planned = bool(footprint & planned_coords)
+                is_occupied_existing = any(occupied for _, occupied in valid_cells)
+                is_valid_location = all(valid for valid, _ in valid_cells)
+                is_valid_place = all(valid and not occupied for valid, occupied in valid_cells) and not is_occupied_planned
 
                 if not is_occupied_planned:
-                    f_surf = pygame.Surface((scaled_t, scaled_t), pygame.SRCALPHA)
+                    f_surf = pygame.Surface((scaled_t * fw, scaled_t * fh), pygame.SRCALPHA)
                     tile_tint = (34, 197, 94, 100) if is_valid_place else (239, 68, 68, 100)
                     f_surf.fill(tile_tint)
                     screen.blit(f_surf, (fsx, fsy))
-                    pygame.draw.rect(screen, (34, 197, 94) if is_valid_place else (239, 68, 68), (fsx, fsy, scaled_t, scaled_t), width=2)
+                    pygame.draw.rect(screen, (34, 197, 94) if is_valid_place else (239, 68, 68), (fsx, fsy, scaled_t * fw, scaled_t * fh), width=2)
                 else:
                     # Hovering an already planned tile: show distinct highlight
                     pygame.draw.rect(screen, (239, 68, 68), (fsx, fsy, scaled_t, scaled_t), width=2)
@@ -1385,32 +1435,26 @@ def main():
                 screen.blit(bar_surf, (bar_x, bar_y))
 
                 planned_count = len(session_planned_furniture)
-                cost_w = planned_count * f_cfg.get("cost_wood", 10)
-                cost_s = planned_count * f_cfg.get("cost_stone", 0)
-                can_afford_all = (resources.get("Wood", 0) >= cost_w and resources.get("Stone", 0) >= cost_s)
-                is_valid_build = (planned_count > 0) and can_afford_all
+                is_valid_build = planned_count > 0
 
-                info_txt = f"Place {f_cfg['name']} | Planned: {planned_count} | Total Cost: {cost_w} Wood (Available: {resources.get('Wood', 0)})"
+                info_txt = f"Order {f_cfg['name']} | Planned: {planned_count} | Household pays commission; Carpenter supplies materials"
                 screen.blit(font_card.render(info_txt, True, (250, 204, 21)), (bar_x + 16, bar_y + 10))
 
                 if is_occupied_planned:
                     stat_msg = "Planned furniture selected! (Right-Click or Del to remove from session)"
                     stat_col = (250, 204, 21)
-                elif not (target_permit or is_inside_house):
+                elif not is_valid_location:
                     stat_msg = "Cannot place: Must be placed inside an issued Permit lot or tenant house!"
                     stat_col = (239, 68, 68)
                 elif is_occupied_existing:
                     stat_msg = "Cannot place: Tile already has built furniture!"
-                    stat_col = (239, 68, 68)
-                elif planned_count > 0 and not can_afford_all:
-                    stat_msg = f"Cannot build: Insufficient materials! Need {cost_w} Wood."
                     stat_col = (239, 68, 68)
                 else:
                     owner_family = None
                     if target_permit:
                         owner_family = next((fam for fam in villager_manager.families if fam.assigned_permit_id == target_permit.id), None)
                     fam_str = f"The {owner_family.surname} Family" if owner_family else "Tenant house / lot"
-                    stat_msg = f"Ready to place! (Left-Click to place, Right-Click to erase. {fam_str})"
+                    stat_msg = f"Ready to order! (Left-Click to place, Right-Click to erase. {fam_str})"
                     stat_col = (34, 197, 94)
 
                 screen.blit(font_hud.render(stat_msg, True, stat_col), (bar_x + 16, bar_y + 32))
@@ -1511,7 +1555,10 @@ def main():
 
                 # Modal popup positioned conveniently above/below the tile
                 has_owner = bool(selected_furniture.family_id)
+                is_uninstalled = selected_furniture.status == "UNINSTALLED"
                 cw, ch = 280, (152 if has_owner else 134)
+                if is_uninstalled:
+                    ch = 152
                 cx = max(12, min(screen.get_width() - cw - 12, fsx + scaled_t // 2 - cw // 2))
                 cy = fsy - ch - 12
                 if cy < 50:
@@ -1553,6 +1600,13 @@ def main():
                 # Details info
                 if selected_furniture.furniture_type == "household_storage":
                     det_txt = f"Inventory: {selected_furniture.total_stored} items stored"
+                elif selected_furniture.construction_order and selected_furniture.construction_order.get("status") != "COMPLETE":
+                    order = selected_furniture.construction_order
+                    fee = from_copper(order.get("price_copper", 0))
+                    fee_txt = f"{fee['Gold']}g {fee['Silver']}s {fee['Copper']}c"
+                    was_paid = order.get("commission_paid", order.get("status") in ("PAID", "BUILDING"))
+                    payment_txt = "Paid" if was_paid else "Awaiting payment"
+                    det_txt = f"Commission: {fee_txt} | {payment_txt}"
                 elif selected_furniture.furniture_type == "bed":
                     det_txt = f"Assigned: {selected_furniture.assigned_villager_id or 'Vacant Bed'}"
                 else:
@@ -1560,7 +1614,7 @@ def main():
                 screen.blit(font_hud.render(det_txt, True, (56, 189, 248)), (cx + 14, cy + 54))
 
                 # Contextual buttons for owned furniture: Household and Possession
-                if owner_fam:
+                if owner_fam and not is_uninstalled:
                     btn_furn_house_rect.x = cx + 14
                     btn_furn_house_rect.y = cy + 76
                     btn_furn_house_rect.w = 114
@@ -1583,6 +1637,16 @@ def main():
                 else:
                     btn_furn_house_rect.x = -9999
                     btn_furn_poss_rect.x = -9999
+
+                if is_uninstalled:
+                    btn_furn_store_rect.update(cx + 14, cy + 76, cw - 28, 24)
+                    store_hov = btn_furn_store_rect.collidepoint(m_pos)
+                    pygame.draw.rect(screen, (16, 185, 129) if store_hov else (5, 150, 105), btn_furn_store_rect, border_radius=5)
+                    pygame.draw.rect(screen, (52, 211, 153), btn_furn_store_rect, width=1, border_radius=5)
+                    store_txt = font_badge.render("Store in Household", True, (255, 255, 255))
+                    screen.blit(store_txt, (btn_furn_store_rect.centerx - store_txt.get_width() // 2, btn_furn_store_rect.centery - store_txt.get_height() // 2))
+                else:
+                    btn_furn_store_rect.x = -9999
 
                 # Buttons: Move & Destroy
                 btn_furn_move_rect.x = cx + 14
@@ -1773,7 +1837,7 @@ def main():
 
 
             # 8. Clock & Calendar HUD (Top Left)
-            day_cycle.draw_hud(screen)
+            day_cycle.draw_hud(screen, villager_manager)
 
             # 9. In-Game Settings Button
             settings_modal.draw_hud_button(screen)
@@ -1781,29 +1845,12 @@ def main():
             # 10. Resources HUD
             resource_hud.draw(screen, resources, weekday=day_cycle.get_weekday_name())
 
-            # 10.5. AI Paths Toggle Button (Right Side, below Resources HUD)
+            # 10.5. Add Item Cheat Button (below Resources HUD)
             screen_w = screen.get_width()
             res_card_h = resource_hud.header_height + (len(resources) * resource_hud.row_height) + resource_hud.padding
-            btn_path_toggle_rect.x = screen_w - PATH_TOGGLE_BTN_WIDTH - resource_hud.margin
-            btn_path_toggle_rect.y = resource_hud.margin + res_card_h + 10
-
+            btn_add_item_cheat_rect.x = screen_w - PATH_TOGGLE_BTN_WIDTH - resource_hud.margin
+            btn_add_item_cheat_rect.y = resource_hud.margin + res_card_h + 10
             m_pos = pygame.mouse.get_pos()
-            btn_hover = btn_path_toggle_rect.collidepoint(m_pos)
-            btn_bg = COLOR_PATH_TOGGLE_ON if show_debug_paths else COLOR_PATH_TOGGLE_OFF
-            if btn_hover:
-                btn_bg = tuple(min(255, c + 25) for c in btn_bg)
-            pygame.draw.rect(screen, btn_bg, btn_path_toggle_rect, border_radius=6)
-            pygame.draw.rect(screen, COLOR_PATH_TOGGLE_BORDER, btn_path_toggle_rect, width=1, border_radius=6)
-
-            toggle_status = "ON" if show_debug_paths else "OFF"
-            btn_text = f"AI Path Lines: [{toggle_status}]"
-            btn_surf = font_btn.render(btn_text, True, (255, 255, 255))
-            txt_rect = btn_surf.get_rect(center=btn_path_toggle_rect.center)
-            screen.blit(btn_surf, txt_rect)
-
-            # 10.6. Add Item Cheat Button (Directly below AI Path Lines toggle)
-            btn_add_item_cheat_rect.x = btn_path_toggle_rect.x
-            btn_add_item_cheat_rect.y = btn_path_toggle_rect.bottom + 8
             cheat_hover = btn_add_item_cheat_rect.collidepoint(m_pos)
             cheat_bg = (180, 83, 9) if cheat_hover else (120, 53, 15)
             pygame.draw.rect(screen, cheat_bg, btn_add_item_cheat_rect, border_radius=6)
@@ -1831,6 +1878,9 @@ def main():
 
             # 13. Settings Modal Dialog (On top if open)
             settings_modal.draw(screen, day_cycle, is_ingame=True)
+
+            # The workbench catalogue is the topmost modal when opened from the map.
+            carpenter_catalog_modal.draw(screen, building_manager, villager_manager)
 
             # 14. Save / Load Modal Dialog (Topmost overlay)
             save_modal.draw(screen)

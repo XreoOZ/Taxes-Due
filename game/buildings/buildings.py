@@ -341,7 +341,8 @@ class Building:
             self.sale_items = []
             self.household_sale_percent = MARKET_DEFAULT_HOUSEHOLD_SALE_PERCENT
             self.household_sale_limits = {}
-            self.auto_pricing = True
+            self.auto_pricing = False
+            self.village_wealth_factor = 1.0
         else:
             self.owner = "landlord"
             self.inventory = {}

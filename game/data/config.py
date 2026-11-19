@@ -137,6 +137,10 @@ INTERACTION_CONTACT_RADIUS = 58.0              # Contact pickup distance (allowi
 TOOL_STOW_ARRIVAL_DIST = 36.0                  # Arrival distance to household chest when returning unused tools
 LOOSE_ITEM_ARRIVAL_DIST = 24.0                 # Arrival distance for gathering loose items
 CHEST_INTERACTION_RADIUS = 36.0                # Interaction distance with household chest
+CARPENTER_BUILD_DURATION_INGAME_HOURS = 1.0
+CARPENTER_DEFAULT_LIVING_HOUSEHOLD_SIZE = 1
+CARPENTER_TOOL_SWING_SPEED = 7.0
+CARPENTER_TOOL_SWING_ANGLE = 0.55
 FURNITURE_CLAIM_BED_SEARCH_RADIUS = 8.5        # Max tile distance to infer chest household ownership from beds
 COLOR_VILLAGER_BODY = (34, 197, 94)     # Forest/Emerald green (Peasant tunic)
 COLOR_VILLAGER_OUTLINE = (20, 83, 45)   # Deep forest green
@@ -197,12 +201,14 @@ DEDICATED_JOBS = {
     "Carpenter": {
         "id": "Carpenter",
         "name": "Carpenter",
-        "title": "Carpenter (WIP)",
+        "title": "Carpenter",
         "color": (234, 179, 8),
-        "wip": True,
-        "workplace_permit": "workshop",
+        "wip": False,
+        "workplace_permit": "construction",
+        "workplace_furniture_type": "carpenter_workbench",
         "desc": "Crafts furniture, structural beams, and wooden barrels.",
-        "required_tools": ["Saw", "Adze"]
+        "required_tools": ["Saw", "Adze"],
+        "material_stock_target": {"Wood": 10, "Stone": 10}
     },
     "Baker": {
         "id": "Baker",
@@ -242,7 +248,9 @@ DEDICATED_JOBS = {
         "wip": False,
         "workplace_permit": "cemetery",
         "desc": "Prepares graves and buries deceased villagers in the cemetery.",
-        "required_tools": ["Hoe"]
+        "required_tools": ["Hoe"],
+        "material_stock_target": {"Wood": 5, "Stone": 5},
+        "materials_per_grave": {"Wood": 1, "Stone": 1}
     }
 }
 
@@ -256,6 +264,8 @@ SCHEDULE_LEISURE = "LEISURE"
 SCHEDULE_SLEEP = "SLEEP"
 SCHEDULE_ANY = "ANY"
 SCHEDULE_PRAYER = "PRAYER"
+DEFAULT_PRAYER_START_HOUR = 3
+DEFAULT_PRAYER_END_HOUR = 4
 
 SCHEDULE_TYPES = {
     "WORK": {
@@ -338,6 +348,7 @@ DEFAULT_RESOURCES = {
 }
 MAX_STACK_SIZE = 100
 MAX_TILE_CAPACITY = 1000  # Up to 10 stacks of 100 per tile (kotak)
+VILLAGER_INVENTORY_CAPACITY = 50
 
 # Currency & Economy System Settings (Config-Driven, Zero Hardcode)
 DENOMINATION_CAP = 1000
@@ -355,6 +366,8 @@ DEFAULT_ITEM_PRICES = {
     "Hoe": 8,
     "Sickle": 6,
     "Watering_Can": 8,
+    "Saw": 12,
+    "Adze": 10,
 }
 
 # Only goods with implemented storage and market behavior are listed here.
@@ -367,12 +380,18 @@ MARKET_TRADEABLE_ITEMS = {
     "Hoe": "Hoe",
     "Sickle": "Sickle",
     "Watering_Can": "Watering_Can",
+    "Saw": "Saw",
+    "Adze": "Adze",
 }
 MARKET_CURRENCY_DENOMINATIONS = ("Gold", "Silver", "Copper")
 MARKET_DEFAULT_HOUSEHOLD_SALE_PERCENT = 20
 MARKET_QUANTITY_DEFAULT = 10
 MARKET_QUANTITY_MAX = 1000
 MARKET_PERCENT_STEP = 5
+MARKET_WEALTH_REFERENCE_DAYS = 7.0
+MARKET_WEALTH_PRICE_ELASTICITY = 0.12
+MARKET_WEALTH_PRICE_FACTOR_MIN = 0.75
+MARKET_WEALTH_PRICE_FACTOR_MAX = 1.5
 
 # -----------------------------------------------------------------------------
 # GENERIC ITEM CATEGORY DEFINITIONS (Single Source of Truth - No Hardcoding)
@@ -912,9 +931,8 @@ FURNITURE_TYPES = {
         "id": "household_storage",
         "name": "Household Storage",
         "desc": "Wooden storage chest for a family's crops and goods. Placed inside a house or lot.",
-        "cost_wood": 10,
-        "cost_stone": 0,
         "capacity": 500,
+        "materials": {"Wood": 10, "Stone": 0},
         "width_tiles": 1,
         "height_tiles": 1,
         "color_body": (139, 90, 43),
@@ -925,16 +943,33 @@ FURNITURE_TYPES = {
         "id": "bed",
         "name": "Bed",
         "desc": "Single wooden bed for 1 villager. Placed inside a house or lot.",
-        "cost_wood": 5,
-        "cost_stone": 0,
         "capacity": 0,
+        "materials": {"Wood": 5, "Stone": 0},
         "width_tiles": 1,
         "height_tiles": 1,
         "color_frame": (139, 90, 43),
         "color_blanket": (59, 130, 246),
         "color_pillow": (241, 245, 249)
+    },
+    "carpenter_workbench": {
+        "id": "carpenter_workbench",
+        "name": "Carpenter Workbench",
+        "desc": "A sturdy medieval workbench for shaping and assembling furniture. Place inside a household or house.",
+        "capacity": 0,
+        "materials": {"Wood": 5, "Stone": 0},
+        "width_tiles": 2,
+        "height_tiles": 1,
+        "max_workers": 2,
+        "workplace_available_while_building": True,
+        "color_frame": (112, 72, 38),
+        "color_top": (170, 119, 70),
+        "color_iron": (82, 91, 101)
     }
 }
+
+# Furniture is represented by the same movable world-item entity after removal.
+for _furniture_config in FURNITURE_TYPES.values():
+    _furniture_config.setdefault("can_be_dropped", True)
 
 # =====================================================================
 # Needs, Survival & Household Consumption System (Agent 1)

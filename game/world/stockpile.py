@@ -2,9 +2,9 @@
 Physical Stockpile & Ground Item System (RimWorld-style Dropped Items & Hauling)
 """
 
-import math
 import pygame
-from game.config import MAX_STACK_SIZE, MAX_TILE_CAPACITY, RESOURCE_COLORS, DEFAULT_STARTER_TOOLS, is_food_item, is_water_item
+from game.config import MAX_STACK_SIZE, MAX_TILE_CAPACITY, DEFAULT_STARTER_TOOLS, is_food_item, is_water_item
+from game.item_icons import draw_item_icon
 
 class ResourceStack:
     def __init__(self, resource_type, amount, grid_x, grid_y, owner_type="landlord", owner_id=None):
@@ -219,126 +219,29 @@ class StockpileManager:
 
             center_x = sx + scaled_tile // 2
             center_y = sy + scaled_tile // 2
-            item_r = max(4, int(scaled_tile * 0.28))
-            is_large_stack = stack.amount > MAX_STACK_SIZE
+            if permit_manager and not self.is_tile_in_storage(stack.grid_x, stack.grid_y, permit_manager):
+                pygame.draw.rect(
+                    surface, (234, 179, 8, 140),
+                    (sx + 2, sy + 2, scaled_tile - 4, scaled_tile - 4),
+                    width=1, border_radius=4,
+                )
 
-            # Jika item berada di luar storage (loose item tercecer), beri indikator border kuning tipis
-            is_loose = False
-            if permit_manager:
-                is_loose = not self.is_tile_in_storage(stack.grid_x, stack.grid_y, permit_manager)
+            # World stacks use the same canonical icon as Add Item and other item UI.
+            draw_item_icon(
+                surface, stack.resource_type, center_x, center_y,
+                size=max(5, int(scaled_tile * 0.28)),
+            )
 
-            if is_loose:
-                pygame.draw.rect(surface, (234, 179, 8, 140), (sx + 2, sy + 2, scaled_tile - 4, scaled_tile - 4), width=1, border_radius=4)
-
-            col = RESOURCE_COLORS.get(stack.resource_type, (200, 200, 200))
-
-            # Visual gambar tumpukan item bergaya RimWorld
-            if stack.resource_type == "Wood":
-                w_w = max(6, int(scaled_tile * 0.55))
-                w_h = max(3, int(scaled_tile * 0.16))
-                if is_large_stack:
-                    pygame.draw.rect(surface, col, (center_x - w_w // 2 + 1, center_y - w_h * 2 - 2, w_w, w_h), border_radius=2)
-                    pygame.draw.rect(surface, (100, 55, 20), (center_x - w_w // 2 + 1, center_y - w_h * 2 - 2, w_w, w_h), width=1, border_radius=2)
-                pygame.draw.rect(surface, col, (center_x - w_w // 2 - 2, center_y - w_h - 1, w_w, w_h), border_radius=2)
-                pygame.draw.rect(surface, (100, 55, 20), (center_x - w_w // 2 - 2, center_y - w_h - 1, w_w, w_h), width=1, border_radius=2)
-                pygame.draw.rect(surface, col, (center_x - w_w // 2 + 2, center_y, w_w, w_h), border_radius=2)
-                pygame.draw.rect(surface, (100, 55, 20), (center_x - w_w // 2 + 2, center_y, w_w, w_h), width=1, border_radius=2)
-
-            elif stack.resource_type == "Food":
-                if is_large_stack:
-                    pygame.draw.circle(surface, (202, 138, 4), (center_x - item_r // 2, center_y - 6), int(item_r * 0.8))
-                    pygame.draw.circle(surface, (161, 98, 7), (center_x - item_r // 2, center_y - 6), int(item_r * 0.8), width=1)
-                pygame.draw.circle(surface, col, (center_x + (item_r // 4 if is_large_stack else 0), center_y - 2), item_r)
-                pygame.draw.circle(surface, (180, 130, 0), (center_x + (item_r // 4 if is_large_stack else 0), center_y - 2), item_r, width=1)
-
-            elif stack.resource_type == "Stone":
-                if is_large_stack:
-                    pygame.draw.polygon(surface, (100, 116, 139), [
-                        (center_x - item_r - 2, center_y + item_r // 2 - 3),
-                        (center_x - 4, center_y - item_r - 4),
-                        (center_x + item_r // 2, center_y + item_r // 2 - 3)
-                    ])
-                pygame.draw.polygon(surface, col, [
-                    (center_x - item_r + 2, center_y + item_r // 2),
-                    (center_x + 2, center_y - item_r),
-                    (center_x + item_r + 2, center_y + item_r // 2)
-                ])
-                pygame.draw.polygon(surface, (71, 85, 105), [
-                    (center_x - item_r + 2, center_y + item_r // 2),
-                    (center_x + 2, center_y - item_r),
-                    (center_x + item_r + 2, center_y + item_r // 2)
-                ], width=1)
-
-            elif stack.resource_type == "Water":
-                b_w = max(6, int(scaled_tile * 0.38))
-                b_h = max(8, int(scaled_tile * 0.48))
-                if is_large_stack:
-                    pygame.draw.rect(surface, (3, 105, 161), (center_x - b_w - 1, center_y - b_h // 2, b_w, b_h), border_radius=3)
-                    pygame.draw.rect(surface, (2, 132, 199), (center_x - b_w - 1, center_y - b_h // 2, b_w, b_h), width=1, border_radius=3)
-                pygame.draw.rect(surface, col, (center_x - b_w // 2 + (4 if is_large_stack else 0), center_y - b_h // 2, b_w, b_h), border_radius=3)
-                pygame.draw.rect(surface, (3, 105, 161), (center_x - b_w // 2 + (4 if is_large_stack else 0), center_y - b_h // 2, b_w, b_h), width=1, border_radius=3)
-
-            elif stack.resource_type in ("Potato", "potato"):
-                # Russet potato tuber visual
-                pw = max(5, int(scaled_tile * 0.28))
-                ph = max(4, int(scaled_tile * 0.22))
-                pygame.draw.ellipse(surface, (180, 130, 70), (center_x - pw // 2, center_y - ph // 2, pw, ph))
-                pygame.draw.ellipse(surface, (120, 75, 25), (center_x - pw // 2, center_y - ph // 2, pw, ph), 1)
-
-            elif stack.resource_type == "Hoe":
-                # Cangkul on the ground
-                h_len = max(8, int(scaled_tile * 0.42))
-                pygame.draw.line(surface, (180, 120, 70), (center_x - h_len // 2, center_y + h_len // 3), (center_x + h_len // 2, center_y - h_len // 3), max(2, int(2 * camera.zoom)))
-                pygame.draw.line(surface, (100, 116, 139), (center_x + h_len // 2 - 3, center_y - h_len // 3 - 4), (center_x + h_len // 2 + 3, center_y - h_len // 3 + 4), max(2, int(3 * camera.zoom)))
-
-            elif stack.resource_type == "Sickle":
-                # Sickle on the ground
-                s_r = max(5, int(scaled_tile * 0.25))
-                pygame.draw.arc(surface, (226, 232, 240), (center_x - s_r, center_y - s_r, s_r * 2, s_r * 2), 0, math.pi * 1.2, max(2, int(2 * camera.zoom)))
-                pygame.draw.line(surface, (180, 120, 70), (center_x, center_y + s_r // 2), (center_x + s_r // 2, center_y + s_r), max(2, int(2 * camera.zoom)))
-
-            elif stack.resource_type == "Watering_Can":
-                # Medieval watering pot (chantepleure) on the ground
-                pot_r = max(5, int(scaled_tile * 0.22))
-                pygame.draw.circle(surface, (180, 105, 55), (center_x - 2, center_y + 1), pot_r)
-                pygame.draw.circle(surface, (120, 65, 30), (center_x - 2, center_y + 1), pot_r, 1)
-                # Loop handle on top
-                pygame.draw.arc(surface, (100, 50, 20), (center_x - pot_r - 2, center_y - pot_r - 3, pot_r * 2, pot_r * 2), 0, math.pi, max(1, int(2 * camera.zoom)))
-                # Angled copper spout & pierced brass rose
-                sp_end_x = center_x + pot_r + 3
-                sp_end_y = center_y - pot_r + 1
-                pygame.draw.line(surface, (160, 90, 45), (center_x - 2, center_y - 2), (sp_end_x, sp_end_y), max(2, int(2 * camera.zoom)))
-                pygame.draw.circle(surface, (217, 149, 44), (sp_end_x, sp_end_y), max(2, int(2.5 * camera.zoom)))
-
-            elif stack.resource_type in ("Copper", "Silver", "Gold", "Copper Coin", "Silver Coin", "Gold Coin"):
-                # Metal currency coins on the ground
-                coin_r = max(4, int(scaled_tile * 0.24))
-                border_col = (120, 53, 15) if "Copper" in stack.resource_type else ((100, 116, 139) if "Silver" in stack.resource_type else (161, 98, 7))
-                if is_large_stack:
-                    pygame.draw.circle(surface, col, (center_x - 3, center_y - 4), coin_r)
-                    pygame.draw.circle(surface, border_col, (center_x - 3, center_y - 4), coin_r, 1)
-                    pygame.draw.circle(surface, col, (center_x + 3, center_y - 2), coin_r)
-                    pygame.draw.circle(surface, border_col, (center_x + 3, center_y - 2), coin_r, 1)
-                pygame.draw.circle(surface, col, (center_x, center_y + 1), coin_r)
-                pygame.draw.circle(surface, border_col, (center_x, center_y + 1), coin_r, max(1, int(1.5 * camera.zoom)))
-                if coin_r >= 6:
-                    pygame.draw.circle(surface, border_col, (center_x, center_y + 1), coin_r - 3, 1)
-
-            else:
-                # Generic fallback item
-                pygame.draw.circle(surface, col, (center_x, center_y), item_r)
-                pygame.draw.circle(surface, (71, 85, 105), (center_x, center_y), item_r, width=1)
-
-            # Angka jumlah stack dinamis
             if camera.zoom >= 0.6:
-                amt_str = stack.get_display_text()
-                txt_surf = self.font.render(amt_str, True, (255, 255, 255))
-                shd_surf = self.font.render(amt_str, True, (0, 0, 0))
-                tx = center_x - txt_surf.get_width() // 2
-                ty = center_y + int(scaled_tile * 0.16)
-
-                bg_rect = pygame.Rect(tx - 3, ty - 1, txt_surf.get_width() + 6, txt_surf.get_height() + 2)
-                pygame.draw.rect(surface, (15, 23, 42, 180), bg_rect, border_radius=3)
-
-                surface.blit(shd_surf, (tx + 1, ty + 1))
-                surface.blit(txt_surf, (tx, ty))
+                amount_text = stack.get_display_text()
+                text_surface = self.font.render(amount_text, True, (255, 255, 255))
+                shadow_surface = self.font.render(amount_text, True, (0, 0, 0))
+                text_x = center_x - text_surface.get_width() // 2
+                text_y = center_y + int(scaled_tile * 0.16)
+                background = pygame.Rect(
+                    text_x - 3, text_y - 1,
+                    text_surface.get_width() + 6, text_surface.get_height() + 2,
+                )
+                pygame.draw.rect(surface, (15, 23, 42, 180), background, border_radius=3)
+                surface.blit(shadow_surface, (text_x + 1, text_y + 1))
+                surface.blit(text_surface, (text_x, text_y))

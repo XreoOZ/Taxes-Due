@@ -67,6 +67,8 @@ class MarketProfileModal:
         self.focused_quantity = None
         self.household_percent_dec_rect = None
         self.household_percent_inc_rect = None
+        self.item_allocation_dec_rects = {}
+        self.item_allocation_inc_rects = {}
         self.status_message = None
 
         # UI interaction rects
@@ -134,10 +136,12 @@ class MarketProfileModal:
                 market_building.assigned_family_id = None
             if not hasattr(market_building, "item_allocations") or not isinstance(market_building.item_allocations, dict):
                 market_building.item_allocations = {}
-            if not hasattr(market_building, "auto_pricing"):
-                market_building.auto_pricing = True
+            market_building.auto_pricing = bool(getattr(market_building, "assigned_family_id", None))
             if not isinstance(getattr(market_building, "sale_items", None), list):
                 market_building.sale_items = [item for item in market_building.inventory if item in MARKET_TRADEABLE_ITEMS]
+            else:
+                # Keep each stall's listing independent, even if old save data reused a list.
+                market_building.sale_items = list(dict.fromkeys(market_building.sale_items))
             if not hasattr(market_building, "household_sale_percent"):
                 market_building.household_sale_percent = MARKET_DEFAULT_HOUSEHOLD_SALE_PERCENT
             if not hasattr(market_building, "household_sale_limits"):
@@ -195,6 +199,8 @@ class MarketProfileModal:
                         if item_name not in mkt.sale_items:
                             mkt.sale_items.append(item_name)
                             mkt.prices.setdefault(item_name, DEFAULT_ITEM_PRICES.get(item_name, 1))
+                            if getattr(mkt, "assigned_family_id", None):
+                                mkt.item_allocations.setdefault(item_name, MARKET_DEFAULT_HOUSEHOLD_SALE_PERCENT)
                         self.show_item_picker = False
                         return f"market_item_added_{item_name}"
                 self.show_item_picker = False
@@ -213,6 +219,16 @@ class MarketProfileModal:
                 mkt.household_sale_percent = min(100, mkt.household_sale_percent + MARKET_PERCENT_STEP)
                 mkt.household_sale_limits = {}
                 return "household_sale_percent_increased"
+            for item_name, rect in self.item_allocation_dec_rects.items():
+                if rect.collidepoint(mouse_pos):
+                    pct = int(mkt.item_allocations.get(item_name, MARKET_DEFAULT_HOUSEHOLD_SALE_PERCENT))
+                    HouseholdStallSystem.set_item_allocation(mkt, item_name, pct - MARKET_PERCENT_STEP)
+                    return f"item_sale_percent_decreased_{item_name}"
+            for item_name, rect in self.item_allocation_inc_rects.items():
+                if rect.collidepoint(mouse_pos):
+                    pct = int(mkt.item_allocations.get(item_name, MARKET_DEFAULT_HOUSEHOLD_SALE_PERCENT))
+                    HouseholdStallSystem.set_item_allocation(mkt, item_name, pct + MARKET_PERCENT_STEP)
+                    return f"item_sale_percent_increased_{item_name}"
             # 2. Assign Stall Dialog Handling
             if self.show_assign_dialog:
                 if self.close_assign_dlg_btn_rect and self.close_assign_dlg_btn_rect.collidepoint(mouse_pos):
@@ -220,10 +236,7 @@ class MarketProfileModal:
                     return "close_assign_dialog"
 
                 if self.unassign_stall_btn_rect and self.unassign_stall_btn_rect.collidepoint(mouse_pos):
-                    mkt.assigned_family_id = None
-                    mkt.assigned_household_id = None
-                    mkt.owner = "landlord"
-                    mkt.household_sale_limits = {}
+                    HouseholdStallSystem.unassign_stall(mkt)
                     self.show_assign_dialog = False
                     try:
                         from game.systems.wealth_system import VillageWealthSystem
@@ -234,10 +247,10 @@ class MarketProfileModal:
 
                 for fam_id, btn_rect in self.family_assign_btn_rects.items():
                     if btn_rect.collidepoint(mouse_pos):
-                        mkt.assigned_family_id = fam_id
-                        mkt.assigned_household_id = fam_id
-                        mkt.owner = fam_id
-                        mkt.household_sale_limits = {}
+                        HouseholdStallSystem.assign_stall(mkt, fam_id)
+                        HouseholdStallSystem.retain_household_owned_sale_items(mkt, furniture_manager)
+                        for item_name in mkt.sale_items:
+                            mkt.item_allocations.setdefault(item_name, MARKET_DEFAULT_HOUSEHOLD_SALE_PERCENT)
                         self.show_assign_dialog = False
                         try:
                             from game.systems.wealth_system import VillageWealthSystem
@@ -315,36 +328,48 @@ class MarketProfileModal:
             # Manual Price Tuning (Gold, Silver, Copper)
             for it_name, rect in self.price_g_dec_btns.items():
                 if rect.collidepoint(mouse_pos):
+                    mkt.auto_pricing = False
+                    mkt.auto_pricing = False
                     cur_p = mkt.prices.get(it_name, DEFAULT_ITEM_PRICES.get(it_name, 1))
                     mkt.prices[it_name] = max(1, cur_p - 100)
                     return f"price_decreased_gold_{it_name}"
 
             for it_name, rect in self.price_g_inc_btns.items():
                 if rect.collidepoint(mouse_pos):
+                    mkt.auto_pricing = False
+                    mkt.auto_pricing = False
                     cur_p = mkt.prices.get(it_name, DEFAULT_ITEM_PRICES.get(it_name, 1))
                     mkt.prices[it_name] = cur_p + 100
                     return f"price_increased_gold_{it_name}"
 
             for it_name, rect in self.price_s_dec_btns.items():
                 if rect.collidepoint(mouse_pos):
+                    mkt.auto_pricing = False
+                    mkt.auto_pricing = False
                     cur_p = mkt.prices.get(it_name, DEFAULT_ITEM_PRICES.get(it_name, 1))
                     mkt.prices[it_name] = max(1, cur_p - 10)
                     return f"price_decreased_silver_{it_name}"
 
             for it_name, rect in self.price_s_inc_btns.items():
                 if rect.collidepoint(mouse_pos):
+                    mkt.auto_pricing = False
+                    mkt.auto_pricing = False
                     cur_p = mkt.prices.get(it_name, DEFAULT_ITEM_PRICES.get(it_name, 1))
                     mkt.prices[it_name] = cur_p + 10
                     return f"price_increased_silver_{it_name}"
 
             for it_name, rect in self.price_c_dec_btns.items():
                 if rect.collidepoint(mouse_pos):
+                    mkt.auto_pricing = False
+                    mkt.auto_pricing = False
                     cur_p = mkt.prices.get(it_name, DEFAULT_ITEM_PRICES.get(it_name, 1))
                     mkt.prices[it_name] = max(1, cur_p - 1)
                     return f"price_decreased_{it_name}"
 
             for it_name, rect in self.price_c_inc_btns.items():
                 if rect.collidepoint(mouse_pos):
+                    mkt.auto_pricing = False
+                    mkt.auto_pricing = False
                     cur_p = mkt.prices.get(it_name, DEFAULT_ITEM_PRICES.get(it_name, 1))
                     mkt.prices[it_name] = cur_p + 1
                     return f"price_increased_{it_name}"
@@ -528,7 +553,7 @@ class MarketProfileModal:
         # -------------------------------------------------------------
         content_y = stats_rect.bottom + 14
 
-        self._draw_goods_tab(surface, mx, content_y, mkt, servant_manager, resources, stockpile_manager, m_pos)
+        self._draw_goods_tab(surface, mx, content_y, mkt, servant_manager, resources, stockpile_manager, furniture_manager, m_pos)
 
         # 7. ASSIGN STALL DIALOG OVERLAY (if active)
         if self.show_assign_dialog:
@@ -545,7 +570,7 @@ class MarketProfileModal:
         except (TypeError, ValueError):
             return 0
 
-    def _draw_goods_tab(self, surface, mx, list_y, mkt, servant_manager, resources, stockpile_manager, m_pos):
+    def _draw_goods_tab(self, surface, mx, list_y, mkt, servant_manager, resources, stockpile_manager, furniture_manager, m_pos):
         """Draw only explicitly enabled market goods and their physical stock controls."""
         assigned = bool(getattr(mkt, "assigned_family_id", None))
         self.price_g_dec_btns.clear()
@@ -557,6 +582,8 @@ class MarketProfileModal:
         self.stock_dep_btns.clear()
         self.stock_with_btns.clear()
         self.stock_quantity_rects.clear()
+        self.item_allocation_dec_rects.clear()
+        self.item_allocation_inc_rects.clear()
 
         self.add_item_btn_rect = pygame.Rect(mx + self.modal_w - 188, list_y - 2, 164, 26)
         pygame.draw.rect(surface, (22, 101, 52) if self.add_item_btn_rect.collidepoint(m_pos) else (20, 83, 45), self.add_item_btn_rect, border_radius=4)
@@ -566,26 +593,12 @@ class MarketProfileModal:
         surface.blit(self.font_sub.render(title, True, COLOR_TEXT_TITLE), (mx + 24, list_y + 4))
         row_top = list_y + 30
 
-        if assigned:
-            pct = max(0, min(100, int(getattr(mkt, "household_sale_percent", MARKET_DEFAULT_HOUSEHOLD_SALE_PERCENT))))
-            surface.blit(self.font_badge.render("Household goods limit:", True, COLOR_TEXT_MUTED), (mx + 24, row_top + 5))
-            self.household_percent_dec_rect = pygame.Rect(mx + 172, row_top, 26, 24)
-            self.household_percent_inc_rect = pygame.Rect(mx + 252, row_top, 26, 24)
-            for rect, text in ((self.household_percent_dec_rect, "-"), (self.household_percent_inc_rect, "+")):
-                pygame.draw.rect(surface, (51, 65, 85), rect, border_radius=3)
-                surface.blit(self.font_sub.render(text, True, (255, 255, 255)), (rect.centerx - 4, rect.centery - 8))
-            pct_rect = pygame.Rect(mx + 202, row_top, 46, 24)
-            pygame.draw.rect(surface, (15, 23, 42), pct_rect, border_radius=3)
-            surface.blit(self.font_sub.render(f"{pct}%", True, (250, 204, 21)), (pct_rect.centerx - 12, pct_rect.centery - 8))
-            surface.blit(self.font_badge.render("of household stock may be sold; price is market controlled", True, COLOR_TEXT_MUTED), (mx + 292, row_top + 6))
-            row_top += 30
-        else:
-            self.household_percent_dec_rect = None
-            self.household_percent_inc_rect = None
+        self.household_percent_dec_rect = None
+        self.household_percent_inc_rect = None
 
         table = pygame.Rect(mx + 24, row_top, self.modal_w - 48, 24)
         pygame.draw.rect(surface, (30, 41, 59), table, border_radius=4)
-        labels = ((mx + 36, "ITEM"), (mx + 174, "STOCK"), (mx + 250, "SELL PRICE"), (mx + 330, "PRICE"), (mx + 394, "QTY"), (mx + 468, "RESTOCK"), (mx + 570, "WITHDRAW"))
+        labels = ((mx + 36, "ITEM"), (mx + 174, "STOCK"), (mx + 250, "PRICE"), (mx + 326, "SALE %" if assigned else "PRICE"), (mx + 394, "QTY"), (mx + 468, "RESTOCK"), (mx + 570, "WITHDRAW"))
         for x, label in labels:
             surface.blit(self.font_badge.render(label, True, COLOR_TEXT_MUTED), (x, row_top + 5))
 
@@ -607,7 +620,18 @@ class MarketProfileModal:
             price_display = from_copper(max(1, int(price)))
             surface.blit(self.font_badge.render(f"{price_display['Gold']}g {price_display['Silver']}s {price_display['Copper']}c", True, (250, 204, 21)), (mx + 250, row_y + 13))
 
-            if not assigned:
+            if assigned:
+                pct = max(0, min(100, int(getattr(mkt, "item_allocations", {}).get(item_name, MARKET_DEFAULT_HOUSEHOLD_SALE_PERCENT))))
+                pct_minus = pygame.Rect(mx + 326, row_y + 7, 18, 24)
+                pct_plus = pygame.Rect(mx + 369, row_y + 7, 18, 24)
+                pct_rect = pygame.Rect(mx + 346, row_y + 7, 22, 24)
+                self.item_allocation_dec_rects[item_name] = pct_minus
+                self.item_allocation_inc_rects[item_name] = pct_plus
+                for rect, label in ((pct_minus, "-"), (pct_plus, "+")):
+                    pygame.draw.rect(surface, (51, 65, 85), rect, border_radius=3)
+                    surface.blit(self.font_badge.render(label, True, (255, 255, 255)), (rect.centerx - 3, rect.centery - 5))
+                surface.blit(self.font_badge.render(f"{pct}", True, (250, 204, 21)), (pct_rect.centerx - 6, pct_rect.centery - 5))
+            else:
                 price_minus = pygame.Rect(mx + 326, row_y + 7, 22, 24)
                 price_plus = pygame.Rect(mx + 350, row_y + 7, 22, 24)
                 self.price_c_dec_btns[item_name] = price_minus
@@ -617,19 +641,23 @@ class MarketProfileModal:
                     text = self.font_sub.render(label, True, (255, 255, 255))
                     surface.blit(text, (rect.centerx - text.get_width() // 2, rect.centery - text.get_height() // 2))
 
-            qty_rect = pygame.Rect(mx + 390, row_y + 7, 54, 24)
-            self.stock_quantity_rects[item_name] = qty_rect
-            qty_text = self.quantity_values.setdefault(item_name, str(MARKET_QUANTITY_DEFAULT))
-            pygame.draw.rect(surface, (15, 23, 42), qty_rect, border_radius=3)
-            pygame.draw.rect(surface, (96, 165, 250) if self.focused_quantity == item_name else (71, 85, 105), qty_rect, width=1, border_radius=3)
-            shown_qty = qty_text if qty_text else "0"
-            qty_surf = self.font_badge.render(shown_qty, True, (255, 255, 255))
-            surface.blit(qty_surf, (qty_rect.centerx - qty_surf.get_width() // 2, qty_rect.centery - qty_surf.get_height() // 2))
+            if not assigned:
+                qty_rect = pygame.Rect(mx + 390, row_y + 7, 54, 24)
+                self.stock_quantity_rects[item_name] = qty_rect
+                qty_text = self.quantity_values.setdefault(item_name, str(MARKET_QUANTITY_DEFAULT))
+                pygame.draw.rect(surface, (15, 23, 42), qty_rect, border_radius=3)
+                pygame.draw.rect(surface, (96, 165, 250) if self.focused_quantity == item_name else (71, 85, 105), qty_rect, width=1, border_radius=3)
+                shown_qty = qty_text if qty_text else "0"
+                qty_surf = self.font_badge.render(shown_qty, True, (255, 255, 255))
+                surface.blit(qty_surf, (qty_rect.centerx - qty_surf.get_width() // 2, qty_rect.centery - qty_surf.get_height() // 2))
 
             restock = pygame.Rect(mx + 456, row_y + 7, 76, 24)
-            self.stock_dep_btns[item_name] = restock
-            pygame.draw.rect(surface, (30, 58, 138), restock, border_radius=3)
-            surface.blit(self.font_badge.render("Restock", True, (255, 255, 255)), (restock.x + 12, restock.y + 6))
+            if not assigned:
+                self.stock_dep_btns[item_name] = restock
+                pygame.draw.rect(surface, (30, 58, 138), restock, border_radius=3)
+                surface.blit(self.font_badge.render("Restock", True, (255, 255, 255)), (restock.x + 12, restock.y + 6))
+            else:
+                surface.blit(self.font_badge.render("Auto", True, COLOR_TEXT_MUTED), (restock.x + 22, restock.y + 7))
             withdraw = pygame.Rect(mx + 558, row_y + 7, 84, 24)
             self.stock_with_btns[item_name] = withdraw
             pygame.draw.rect(surface, (127, 29, 29), withdraw, border_radius=3)
@@ -662,9 +690,12 @@ class MarketProfileModal:
             pygame.draw.rect(surface, (15, 23, 42), picker, border_radius=8)
             pygame.draw.rect(surface, (96, 165, 250), picker, width=2, border_radius=8)
             surface.blit(self.font_sub.render("Choose a market item", True, COLOR_TEXT_TITLE), (picker.x + 14, picker.y + 12))
+            # Sale catalogs are per stall: another stall listing an item does not hide it here.
+            # Stock is still supplied from this stall's owner household by the hauling workflow.
             selectable = [it for it in MARKET_TRADEABLE_ITEMS if it not in getattr(mkt, "sale_items", [])]
             if not selectable:
-                surface.blit(self.font_body.render("All supported goods are already listed.", True, COLOR_TEXT_MUTED), (picker.x + 14, picker.y + 42))
+                empty_label = "All supported goods are already listed at this stall."
+                surface.blit(self.font_body.render(empty_label, True, COLOR_TEXT_MUTED), (picker.x + 14, picker.y + 42))
             for idx, item_name in enumerate(selectable):
                 item_rect = pygame.Rect(picker.x + 12, picker.y + 38 + idx * 34, picker.width - 24, 30)
                 self.item_picker_rects[item_name] = item_rect

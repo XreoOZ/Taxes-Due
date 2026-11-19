@@ -4,6 +4,7 @@ Day & Night Cycle System (Configurable In-Game Day Length & Ambient Lighting)
 
 import math
 import pygame
+from game.data.config import DEDICATED_JOBS
 from game.config import (
     DAY_LENGTH_OPTIONS,
     DEFAULT_DAY_LENGTH_INDEX,
@@ -110,14 +111,36 @@ class DayCycleSystem:
 
         return None
 
-    def draw_hud(self, surface):
+    def draw_hud(self, surface, villager_manager=None):
         """Render floating Clock & Calendar HUD di bagian atas layar"""
         self._init_fonts()
         screen_w, _ = surface.get_size()
 
         hour, minute, time_str, is_night = self.get_clock_time()
 
-        pill_w = 175
+        villagers = villager_manager.get_all_villagers() if villager_manager else []
+        living = [villager for villager in villagers if getattr(villager, "is_alive", True)]
+        known_jobs = set(DEDICATED_JOBS)
+        assigned_count = sum(
+            1 for villager in living
+            if getattr(villager, "job", None) in known_jobs and getattr(villager, "job", None) != "Unassigned"
+        )
+        unassigned_count = len(living) - assigned_count
+        day_surface = self.font_clock.render(f"Day {self.day_number}", True, (241, 245, 249))
+        unassigned_surface = self.font_sub.render(f"Unassigned {unassigned_count}", True, (203, 213, 225))
+        assigned_surface = self.font_sub.render(f"Assigned {assigned_count}", True, (134, 239, 172))
+        clock_surface = self.font_clock.render(time_str, True, (56, 189, 248))
+        chip_padding = self.font_sub.size("  ")[0]
+        chip_gap = max(2, self.font_sub.get_height() // 3)
+        chip_h = max(self.font_sub.get_height(), self.font_clock.get_height()) + chip_padding
+        day_chip_w = day_surface.get_width() + chip_padding
+        unassigned_chip_w = unassigned_surface.get_width() + chip_padding
+        assigned_chip_w = assigned_surface.get_width() + chip_padding
+        pill_w = max(
+            175,
+            34 + day_chip_w + chip_gap + unassigned_chip_w + chip_gap
+            + assigned_chip_w + chip_gap + clock_surface.get_width() + 12,
+        )
         pill_h = 36
         pill_x = 16
         pill_y = 16
@@ -137,9 +160,20 @@ class DayCycleSystem:
             pygame.draw.circle(surface, (245, 158, 11), (icon_cx, icon_cy), 7)
             pygame.draw.circle(surface, (254, 240, 138), (icon_cx, icon_cy), 5)
 
-        # Text: Day X | Time
-        txt_day = self.font_clock.render(f"Day {self.day_number}", True, (241, 245, 249))
-        txt_time = self.font_clock.render(time_str, True, (56, 189, 248))
-
-        surface.blit(txt_day, (pill_x + 34, pill_y + 8))
-        surface.blit(txt_time, (pill_x + pill_w - txt_time.get_width() - 12, pill_y + 8))
+        # Distinct, adjacent status chips inside one shared HUD card.
+        chip_x = pill_x + 34
+        chip_y = pill_y + (pill_h - chip_h) // 2
+        for text_surface, chip_w in (
+            (day_surface, day_chip_w),
+            (unassigned_surface, unassigned_chip_w),
+            (assigned_surface, assigned_chip_w),
+        ):
+            chip_rect = pygame.Rect(chip_x, chip_y, chip_w, chip_h)
+            pygame.draw.rect(surface, (30, 41, 59), chip_rect, border_radius=5)
+            surface.blit(
+                text_surface,
+                (chip_rect.centerx - text_surface.get_width() // 2,
+                 chip_rect.centery - text_surface.get_height() // 2),
+            )
+            chip_x = chip_rect.right + chip_gap
+        surface.blit(clock_surface, (pill_x + pill_w - clock_surface.get_width() - 12, pill_y + 8))

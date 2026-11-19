@@ -6,7 +6,15 @@ Minimum price: 1 Copper. No maximum price.
 Zero hardcoding, config-driven.
 """
 import math
-from game.data.config import DEFAULT_ITEM_PRICES, MARKET_TRADEABLE_ITEMS
+from game.data.config import (
+    DAILY_FOOD_REQUIREMENT,
+    DEFAULT_ITEM_PRICES,
+    MARKET_TRADEABLE_ITEMS,
+    MARKET_WEALTH_PRICE_ELASTICITY,
+    MARKET_WEALTH_PRICE_FACTOR_MAX,
+    MARKET_WEALTH_PRICE_FACTOR_MIN,
+    MARKET_WEALTH_REFERENCE_DAYS,
+)
 
 class MarketPricingSystem:
     # Baseline reference stock for normal default price
@@ -46,6 +54,22 @@ class MarketPricingSystem:
         return max(0, int(market.inventory.get(item_name, 0)))
 
     @classmethod
+    def get_village_wealth_factor(cls, total_wealth_copper, living_population):
+        """Scale household-stall prices gently against the village's food-buying capacity."""
+        food_prices = [
+            cls.get_base_price(item_name)
+            for item_name, category in MARKET_TRADEABLE_ITEMS.items()
+            if category == "Food"
+        ]
+        if not food_prices or living_population <= 0:
+            return 1.0
+        daily_food_cost = max(1, round(sum(food_prices) / len(food_prices))) * max(1, DAILY_FOOD_REQUIREMENT)
+        reference_wealth = max(1.0, living_population * daily_food_cost * MARKET_WEALTH_REFERENCE_DAYS)
+        relative_wealth = max(0.01, max(0, int(total_wealth_copper)) / reference_wealth)
+        factor = 1.0 + MARKET_WEALTH_PRICE_ELASTICITY * math.log(relative_wealth)
+        return max(MARKET_WEALTH_PRICE_FACTOR_MIN, min(MARKET_WEALTH_PRICE_FACTOR_MAX, factor))
+
+    @classmethod
     def get_price(cls, market, item_name):
         """
         Returns the active dynamic price for an item in a market.
@@ -61,6 +85,8 @@ class MarketPricingSystem:
 
         stock = cls.get_market_stock(market, item_name)
         base_p = cls.get_base_price(item_name)
+        wealth_factor = max(0.0, float(getattr(market, "village_wealth_factor", 1.0)))
+        base_p = max(cls.MIN_PRICE, int(round(base_p * wealth_factor)))
         return cls.calculate_price(item_name, stock, base_p)
 
     @classmethod
@@ -69,7 +95,7 @@ class MarketPricingSystem:
         Synchronizes market.prices with dynamic auto prices for all known items
         and items in inventory, making it immediately available to Agent 2's UI.
         """
-        if not market or not getattr(market, "auto_pricing", True):
+        if not market or not getattr(market, "assigned_family_id", None):
             return
 
         if not hasattr(market, "prices") or not isinstance(market.prices, dict):

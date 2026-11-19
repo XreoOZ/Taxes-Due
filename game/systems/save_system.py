@@ -181,7 +181,11 @@ def serialize_game_state(day_cycle, resources, player, permit_manager, building_
             "permit_id": f.permit_id,
             "family_id": f.family_id,
             "assigned_villager_id": getattr(f, "assigned_villager_id", None),
+            "assigned_workers": list(getattr(f, "assigned_workers", [])),
             "is_dropped": getattr(f, "is_dropped", False),
+            "stored_in_id": getattr(f, "stored_in_id", None),
+            "construction_order": dict(getattr(f, "construction_order", {}) or {}),
+            "construction_progress": getattr(f, "construction_progress", 0.0),
             "designated_target": desig_target,
             "carrier_id": getattr(f, "carrier_id", None),
             "condition": getattr(f, "condition", 1.0),
@@ -237,6 +241,8 @@ def serialize_game_state(day_cycle, resources, player, permit_manager, building_
                     "carrying_corpse_id": getattr(m, "carrying_corpse_id", None),
                     "burial_payment_target_corpse_id": getattr(m, "burial_payment_target_corpse_id", None),
                     "burial_payment_gravedigger_id": getattr(m, "burial_payment_gravedigger_id", None),
+                    "carpenter_payment_order_id": getattr(m, "carpenter_payment_order_id", None),
+                    "carpenter_payment_carpenter_id": getattr(m, "carpenter_payment_carpenter_id", None),
                     "is_buried": getattr(m, "is_buried", False),
                     "is_picked_up": getattr(m, "is_picked_up", False)
                 } for m in fam.members
@@ -429,8 +435,7 @@ def deserialize_game_state(data, day_cycle, resources, player, permit_manager, b
         b.household_sale_percent = b_d.get("household_sale_percent", MARKET_DEFAULT_HOUSEHOLD_SALE_PERCENT)
         b.household_sale_limits = dict(b_d.get("household_sale_limits", {}))
         b._stall_requested_qty = dict(b_d.get("stall_requested_qty", {}))
-        if "auto_pricing" in b_d:
-            b.auto_pricing = b_d["auto_pricing"]
+        b.auto_pricing = bool(b.assigned_family_id)
         building_manager.buildings.append(b)
 
     building_manager.construction_sites.clear()
@@ -460,7 +465,7 @@ def deserialize_game_state(data, day_cycle, resources, player, permit_manager, b
         b.household_sale_percent = b_d.get("household_sale_percent", MARKET_DEFAULT_HOUSEHOLD_SALE_PERCENT)
         b.household_sale_limits = dict(b_d.get("household_sale_limits", {}))
         b._stall_requested_qty = dict(b_d.get("stall_requested_qty", {}))
-        b.auto_pricing = b_d.get("auto_pricing", True)
+        b.auto_pricing = bool(b.assigned_family_id)
         from game.buildings.buildings import DemolitionSite
         site = DemolitionSite(b)
         site.progress = d_d.get("progress", 0.0)
@@ -495,9 +500,13 @@ def deserialize_game_state(data, day_cycle, resources, player, permit_manager, b
         )
         f.inventory = dict(f_d.get("inventory", {}))
         f.is_dropped = f_d.get("is_dropped", False)
+        f.stored_in_id = f_d.get("stored_in_id", None)
+        f.construction_order = dict(f_d.get("construction_order", {}) or {}) or None
+        f.construction_progress = f_d.get("construction_progress", 0.0)
         f.designated_target = tuple(f_d["designated_target"]) if f_d.get("designated_target") else None
         f.carrier_id = f_d.get("carrier_id", None)
         f.condition = f_d.get("condition", 1.0)
+        f.assigned_workers = list(f_d.get("assigned_workers", []))
         furniture_manager.furnitures.append(f)
     if hasattr(furniture_manager, "invalidate_cache"):
         furniture_manager.invalidate_cache()
@@ -557,6 +566,8 @@ def deserialize_game_state(data, day_cycle, resources, player, permit_manager, b
             v.carrying_corpse_id = m_d.get("carrying_corpse_id", None)
             v.burial_payment_target_corpse_id = m_d.get("burial_payment_target_corpse_id", None)
             v.burial_payment_gravedigger_id = m_d.get("burial_payment_gravedigger_id", None)
+            v.carpenter_payment_order_id = m_d.get("carpenter_payment_order_id", None)
+            v.carpenter_payment_carpenter_id = m_d.get("carpenter_payment_carpenter_id", None)
             v.is_buried = bool(m_d.get("is_buried", False))
             v.is_picked_up = bool(m_d.get("is_picked_up", False))
             v.assigned_permit_id = fam.assigned_permit_id

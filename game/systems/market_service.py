@@ -51,11 +51,11 @@ class MarketService:
         Prioritas: harga yang dikonfigurasi landlord di market.prices -> auto_pricing (MarketPricingSystem) -> DEFAULT_ITEM_PRICES -> 1
         """
         if market:
-            if hasattr(market, "prices") and item_name in market.prices:
-                return max(1, int(market.prices[item_name]))
-            if getattr(market, "auto_pricing", False):
+            if getattr(market, "assigned_family_id", None):
                 from game.systems.market_pricing import MarketPricingSystem
                 return MarketPricingSystem.get_price(market, item_name)
+            if hasattr(market, "prices") and item_name in market.prices:
+                return max(1, int(market.prices[item_name]))
         from game.systems.market_pricing import MarketPricingSystem
         return MarketPricingSystem.get_base_price(item_name)
 

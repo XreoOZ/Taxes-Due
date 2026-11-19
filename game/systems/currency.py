@@ -53,7 +53,30 @@ def normalize_wallet(wallet):
                 normalized[c_name] += max(0, int(v))
             except (ValueError, TypeError):
                 pass
+    denominations = sorted(
+        CURRENCY_DENOMINATIONS,
+        key=lambda denomination: EXCHANGE_RATES.get(denomination, 0),
+    )
+    for lower, higher in zip(denominations, denominations[1:]):
+        lower_value = EXCHANGE_RATES.get(lower, 0)
+        higher_value = EXCHANGE_RATES.get(higher, 0)
+        if lower_value <= 0 or higher_value <= lower_value or higher_value % lower_value:
+            continue
+        conversion_rate = higher_value // lower_value
+        converted, normalized[lower] = divmod(normalized[lower], conversion_rate)
+        normalized[higher] += converted
     return normalized
+
+def compact_currency_wallet(wallet):
+    """Compact coin denominations in-place while preserving unrelated inventory."""
+    if not isinstance(wallet, dict):
+        return normalize_wallet(wallet)
+    compacted = normalize_wallet(wallet)
+    for key in list(wallet):
+        if canonical_denomination(key):
+            del wallet[key]
+    wallet.update({denomination: count for denomination, count in compacted.items() if count > 0})
+    return compacted
 
 def to_copper(wallet):
     """Menghitung total nilai moneter dalam satuan Copper (1 Gold = 100c, 1 Silver = 10c, 1 Copper = 1c)"""
@@ -63,6 +86,65 @@ def to_copper(wallet):
         w["Silver"] * EXCHANGE_RATES.get("Silver", 10) +
         w["Gold"] * EXCHANGE_RATES.get("Gold", 100)
     )
+
+def transfer_currency_value(source_wallet, destination_wallet, amount_in_copper):
+    """Move the smallest available set of coins whose value covers an amount.
+
+    This is a physical withdrawal, so it transfers whole coins without requiring
+    the source wallet to make change. Any excess value can be returned after the
+    eventual purchase transaction.
+    """
+    if not isinstance(source_wallet, dict) or not isinstance(destination_wallet, dict):
+        return False, "Currency wallet is unavailable."
+
+    compact_currency_wallet(source_wallet)
+    required = max(0, int(amount_in_copper))
+    source_value = to_copper(source_wallet)
+    if source_value < required:
+        return False, f"Insufficient funds: has {source_value}c, needs {required}c."
+    if required == 0:
+        return True, "No withdrawal needed."
+
+    remaining = required
+    selected = {}
+    denominations = sorted(
+        CURRENCY_DENOMINATIONS,
+        key=lambda denomination: EXCHANGE_RATES.get(denomination, 0),
+        reverse=True,
+    )
+    normalized = normalize_wallet(source_wallet)
+    for denomination in denominations:
+        coin_value = EXCHANGE_RATES.get(denomination, 0)
+        if coin_value <= 0:
+            continue
+        count = min(normalized.get(denomination, 0), (remaining + coin_value - 1) // coin_value)
+        if count:
+            selected[denomination] = count
+            remaining -= count * coin_value
+        if remaining <= 0:
+            break
+
+    if remaining > 0:
+        return False, "Available denominations cannot cover the withdrawal."
+
+    for denomination, count in selected.items():
+        amount_left = count
+        for source_key in list(source_wallet):
+            if canonical_denomination(source_key) != denomination:
+                continue
+            moved = min(amount_left, max(0, int(source_wallet[source_key])))
+            source_wallet[source_key] -= moved
+            amount_left -= moved
+            if source_wallet[source_key] <= 0:
+                del source_wallet[source_key]
+            if amount_left <= 0:
+                break
+        if amount_left > 0:
+            return False, "Currency changed before withdrawal completed."
+        destination_wallet[denomination] = destination_wallet.get(denomination, 0) + count
+
+    compact_currency_wallet(destination_wallet)
+    return True, "Currency transferred."
 
 def from_copper(copper_val):
     """
@@ -81,32 +163,8 @@ def can_afford(wallet, price_in_copper):
     return to_copper(wallet) >= price_in_copper
 
 def consolidate_wallet(wallet):
-    """
-    Konsolidasi koin yang melebihi batas 1000 (Copper -> Silver -> Gold).
-    Mempertahankan total nilai moneter tanpa menambah atau mengurangi nilai.
-    """
-    w = normalize_wallet(wallet)
-    # Jika Copper melebihi cap dan bisa dikonversi ke Silver
-    if w["Copper"] > DENOMINATION_CAP:
-        excess = w["Copper"] - DENOMINATION_CAP
-        convert_copper = (excess + (COPPER_PER_SILVER - 1)) // COPPER_PER_SILVER * COPPER_PER_SILVER
-        convert_copper = min(w["Copper"], convert_copper)
-        silver_gain = convert_copper // COPPER_PER_SILVER
-        if w["Silver"] + silver_gain <= DENOMINATION_CAP:
-            w["Copper"] -= convert_copper
-            w["Silver"] += silver_gain
-
-    # Jika Silver melebihi cap dan bisa dikonversi ke Gold
-    if w["Silver"] > DENOMINATION_CAP:
-        excess = w["Silver"] - DENOMINATION_CAP
-        convert_silver = (excess + (SILVER_PER_GOLD - 1)) // SILVER_PER_GOLD * SILVER_PER_GOLD
-        convert_silver = min(w["Silver"], convert_silver)
-        gold_gain = convert_silver // SILVER_PER_GOLD
-        if w["Gold"] + gold_gain <= DENOMINATION_CAP:
-            w["Silver"] -= convert_silver
-            w["Gold"] += gold_gain
-
-    return w
+    """Return compact denominations without changing the wallet total value."""
+    return normalize_wallet(wallet)
 
 def make_change_and_deposit(market_wallet, payment, change):
     """
@@ -266,12 +324,9 @@ def calculate_payment_and_change(customer_funds, price_in_copper, market_funds=N
         cust_s = cust["Silver"] - payment["Silver"] + change["Silver"]
         cust_g = cust["Gold"] - payment["Gold"] + change["Gold"]
 
-        if cust_c > DENOMINATION_CAP or cust_s > DENOMINATION_CAP or cust_g > DENOMINATION_CAP:
-            post_cust = consolidate_wallet({"Copper": cust_c, "Silver": cust_s, "Gold": cust_g})
-            if any(v > DENOMINATION_CAP for v in post_cust.values()):
-                continue
-        else:
-            post_cust = {"Copper": cust_c, "Silver": cust_s, "Gold": cust_g}
+        post_cust = consolidate_wallet({"Copper": cust_c, "Silver": cust_s, "Gold": cust_g})
+        if any(v > DENOMINATION_CAP for v in post_cust.values()):
+            continue
 
         # Cek cap market
         if any(v > DENOMINATION_CAP for v in post_mkt.values()):
@@ -326,8 +381,10 @@ def execute_currency_transfer(sender_funds, recipient_funds, payment, change):
     if isinstance(sender_funds, dict):
         for k in CURRENCY_DENOMINATIONS:
             sender_funds[k] = new_s[k]
+        compact_currency_wallet(sender_funds)
     if isinstance(recipient_funds, dict):
         for k in CURRENCY_DENOMINATIONS:
             recipient_funds[k] = new_r[k]
+        compact_currency_wallet(recipient_funds)
 
     return True, new_s, new_r, "Transfer successful"

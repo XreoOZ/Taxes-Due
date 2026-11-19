@@ -10,7 +10,8 @@ from game.systems.currency import (
     to_copper,
     from_copper,
     normalize_wallet,
-    canonical_denomination
+    canonical_denomination,
+    compact_currency_wallet,
 )
 from game.systems.market_pricing import MarketPricingSystem
 from game.systems.wealth_system import VillageWealthSystem
@@ -20,6 +21,28 @@ VILLAGER_STALL_HAUL_CAPACITY = 20
 
 
 class HouseholdStallSystem:
+    @staticmethod
+    def _inventory_contains_item(inventory, storage_item):
+        if not isinstance(inventory, dict):
+            return False
+        target = str(storage_item).replace(" ", "_").casefold()
+        return any(
+            str(item_name).replace(" ", "_").casefold() == target and int(amount or 0) > 0
+            for item_name, amount in inventory.items()
+        )
+
+    @classmethod
+    def get_household_owned_sale_items(cls, family_id, furniture_manager):
+        """Return tradeable goods physically available in this household's chest."""
+        if not family_id or not furniture_manager:
+            return set()
+        chest = furniture_manager.get_storage_for_family(str(family_id))
+        inventory = getattr(chest, "inventory", {}) if chest else {}
+        return {
+            item_name for item_name, storage_item in MARKET_TRADEABLE_ITEMS.items()
+            if cls._inventory_contains_item(inventory, storage_item)
+        }
+
     @classmethod
     def assign_stall(cls, market, family_id):
         """Assigns a Market Stall to a peasant household."""
@@ -29,6 +52,8 @@ class HouseholdStallSystem:
         market.assigned_household_id = family_id
         market.owner = family_id
         market.household_sale_limits = {}
+        market._stall_requested_qty = {}
+        market.auto_pricing = True
         VillageWealthSystem.mark_dirty()
         return True
 
@@ -41,6 +66,8 @@ class HouseholdStallSystem:
         market.assigned_household_id = None
         market.owner = "landlord"
         market.household_sale_limits = {}
+        market._stall_requested_qty = {}
+        market.auto_pricing = False
         VillageWealthSystem.mark_dirty()
         return True
 
@@ -53,6 +80,9 @@ class HouseholdStallSystem:
             market.item_allocations = {}
         pct = max(0, min(100, int(percentage)))
         market.item_allocations[item_name] = pct
+        if isinstance(getattr(market, "household_sale_limits", None), dict):
+            market.household_sale_limits.pop(item_name, None)
+        return pct
 
     @classmethod
     def get_item_allocation(cls, market, item_name):
@@ -60,6 +90,18 @@ class HouseholdStallSystem:
         if not market or not hasattr(market, "item_allocations") or not isinstance(market.item_allocations, dict):
             return 0
         return market.item_allocations.get(item_name, 0)
+
+    @classmethod
+    def retain_household_owned_sale_items(cls, market, furniture_manager):
+        """Keep only listed goods physically owned by the newly assigned household."""
+        family_id = getattr(market, "assigned_family_id", None) if market else None
+        owned = cls.get_household_owned_sale_items(family_id, furniture_manager)
+        market.sale_items = [item for item in getattr(market, "sale_items", []) if item in owned]
+        market.item_allocations = {
+            item: percentage for item, percentage in getattr(market, "item_allocations", {}).items()
+            if item in market.sale_items
+        }
+        return list(market.sale_items)
 
     @classmethod
     def calculate_allocatable_goods(cls, market, family_id, item_name, furniture_manager):
@@ -78,7 +120,9 @@ class HouseholdStallSystem:
 
         if item_name not in MARKET_TRADEABLE_ITEMS or item_name not in getattr(market, "sale_items", []):
             return 0
-        pct = max(0, min(100, int(getattr(market, "household_sale_percent", MARKET_DEFAULT_HOUSEHOLD_SALE_PERCENT))))
+        pct = max(0, min(100, int(getattr(market, "item_allocations", {}).get(
+            item_name, getattr(market, "household_sale_percent", MARKET_DEFAULT_HOUSEHOLD_SALE_PERCENT)
+        ))))
         if pct <= 0:
             return 0
 
@@ -145,6 +189,8 @@ class HouseholdStallSystem:
         if not hasattr(market, "currency") or not isinstance(market.currency, dict):
             market.currency = {"Copper": 0, "Silver": 0, "Gold": 0}
         market.currency[canon] = market.currency.get(canon, 0) + actual
+        compact_currency_wallet(market.currency)
+        compact_currency_wallet(resources)
         VillageWealthSystem.mark_dirty()
         return actual
 
@@ -163,6 +209,8 @@ class HouseholdStallSystem:
 
         market.currency[canon] = max(0, market.currency.get(canon, 0) - actual)
         resources[canon] = resources.get(canon, 0) + actual
+        compact_currency_wallet(market.currency)
+        compact_currency_wallet(resources)
         VillageWealthSystem.mark_dirty()
         return actual
 
@@ -228,9 +276,6 @@ class HouseholdStallSystem:
         # B. Priority 2: Physical Goods Transportation to Market
         for item_name in getattr(market, "sale_items", []):
             alloc_qty = cls.calculate_allocatable_goods(market, fam_id, item_name, furniture_manager)
-            requests = getattr(market, "_stall_requested_qty", {})
-            if item_name in requests:
-                alloc_qty = min(alloc_qty, requests.pop(item_name))
             if alloc_qty > 0:
                 villager.task = "HAULING_STALL_GOODS_FETCH"
                 villager.stall_target_market = market
@@ -283,6 +328,9 @@ class HouseholdStallSystem:
                             villager.currency = {"Copper": 0, "Silver": 0, "Gold": 0}
                         villager.currency[denom] = villager.currency.get(denom, 0) + amt
                         villager.inventory[denom] = villager.inventory.get(denom, 0) + amt
+                compact_currency_wallet(mkt_curr)
+                compact_currency_wallet(villager.currency)
+                compact_currency_wallet(villager.inventory)
 
                 VillageWealthSystem.mark_dirty()
                 if withdrawn:
@@ -324,6 +372,10 @@ class HouseholdStallSystem:
                         chest.currency[denom] = chest.currency.get(denom, 0) + amt
                         if hasattr(chest, "inventory") and isinstance(chest.inventory, dict):
                             chest.inventory[denom] = chest.inventory.get(denom, 0) + amt
+                compact_currency_wallet(chest.currency)
+                compact_currency_wallet(chest.inventory)
+                compact_currency_wallet(villager.currency)
+                compact_currency_wallet(villager.inventory)
 
                 VillageWealthSystem.mark_dirty()
                 if deposited:

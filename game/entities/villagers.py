@@ -10,6 +10,8 @@ from game.config import (
     VILLAGER_RADIUS,
     VILLAGER_SPEED,
     VILLAGER_CARRY_CAPACITY,
+    CARPENTER_TOOL_SWING_SPEED,
+    CARPENTER_TOOL_SWING_ANGLE,
     WATERING_DURATION_SECONDS,
     DOORWAY_WAYPOINT_DISTANCE,
     TILE_SIZE,
@@ -217,6 +219,8 @@ class Villager:
         self.gravedigger_timer = 0.0
         self.burial_payment_target_corpse_id = None
         self.burial_payment_gravedigger_id = None
+        self.carpenter_payment_order_id = None
+        self.carpenter_payment_carpenter_id = None
         self.target_restock_market = None
         self.target_restock_mat = None
         self.target_restock_qty = 0
@@ -348,6 +352,14 @@ class Villager:
             return "Walking to market for grave supplies" if getattr(self, "is_moving", False) else "Buying grave supplies"
         elif task == "GRAVEDIGGER_RESTOCK_HAULING_HOME":
             return "Carrying grave supplies home"
+        elif task.startswith("CARPENTER_FEE_"):
+            return "Delivering Carpenter commission" if task.endswith("TRAVEL") else "Collecting furniture commission"
+        elif task == "WAITING_FOR_CARPENTER_COMMISSION":
+            return "Waiting for furniture commission"
+        elif task == "CARPENTER_CONSTRUCTING":
+            return "Building furniture"
+        elif task.startswith("CARPENTER_RESTOCK_"):
+            return "Restocking Carpenter materials"
         elif task == "HAULING_STALL_COINS_FETCH":
             return "Collecting market stall earnings"
         elif task == "HAULING_STALL_COINS_DELIVER":
@@ -360,6 +372,8 @@ class Villager:
             if getattr(self, "assigned_bed_id", None):
                 return "Sleeping in Bed"
             return "Resting on floor"
+        elif task == "LEISURE":
+            return "Enjoying leisure time" if getattr(self, "is_moving", False) else "Resting during leisure"
         elif task == "IDLE":
             if getattr(self, "is_moving", False):
                 return "Wandering leisurely"
@@ -413,7 +427,7 @@ class Villager:
             return False
 
         tile = state.get("target_work_tile")
-        if tile and permit_manager:
+        if tile and permit_manager and getattr(self, "job", None) == "Farmer":
             farm = permit_manager.get_farm_permit_for_villager(self)
             if not farm or not farm.contains_tile(tile[0], tile[1]):
                 self.task = "IDLE"
@@ -431,10 +445,13 @@ class Villager:
         self.carrying_furniture = state.get("carrying_furniture")
         return True
 
-    def die(self, reason="Starvation", day=1, stockpile_manager=None, family=None):
+    def die(self, reason="Starvation", day=1, stockpile_manager=None, family=None, permit_manager=None):
         """Transition this villager to the DECEASED state (corpse) and drop 100% of personal inventory."""
         self.is_alive = False
         self.status = "DECEASED"
+        self.previous_job = getattr(self, "job", None)
+        self.job = "Unassigned"
+        self.title = DEDICATED_JOBS.get("Unassigned", {}).get("title", "Unassigned")
         self.death_reason = reason
         self.death_day = day
         self.task = "DECEASED"
@@ -455,6 +472,14 @@ class Villager:
 
         # Release work tile reservation if holding one
         self.current_work_tile = None
+
+        # A corpse remains a world entity until burial, but it no longer occupies a job slot.
+        pm = permit_manager or getattr(self, "permit_manager", None)
+        if pm:
+            for permit in getattr(pm, "permits", []):
+                workers = getattr(permit, "assigned_workers", None)
+                if isinstance(workers, list):
+                    permit.assigned_workers = [worker_id for worker_id in workers if str(worker_id) != str(self.id)]
 
         # Drop carried furniture if applicable
         if getattr(self, "carrying_furniture", None):
@@ -1138,7 +1163,7 @@ class Villager:
                 reason = "Dehydration"
             vm = villager_manager or getattr(self, "villager_manager", None)
             fam = vm.get_family_by_id(self.family_id) if vm else None
-            self.die(reason=reason, day=cur_day, stockpile_manager=stockpile_manager, family=fam)
+            self.die(reason=reason, day=cur_day, stockpile_manager=stockpile_manager, family=fam, permit_manager=permit_manager)
             return
 
         if market_service is not None:
@@ -1147,6 +1172,7 @@ class Villager:
         self.furniture_manager = furniture_manager
         if villager_manager is not None:
             self.villager_manager = villager_manager
+        self.permit_manager = permit_manager
         if stockpile_manager is not None:
             self.stockpile_manager = stockpile_manager
 
@@ -1166,6 +1192,12 @@ class Villager:
         if CemeterySystem.update_burial_payment_task(
             self, dt, building_manager, furniture_manager, stockpile_manager,
             all_entities, player,
+        ):
+            return
+        from game.systems.carpenter_system import CarpenterSystem
+        if CarpenterSystem.update_payment_task(
+            self, dt, building_manager, furniture_manager, stockpile_manager,
+            all_entities, player, villager_manager,
         ):
             return
 
@@ -1331,6 +1363,10 @@ class Villager:
                 self.need_seek_cooldown = 3.0
                 self.say("Waiting: family member is already purchasing food!", duration=2.5)
                 self.task = "IDLE"
+                self._resume_leisure_after_need_failure(
+                    dt, sched_activity, player, all_entities, building_manager,
+                    permit_manager, furniture_manager,
+                )
                 return
 
             market, food_item, price = AIFoodPurchasingSystem.find_nearest_eligible_market(
@@ -1341,6 +1377,10 @@ class Villager:
                 self.need_seek_cooldown = 4.0
                 self.say("No food at home and market has none!", duration=2.5)
                 self.task = "IDLE"
+                self._resume_leisure_after_need_failure(
+                    dt, sched_activity, player, all_entities, building_manager,
+                    permit_manager, furniture_manager,
+                )
                 return
 
             purchase_qty = AIFoodPurchasingSystem.get_household_purchase_quantity(
@@ -1364,6 +1404,10 @@ class Villager:
                 self.need_seek_cooldown = 4.0
                 self.say(message, duration=2.5)
                 self.task = "IDLE"
+                self._resume_leisure_after_need_failure(
+                    dt, sched_activity, player, all_entities, building_manager,
+                    permit_manager, furniture_manager,
+                )
                 return
 
             self.purchase_target_market_id = getattr(market, "id", None)
@@ -1393,6 +1437,10 @@ class Villager:
                     self.need_seek_cooldown = 4.0
                     self.say("Household coins could not be collected.", duration=2.5)
                     self.task = "IDLE"
+                    self._resume_leisure_after_need_failure(
+                        dt, sched_activity, player, all_entities, building_manager,
+                        permit_manager, furniture_manager,
+                    )
             return
 
         # -------------------------------------------------------------
@@ -1404,6 +1452,10 @@ class Villager:
             if not chest:
                 self.task = "IDLE"
                 self.need_seek_cooldown = 4.0
+                self._resume_leisure_after_need_failure(
+                    dt, sched_activity, player, all_entities, building_manager,
+                    permit_manager, furniture_manager,
+                )
                 return
             cx, cy = chest.get_world_pos(TILE_SIZE)
             arrived = self._move_towards(cx, cy, dt, arrival_dist=CHEST_INTERACTION_RADIUS, all_entities=all_entities, player=player, building_manager=building_manager, furniture_manager=furniture_manager, exclusive_target=False)
@@ -1417,6 +1469,10 @@ class Villager:
                     self.say("Not enough coins in chest for Market food!", duration=2.5)
                     self.task = "IDLE"
                     self.need_seek_cooldown = 4.0
+                    self._resume_leisure_after_need_failure(
+                        dt, sched_activity, player, all_entities, building_manager,
+                        permit_manager, furniture_manager,
+                    )
             return
 
         if self.task == "BUYING_FOOD_RETRIEVE_GROUND_COINS":
@@ -1445,6 +1501,8 @@ class Villager:
                 denomination = canonical_denomination(stack.resource_type)
                 if amount > 0 and denomination:
                     self.inventory[denomination] = self.inventory.get(denomination, 0) + amount
+                    from game.systems.currency import compact_currency_wallet
+                    compact_currency_wallet(self.inventory)
                 self.target_loose_stack = None
                 if to_copper(normalize_wallet(self.inventory)) >= getattr(self, "purchase_target_price", 0):
                     self.task = "BUYING_FOOD_TRAVEL_TO_MARKET"
@@ -1494,8 +1552,10 @@ class Villager:
                 vm = getattr(self, "villager_manager", None) or villager_manager
                 fam = vm.get_family_by_id(self.family_id) if vm else None
                 pid = getattr(fam, "assigned_permit_id", None)
-                p = permit_manager.get_permit_by_id(pid) if pid else None
-                cx, cy = p.get_center_world(TILE_SIZE) if p else (self.x, self.y)
+                p = next((permit for permit in permit_manager.permits
+                          if str(permit.id) == str(pid)), None) if pid else None
+                cx = (p.grid_x + p.tiles_w / 2.0) * TILE_SIZE if p else self.x
+                cy = (p.grid_y + p.tiles_h / 2.0) * TILE_SIZE if p else self.y
             else:
                 cx, cy = (self.x, self.y)
 
@@ -1606,17 +1666,13 @@ class Villager:
                 # 1. Travel to Church
                 # 2. Receive Church Tax from household representatives
                 # 3. Remain at the Church until Prayer Time ends
-                if church_p:
-                    tiles = ChurchSystem.get_church_walkable_tiles(church_p, building_manager)
-                    if tiles:
-                        altar_tile = tiles[0]
-                        twx = (altar_tile[0] + 0.5) * TILE_SIZE
-                        twy = (altar_tile[1] + 0.5) * TILE_SIZE
-                        self.task = "LEADING_PRAYER"
-                        self._move_towards(twx, twy, dt, arrival_dist=12, all_entities=all_entities, player=player, building_manager=building_manager, furniture_manager=furniture_manager, exclusive_target=True)
-                        return
-                else:
+                tiles = ChurchSystem.get_church_walkable_tiles(church_p, building_manager) if church_p else []
+                if tiles:
+                    altar_tile = tiles[0]
+                    twx = (altar_tile[0] + 0.5) * TILE_SIZE
+                    twy = (altar_tile[1] + 0.5) * TILE_SIZE
                     self.task = "LEADING_PRAYER"
+                    self._move_towards(twx, twy, dt, arrival_dist=12, all_entities=all_entities, player=player, building_manager=building_manager, furniture_manager=furniture_manager, exclusive_target=True)
                     return
             else:
                 church_tile = ChurchSystem.find_free_church_tile(self, church_p, building_manager)
@@ -1630,7 +1686,11 @@ class Villager:
                         if dist_to_church <= 48.0 or arrived:
                             ChurchSystem.process_church_tax_payment(self, priest_worker, church_p, furniture_manager)
                     return
-                # If Church is full: immediately proceed to normal activity without waiting outside or blocking doors
+            # Prayer is a shared schedule overlay. If no church space exists,
+            # resume the job's underlying schedule (often sleep at this hour).
+            if schedule_manager:
+                sched_activity = schedule_manager.get_scheduled_activity(self.job, cur_hour)
+            ChurchSystem.release_church_tile(self)
         else:
             ChurchSystem.release_church_tile(self)
             if self == priest_worker:
@@ -1735,11 +1795,7 @@ class Villager:
             # A. Jika sedang membawa perabotan menuju target pemasangan baru
             if getattr(self, "carrying_furniture", None):
                 f = self.carrying_furniture
-                if not f.designated_target:
-                    f.carrier_id = None
-                    self.carrying_furniture = None
-                    self.task = "IDLE"
-                else:
+                if f.designated_target:
                     tgx, tgy, target_permit_id = f.designated_target
                     dest_x = (tgx + 0.5) * TILE_SIZE
                     dest_y = (tgy + 0.5) * TILE_SIZE
@@ -1752,9 +1808,29 @@ class Villager:
                         self.carrying_furniture = None
                         self.task = "IDLE"
                         self.say(f"Reinstalled our {f.name} here, Lord!", duration=3.0)
+                elif (f.can_be_dropped and f.family_id is not None
+                      and str(f.family_id) == str(self.family_id)
+                      and (f.is_dropped or f.status == "UNINSTALLED")):
+                    dest_x, dest_y = self._get_home_storage_dest(permit_manager, building_manager, furniture_manager, all_entities=all_entities)
+                    self.task = "HAULING_DROPPED_FURNITURE"
+                    self.active_tool = None
+                    arrived = self._move_towards(dest_x, dest_y, dt, arrival_dist=CHEST_INTERACTION_RADIUS,
+                                                 all_entities=all_entities, player=player,
+                                                 building_manager=building_manager, furniture_manager=furniture_manager,
+                                                 exclusive_target=False)
+                    if arrived:
+                        f.carrier_id = None
+                        stored, message = furniture_manager.store_uninstalled_furniture(f.id)
+                        self.carrying_furniture = None
+                        self.task = "IDLE"
+                        self.say(message if stored else f"Could not store {f.name}; leaving it here.", duration=2.5)
+                else:
+                    f.carrier_id = None
+                    self.carrying_furniture = None
+                    self.task = "IDLE"
                 return
 
-            # B. Jika belum membawa, cari perabotan milik keluarga yang telah didesain untuk dipindahkan
+            # B. Retrieve player-designated furniture or dropped furniture owned by this household.
             fam_str = str(self.family_id)
             target_f = None
             for f in furniture_manager.furnitures:
@@ -1762,13 +1838,22 @@ class Villager:
                     if str(getattr(f, "family_id", "")) == fam_str:
                         target_f = f
                         break
-                    elif f.family_id is None and target_f is None:
-                        target_f = f
+            if target_f is None:
+                owned_dropped = [f for f in furniture_manager.furnitures
+                                 if f.can_be_dropped and (f.is_dropped or f.status == "UNINSTALLED")
+                                 and str(getattr(f, "family_id", "")) == fam_str
+                                 and f.carrier_id in (None, self.id) and f.stored_in_id is None]
+                if owned_dropped:
+                    owned_dropped.sort(key=lambda f: math.hypot(f.get_world_pos(TILE_SIZE)[0] - self.x,
+                                                                 f.get_world_pos(TILE_SIZE)[1] - self.y))
+                    target_f = owned_dropped[0]
 
             if target_f:
                 target_f.carrier_id = self.id
-                fx, fy = target_f.get_world_pos(TILE_SIZE)
-                self.task = "FETCHING_FURNITURE"
+                fx, fy = target_f.get_approach_point(self.x, self.y, worker_id=self.id,
+                                                     all_entities=all_entities, tile_size=TILE_SIZE,
+                                                     bm=building_manager)
+                self.task = "FETCHING_FURNITURE" if target_f.designated_target else "FETCHING_DROPPED_FURNITURE"
                 self.active_tool = None
                 if self.current_work_tile:
                     assigned_farm = next((p for p in permit_manager.permits if p.permit_type == "farm" and hasattr(p, "assigned_workers") and self.id in p.assigned_workers), None) if permit_manager else None
@@ -2078,22 +2163,29 @@ class Villager:
                             return
                 else:
                     requested_items = dict(missing_tools)
-                    market, total_cost = AIMarketPurchasingSystem.find_market_for_items(
+                    market, purchase_items, total_cost = AIMarketPurchasingSystem.find_market_for_items(
                         self, requested_items, building_manager, furniture_manager, villager_manager
                     )
                     if market:
                         self.job_tool_purchase_market = market
-                        self.job_tool_purchase_items = requested_items
+                        self.job_tool_purchase_items = purchase_items
                         self.task = "BUYING_JOB_TOOLS_RETRIEVE_COINS"
                         return
                     self.task = "MISSING_TOOL"
                     if not getattr(self, "speech_text", None):
-                        self.say("My job tools are missing, and no market can supply the complete set.", duration=2.5)
+                        self.say("My job tools are missing, and no market can supply an affordable required item.", duration=2.5)
                     return
 
         # -------------------------------------------------------------
         # Rutinitas 2: Jam Kerja (WORK / ANY)
         # -------------------------------------------------------------
+        if CarpenterSystem.update_worker(
+            self, dt, sched_activity, building_manager, furniture_manager,
+            villager_manager, all_entities, player, day_cycle,
+            stockpile_manager=stockpile_manager, permit_manager=permit_manager,
+        ):
+            return
+
         if sched_activity in ("WORK", "ANY"):
             # Jika sedang membawa hasil panen di tangan, antar langsung ke Household Storage keluarga
             if self.carrying_crop > 0:
@@ -2128,6 +2220,12 @@ class Villager:
             # Cek apakah ada sisa hasil panen keluarga di ladang yang belum diangkut
             if stockpile_manager:
                 loose_crops = stockpile_manager.get_villager_loose_stacks(self.family_id, crops_only=True)
+                farm = permit_manager.get_farm_permit_for_villager(self) if permit_manager else None
+                if farm:
+                    loose_crops = [stack for stack in loose_crops
+                                   if farm.contains_tile(stack.grid_x, stack.grid_y)]
+                else:
+                    loose_crops = []
                 if loose_crops:
                     self.task = "HAULING_HOME"
                     self.active_tool = None
@@ -2559,6 +2657,20 @@ class Villager:
                         if corpse_entity:
                             corpse_entity.is_buried = True
                             corpse_entity.is_picked_up = False
+                            deceased_family = villager_manager.get_family_by_id(corpse_entity.family_id)
+                            if deceased_family:
+                                deceased_family.members = [
+                                    member for member in deceased_family.members
+                                    if str(member.id) != str(corpse_entity.id)
+                                ]
+                            if permit_manager:
+                                for permit in getattr(permit_manager, "permits", []):
+                                    workers = getattr(permit, "assigned_workers", None)
+                                    if isinstance(workers, list):
+                                        permit.assigned_workers = [
+                                            worker_id for worker_id in workers
+                                            if str(worker_id) != str(corpse_entity.id)
+                                        ]
                         self.say("Burial complete. May they rest in peace.", duration=3.0)
                         self.carrying_corpse_id = None
                         self.carrying_corpse_name = None
@@ -2584,12 +2696,10 @@ class Villager:
 
                 if (ready_overflow or unburied_corpses) and self.task not in restock_tasks:
                     target_corpse = ready_overflow or unburied_corpses[0]
-                    w_count, s_count, miss_w, miss_s = CemeterySystem.check_gravedigger_stock(self, furniture_manager)
-                    if miss_w > 0 or miss_s > 0:
-                        mat_to_buy = "Wood" if miss_w > 0 else "Stone"
-                        qty_to_buy = miss_w if miss_w > 0 else miss_s
-                        mkt, p_cop, can_buy = AIMarketPurchasingSystem.find_nearest_market_for_material(
-                            self, mat_to_buy, qty_to_buy, building_manager, furniture_manager, villager_manager
+                    _, missing_materials = CemeterySystem.get_missing_gravedigger_materials(self, furniture_manager)
+                    if missing_materials:
+                        mkt, mat_to_buy, can_buy, _ = AIMarketPurchasingSystem.find_market_for_material_needs(
+                            self, missing_materials, building_manager, furniture_manager, villager_manager
                         )
                         if mkt and can_buy > 0:
                             self.target_restock_market = mkt
@@ -2598,7 +2708,7 @@ class Villager:
                             self.task = "GRAVEDIGGER_RESTOCK_RETRIEVE_COINS"
                             return
                         else:
-                            self.say("Need 1 Wood and 1 Stone to prepare grave.", duration=2.5)
+                            self.say("I need burial materials, but no market has an affordable item in stock.", duration=2.5)
                             return
 
                     # Arrange payment first. The family representative visits the
@@ -2631,12 +2741,10 @@ class Villager:
 
                 # E. Restocking material rutin (Target 5 Wood, 5 Stone)
                 if self.task == "IDLE":
-                    w_count, s_count, miss_w, miss_s = CemeterySystem.check_gravedigger_stock(self, furniture_manager)
-                    if miss_w > 0 or miss_s > 0:
-                        mat_to_buy = "Wood" if miss_w > 0 else "Stone"
-                        qty_to_buy = miss_w if miss_w > 0 else miss_s
-                        mkt, p_cop, can_buy = AIMarketPurchasingSystem.find_nearest_market_for_material(
-                            self, mat_to_buy, qty_to_buy, building_manager, furniture_manager, villager_manager
+                    _, missing_materials = CemeterySystem.get_missing_gravedigger_materials(self, furniture_manager)
+                    if missing_materials:
+                        mkt, mat_to_buy, can_buy, _ = AIMarketPurchasingSystem.find_market_for_material_needs(
+                            self, missing_materials, building_manager, furniture_manager, villager_manager
                         )
                         if mkt and can_buy > 0:
                             self.target_restock_market = mkt
@@ -2699,7 +2807,7 @@ class Villager:
         # -------------------------------------------------------------
         # Rutinitas 3: Waktu Santai / Istirahat (LEISURE / Chores Finished)
         # -------------------------------------------------------------
-        self.task = "IDLE"
+        self.task = "LEISURE" if sched_activity in ("LEISURE", "ANY") else "IDLE"
         self.active_tool = None
 
         if self._get_unneeded_inventory() and furniture_manager and furniture_manager.get_storage_for_family(self.family_id):
@@ -2755,6 +2863,18 @@ class Villager:
                 return
 
         self._idle_behavior(dt, player=player, all_entities=all_entities, building_manager=building_manager, permit_manager=permit_manager, furniture_manager=furniture_manager)
+
+    def _resume_leisure_after_need_failure(self, dt, sched_activity, player, all_entities,
+                                          building_manager, permit_manager, furniture_manager):
+        """Keep leisure/anything schedules moving after a need has no available source."""
+        self.task = "LEISURE" if sched_activity in ("LEISURE", "ANY") else "IDLE"
+        self.active_tool = None
+        if sched_activity in ("LEISURE", "ANY"):
+            self._idle_behavior(
+                dt, player=player, all_entities=all_entities,
+                building_manager=building_manager, permit_manager=permit_manager,
+                furniture_manager=furniture_manager,
+            )
 
     def _idle_behavior(self, dt, player=None, all_entities=None, building_manager=None, permit_manager=None, furniture_manager=None):
         self.idle_wander_timer -= dt
@@ -2909,7 +3029,7 @@ class Villager:
         wp_dy = target_wp[1] - self.y
         dist_to_wp = math.hypot(wp_dx, wp_dy)
         is_last_wp = (self.path_index == len(self.current_path) - 1)
-        tol = arrival_dist if is_last_wp else 8.0
+        tol = arrival_dist if is_last_wp else PATH_WAYPOINT_TOLERANCE
 
         if dist_to_wp <= tol:
             if is_last_wp:
@@ -3197,6 +3317,36 @@ class Villager:
             else:
                 pygame.draw.circle(surface, (180, 120, 70), (hx, hy), max(2, int(3 * camera.zoom)))
                 pygame.draw.arc(surface, (226, 232, 240), (hx - arc_r // 2, hy - arc_r, arc_r * 2, arc_r * 2), self.facing_angle, self.facing_angle + math.pi * 0.9, max(2, int(2 * camera.zoom)))
+
+        elif active_t in ("Saw", "Adze"):
+            is_carpenter_working = self.task == "CARPENTER_CONSTRUCTING" and not self.is_moving
+            phase = time.time() * CARPENTER_TOOL_SWING_SPEED
+            swing = math.sin(phase) * CARPENTER_TOOL_SWING_ANGLE if is_carpenter_working else 0.0
+            tool_angle = self.facing_angle - 0.55 + swing
+            tool_len = max(9, int(15 * camera.zoom))
+            tool_end = (hx + int(math.cos(tool_angle) * tool_len),
+                        hy + int(math.sin(tool_angle) * tool_len))
+            pygame.draw.line(surface, (125, 82, 44), (hx, hy), tool_end,
+                             max(2, int(3 * camera.zoom)))
+            if active_t == "Saw":
+                blade_end = (tool_end[0] + int(math.cos(tool_angle + 0.4) * tool_len * 0.6),
+                             tool_end[1] + int(math.sin(tool_angle + 0.4) * tool_len * 0.6))
+                pygame.draw.line(surface, (203, 213, 225), tool_end, blade_end,
+                                 max(2, int(3 * camera.zoom)))
+                pygame.draw.line(surface, (71, 85, 105), tool_end, blade_end,
+                                 max(1, int(camera.zoom)))
+            else:
+                blade_end = (tool_end[0] + int(math.cos(tool_angle + math.pi / 2) * tool_len * 0.35),
+                             tool_end[1] + int(math.sin(tool_angle + math.pi / 2) * tool_len * 0.35))
+                pygame.draw.line(surface, (203, 213, 225), tool_end, blade_end,
+                                 max(3, int(5 * camera.zoom)))
+                pygame.draw.line(surface, (100, 116, 139), tool_end, blade_end,
+                                 max(1, int(camera.zoom)))
+            if is_carpenter_working and math.sin(phase) < -0.65:
+                dust_x = tool_end[0] + int(math.cos(self.facing_angle) * camera.zoom * 3)
+                dust_y = tool_end[1] + int(math.sin(self.facing_angle) * camera.zoom * 3)
+                pygame.draw.circle(surface, (217, 149, 44), (dust_x, dust_y),
+                                   max(1, int(2 * camera.zoom)))
 
         elif active_t == "Hammer":
             is_building = (self.task in ("BUILDING", "REPAIRING") and not getattr(self, "is_moving", False))

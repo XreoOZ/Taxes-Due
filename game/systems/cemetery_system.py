@@ -289,9 +289,25 @@ class CemeterySystem:
 
         wood_amt = chest_inventory.get("Wood", 0) + personal_inventory.get("Wood", 0)
         stone_amt = chest_inventory.get("Stone", 0) + personal_inventory.get("Stone", 0)
-        missing_w = max(0, GRAVEDIGGER_TARGET_WOOD - wood_amt)
-        missing_s = max(0, GRAVEDIGGER_TARGET_STONE - stone_amt)
+        from game.config import DEDICATED_JOBS
+        stock_targets = DEDICATED_JOBS.get("Gravedigger", {}).get("material_stock_target", {})
+        current = {"Wood": wood_amt, "Stone": stone_amt}
+        missing_w = max(0, int(stock_targets.get("Wood", 0)) - current["Wood"])
+        missing_s = max(0, int(stock_targets.get("Stone", 0)) - current["Stone"])
         return wood_amt, stone_amt, missing_w, missing_s
+
+    @classmethod
+    def get_missing_gravedigger_materials(cls, gravedigger, furniture_manager):
+        """Return configured material deficits for this household and worker."""
+        from game.config import DEDICATED_JOBS
+        family_id = getattr(gravedigger, "family_id", None)
+        chest = furniture_manager.get_storage_for_family(family_id) if furniture_manager and family_id else None
+        chest_inventory = getattr(chest, "inventory", {}) if chest else {}
+        personal_inventory = getattr(gravedigger, "inventory", {})
+        targets = DEDICATED_JOBS.get("Gravedigger", {}).get("material_stock_target", {})
+        stock = {item: chest_inventory.get(item, 0) + personal_inventory.get(item, 0) for item in targets}
+        missing = {item: max(0, int(target) - stock[item]) for item, target in targets.items() if stock[item] < target}
+        return stock, missing
 
     @classmethod
     def consume_grave_materials(cls, gravedigger, furniture_manager):
@@ -303,19 +319,17 @@ class CemeterySystem:
         chest = furniture_manager.get_storage_for_family(fam_id) if (furniture_manager and fam_id) else None
         chest_inventory = getattr(chest, "inventory", {}) if chest else {}
         personal_inventory = getattr(gravedigger, "inventory", {})
-        if (chest_inventory.get("Wood", 0) + personal_inventory.get("Wood", 0) < GRAVE_COST_WOOD
-                or chest_inventory.get("Stone", 0) + personal_inventory.get("Stone", 0) < GRAVE_COST_STONE):
-            return False
-
-        for inventory, item, amount in (
-            (chest_inventory, "Wood", GRAVE_COST_WOOD),
-            (chest_inventory, "Stone", GRAVE_COST_STONE),
-        ):
-            taken = min(inventory.get(item, 0), amount)
-            inventory[item] = inventory.get(item, 0) - taken
+        from game.config import DEDICATED_JOBS
+        materials = DEDICATED_JOBS.get("Gravedigger", {}).get("materials_per_grave", {})
+        for item, amount in materials.items():
+            if chest_inventory.get(item, 0) + personal_inventory.get(item, 0) < amount:
+                return False
+        for item, amount in materials.items():
+            taken = min(chest_inventory.get(item, 0), amount)
+            chest_inventory[item] = chest_inventory.get(item, 0) - taken
             personal_inventory[item] = personal_inventory.get(item, 0) - (amount - taken)
-            if inventory.get(item, 0) <= 0:
-                inventory.pop(item, None)
+            if chest_inventory.get(item, 0) <= 0:
+                chest_inventory.pop(item, None)
             if personal_inventory.get(item, 0) <= 0:
                 personal_inventory.pop(item, None)
         return True
@@ -451,6 +465,9 @@ class CemeterySystem:
         for denom, amount in from_copper(fee).items():
             if amount:
                 payer.inventory[denom] = payer.inventory.get(denom, 0) + amount
+        from game.systems.currency import compact_currency_wallet
+        compact_currency_wallet(chest.inventory)
+        compact_currency_wallet(payer.inventory)
         commission["fee_paid"] = fee
         commission["status"] = "PAYMENT_TRAVELING"
         return fee
@@ -477,6 +494,8 @@ class CemeterySystem:
         for denom, amount in from_copper(fee).items():
             if amount:
                 gravedigger.inventory[denom] = gravedigger.inventory.get(denom, 0) + amount
+        from game.systems.currency import compact_currency_wallet
+        compact_currency_wallet(gravedigger.inventory)
         commission["fee_paid"] = fee
         commission["status"] = "PAID"
         cls._mark_wealth_dirty()
@@ -539,6 +558,8 @@ class CemeterySystem:
                     for denom, amount in from_copper(commission.get("fee_paid", 0)).items():
                         if amount:
                             chest.store_item(denom, amount)
+                    from game.systems.currency import compact_currency_wallet
+                    compact_currency_wallet(chest.inventory)
                 commission["status"] = "PAID"
                 villager.burial_payment_target_corpse_id = None
                 villager.task = "IDLE"
@@ -557,6 +578,9 @@ class CemeterySystem:
                         if villager.inventory[denom] <= 0:
                             villager.inventory.pop(denom, None)
                         gravedigger.inventory[denom] = gravedigger.inventory.get(denom, 0) + amount
+                from game.systems.currency import compact_currency_wallet
+                compact_currency_wallet(villager.inventory)
+                compact_currency_wallet(gravedigger.inventory)
                 commission["status"] = "PAID"
                 cls._mark_wealth_dirty()
                 villager.say(f"Paid the burial fee for {commission['corpse_name']}.", duration=2.5)

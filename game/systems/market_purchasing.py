@@ -4,7 +4,7 @@ AI Food Purchasing & Market Transaction System (Agent 3)
 Coordinates the complete, realistic physical market food purchasing workflow for villagers:
 1. Household food stock check (Zero remote purchases when food is available at home).
 2. Family coordination (Prevents duplicate simultaneous purchases by household members).
-3. Nearest eligible market selection (Valid stock, configured price, affordable).
+3. Nearest eligible market selection (Valid stock, configured price, affordable quantities).
 4. Physical coin retrieval from household storage (Real money transfer to villager pocket).
 5. Physical navigation to Market interaction position (Zero teleportation or remote purchasing).
 6. Atomic market transaction at Market location (Exact payment, currency conservation, change calculation).
@@ -14,17 +14,27 @@ Coordinates the complete, realistic physical market food purchasing workflow for
 
 import math
 from game.config import TILE_SIZE, AI_NEED_MAX, AI_NEED_FOOD_RESTORE
-from game.data.config import is_food_item, CHEST_INTERACTION_RADIUS, EXCHANGE_RATES
+from game.data.config import is_food_item, CHEST_INTERACTION_RADIUS, VILLAGER_INVENTORY_CAPACITY
 from game.systems.currency import (
     to_copper,
     normalize_wallet,
     calculate_payment_and_change,
+    transfer_currency_value,
     execute_currency_transfer,
     CURRENCY_DENOMINATIONS,
     canonical_denomination,
 )
 from game.systems.market_service import MarketService
 from game.world.navigation import find_nearest_target
+
+
+def _inventory_load(inventory):
+    return sum(max(0, int(amount)) for item, amount in inventory.items()
+               if not canonical_denomination(item))
+
+
+def _inventory_room(inventory):
+    return max(0, int(VILLAGER_INVENTORY_CAPACITY) - _inventory_load(inventory))
 
 
 class AIFoodPurchasingSystem:
@@ -196,15 +206,15 @@ class AIFoodPurchasingSystem:
                         dist = float("inf")
                     if not math.isfinite(dist):
                         continue
-                    candidates.append((dist, m, food_item, unit_price))
+                    candidates.append((unit_price, dist, m, food_item))
 
         if not candidates:
             return None, None, 0
 
-        # Sort by distance (nearest eligible market first)
-        candidates.sort(key=lambda c: c[0])
+        # Prefer the cheapest available food; use travel distance to break equal-price ties.
+        candidates.sort(key=lambda c: (c[0], c[1]))
         best_candidate = candidates[0]
-        return best_candidate[1], best_candidate[2], best_candidate[3]
+        return best_candidate[2], best_candidate[3], best_candidate[0]
 
     @classmethod
     def retrieve_coins_from_storage(cls, villager, price_in_copper, furniture_manager=None):
@@ -225,21 +235,11 @@ class AIFoodPurchasingSystem:
             return False, "Household has no storage chest to retrieve coins from."
 
         deficit = price_in_copper - cur_pocket_val
-        ok, payment_dict, change_dict, msg = calculate_payment_and_change(chest.inventory, deficit)
-        if not ok or not payment_dict:
-            return False, f"Chest has insufficient coins to cover purchase: {msg}"
-
-        # Deduct coins from chest and transfer into villager inventory
         if not hasattr(villager, "inventory") or not isinstance(villager.inventory, dict):
             villager.inventory = {}
-
-        for denom, count in payment_dict.items():
-            if count > 0:
-                chest.inventory[denom] = chest.inventory.get(denom, 0) - count
-                if chest.inventory[denom] <= 0:
-                    del chest.inventory[denom]
-                villager.inventory[denom] = villager.inventory.get(denom, 0) + count
-
+        ok, message = transfer_currency_value(chest.inventory, villager.inventory, deficit)
+        if not ok:
+            return False, f"Chest has insufficient coins to cover purchase: {message}"
         return True, "Successfully retrieved coins from household storage."
 
     @classmethod
@@ -258,6 +258,8 @@ class AIFoodPurchasingSystem:
         stock = market.inventory.get(food_item, 0)
         if stock < quantity:
             return False, f"Market ran out of {food_item} while traveling."
+        if _inventory_room(getattr(villager, "inventory", {})) < quantity:
+            return False, "Villager inventory is full."
 
         unit_price = MarketService.get_item_price(food_item, market)
         if unit_price <= 0:
@@ -306,11 +308,13 @@ class AIFoodPurchasingSystem:
 
         # 1. Return any coins (change or leftover funds) back to household storage chest
         if chest and hasattr(chest, "inventory") and isinstance(chest.inventory, dict):
+            from game.systems.currency import compact_currency_wallet
             for denom in CURRENCY_DENOMINATIONS:
                 amt = villager.inventory.get(denom, 0)
                 if amt > 0:
                     chest.inventory[denom] = chest.inventory.get(denom, 0) + amt
                     del villager.inventory[denom]
+            compact_currency_wallet(chest.inventory)
 
         # 2. Consume 1 food item from villager's inventory
         food_it = next((it for it, c in getattr(villager, "inventory", {}).items() if is_food_item(it) and c > 0), None)
@@ -346,11 +350,13 @@ class AIFoodPurchasingSystem:
         """
         chest = furniture_manager.get_storage_for_family(villager.family_id) if furniture_manager else None
         if chest and hasattr(chest, "inventory") and isinstance(chest.inventory, dict):
+            from game.systems.currency import compact_currency_wallet
             for denom in CURRENCY_DENOMINATIONS:
                 amt = villager.inventory.get(denom, 0)
                 if amt > 0:
                     chest.inventory[denom] = chest.inventory.get(denom, 0) + amt
                     del villager.inventory[denom]
+            compact_currency_wallet(chest.inventory)
 
         villager.purchase_target_market_id = None
         villager.purchase_food_item = None
@@ -385,69 +391,31 @@ class AIMarketPurchasingSystem:
         if to_copper(source_wallet) < deficit:
             return False, "Household does not have enough coins for the purchase."
 
-        remaining = deficit
-        withdrawal = {}
-        denominations = sorted(CURRENCY_DENOMINATIONS, key=lambda denom: EXCHANGE_RATES[denom], reverse=True)
-        for denomination in denominations:
-            coin_value = EXCHANGE_RATES[denomination]
-            count = min(source_wallet[denomination], (remaining + coin_value - 1) // coin_value)
-            if count:
-                withdrawal[denomination] = count
-                remaining -= count * coin_value
-            if remaining <= 0:
-                break
-
-        if remaining > 0:
-            return False, "Household funds could not cover the purchase."
-
-        for denomination, count in withdrawal.items():
-            remaining_count = count
-            for source_key in list(source):
-                if canonical_denomination(source_key) != denomination:
-                    continue
-                source_count = max(0, int(source[source_key]))
-                moved = min(remaining_count, source_count)
-                source[source_key] -= moved
-                remaining_count -= moved
-                if source[source_key] <= 0:
-                    del source[source_key]
-                if remaining_count <= 0:
-                    break
-            if remaining_count > 0:
-                return False, "Household currency changed before withdrawal."
-            pocket[denomination] = pocket.get(denomination, 0) + count
-
-        return True, "Retrieved household coins."
+        return transfer_currency_value(source, pocket, deficit)
 
     @classmethod
     def find_market_for_items(cls, villager, requested_items, building_manager, furniture_manager=None, villager_manager=None):
-        """Find the nearest market that can sell every requested item in one purchase."""
+        """Find the nearest market that can sell at least one affordable required item."""
         if not building_manager or not requested_items:
-            return None, 0
+            return None, {}, 0
 
         wallet, source = MarketService.get_household_funds_and_source(villager, furniture_manager, villager_manager)
         pocket_funds = to_copper(normalize_wallet(getattr(villager, "inventory", {})))
         available_funds = to_copper(wallet) + (0 if source is getattr(villager, "inventory", None) else pocket_funds)
         best_market = None
+        best_items = {}
         best_cost = 0
-        best_distance = float("inf")
+        best_rank = None
 
         for market in getattr(building_manager, "buildings", []):
             if getattr(market, "building_type", "") != "market" or getattr(market, "is_under_construction", False):
                 continue
 
-            total_cost = 0
-            can_supply_all = True
-            for item_name, quantity in requested_items.items():
-                if not MarketService.is_item_for_sale(market, item_name):
-                    can_supply_all = False
-                    break
-                if getattr(market, "inventory", {}).get(item_name, 0) < quantity:
-                    can_supply_all = False
-                    break
-                total_cost += MarketService.get_item_price(item_name, market) * quantity
-
-            if not can_supply_all or total_cost <= 0 or available_funds < total_cost:
+            purchase_items, total_cost = cls.get_affordable_item_quantities(
+                requested_items, market, available_funds,
+                inventory_room=_inventory_room(getattr(villager, "inventory", {})),
+            )
+            if not purchase_items or total_cost <= 0:
                 continue
 
             _, _, distance = find_nearest_target(
@@ -461,18 +429,56 @@ class AIMarketPurchasingSystem:
             )
             if not math.isfinite(distance):
                 continue
-            if distance < best_distance:
+            # Choose the lowest complete affordable cart first; use path distance only to break price ties.
+            unfilled = sum(max(0, int(qty) - purchase_items.get(name, 0)) for name, qty in requested_items.items())
+            rank = (unfilled, total_cost, distance)
+            if best_rank is None or rank < best_rank:
                 best_market = market
+                best_items = purchase_items
                 best_cost = total_cost
-                best_distance = distance
+                best_rank = rank
 
-        return best_market, best_cost
+        return best_market, best_items, best_cost
+
+    @classmethod
+    def get_affordable_item_quantities(cls, requested_items, market, available_funds, inventory_room=None):
+        """Build a partial purchase cart capped by each requirement, market stock, and funds."""
+        if not market or not isinstance(requested_items, dict):
+            return {}, 0
+
+        remaining_funds = max(0, int(available_funds))
+        remaining_room = max(0, int(inventory_room)) if inventory_room is not None else int(VILLAGER_INVENTORY_CAPACITY)
+        purchase_items = {}
+        total_cost = 0
+        inventory = getattr(market, "inventory", {})
+        for item_name, requested_quantity in requested_items.items():
+            if not MarketService.is_item_for_sale(market, item_name):
+                continue
+            unit_price = MarketService.get_item_price(item_name, market)
+            market_stock = max(0, int(inventory.get(item_name, 0)))
+            required = max(0, int(requested_quantity))
+            if unit_price <= 0 or market_stock <= 0 or required <= 0:
+                continue
+
+            quantity = min(required, market_stock, remaining_funds // unit_price, remaining_room)
+            if quantity <= 0:
+                continue
+            purchase_items[item_name] = quantity
+            remaining_room -= quantity
+            item_cost = quantity * unit_price
+            total_cost += item_cost
+            remaining_funds -= item_cost
+
+        return purchase_items, total_cost
 
     @classmethod
     def execute_items_transaction(cls, villager, market, requested_items):
-        """Buy a complete requested item set atomically, without partial purchases."""
+        """Buy the requested affordable item quantities atomically."""
         if not market or not requested_items:
             return False, "Market or requested items are unavailable."
+
+        if sum(max(0, int(qty)) for qty in requested_items.values()) > _inventory_room(villager.inventory):
+            return False, "Villager inventory is full."
 
         total_cost = 0
         for item_name, quantity in requested_items.items():
@@ -537,8 +543,10 @@ class AIMarketPurchasingSystem:
         if not building_manager:
             return None, 0, 0
         from game.systems.currency import to_copper
-        wallet, _ = MarketService.get_household_funds_and_source(villager, furniture_manager, villager_manager)
-        total_funds = to_copper(wallet)
+        wallet, source = MarketService.get_household_funds_and_source(villager, furniture_manager, villager_manager)
+        pocket = getattr(villager, "inventory", {})
+        pocket_funds = to_copper(normalize_wallet(pocket))
+        total_funds = to_copper(wallet) + (0 if source is pocket else pocket_funds)
         if total_funds <= 0:
             return None, 0, 0
 
@@ -552,7 +560,7 @@ class AIMarketPurchasingSystem:
         best_mkt = None
         best_price = 0
         best_qty = 0
-        min_dist = float('inf')
+        best_rank = None
 
         for m in completed_markets:
             inv = getattr(m, "inventory", {})
@@ -561,15 +569,14 @@ class AIMarketPurchasingSystem:
             stock = inv.get(material_name, 0)
             if stock <= 0:
                 continue
-            prices = getattr(m, "prices", {})
-            from game.data.config import DEFAULT_ITEM_PRICES
-            unit_price = prices.get(material_name, DEFAULT_ITEM_PRICES.get(material_name, 2))
+            unit_price = MarketService.get_item_price(material_name, m)
             if unit_price <= 0:
                 continue
             if total_funds < unit_price:
                 continue
 
-            affordable_qty = min(stock, needed_amount, total_funds // unit_price)
+            affordable_qty = min(stock, needed_amount, total_funds // unit_price,
+                                 _inventory_room(getattr(villager, "inventory", {})))
             if affordable_qty <= 0:
                 continue
 
@@ -584,13 +591,27 @@ class AIMarketPurchasingSystem:
             )
             if not math.isfinite(d):
                 continue
-            if d < min_dist:
-                min_dist = d
+            rank = (max(0, int(needed_amount) - affordable_qty), affordable_qty * unit_price, d)
+            if best_rank is None or rank < best_rank:
+                best_rank = rank
                 best_mkt = m
                 best_price = unit_price
                 best_qty = affordable_qty
 
         return best_mkt, best_price, best_qty
+
+    @classmethod
+    def find_market_for_material_needs(cls, villager, material_needs, building_manager,
+                                      furniture_manager=None, villager_manager=None):
+        """Select the first configured material deficit that can be purchased now."""
+        for material, amount in material_needs.items():
+            market, unit_price, quantity = cls.find_nearest_market_for_material(
+                villager, material, amount, building_manager,
+                furniture_manager, villager_manager,
+            )
+            if market and quantity > 0:
+                return market, material, quantity, unit_price
+        return None, None, 0, 0
 
     @classmethod
     def execute_material_transaction(cls, villager, market, material_name, quantity=1):
@@ -605,10 +626,10 @@ class AIMarketPurchasingSystem:
         stock = market.inventory.get(material_name, 0)
         if stock < quantity:
             return False, f"Insufficient stock: requested {quantity}, available {stock}."
+        if _inventory_room(getattr(villager, "inventory", {})) < quantity:
+            return False, "Villager inventory is full."
 
-        prices = getattr(market, "prices", {})
-        from game.data.config import DEFAULT_ITEM_PRICES
-        unit_price = prices.get(material_name, DEFAULT_ITEM_PRICES.get(material_name, 2))
+        unit_price = MarketService.get_item_price(material_name, market)
         total_cost = unit_price * quantity
 
         from game.systems.currency import calculate_payment_and_change, execute_currency_transfer
@@ -630,20 +651,23 @@ class AIMarketPurchasingSystem:
     @classmethod
     def deposit_materials_and_change_to_chest(cls, villager, furniture_manager=None):
         """
-        Deposits purchased materials (Wood, Stone) and any remaining coins into household chest.
+        Deposits configured job materials and any remaining coins into household chest.
         """
         chest = furniture_manager.get_storage_for_family(villager.family_id) if furniture_manager else None
         if chest and hasattr(chest, "inventory") and isinstance(chest.inventory, dict):
-            from game.systems.currency import CURRENCY_DENOMINATIONS
+            from game.systems.currency import CURRENCY_DENOMINATIONS, compact_currency_wallet
             # Deposit coins
             for denom in CURRENCY_DENOMINATIONS:
                 amt = villager.inventory.get(denom, 0)
                 if amt > 0:
                     chest.inventory[denom] = chest.inventory.get(denom, 0) + amt
                     del villager.inventory[denom]
+            compact_currency_wallet(chest.inventory)
 
-            # Deposit materials
-            for mat in ("Wood", "Stone"):
+            # Job material requirements define which purchased resources return to storage.
+            from game.config import DEDICATED_JOBS
+            material_targets = DEDICATED_JOBS.get(getattr(villager, "job", ""), {}).get("material_stock_target", {})
+            for mat in material_targets:
                 amt = villager.inventory.get(mat, 0)
                 if amt > 0:
                     chest.store_item(mat, amt)
