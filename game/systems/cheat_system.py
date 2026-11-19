@@ -5,38 +5,20 @@ with full physical world representation and overflow drops near storage when ful
 Zero hardcoding, config-driven.
 """
 
-from game.data.config import ITEM_CATEGORIES, register_item_category
+from game.data.config import MARKET_CURRENCY_DENOMINATIONS, MARKET_TRADEABLE_ITEMS
 from game.world.stockpile import MAX_TILE_CAPACITY, is_food_item, is_water_item
 
 CORE_RESOURCE_KEYS = ["Wood", "Food", "Stone", "Water", "Copper", "Silver", "Gold"]
 
 def get_registered_item_types():
     """
-    Dynamically retrieves unique canonical item types from existing definitions.
-    Prevents duplicates, alias variations, or redundant items.
+    Return canonical items with active market/storage behavior for the cheat UI.
+    Using the trade catalog keeps WIP and unimplemented item definitions out.
     """
-    preferred = [
-        "Wood", "Stone", "Water", "Potato", "Bread", "Carrot", "Cabbage",
-        "Wheat", "Fish", "Meat", "Apple", "Hoe", "Sickle", "Watering_Can",
-        "Hammer", "Tongs", "Saw", "Adze", "Rolling_Pin", "Peel", "Fishing_Rod",
-        "Timber", "Carved Stone", "Linen Cloth", "Copper Coin", "Silver Coin", "Gold Coin"
-    ]
-    seen_normalized = set()
-    result = []
-
-    for it in preferred:
-        norm = it.strip().lower().replace("_", " ")
-        if norm not in seen_normalized:
-            seen_normalized.add(norm)
-            result.append(it)
-
-    for it in ITEM_CATEGORIES.keys():
-        norm = str(it).strip().lower().replace("_", " ")
-        if norm not in seen_normalized:
-            seen_normalized.add(norm)
-            result.append(str(it).strip().title())
-
-    return result
+    return list(dict.fromkeys((
+        *MARKET_TRADEABLE_ITEMS.keys(),
+        *MARKET_CURRENCY_DENOMINATIONS,
+    )))
 
 def clean_resources_dictionary(resources):
     """

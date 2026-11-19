@@ -241,7 +241,9 @@ class AddItemModal:
 
         # 5. Category Filter Row
         cat_y = dest_y + 40
-        categories = ["ALL", "FOOD", "RESOURCE", "TOOL", "CURRENCY"]
+        categories = ["ALL"] + list(dict.fromkeys(
+            self._get_item_category(item).upper() for item in self.items
+        ))
         cat_x = mx + 20
         self.category_btn_rects.clear()
 
