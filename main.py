@@ -26,7 +26,6 @@ from game.config import (
     FPS,
     TILE_SIZE,
     DEFAULT_RESOURCES,
-    DEFAULT_STARTER_TOOLS,
     BUILDING_TYPES,
     PERMIT_TYPES,
     FURNITURE_TYPES,
@@ -168,7 +167,6 @@ def main():
         building_manager = BuildingManager()
         permit_manager = PermitManager()
         stockpile_manager = StockpileManager()
-        stockpile_manager.initialize_starter_stockpile(DEFAULT_RESOURCES, permit_manager, DEFAULT_STARTER_TOOLS)
         servant_manager = ServantManager()
         villager_manager = VillagerManager()
         furniture_manager = FurnitureManager()

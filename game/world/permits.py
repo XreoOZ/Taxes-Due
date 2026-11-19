@@ -805,12 +805,6 @@ class PermitManager:
         self.font = None
         self.permit_counter = 1
 
-        # Initial Starter Permits
-        self.add_permit_rect("Starter Housing Lot", "housing", 2, 2, 6, 6)
-        self.add_permit_rect("Starter Storage Lot", "storage", 2, -6, 5, 5)
-        self.add_permit_rect("Starter Farm Lot", "farm", -6, -6, 6, 6)
-        self.add_permit_rect("Landlord Private Grounds", "landlord_private", -10, 2, 8, 8)
-
     def _ensure_font(self):
         if self.font is None:
             self.font = pygame.font.SysFont("Segoe UI", 11, bold=True)
