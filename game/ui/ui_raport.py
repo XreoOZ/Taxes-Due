@@ -4,6 +4,7 @@ Raport UI (Town Ledger, Free-form Area Permit Deeds, RimWorld Work Priorities & 
 
 import math
 import pygame
+from game.ui.permits_ui import PermitsModal
 from game.config import (
     COLOR_RAPORT_BTN_BG,
     COLOR_RAPORT_BTN_BORDER,
@@ -34,7 +35,6 @@ from game.config import (
     DEMOLITION_REFUND_RATIO,
     SCHEDULE_TYPES,
     DEFAULT_JOB_SCHEDULE,
-    DAYS_OF_WEEK,
     is_food_item
 )
 from game.data.planning import (
@@ -126,8 +126,6 @@ class RaportUI:
         # Schedule State
         self.selected_schedule_job_id = None
         self.selected_schedule_brush = "WORK"
-        self.selected_schedule_day = "Monday"
-        self.schedule_day_btn_rects = {}
         self.prayer_start_dec_rect = None
         self.prayer_start_inc_rect = None
         self.prayer_end_dec_rect = None
@@ -780,11 +778,6 @@ class RaportUI:
                         self.selected_schedule_job_id = None
                         return "back_to_schedule_jobs"
 
-                    for day_name, rect in self.schedule_day_btn_rects.items():
-                        if rect.collidepoint(mouse_pos):
-                            self.selected_schedule_day = day_name
-                            return f"select_schedule_day_{day_name}"
-
                     if self.prayer_start_dec_rect and self.prayer_start_dec_rect.collidepoint(mouse_pos):
                         s, e = schedule_manager.get_prayer_hours()
                         schedule_manager.set_prayer_time(max(0, s - 1), e)
@@ -811,21 +804,21 @@ class RaportUI:
 
                     for hour_idx, rect in self.schedule_hour_cell_rects.items():
                         if rect.collidepoint(mouse_pos):
-                            schedule_manager.set_hour_activity(self.selected_schedule_job_id, hour_idx, self.selected_schedule_brush, day=self.selected_schedule_day)
+                            schedule_manager.set_hour_activity(self.selected_schedule_job_id, hour_idx, self.selected_schedule_brush)
                             return f"paint_hour_{hour_idx}_{self.selected_schedule_brush}"
 
                     for preset_name, rect in self.schedule_preset_btn_rects.items():
                         if rect.collidepoint(mouse_pos):
                             if preset_name == "standard":
-                                schedule_manager.reset_to_default(self.selected_schedule_job_id, day=self.selected_schedule_day)
+                                schedule_manager.reset_to_default(self.selected_schedule_job_id)
                             elif preset_name == "hardwork":
                                 sched = ["SLEEP"]*5 + ["LEISURE"] + ["WORK"]*15 + ["LEISURE"] + ["SLEEP"]*2
                                 for h in range(24):
-                                    schedule_manager.set_hour_activity(self.selected_schedule_job_id, h, sched[h], day=self.selected_schedule_day)
+                                    schedule_manager.set_hour_activity(self.selected_schedule_job_id, h, sched[h])
                             elif preset_name == "relaxed":
                                 sched = ["SLEEP"]*7 + ["LEISURE"]*2 + ["WORK"]*7 + ["LEISURE"]*6 + ["SLEEP"]*2
                                 for h in range(24):
-                                    schedule_manager.set_hour_activity(self.selected_schedule_job_id, h, sched[h], day=self.selected_schedule_day)
+                                    schedule_manager.set_hour_activity(self.selected_schedule_job_id, h, sched[h])
                             return f"apply_schedule_preset_{preset_name}"
 
         # 7. Tab 4: Villagers & Family Clans Management
@@ -974,11 +967,6 @@ class RaportUI:
                     return "back_to_jobs"
 
                 if schedule_manager:
-                    for day_name, rect in self.schedule_day_btn_rects.items():
-                        if rect.collidepoint(mouse_pos):
-                            self.selected_schedule_day = day_name
-                            return f"select_schedule_day_{day_name}"
-
                     if self.prayer_start_dec_rect and self.prayer_start_dec_rect.collidepoint(mouse_pos):
                         s, e = schedule_manager.get_prayer_hours()
                         schedule_manager.set_prayer_time(max(0, s - 1), e)
@@ -1005,21 +993,21 @@ class RaportUI:
 
                     for hour_idx, rect in self.schedule_hour_cell_rects.items():
                         if rect.collidepoint(mouse_pos):
-                            schedule_manager.set_hour_activity(self.selected_schedule_job_id, hour_idx, self.selected_schedule_brush, day=self.selected_schedule_day)
+                            schedule_manager.set_hour_activity(self.selected_schedule_job_id, hour_idx, self.selected_schedule_brush)
                             return f"paint_hour_{hour_idx}_{self.selected_schedule_brush}"
 
                     for preset_name, rect in self.schedule_preset_btn_rects.items():
                         if rect.collidepoint(mouse_pos):
                             if preset_name == "standard":
-                                schedule_manager.reset_to_default(self.selected_schedule_job_id, day=self.selected_schedule_day)
+                                schedule_manager.reset_to_default(self.selected_schedule_job_id)
                             elif preset_name == "hardwork":
                                 sched = ["SLEEP"]*5 + ["LEISURE"] + ["WORK"]*15 + ["LEISURE"] + ["SLEEP"]*2
                                 for h in range(24):
-                                    schedule_manager.set_hour_activity(self.selected_schedule_job_id, h, sched[h], day=self.selected_schedule_day)
+                                    schedule_manager.set_hour_activity(self.selected_schedule_job_id, h, sched[h])
                             elif preset_name == "relaxed":
                                 sched = ["SLEEP"]*7 + ["LEISURE"]*2 + ["WORK"]*7 + ["LEISURE"]*6 + ["SLEEP"]*2
                                 for h in range(24):
-                                    schedule_manager.set_hour_activity(self.selected_schedule_job_id, h, sched[h], day=self.selected_schedule_day)
+                                    schedule_manager.set_hour_activity(self.selected_schedule_job_id, h, sched[h])
                             return f"apply_schedule_preset_{preset_name}"
 
             # Sub-view B: Worker Roster for Selected Job
@@ -1305,7 +1293,8 @@ class RaportUI:
             surface.blit(sub_txt, (mx + 28, cy + 22))
 
             card_y = cy + 44
-            for cat in categories:
+            card_width = (self.modal_w - 60) // max(1, len(categories))
+            for category_index, cat in enumerate(categories):
                 cat_id = cat["id"]
                 cat_name = cat["name"]
                 cat_desc = cat["desc"]
@@ -1322,7 +1311,12 @@ class RaportUI:
 
                 item_count = len(cat_items)
 
-                card_rect = pygame.Rect(mx + 24, card_y, self.modal_w - 48, 36)
+                card_rect = pygame.Rect(
+                    mx + 24 + category_index * (card_width + 12),
+                    card_y,
+                    card_width,
+                    92,
+                )
                 self.building_category_btn_rects[cat_id] = card_rect
 
                 is_hov = card_rect.collidepoint(m_pos)
@@ -1338,14 +1332,13 @@ class RaportUI:
 
                 # Category title & description
                 t_surf = self.font_sub.render(cat_name, True, (241, 245, 249) if is_hov else (226, 232, 240))
-                surface.blit(t_surf, (card_rect.x + 16, card_rect.y + 9))
+                surface.blit(t_surf, (card_rect.x + 16, card_rect.y + 12))
 
-                desc_surf = self.font_body.render(f"— {cat_desc}", True, COLOR_TEXT_MUTED)
-                surface.blit(desc_surf, (card_rect.x + 22 + t_surf.get_width(), card_rect.y + 10))
+                desc_surf = self.font_body.render(cat_desc, True, COLOR_TEXT_MUTED)
+                surface.blit(desc_surf, (card_rect.x + 16, card_rect.y + 36))
 
-                # Right badges: item count and "View Structures →"
                 badge_w = 80
-                badge_rect = pygame.Rect(card_rect.right - badge_w - 12, card_rect.y + 7, badge_w, 22)
+                badge_rect = pygame.Rect(card_rect.right - badge_w - 12, card_rect.y + 62, badge_w, 20)
                 badge_bg = (22, 101, 52) if item_count > 0 else (51, 65, 85)
                 badge_border = (74, 222, 128) if item_count > 0 else (100, 116, 139)
                 pygame.draw.rect(surface, badge_bg, badge_rect, border_radius=4)
@@ -1356,9 +1349,7 @@ class RaportUI:
                 surface.blit(cnt_txt, (badge_rect.centerx - cnt_txt.get_width() // 2, badge_rect.centery - cnt_txt.get_height() // 2))
 
                 arrow_lbl = self.font_badge.render("View →", True, (56, 189, 248) if is_hov else (148, 163, 184))
-                surface.blit(arrow_lbl, (badge_rect.x - arrow_lbl.get_width() - 10, card_rect.y + 11))
-
-                card_y += 42
+                surface.blit(arrow_lbl, (badge_rect.x - arrow_lbl.get_width() - 10, badge_rect.y + 3))
 
         else:
             # -----------------------------------------------------------------
@@ -2152,7 +2143,7 @@ class RaportUI:
 
                 # Mini schedule preview bar
                 if schedule_manager:
-                    sched = schedule_manager.get_schedule(job_id)
+                    sched = schedule_manager.get_schedule_view(job_id)
                     bar_x = card_rect.x + 46
                     bar_y = card_rect.y + 32
                     bar_w = 260
@@ -2202,7 +2193,6 @@ class RaportUI:
             surface.blit(self.font_sub.render(curr_str, True, (250, 204, 21)), (mx + self.modal_w - 180, cy - 2))
 
             # 1. Paintbrush tools banner
-            self.schedule_day_btn_rects = {}
             tool_y = cy + 28
             tool_rect = pygame.Rect(mx + 24, tool_y, self.modal_w - 48, 38)
             pygame.draw.rect(surface, (24, 34, 52), tool_rect, border_radius=6)
@@ -2213,6 +2203,8 @@ class RaportUI:
             self.schedule_brush_btn_rects = {}
             bx = tool_rect.x + 100
             for b_id, b_info in SCHEDULE_TYPES.items():
+                if b_id == "PRAYER":
+                    continue
                 b_btn = pygame.Rect(bx, tool_rect.y + 5, 96, 28)
                 self.schedule_brush_btn_rects[b_id] = b_btn
                 is_sel = (self.selected_schedule_brush == b_id)
@@ -2278,7 +2270,7 @@ class RaportUI:
             day_sched_title = f"{job_name} 24-Hour Timeline (Click hour slot to apply paint tool):"
             surface.blit(self.font_sub.render(day_sched_title, True, (241, 245, 249)), (mx + 24, grid_y))
 
-            sched = schedule_manager.get_schedule(self.selected_schedule_job_id) if schedule_manager else list(DEFAULT_JOB_SCHEDULE)
+            sched = schedule_manager.get_schedule_view(self.selected_schedule_job_id) if schedule_manager else list(DEFAULT_JOB_SCHEDULE)
             grid_bar_y = grid_y + 24
             avail_grid_w = self.modal_w - 48
             cell_w = avail_grid_w // 24

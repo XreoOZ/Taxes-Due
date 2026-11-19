@@ -14,6 +14,7 @@ from game.systems.currency import (
 )
 from game.systems.market_pricing import MarketPricingSystem
 from game.systems.wealth_system import VillageWealthSystem
+from game.data.config import MARKET_TRADEABLE_ITEMS, MARKET_DEFAULT_HOUSEHOLD_SALE_PERCENT
 
 VILLAGER_STALL_HAUL_CAPACITY = 20
 
@@ -27,6 +28,7 @@ class HouseholdStallSystem:
         market.assigned_family_id = family_id
         market.assigned_household_id = family_id
         market.owner = family_id
+        market.household_sale_limits = {}
         VillageWealthSystem.mark_dirty()
         return True
 
@@ -38,6 +40,7 @@ class HouseholdStallSystem:
         market.assigned_family_id = None
         market.assigned_household_id = None
         market.owner = "landlord"
+        market.household_sale_limits = {}
         VillageWealthSystem.mark_dirty()
         return True
 
@@ -73,7 +76,9 @@ class HouseholdStallSystem:
         if not market or not family_id or not furniture_manager:
             return 0
 
-        pct = cls.get_item_allocation(market, item_name)
+        if item_name not in MARKET_TRADEABLE_ITEMS or item_name not in getattr(market, "sale_items", []):
+            return 0
+        pct = max(0, min(100, int(getattr(market, "household_sale_percent", MARKET_DEFAULT_HOUSEHOLD_SALE_PERCENT))))
         if pct <= 0:
             return 0
 
@@ -81,16 +86,22 @@ class HouseholdStallSystem:
         if not chest or not hasattr(chest, "inventory") or not isinstance(chest.inventory, dict):
             return 0
 
-        chest_stock = chest.inventory.get(item_name, 0)
+        storage_item = MARKET_TRADEABLE_ITEMS[item_name]
+        chest_stock = chest.inventory.get(storage_item, 0)
         if chest_stock <= 0:
             return 0
 
-        max_alloc = int(math.floor(chest_stock * (pct / 100.0)))
+        if not isinstance(getattr(market, "household_sale_limits", None), dict):
+            market.household_sale_limits = {}
+        max_alloc = market.household_sale_limits.get(item_name)
+        if max_alloc is None:
+            max_alloc = int(math.floor(chest_stock * (pct / 100.0)))
+            market.household_sale_limits[item_name] = max_alloc
         current_mkt_stock = market.inventory.get(item_name, 0) if hasattr(market, "inventory") else 0
         in_transit = getattr(market, "_stall_in_transit", {}).get(item_name, 0)
 
         remaining_alloc = max(0, max_alloc - (current_mkt_stock + in_transit))
-        # Cannot haul more than currently physically present in chest
+        # Replenish sales up to the saved cap without exceeding actual household stock.
         return min(remaining_alloc, chest_stock)
 
     @classmethod
@@ -105,6 +116,17 @@ class HouseholdStallSystem:
                 if str(b_fam) == fam_str:
                     return b
         return None
+
+    @classmethod
+    def request_goods_restock(cls, market, item_name, amount, furniture_manager):
+        available = cls.calculate_allocatable_goods(market, getattr(market, "assigned_family_id", None), item_name, furniture_manager)
+        if available <= 0:
+            return 0
+        requests = getattr(market, "_stall_requested_qty", None)
+        if not isinstance(requests, dict):
+            market._stall_requested_qty = {}
+        market._stall_requested_qty[item_name] = min(max(0, int(amount)), available)
+        return market._stall_requested_qty[item_name]
 
     @classmethod
     def deposit_coin(cls, market, denomination, amount, resources):
@@ -204,18 +226,18 @@ class HouseholdStallSystem:
             return True
 
         # B. Priority 2: Physical Goods Transportation to Market
-        allocations = getattr(market, "item_allocations", {})
-        if allocations and isinstance(allocations, dict):
-            for item_name, pct in allocations.items():
-                if pct > 0:
-                    alloc_qty = cls.calculate_allocatable_goods(market, fam_id, item_name, furniture_manager)
-                    if alloc_qty > 0:
-                        villager.task = "HAULING_STALL_GOODS_FETCH"
-                        villager.stall_target_market = market
-                        villager.stall_target_item = item_name
-                        villager.stall_target_qty = min(alloc_qty, VILLAGER_STALL_HAUL_CAPACITY)
-                        villager.say(f"Preparing to haul {villager.stall_target_qty} {item_name} to stall...", duration=2.5)
-                        return True
+        for item_name in getattr(market, "sale_items", []):
+            alloc_qty = cls.calculate_allocatable_goods(market, fam_id, item_name, furniture_manager)
+            requests = getattr(market, "_stall_requested_qty", {})
+            if item_name in requests:
+                alloc_qty = min(alloc_qty, requests.pop(item_name))
+            if alloc_qty > 0:
+                villager.task = "HAULING_STALL_GOODS_FETCH"
+                villager.stall_target_market = market
+                villager.stall_target_item = item_name
+                villager.stall_target_qty = min(alloc_qty, VILLAGER_STALL_HAUL_CAPACITY)
+                villager.say(f"Preparing to haul {villager.stall_target_qty} {item_name} to stall...", duration=2.5)
+                return True
 
         return False
 
@@ -333,7 +355,8 @@ class HouseholdStallSystem:
                     villager.stall_target_market = None
                     return False
 
-                avail_in_chest = chest.inventory.get(item_name, 0)
+                storage_item = MARKET_TRADEABLE_ITEMS.get(item_name, item_name)
+                avail_in_chest = chest.inventory.get(storage_item, 0)
                 take_amt = min(target_qty, avail_in_chest)
                 if take_amt <= 0:
                     villager.task = "IDLE"
@@ -341,9 +364,9 @@ class HouseholdStallSystem:
                     return False
 
                 # Withdraw from chest into villager inventory (now in-transit!)
-                chest.inventory[item_name] -= take_amt
-                if chest.inventory[item_name] <= 0:
-                    del chest.inventory[item_name]
+                chest.inventory[storage_item] -= take_amt
+                if chest.inventory[storage_item] <= 0:
+                    del chest.inventory[storage_item]
 
                 villager.inventory[item_name] = villager.inventory.get(item_name, 0) + take_amt
                 villager.stall_carried_item = item_name

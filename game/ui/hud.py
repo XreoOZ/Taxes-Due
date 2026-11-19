@@ -32,7 +32,7 @@ class ResourceHUD:
             self.font_item = pygame.font.SysFont("Segoe UI", 13)
             self.font_val = pygame.font.SysFont("Consolas", 13, bold=True)
 
-    def draw(self, surface, resources):
+    def draw(self, surface, resources, weekday=None):
         self._init_fonts()
         screen_w, _ = surface.get_size()
 
@@ -57,6 +57,10 @@ class ResourceHUD:
         # 2. Header Title
         title_surf = self.font_title.render("RESOURCES", True, COLOR_TEXT_TITLE)
         surface.blit(title_surf, (card_x + self.padding, card_y + 10))
+        if weekday:
+            weekday_surf = self.font_title.render(weekday, True, COLOR_TEXT_MAIN)
+            weekday_rect = weekday_surf.get_rect(right=card_x + self.card_width - self.padding, top=card_y + 10)
+            surface.blit(weekday_surf, weekday_rect)
 
         # Garis pemisah tipis di bawah header
         pygame.draw.line(

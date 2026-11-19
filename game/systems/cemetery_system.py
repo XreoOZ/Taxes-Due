@@ -27,6 +27,7 @@ from game.config import (
     TOMBSTONE_MODELS_COUNT
 )
 from game.systems.currency import (
+    COPPER_PER_SILVER,
     to_copper,
     from_copper,
     normalize_wallet,
@@ -135,7 +136,7 @@ class CemeterySystem:
             released_vil = next((v for v in all_vils if getattr(v, "job", "") == "Gravedigger"), None)
 
         if released_vil:
-            released_vil.set_job("Farmer")
+            released_vil.set_job("Unassigned")
             released_vil.say("I have stepped down from being a Gravedigger.", duration=2.5)
             return True, released_vil
 
@@ -211,6 +212,28 @@ class CemeterySystem:
         return None
 
     @classmethod
+    def get_overflow_corpse_ids(cls):
+        return {
+            str(item.get("corpse_id"))
+            for item in cls.get_instance().overflow_corpses
+        }
+
+    @classmethod
+    def release_ready_overflow_corpse(cls, cemetery_permit, current_day=1.0):
+        """Requeue the oldest overflow corpse once an empty grave is available."""
+        if not cls.get_available_grave_tile(cemetery_permit, current_day):
+            return None
+        pending = cls.get_instance().overflow_corpses
+        if not pending:
+            return None
+        record = pending.pop(0)
+        corpse = record.get("corpse_obj")
+        if corpse:
+            corpse.is_picked_up = False
+            corpse.is_buried = False
+        return corpse
+
+    @classmethod
     def complete_burial_on_tile(cls, cemetery_permit, tile, corpse, current_day=1.0):
         """
         Completes the burial on a grave tile:
@@ -257,10 +280,11 @@ class CemeterySystem:
         """
         fam_id = getattr(gravedigger, "family_id", None)
         chest = furniture_manager.get_storage_for_family(fam_id) if (furniture_manager and fam_id) else None
-        inv = getattr(chest, "inventory", {}) if chest else {}
+        chest_inventory = getattr(chest, "inventory", {}) if chest else {}
+        personal_inventory = getattr(gravedigger, "inventory", {})
 
-        wood_amt = inv.get("Wood", 0)
-        stone_amt = inv.get("Stone", 0)
+        wood_amt = chest_inventory.get("Wood", 0) + personal_inventory.get("Wood", 0)
+        stone_amt = chest_inventory.get("Stone", 0) + personal_inventory.get("Stone", 0)
         missing_w = max(0, GRAVEDIGGER_TARGET_WOOD - wood_amt)
         missing_s = max(0, GRAVEDIGGER_TARGET_STONE - stone_amt)
         return wood_amt, stone_amt, missing_w, missing_s
@@ -273,15 +297,23 @@ class CemeterySystem:
         """
         fam_id = getattr(gravedigger, "family_id", None)
         chest = furniture_manager.get_storage_for_family(fam_id) if (furniture_manager and fam_id) else None
-        if not chest or not hasattr(chest, "inventory"):
+        chest_inventory = getattr(chest, "inventory", {}) if chest else {}
+        personal_inventory = getattr(gravedigger, "inventory", {})
+        if (chest_inventory.get("Wood", 0) + personal_inventory.get("Wood", 0) < GRAVE_COST_WOOD
+                or chest_inventory.get("Stone", 0) + personal_inventory.get("Stone", 0) < GRAVE_COST_STONE):
             return False
 
-        inv = chest.inventory
-        if inv.get("Wood", 0) < GRAVE_COST_WOOD or inv.get("Stone", 0) < GRAVE_COST_STONE:
-            return False
-
-        inv["Wood"] -= GRAVE_COST_WOOD
-        inv["Stone"] -= GRAVE_COST_STONE
+        for inventory, item, amount in (
+            (chest_inventory, "Wood", GRAVE_COST_WOOD),
+            (chest_inventory, "Stone", GRAVE_COST_STONE),
+        ):
+            taken = min(inventory.get(item, 0), amount)
+            inventory[item] = inventory.get(item, 0) - taken
+            personal_inventory[item] = personal_inventory.get(item, 0) - (amount - taken)
+            if inventory.get(item, 0) <= 0:
+                inventory.pop(item, None)
+            if personal_inventory.get(item, 0) <= 0:
+                personal_inventory.pop(item, None)
         return True
 
     # -------------------------------------------------------------------------
@@ -301,11 +333,20 @@ class CemeterySystem:
         if not deceased_villager:
             return None
 
+        corpse_id = str(getattr(deceased_villager, "id", ""))
+        existing = next(
+            (entry for entry in cls.get_instance().pending_commissions
+             if entry.get("corpse_id") == corpse_id),
+            None,
+        )
+        if existing:
+            return existing
+
         fam_id = getattr(deceased_villager, "family_id", None)
         family = villager_manager.get_family_by_id(fam_id) if (villager_manager and fam_id) else None
         surviving = [m for m in getattr(family, "members", []) if getattr(m, "is_alive", True)] if family else []
 
-        max_fee_copper = BURIAL_FEE_MAX_SILVER * 10  # 1 Silver = 10 Copper
+        max_fee_copper = BURIAL_FEE_MAX_SILVER * COPPER_PER_SILVER
         fee_paid_copper = 0
         payer_type = "representative"
 
@@ -349,13 +390,13 @@ class CemeterySystem:
         else:
             # Fallback: No surviving members -> Gravedigger retrieves fee from Landlord storage
             payer_type = "landlord"
-            landlord_copper = 0
             if resources and isinstance(resources, dict):
-                landlord_copper = resources.get("Copper", 0) + resources.get("Silver", 0) * 10 + resources.get("Gold", 0) * 100
-                fee_paid_copper = min(max_fee_copper, landlord_copper)
-                # Deduct from landlord resources
+                landlord_wallet = normalize_wallet(resources)
+                fee_paid_copper = min(max_fee_copper, to_copper(landlord_wallet))
                 if fee_paid_copper > 0:
-                    resources["Copper"] = max(0, resources.get("Copper", 0) - fee_paid_copper)
+                    remainder = from_copper(to_copper(landlord_wallet) - fee_paid_copper)
+                    for denomination in ("Copper", "Silver", "Gold"):
+                        resources[denomination] = remainder[denomination]
 
         # Deposit payment directly to Gravedigger (Requirement 5 & 6)
         target_gd = gravedigger
@@ -367,8 +408,6 @@ class CemeterySystem:
             if not hasattr(target_gd, "currency") or not isinstance(target_gd.currency, dict):
                 target_gd.currency = {"Copper": 0, "Silver": 0, "Gold": 0}
             target_gd.currency["Copper"] = target_gd.currency.get("Copper", 0) + fee_paid_copper
-            if hasattr(target_gd, "inventory") and isinstance(target_gd.inventory, dict):
-                target_gd.inventory["Copper"] = target_gd.inventory.get("Copper", 0) + fee_paid_copper
 
         try:
             from game.systems.wealth_system import VillageWealthSystem
@@ -402,13 +441,7 @@ class CemeterySystem:
            "The cemetery is currently full. Please consider expanding it, Landlord."
         4. Registers pending corpse awaiting future available grave.
         """
-        if not cemetery_permit:
-            return 0.0, 0.0
-
-        # Safe position just outside the perimeter of the cemetery plot
-        min_tile = min(cemetery_permit.tiles, key=lambda t: (t[1], t[0]))
-        temp_x = (min_tile[0] - 1.0) * tile_size
-        temp_y = (min_tile[1] + 0.5) * tile_size
+        corpse_x, corpse_y = cls.get_overflow_position(cemetery_permit, corpse, tile_size)
 
         inst = cls.get_instance()
         corpse_id = str(getattr(corpse, "id", corpse))
@@ -416,10 +449,29 @@ class CemeterySystem:
             inst.overflow_corpses.append({
                 "corpse_id": corpse_id,
                 "corpse_obj": corpse,
-                "x": temp_x,
-                "y": temp_y
+                "x": corpse_x,
+                "y": corpse_y,
             })
 
+        if hasattr(corpse, "x"):
+            corpse.x = corpse_x
+            corpse.y = corpse_y
+            corpse.is_picked_up = False
+            corpse.is_cemetery_overflow = True
+
         # Polite notification to the Landlord
-        gravedigger.say("The cemetery is currently full. Please consider expanding it, Landlord.", duration=3.5)
-        return temp_x, temp_y
+        if gravedigger:
+            message = "There is no cemetery yet. Please grant cemetery land, Landlord." if not cemetery_permit else "The cemetery is full. Please consider expanding it, Landlord."
+            gravedigger.say(message, duration=3.5)
+        return corpse_x, corpse_y
+
+    @classmethod
+    def get_overflow_position(cls, cemetery_permit, corpse, tile_size=TILE_SIZE):
+        """Return a safe holding position outside the cemetery boundary."""
+        if cemetery_permit and cemetery_permit.tiles:
+            min_tile = min(cemetery_permit.tiles, key=lambda t: (t[1], t[0]))
+            return (min_tile[0] - 1.0) * tile_size, (min_tile[1] + 0.5) * tile_size
+        return (
+            float(getattr(corpse, "x", 0.0)),
+            float(getattr(corpse, "y", 0.0)),
+        )

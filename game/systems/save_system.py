@@ -6,6 +6,7 @@ Handles serialization and deserialization of complete game world state across sa
 import os
 import json
 import time
+from game.data.config import MARKET_TRADEABLE_ITEMS, MARKET_DEFAULT_HOUSEHOLD_SALE_PERCENT
 
 SAVE_DIR = "saves"
 
@@ -107,6 +108,10 @@ def serialize_game_state(day_cycle, resources, player, permit_manager, building_
             "assigned_family_id": getattr(b, "assigned_family_id", None),
             "assigned_household_id": getattr(b, "assigned_household_id", None),
             "item_allocations": dict(getattr(b, "item_allocations", {})),
+            "sale_items": list(getattr(b, "sale_items", [])),
+            "household_sale_percent": getattr(b, "household_sale_percent", MARKET_DEFAULT_HOUSEHOLD_SALE_PERCENT),
+            "household_sale_limits": dict(getattr(b, "household_sale_limits", {})),
+            "stall_requested_qty": dict(getattr(b, "_stall_requested_qty", {})),
             "auto_pricing": getattr(b, "auto_pricing", True)
         })
 
@@ -141,6 +146,10 @@ def serialize_game_state(day_cycle, resources, player, permit_manager, building_
                 "assigned_family_id": getattr(b, "assigned_family_id", None),
                 "assigned_household_id": getattr(b, "assigned_household_id", None),
                 "item_allocations": dict(getattr(b, "item_allocations", {})),
+                "sale_items": list(getattr(b, "sale_items", [])),
+                "household_sale_percent": getattr(b, "household_sale_percent", MARKET_DEFAULT_HOUSEHOLD_SALE_PERCENT),
+                "household_sale_limits": dict(getattr(b, "household_sale_limits", {})),
+                "stall_requested_qty": dict(getattr(b, "_stall_requested_qty", {})),
                 "auto_pricing": getattr(b, "auto_pricing", True)
             }
         })
@@ -247,10 +256,7 @@ def serialize_game_state(day_cycle, resources, player, permit_manager, building_
     # 9. Schedules
     schedules_data = {}
     if schedule_manager:
-        schedules_data = {
-            job_id: ({d: list(s) for d, s in sched.items()} if isinstance(sched, dict) else list(sched))
-            for job_id, sched in schedule_manager.job_schedules.items()
-        }
+        schedules_data = schedule_manager.to_dict()
 
     all_vils = villager_manager.get_all_villagers()
     total_pop = len(all_vils) + len(servant_manager.servants)
@@ -409,6 +415,10 @@ def deserialize_game_state(data, day_cycle, resources, player, permit_manager, b
             b.assigned_household_id = b_d["assigned_household_id"]
         if "item_allocations" in b_d:
             b.item_allocations = dict(b_d["item_allocations"])
+        b.sale_items = list(b_d.get("sale_items", [item for item in b.inventory if item in MARKET_TRADEABLE_ITEMS]))
+        b.household_sale_percent = b_d.get("household_sale_percent", MARKET_DEFAULT_HOUSEHOLD_SALE_PERCENT)
+        b.household_sale_limits = dict(b_d.get("household_sale_limits", {}))
+        b._stall_requested_qty = dict(b_d.get("stall_requested_qty", {}))
         if "auto_pricing" in b_d:
             b.auto_pricing = b_d["auto_pricing"]
         building_manager.buildings.append(b)
@@ -436,6 +446,10 @@ def deserialize_game_state(data, day_cycle, resources, player, permit_manager, b
         b.assigned_family_id = b_d.get("assigned_family_id")
         b.assigned_household_id = b_d.get("assigned_household_id")
         b.item_allocations = dict(b_d.get("item_allocations", {}))
+        b.sale_items = list(b_d.get("sale_items", [item for item in b.inventory if item in MARKET_TRADEABLE_ITEMS]))
+        b.household_sale_percent = b_d.get("household_sale_percent", MARKET_DEFAULT_HOUSEHOLD_SALE_PERCENT)
+        b.household_sale_limits = dict(b_d.get("household_sale_limits", {}))
+        b._stall_requested_qty = dict(b_d.get("stall_requested_qty", {}))
         b.auto_pricing = b_d.get("auto_pricing", True)
         from game.buildings.buildings import DemolitionSite
         site = DemolitionSite(b)
@@ -573,12 +587,7 @@ def deserialize_game_state(data, day_cycle, resources, player, permit_manager, b
 
     # 10. Schedules
     if schedule_manager and "schedules" in data:
-        from game.data.config import DAYS_OF_WEEK
-        for job_id, sched in data["schedules"].items():
-            if isinstance(sched, dict):
-                schedule_manager.job_schedules[job_id] = {d: list(s) for d, s in sched.items()}
-            elif isinstance(sched, list):
-                schedule_manager.job_schedules[job_id] = {d: list(sched) for d in DAYS_OF_WEEK}
+        schedule_manager.load_from_dict(data["schedules"])
 
     # 10.5. Production Distribution Records
     if "production_records" in data:

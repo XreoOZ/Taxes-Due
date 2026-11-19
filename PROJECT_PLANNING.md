@@ -58,14 +58,15 @@
 
 ---
 
-## 4. Tracked WIP Roadmap Items (Postponed Features)
+## 4. Tracked Roadmap Items
 
-All postponed features are systematically recorded below and mirrored in the in-game UI (`Reports -> Roadmap / WIP`):
+Planned features and implemented milestones remain recorded below and mirrored in the in-game UI (`Reports -> Roadmap / WIP`):
 
 ### 1. Corpse Burial & Removal
+- **Status**: IMPLEMENTED
 - **Category**: Sanitation & AI Needs
 - **Lead Agent**: Agent 1
-- **Description**: Mechanics for handling deceased villagers, including graveyards, transport of corpses, burial rites, and mood/hygiene debuffs if bodies are unburied.
+- **Description**: Gravediggers transport corpses, prepare and bury graves, hold bodies safely when the cemetery is full, resume burial when space opens, and reuse graves after 30 days.
 
 ### 2. Household-Owned Market Management
 - **Category**: Market & Commerce

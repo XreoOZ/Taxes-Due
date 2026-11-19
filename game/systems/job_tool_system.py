@@ -193,7 +193,7 @@ def assign_job_worker(job_id, permit_manager, villager_manager, furniture_manage
 def release_job_worker(job_id, permit_manager, villager_manager):
     """
     Universally releases a worker from any job in DEDICATED_JOBS.
-    Restores the worker to normal status (Farmer or Unassigned).
+    Restores the worker to Unassigned status.
     Returns (success: bool, villager or error message).
     """
     if not villager_manager:
@@ -225,8 +225,7 @@ def release_job_worker(job_id, permit_manager, villager_manager):
         released_vil = next((v for v in all_vils if getattr(v, "job", "") == job_id), None)
 
     if released_vil:
-        fallback_job = "Unassigned" if job_id == "Farmer" else "Farmer"
-        released_vil.set_job(fallback_job)
+        released_vil.set_job("Unassigned")
         job_name = job_cfg.get("name", job_id)
         released_vil.say(f"I have stepped down from being a {job_name}.", duration=2.5)
         return True, released_vil

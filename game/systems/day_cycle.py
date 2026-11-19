@@ -11,7 +11,8 @@ from game.config import (
     COLOR_HUD_BORDER,
     STARTING_HOUR,
     NIGHT_START_HOUR,
-    NIGHT_END_HOUR
+    NIGHT_END_HOUR,
+    WEEKDAY_NAMES,
 )
 
 class DayCycleSystem:
@@ -68,6 +69,10 @@ class DayCycleSystem:
         is_night = (hour < NIGHT_END_HOUR or hour >= NIGHT_START_HOUR)
         time_str = f"{hour:02d}:{minute:02d}"
         return hour, minute, time_str, is_night
+
+    def get_weekday_name(self):
+        """Return the informational weekday label for the current in-game day."""
+        return WEEKDAY_NAMES[(max(1, self.day_number) - 1) % len(WEEKDAY_NAMES)]
 
     def get_ambient_overlay(self, screen_w, screen_h):
         """Menghitung overlay pencahayaan siang/malam yang halus (natural lighting)"""

@@ -16,11 +16,11 @@ PLANNING_FEATURES = [
     {
         "id": "corpse_burial",
         "name": "Corpse Burial & Removal",
-        "status": STATUS_PLANNED,
+        "status": STATUS_IMPLEMENTED,
         "category": "Sanitation & AI Needs",
         "owner_agent": "Agent 1",
-        "summary": "Burial, corpse removal, and funeral mechanics.",
-        "description": "Mechanics for clearing deceased villagers, transporting corpses to graveyards or burial plots, and psychological/hygiene consequences on settlement morale."
+        "summary": "Gravediggers transport, bury, and recover corpses when cemetery space opens.",
+        "description": "Includes burial commissions, corpse transport, grave materials, full cemetery overflow, and reuse of graves after 30 days."
     },
     {
         "id": "household_market_mgmt",

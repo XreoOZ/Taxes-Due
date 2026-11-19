@@ -24,6 +24,7 @@ from game.config import (
     COLOR_STONE_FLOOR_ALT,
     COLOR_STONE_DOOR,
     DEFAULT_ITEM_PRICES,
+    MARKET_DEFAULT_HOUSEHOLD_SALE_PERCENT,
     DOORWAY_IDLE_MIN_DISTANCE,
     DOORWAY_QUEUE_LATERAL_OFFSET
 )
@@ -337,6 +338,9 @@ class Building:
             self.capacity = float("inf")  # UNLIMITED STORAGE CAPACITY (Not 6 slots)
             self.assigned_family_id = None
             self.item_allocations = {}
+            self.sale_items = []
+            self.household_sale_percent = MARKET_DEFAULT_HOUSEHOLD_SALE_PERCENT
+            self.household_sale_limits = {}
             self.auto_pricing = True
         else:
             self.owner = "landlord"

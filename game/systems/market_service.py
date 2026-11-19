@@ -7,6 +7,7 @@ and other systems to interact with the landlord-controlled market.
 import time
 from game.data.config import (
     DEFAULT_ITEM_PRICES,
+    MARKET_TRADEABLE_ITEMS,
     CURRENCY_DENOMINATIONS,
     DENOMINATION_CAP,
     is_food_item
@@ -75,6 +76,11 @@ class MarketService:
         if not market or not hasattr(market, "inventory"):
             return 0
         return market.inventory.get(item_name, 0)
+
+    @classmethod
+    def is_item_for_sale(cls, market, item_name):
+        sale_items = getattr(market, "sale_items", None) or []
+        return item_name in MARKET_TRADEABLE_ITEMS and item_name in sale_items
 
     @classmethod
     def resolve_household_info(cls, household, villager_manager=None):
@@ -235,10 +241,26 @@ class MarketService:
         return total_food
 
     @classmethod
+    def get_household_food_need(cls, household, furniture_manager=None, villager_manager=None, stockpile_manager=None):
+        """Return the remaining daily food quantity needed by living household members."""
+        fam_id, family, villager = cls.resolve_household_info(household, villager_manager)
+        if not family and villager_manager and fam_id:
+            family = villager_manager.get_family_by_id(fam_id)
+        members = getattr(family, "members", []) if family else ([villager] if villager else [])
+        living = [member for member in members if getattr(member, "is_alive", True)]
+        target = len(living) or 1
+        consumed_today = sum(max(0, int(getattr(member, "daily_food_consumed", 0))) for member in living)
+        available = cls.get_household_available_food_stock(
+            household, furniture_manager=furniture_manager,
+            villager_manager=villager_manager, stockpile_manager=stockpile_manager
+        )
+        return max(0, target - consumed_today - available)
+
+    @classmethod
     def can_household_purchase_food(cls, household, food_item="Potato", furniture_manager=None, villager_manager=None, stockpile_manager=None):
         """
         Evaluates whether a household is eligible to purchase food from the market.
-        Rule: If the household has >= 1 available FOOD item, purchase is denied.
+        Food purchases are limited to the household's remaining daily need.
         """
         if not is_food_item(food_item):
             return True, "Non-food purchases are not restricted by household food stock."
@@ -249,9 +271,10 @@ class MarketService:
             villager_manager=villager_manager,
             stockpile_manager=stockpile_manager
         )
-        if avail > 0:
-            return False, f"Household already possesses {avail} food items. Market food purchase disallowed."
-        return True, "Household has 0 food. Market food purchase allowed."
+        needed = cls.get_household_food_need(household, furniture_manager, villager_manager, stockpile_manager)
+        if needed <= 0:
+            return False, "Household already has enough food for today's members."
+        return True, f"Household needs up to {needed} more food today."
 
     @classmethod
     def purchase_food(cls, family_id, villager=None, food_type="Potato", amount=1, building_manager=None, furniture_manager=None, villager_manager=None, stockpile_manager=None):
@@ -261,6 +284,11 @@ class MarketService:
         Returns: (bought: bool, food_name: str, amount: int)
         """
         target = villager if villager is not None else family_id
+
+        if is_food_item(food_type):
+            amount = cls.get_household_food_need(target, furniture_manager, villager_manager, stockpile_manager)
+            if amount <= 0:
+                return False, food_type, 0
 
         # 1. Check household available food
         can_buy, reason = cls.can_household_purchase_food(
@@ -296,22 +324,16 @@ class MarketService:
         if quantity <= 0:
             return False, "Quantity must be greater than 0", 0, 0
 
-        # Air tidak diperjualbelikan (WIP scope)
-        if item_name.strip().lower() == "water":
-            return False, "Water sales are WIP. Water purchasing is not available.", 0, 0
-
         # Agent 2: Enforce household food rule: IF HOUSEHOLD HAS FOOD -> DO NOT BUY FOOD
         if is_food_item(item_name) and check_household_food:
-            food_stk = cls.get_household_available_food_stock(
-                household, furniture_manager=furniture_manager,
-                villager_manager=villager_manager, stockpile_manager=stockpile_manager
-            )
-            if food_stk > 0:
-                return False, f"Household already has {food_stk} available food in inventory. Purchasing from market is prohibited.", 0, 0
+            if cls.get_household_food_need(household, furniture_manager, villager_manager, stockpile_manager) <= 0:
+                return False, "Household already has enough food for today's members.", 0, 0
 
         market = cls.get_market(building_manager)
         if not market:
             return False, "No completed market building found in village", 0, 0
+        if not cls.is_item_for_sale(market, item_name):
+            return False, f"{item_name} is not listed for sale at this market.", 0, 0
 
         stock = cls.get_market_stock(item_name, market)
         if stock < quantity:
@@ -356,24 +378,19 @@ class MarketService:
         if quantity <= 0:
             return False, "Quantity must be greater than zero", {}
 
-        # Validasi batas WIP: air tidak dijual
-        if item_name.strip().lower() == "water":
-            return False, "Water sales are WIP. Water purchasing is not available.", {}
-
         # Agent 2: Enforce household food purchasing restriction
         fam_id, fam_obj, vil_obj = cls.resolve_household_info(household, villager_manager)
         should_enforce_food = (enforce_food_restriction or (vil_obj is not None and not bypass_food_restriction))
         if is_food_item(item_name) and should_enforce_food:
-            food_stk = cls.get_household_available_food_stock(
-                household, furniture_manager=furniture_manager,
-                villager_manager=villager_manager, stockpile_manager=stockpile_manager
-            )
-            if food_stk > 0:
-                return False, f"Household already has {food_stk} available food in inventory. Purchasing from market is prohibited.", {}
+            if cls.get_household_food_need(household, furniture_manager, villager_manager, stockpile_manager) <= 0:
+                return False, "Household already has enough food for today's members.", {}
 
         market = cls.get_market(building_manager)
         if not market:
             return False, "No completed market building found", {}
+
+        if not cls.is_item_for_sale(market, item_name):
+            return False, f"{item_name} is not listed for sale at this market.", {}
 
         # 1. Cek stok pasar
         stock = cls.get_market_stock(item_name, market)
@@ -423,6 +440,8 @@ class MarketService:
         market.inventory[item_name] -= quantity
         if market.inventory[item_name] <= 0:
             del market.inventory[item_name]
+        from game.systems.market_pricing import MarketPricingSystem
+        MarketPricingSystem.update_market_prices(market)
 
         # C. Masukkan barang ke penyimpanan household
         delivered_to = "chest"

@@ -16,11 +16,14 @@ from game.config import (
     ENTITY_AVOIDANCE_RADIUS,
     SERVANT_YIELD_FORCE,
     MIN_ENTITY_SEPARATION,
-    COLOR_SERVANT_BODY,
     COLOR_SERVANT_OUTLINE,
     COLOR_SHADOW,
     RESOURCE_COLORS,
+    DEDICATED_JOBS,
     PATH_WAYPOINT_TOLERANCE,
+    NAVIGATION_RETRY_INTERVAL,
+    NAVIGATION_BLOCKED_TILE_TIMEOUT,
+    NAVIGATION_BLOCKED_PROBE_DISTANCE,
     STUCK_THRESHOLD_SECONDS,
     STUCK_AVOIDANCE_DURATION,
     EMERGENCY_STUCK_TIMEOUT,
@@ -48,7 +51,9 @@ from game.config import (
     TILE_STEP_RESERVATION_TIMEOUT,
     NARROW_PASSAGE_WAIT_DISTANCE
 )
+from game.data.config import MARKET_TRADEABLE_ITEMS, MARKET_CURRENCY_DENOMINATIONS
 from game.world.pathfinding import GlobalPathRegistry, calculate_collision_slide, is_narrow_passage_tile
+from game.world.navigation import find_navigation_path
 from game.systems.job_tool_system import (
     get_job_required_tools,
     get_missing_tools_for_worker,
@@ -133,6 +138,7 @@ class Servant:
         self.path_index = 0
         self.path_target = None
         self.path_target_tile = None
+        self.path_retry_timer = 0.0
         self.path_seq = 0
         self.yield_timer = 0.0
         self.wait_timer = 0.0
@@ -551,7 +557,14 @@ class Servant:
                 if not hasattr(mkt, "inventory") or mkt.inventory is None:
                     mkt.inventory = {}
 
-                mkt.inventory[self.carried_res] = mkt.inventory.get(self.carried_res, 0) + self.carried_amount
+                if self.carried_res in MARKET_CURRENCY_DENOMINATIONS:
+                    if not isinstance(getattr(mkt, "currency", None), dict):
+                        mkt.currency = {denom: 0 for denom in MARKET_CURRENCY_DENOMINATIONS}
+                    mkt.currency[self.carried_res] = mkt.currency.get(self.carried_res, 0) + self.carried_amount
+                else:
+                    mkt.inventory[self.carried_res] = mkt.inventory.get(self.carried_res, 0) + self.carried_amount
+                    from game.systems.market_pricing import MarketPricingSystem
+                    MarketPricingSystem.update_market_prices(mkt)
 
                 if self.target_restock_order:
                     self.target_restock_order["delivered"] = self.target_restock_order.get("delivered", 0) + self.carried_amount
@@ -560,7 +573,7 @@ class Servant:
                         if servant_manager and self.target_restock_order in getattr(servant_manager, "restock_orders", []):
                             servant_manager.restock_orders.remove(self.target_restock_order)
 
-                self.say(f"Restocked {self.carried_amount} {self.carried_res} at Market, Sire!", duration=2.5)
+                self.say(f"Delivered {self.carried_amount} {self.carried_res} to Market, Sire!", duration=2.5)
                 self.carried_res = None
                 self.carried_amount = 0
                 reg = GlobalPathRegistry.get_instance()
@@ -939,10 +952,10 @@ class Servant:
         # Bebaskan lorong sempit jika tanpa sengaja berada di lorong sempit saat idle
         cur_gx = int(math.floor(self.x / TILE_SIZE))
         cur_gy = int(math.floor(self.y / TILE_SIZE))
-        if is_narrow_passage_tile((cur_gx, cur_gy), building_manager=building_manager, furniture_manager=furniture_manager):
+        if is_narrow_passage_tile((cur_gx, cur_gy), building_manager=building_manager):
             for dx, dy in ((0, 1), (0, -1), (1, 0), (-1, 0), (1, 1), (-1, -1), (1, -1), (-1, 1)):
                 cand_t = (cur_gx + dx, cur_gy + dy)
-                if not is_narrow_passage_tile(cand_t, building_manager=building_manager, furniture_manager=furniture_manager):
+                if not is_narrow_passage_tile(cand_t, building_manager=building_manager):
                     cand_wx = (cand_t[0] + 0.5) * TILE_SIZE
                     cand_wy = (cand_t[1] + 0.5) * TILE_SIZE
                     self.idle_target = (cand_wx, cand_wy)
@@ -965,31 +978,10 @@ class Servant:
         self._move_towards(self.idle_target[0], self.idle_target[1], dt, arrival_dist=20, all_servants=all_servants, player=player, building_manager=building_manager, all_entities=all_entities, furniture_manager=furniture_manager, exclusive_target=False)
 
     def _move_towards(self, tx, ty, dt, arrival_dist=10, all_servants=None, player=None, building_manager=None, all_entities=None, furniture_manager=None, exclusive_target=False):
-        reg = GlobalPathRegistry.get_instance()
-
         if getattr(self, "player_avoid_speech_cooldown", 0.0) > 0.0:
             self.player_avoid_speech_cooldown = max(0.0, self.player_avoid_speech_cooldown - dt)
+        self.path_retry_timer = max(0.0, getattr(self, "path_retry_timer", 0.0) - dt)
 
-        # 0. Route Lifecycle Tracking
-        if not hasattr(self, "route_state"):
-            self.route_state = ROUTE_STATE_NONE
-        if not hasattr(self, "route_request_timer"):
-            self.route_request_timer = 0.0
-        if not hasattr(self, "route_retry_count"):
-            self.route_retry_count = 0
-
-
-
-        # Doorway passage yield when door_waypoints is explicitly configured
-        if getattr(self, "door_waypoints", None) and building_manager and all_servants:
-            for other_s in all_servants:
-                if other_s != self:
-                    for b in getattr(building_manager, "buildings", []):
-                        if getattr(b, "door_pos", None) and b.is_in_door_threshold(other_s.x, other_s.y, TILE_SIZE):
-                            self.is_moving = False
-                            return False
-
-        # Direct arrival check
         direct_dist = math.hypot(tx - self.x, ty - self.y)
         if direct_dist <= arrival_dist:
             self.is_moving = False
@@ -998,79 +990,37 @@ class Servant:
             self.path_target = None
             self.is_waiting_for_path = False
             self.route_state = ROUTE_STATE_COMPLETED
-            self.route_request_timer = 0.0
-            self.route_retry_count = 0
-            reg.release_reservation(self.id)
             return True
 
-        if getattr(self, "route_state", None) == ROUTE_STATE_FAILED:
-            if self.path_target and math.hypot(tx - self.path_target[0], ty - self.path_target[1]) > 16.0:
-                self.route_state = ROUTE_STATE_NONE
-                self.route_retry_count = 0
-                self.route_request_timer = 0.0
-            else:
-                self.is_moving = False
-                self.is_waiting_for_path = False
-                return False
-
-        # 1. Path Calculation / Re-pathing
         target_dist = math.hypot(tx - (self.path_target[0] if self.path_target else 999999),
                                  ty - (self.path_target[1] if self.path_target else 999999))
-        needs_new_path = (self.path_target is None or target_dist > 16.0 or not self.current_path or self.path_index >= len(self.current_path))
+        target_changed = self.path_target is None or target_dist > PATH_WAYPOINT_TOLERANCE
+        needs_new_path = (
+            target_changed
+            or (self.current_path and self.path_index >= len(self.current_path))
+            or (not self.current_path and self.path_retry_timer <= 0.0)
+        )
 
         if needs_new_path:
             self.path_target = (tx, ty)
-            tgt_gx = int(math.floor(tx / TILE_SIZE))
-            tgt_gy = int(math.floor(ty / TILE_SIZE))
-            self.path_target_tile = (tgt_gx, tgt_gy)
-            self.path_seq = reg.register_claim(self.id, self.path_target_tile)
-
-            furn_avoid = set()
-            if furniture_manager and hasattr(furniture_manager, "get_occupied_tiles"):
-                furn_avoid.update(furniture_manager.get_occupied_tiles(exclude_tile=self.path_target_tile))
-            furn_avoid.discard(self.path_target_tile)
-
-            cand_path = None
-            if building_manager:
-                cand_path = building_manager.find_path((self.x, self.y), (tx, ty), TILE_SIZE, furniture_manager=furniture_manager, avoid_tiles=furn_avoid)
-                if not cand_path:
-                    for adx, ady in ((0, 1), (1, 0), (0, -1), (-1, 0), (1, 1), (-1, -1), (1, -1), (-1, 1)):
-                        adj_x = (tgt_gx + adx + 0.5) * TILE_SIZE
-                        adj_y = (tgt_gy + ady + 0.5) * TILE_SIZE
-                        adj_cand = building_manager.find_path((self.x, self.y), (adj_x, adj_y), TILE_SIZE, furniture_manager=furniture_manager, avoid_tiles=furn_avoid)
-                        if adj_cand:
-                            cand_path = adj_cand
-                            break
-            else:
-                cand_path = [(tx, ty)]
-
-            if cand_path:
-                self.current_path = cand_path
+            if target_changed:
+                self.path_retry_timer = 0.0
+            candidate_path = find_navigation_path(
+                (self.x, self.y), (tx, ty), building_manager,
+                furniture_manager=furniture_manager, tile_size=TILE_SIZE,
+            )
+            if candidate_path:
+                self.current_path = candidate_path
                 self.path_index = 0
                 self.is_waiting_for_path = False
-                self.wait_timer = 0.0
                 self.route_state = ROUTE_STATE_ASSIGNED
-                self.route_request_timer = 0.0
-                self.route_retry_count = 0
-                reg.request_path_reservation(self.id, cand_path, (self.x, self.y), self.path_target_tile, building_manager=building_manager, exclusive_target=exclusive_target)
             else:
-                self.route_retry_count += 1
-                if self.route_retry_count >= ROUTE_MAX_RETRIES:
-                    self.route_state = ROUTE_STATE_FAILED
-                    self.is_waiting_for_path = False
-                    self.is_moving = False
-                    self.current_path = []
-                    self.route_request_timer = 0.0
-                    return False
-                self.route_request_timer += dt
-                if self.route_request_timer >= ROUTE_REQUEST_TIMEOUT:
-                    self.route_state = ROUTE_STATE_FAILED
-                    self.is_waiting_for_path = False
-                    self.is_moving = False
-                    self.current_path = []
-                    self.route_request_timer = 0.0
-                    return False
+                self.current_path = []
+                self.path_index = 0
+                self.path_retry_timer = NAVIGATION_RETRY_INTERVAL
                 self.is_moving = False
+                self.is_waiting_for_path = False
+                self.route_state = ROUTE_STATE_FAILED
                 return False
 
         if not self.current_path or self.path_index >= len(self.current_path):
@@ -1093,9 +1043,6 @@ class Servant:
                 self.path_target = None
                 self.is_waiting_for_path = False
                 self.route_state = ROUTE_STATE_COMPLETED
-                self.route_request_timer = 0.0
-                self.route_retry_count = 0
-                reg.release_reservation(self.id)
                 return True
             else:
                 self.path_index += 1
@@ -1181,11 +1128,11 @@ class Servant:
             if self.stuck_timer >= 0.5:
                 cur_gx = int(math.floor(self.x / TILE_SIZE))
                 cur_gy = int(math.floor(self.y / TILE_SIZE))
-                blocked_gx = int(math.floor((self.x + dir_x * 24.0) / TILE_SIZE))
-                blocked_gy = int(math.floor((self.y + dir_y * 24.0) / TILE_SIZE))
+                blocked_gx = int(math.floor((self.x + dir_x * NAVIGATION_BLOCKED_PROBE_DISTANCE) / TILE_SIZE))
+                blocked_gy = int(math.floor((self.y + dir_y * NAVIGATION_BLOCKED_PROBE_DISTANCE) / TILE_SIZE))
                 if not hasattr(self, "stuck_blocked_tiles") or not isinstance(self.stuck_blocked_tiles, dict):
                     self.stuck_blocked_tiles = {}
-                self.stuck_blocked_tiles[(blocked_gx, blocked_gy)] = time.time() + 5.0
+                self.stuck_blocked_tiles[(blocked_gx, blocked_gy)] = time.time() + NAVIGATION_BLOCKED_TILE_TIMEOUT
                 self.stuck_timer = 0.0
                 self.current_path = []
                 self.path_index = 0
@@ -1229,7 +1176,9 @@ class Servant:
         surface.blit(shadow_surf, (sx - shadow_w // 2, sy + int(r * 0.4)))
 
         # 2. Badan AI Servant (Lingkaran Amber)
-        pygame.draw.circle(surface, COLOR_SERVANT_BODY, (sx, char_y), r)
+        job_colors = DEDICATED_JOBS.get(self.job, DEDICATED_JOBS["Unassigned"])
+        body_color = job_colors.get("color", DEDICATED_JOBS["Unassigned"]["color"])
+        pygame.draw.circle(surface, body_color, (sx, char_y), r)
         outline_w = max(1, int(3 * camera.zoom))
         pygame.draw.circle(surface, COLOR_SERVANT_OUTLINE, (sx, char_y), r, outline_w)
 
@@ -1336,7 +1285,9 @@ class ServantManager:
 
     def add_restock_order(self, market_building, item_type, amount, stockpile_manager=None, resources=None):
         """Mendaftarkan tugas restock fisik barang dari storage Landlord ke pasar oleh Servant (Agent 2)"""
-        if amount <= 0 or not market_building:
+        if amount <= 0 or not market_building or (item_type not in MARKET_TRADEABLE_ITEMS and item_type not in MARKET_CURRENCY_DENOMINATIONS):
+            return None
+        if item_type in MARKET_TRADEABLE_ITEMS and item_type not in getattr(market_building, "sale_items", []):
             return None
 
         # Cek ketersediaan di Landlord storage

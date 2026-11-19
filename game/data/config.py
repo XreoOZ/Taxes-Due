@@ -69,6 +69,13 @@ COLOR_PATH_TARGET_RING = (56, 189, 248)  # Cyan for target destination reticle
 PATH_LINE_WIDTH = 2
 PATH_ARROW_SPACING = 36.0                # Distance in screen pixels between directional arrows
 PATH_WAYPOINT_TOLERANCE = 14.0           # Waypoint arrival threshold
+NAVIGATION_RETRY_INTERVAL = 0.5          # Seconds before retrying an unreachable destination
+NAVIGATION_BLOCKED_TILE_TIMEOUT = 8.0    # Seconds to avoid a tile that stopped an actor
+NAVIGATION_BLOCKED_PROBE_DISTANCE = 48.0 # Distance ahead used to identify a blocked tile
+PATH_TARGET_FALLBACK_OFFSETS = (
+    (0, 1), (1, 0), (0, -1), (-1, 0),
+    (1, 1), (-1, -1), (1, -1), (-1, 1),
+)
 PATH_TOGGLE_BTN_WIDTH = 180
 PATH_TOGGLE_BTN_HEIGHT = 32
 COLOR_PATH_TOGGLE_ON = (16, 185, 129)        # Emerald green when active
@@ -231,7 +238,7 @@ DEDICATED_JOBS = {
         "id": "Gravedigger",
         "name": "Gravedigger",
         "title": "Gravedigger",
-        "color": (100, 116, 139),
+        "color": (48, 50, 56),
         "wip": False,
         "workplace_permit": "cemetery",
         "desc": "Prepares graves and buries deceased villagers in the cemetery.",
@@ -239,8 +246,9 @@ DEDICATED_JOBS = {
     }
 }
 
-# Days of the Week Schedule
-DAYS_OF_WEEK = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+# Calendar labels shown in the HUD only; schedules are shared across every day.
+WEEKDAY_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+DAYS_OF_WEEK = WEEKDAY_NAMES  # Legacy import compatibility; never used by schedules.
 
 # 24-Hour Schedule System (RimWorld-Style Activity Management)
 SCHEDULE_WORK = "WORK"
@@ -334,7 +342,28 @@ DEFAULT_ITEM_PRICES = {
     "Potato": 3,       # 1 Potato = 3 Copper (Configurable default price)
     "Wood": 2,         # 1 Wood = 2 Copper
     "Stone": 3,        # 1 Stone = 3 Copper
+    "Water": 2,
+    "Hoe": 8,
+    "Sickle": 6,
+    "Watering_Can": 8,
 }
+
+# Only goods with implemented storage and market behavior are listed here.
+# Other ITEM_CATEGORIES entries may be used by WIP systems, but are not sellable.
+MARKET_TRADEABLE_ITEMS = {
+    "Potato": "Food",
+    "Wood": "Wood",
+    "Stone": "Stone",
+    "Water": "Water",
+    "Hoe": "Hoe",
+    "Sickle": "Sickle",
+    "Watering_Can": "Watering_Can",
+}
+MARKET_CURRENCY_DENOMINATIONS = ("Gold", "Silver", "Copper")
+MARKET_DEFAULT_HOUSEHOLD_SALE_PERCENT = 20
+MARKET_QUANTITY_DEFAULT = 10
+MARKET_QUANTITY_MAX = 1000
+MARKET_PERCENT_STEP = 5
 
 # -----------------------------------------------------------------------------
 # GENERIC ITEM CATEGORY DEFINITIONS (Single Source of Truth - No Hardcoding)
@@ -706,28 +735,24 @@ BUILDING_TYPES["manor"] = BUILDING_TYPES["stone_structure"]
 
 def get_building_categories():
     """
-    Returns dynamically discovered building and structure categories from BUILDING_TYPES and FURNITURE_TYPES.
-    Preserves config-driven architecture: zero hardcoding in UI.
-    Automatically incorporates newly registered building and structure types.
+    Returns the two top-level Building menu categories. Structure blueprints
+    remain data-driven by BUILDING_TYPES; furniture comes from FURNITURE_TYPES.
     """
-    categories = {}
-    for b_id, b_cfg in BUILDING_TYPES.items():
-        if b_id in ("house", "storage", "manor"):
-            continue
-        cat_id = b_cfg.get("category_id", b_id)
-        if cat_id not in categories:
-            categories[cat_id] = {
-                "id": cat_id,
-                "name": b_cfg.get("category", b_cfg.get("name", cat_id.capitalize())),
-                "desc": b_cfg.get("desc", ""),
-                "color": b_cfg.get("border_color", (59, 130, 246)),
-                "kind": "structure",
-                "building_types": []
-            }
-        if b_id not in categories[cat_id]["building_types"]:
-            categories[cat_id]["building_types"].append(b_id)
-
-    # Furniture Category
+    # The Building menu has two top-level choices: Structure and Furniture.
+    structure_types = [
+        building_id for building_id in BUILDING_TYPES
+        if building_id not in ("house", "storage", "manor")
+    ]
+    categories = {
+        "structure": {
+            "id": "structure",
+            "name": "Structure",
+            "desc": "Wooden and stone structures, wells, market stalls, and toilets.",
+            "color": (59, 130, 246),
+            "kind": "structure",
+            "building_types": structure_types,
+        },
+    }
     categories["furniture"] = {
         "id": "furniture",
         "name": "Furniture",
@@ -944,5 +969,6 @@ AI_NEED_TOILET_DECAY_PER_DAY = 150.0   # Decays over time to trigger urgent need
 AI_NEED_TOILET_URGENT_THRESHOLD = 20.0 # <= 20% triggers toilet seeking
 AI_NEED_TOILET_RESTORE = 100.0         # Restored when using toilet
 TOILET_USE_DURATION_HOURS = 0.25       # 15 in-game minutes
+TOILET_USE_DURATION_SECONDS = 5.0      # Real-time seconds for toilet usage
 
 

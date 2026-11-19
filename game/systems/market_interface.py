@@ -20,7 +20,7 @@ def request_market_food_purchase(family_id, villager=None, food_item="Potato", q
     service = market_service if market_service is not None else MarketService
     target = villager if villager is not None else family_id
 
-    # Agent 2: Enforce household food purchasing restriction before attempting market purchase
+    # Buy only the amount needed to cover the living household's remaining daily food need.
     get_stock_fn = getattr(service, "get_household_available_food_stock", getattr(MarketService, "get_household_available_food_stock", None))
     if is_food_item(food_item) and callable(get_stock_fn):
         avail_food = get_stock_fn(
@@ -29,8 +29,11 @@ def request_market_food_purchase(family_id, villager=None, food_item="Potato", q
             villager_manager=vm,
             stockpile_manager=sm
         )
-        if avail_food > 0:
+        need_fn = getattr(service, "get_household_food_need", getattr(MarketService, "get_household_food_need", None))
+        food_need = need_fn(target, furniture_manager=fm, villager_manager=vm, stockpile_manager=sm) if callable(need_fn) else max(0, quantity - avail_food)
+        if food_need <= 0:
             return False, food_item, 0
+        quantity = food_need
 
     if hasattr(service, "purchase_food"):
         try:

@@ -6,7 +6,7 @@ Minimum price: 1 Copper. No maximum price.
 Zero hardcoding, config-driven.
 """
 import math
-from game.data.config import DEFAULT_ITEM_PRICES
+from game.data.config import DEFAULT_ITEM_PRICES, MARKET_TRADEABLE_ITEMS
 
 class MarketPricingSystem:
     # Baseline reference stock for normal default price
@@ -75,10 +75,8 @@ class MarketPricingSystem:
         if not hasattr(market, "prices") or not isinstance(market.prices, dict):
             market.prices = {}
 
-        # Items to price: default items + items in market inventory
-        item_keys = set(DEFAULT_ITEM_PRICES.keys())
-        if hasattr(market, "inventory") and isinstance(market.inventory, dict):
-            item_keys.update(market.inventory.keys())
+        # Price only configured goods that the player explicitly listed for sale.
+        item_keys = set(getattr(market, "sale_items", None) or []) & set(MARKET_TRADEABLE_ITEMS)
 
         for it in item_keys:
             market.prices[it] = cls.get_price(market, it)

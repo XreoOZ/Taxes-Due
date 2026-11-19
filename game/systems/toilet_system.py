@@ -19,11 +19,10 @@ from game.config import (
     AI_NEED_TOILET_DECAY_PER_DAY,
     AI_NEED_TOILET_URGENT_THRESHOLD,
     AI_NEED_TOILET_RESTORE,
-    TOILET_USE_DURATION_HOURS
+    TOILET_USE_DURATION_SECONDS,
 )
 
 TOILET_INTERACTION_RADIUS = 28.0
-TOILET_USE_DURATION_SECONDS = 3.0  # Real-time seconds for toilet animation / usage
 
 
 class ToiletSystem:

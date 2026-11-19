@@ -14,7 +14,6 @@ from game.config import (
     DOORWAY_WAYPOINT_DISTANCE,
     TILE_SIZE,
     CROP_TYPES,
-    COLOR_VILLAGER_BODY,
     COLOR_VILLAGER_OUTLINE,
     COLOR_SHADOW,
     VILLAGER_SURNAMES,
@@ -35,6 +34,7 @@ from game.config import (
     PATH_WAYPOINT_TOLERANCE,
     STUCK_THRESHOLD_SECONDS,
     STUCK_AVOIDANCE_DURATION,
+    NAVIGATION_RETRY_INTERVAL,
     EMERGENCY_STUCK_TIMEOUT,
     EMERGENCY_COLLISION_BYPASS_DURATION,
     PATH_WAIT_RECHECK_INTERVAL,
@@ -85,8 +85,10 @@ from game.config import (
     NARROW_PASSAGE_WAIT_DISTANCE
 )
 from game.world.pathfinding import GlobalPathRegistry, calculate_collision_slide, is_narrow_passage_tile
+from game.world.navigation import find_navigation_path
 from game.systems.market_interface import request_market_food_purchase
-from game.systems.market_purchasing import AIFoodPurchasingSystem
+from game.systems.market_purchasing import AIFoodPurchasingSystem, AIMarketPurchasingSystem
+from game.systems.market_service import MarketService
 from game.systems.currency import to_copper, normalize_wallet, from_copper
 from game.systems.job_tool_system import (
     get_job_required_tools,
@@ -146,13 +148,13 @@ class Villager:
         self.path_target = None
         self.path_target_tile = None
         self.path_seq = 0
+        self.path_retry_timer = 0.0
         self.yield_timer = 0.0
         self.wait_timer = 0.0
         self.is_waiting_for_path = False
         self.stuck_timer = 0.0
         self.hard_stuck_timer = 0.0
         self.collision_bypass_timer = 0.0
-        self.stuck_blocked_tiles = {}
         self.route_state = ROUTE_STATE_NONE
         self.route_request_timer = 0.0
         self.route_retry_count = 0
@@ -200,6 +202,7 @@ class Villager:
         self.purchase_target_market_id = None
         self.purchase_food_item = None
         self.purchase_target_price = 0
+        self.purchase_target_qty = 1
 
         # Agent 3: Toilet, Church, Priest & Cemetery / Gravedigger
         self.need_toilet = 100.0
@@ -303,6 +306,8 @@ class Villager:
             return "Carrying water to household storage"
         elif task == "EQUIPPING_JOB_TOOLS":
             return f"Equipping tools for {self.job}"
+        elif task in ("BUYING_JOB_TOOLS_RETRIEVE_COINS", "BUYING_JOB_TOOLS_TRAVEL_TO_MARKET", "BUYING_JOB_TOOLS_RETURN_HOME"):
+            return "Buying required job tools"
         elif task == "RETURNING_TOOLS":
             return "Returning unused tools to storage"
         elif task == "MISSING_TOOL":
@@ -327,6 +332,12 @@ class Villager:
             return "Burying deceased in Cemetery"
         elif task == "CARRYING_CORPSE":
             return "Transporting corpse to Cemetery"
+        elif task == "GRAVEDIGGER_RESTOCK_RETRIEVE_COINS":
+            return "Walking to household storage for grave supplies" if getattr(self, "is_moving", False) else "Preparing coins for grave supplies"
+        elif task == "GRAVEDIGGER_RESTOCK_TRAVEL_TO_MARKET":
+            return "Walking to market for grave supplies" if getattr(self, "is_moving", False) else "Buying grave supplies"
+        elif task == "GRAVEDIGGER_RESTOCK_HAULING_HOME":
+            return "Carrying grave supplies home"
         elif task == "HAULING_STALL_COINS_FETCH":
             return "Collecting market stall earnings"
         elif task == "HAULING_STALL_COINS_DELIVER":
@@ -1041,12 +1052,62 @@ class Villager:
                     else:
                         self.task = "SEEKING_FOOD"
 
+        # Household food is a shared need: start a market purchase whenever its
+        # configured daily stock is short, rather than waiting for hunger to become critical.
+        food_purchase_tasks = (
+            "SEEKING_FOOD",
+            "BUYING_FOOD_RETRIEVE_COINS",
+            "BUYING_FOOD_TRAVEL_TO_MARKET",
+            "BUYING_FOOD_HAULING_HOME",
+            "BUYING_JOB_TOOLS_RETRIEVE_COINS",
+            "BUYING_JOB_TOOLS_TRAVEL_TO_MARKET",
+            "BUYING_JOB_TOOLS_RETURN_HOME",
+            "GRAVEDIGGER_RESTOCK_RETRIEVE_COINS",
+            "GRAVEDIGGER_RESTOCK_TRAVEL_TO_MARKET",
+            "GRAVEDIGGER_RESTOCK_HAULING_HOME",
+        )
+        if (sched_activity != "SLEEP" and self.task not in food_purchase_tasks
+                and self.task not in ("SEEKING_WATER", "SEEKING_TOILET", "RECOVER_DEATH_ITEMS")
+                and self.need_seek_cooldown <= 0.0):
+            household_food_need = MarketService.get_household_food_need(
+                self, furniture_manager=furniture_manager, villager_manager=villager_manager,
+                stockpile_manager=stockpile_manager,
+            )
+            vm = getattr(self, "villager_manager", None) or villager_manager
+            if (household_food_need > 0
+                    and not AIFoodPurchasingSystem.is_family_member_purchasing_food(self, vm)):
+                self.interrupt_task("HOUSEHOLD_FOOD_SHORTAGE")
+                if self.current_work_tile and permit_manager:
+                    farm = next((p for p in permit_manager.permits
+                                 if p.permit_type == "farm" and self.id in getattr(p, "assigned_workers", [])), None)
+                    if farm:
+                        farm.release_worker_reservations(self.id)
+                    self.current_work_tile = None
+                GlobalPathRegistry.get_instance().release_reservation(self.id)
+                self.current_path = []
+                self.is_waiting_for_path = False
+                self.task = "SEEKING_FOOD"
+
         # Eksekusi Pencarian Makanan (SEEKING_FOOD) - Category-Based, Zero Hardcoding
         if self.task == "SEEKING_FOOD":
             self.active_tool = None
+            household_food_need = MarketService.get_household_food_need(
+                self, furniture_manager=furniture_manager, villager_manager=villager_manager,
+                stockpile_manager=stockpile_manager
+            )
+            needs_household_restock = False
+            if building_manager and household_food_need > 0:
+                candidate_market, candidate_food, _ = AIFoodPurchasingSystem.find_nearest_eligible_market(
+                    self, building_manager, furniture_manager=furniture_manager,
+                    villager_manager=villager_manager
+                )
+                needs_household_restock = bool(candidate_market and AIFoodPurchasingSystem.get_household_purchase_quantity(
+                    self, candidate_market, candidate_food, furniture_manager=furniture_manager,
+                    villager_manager=villager_manager, stockpile_manager=stockpile_manager
+                ) > 0)
             # 1. Dari inventory pribadi (makanan yang dibawa di saku)
             inv_food = next((it for it, c in self.inventory.items() if is_food_item(it) and c > 0), None)
-            if inv_food:
+            if inv_food and not needs_household_restock:
                 self.inventory[inv_food] -= 1
                 if self.inventory[inv_food] <= 0:
                     del self.inventory[inv_food]
@@ -1063,7 +1124,7 @@ class Villager:
             if chest and hasattr(chest, "inventory") and isinstance(chest.inventory, dict):
                 chest_food = next((it for it, c in chest.inventory.items() if is_food_item(it) and c > 0), None)
 
-            if chest and chest_food:
+            if chest and chest_food and not needs_household_restock:
                 cx, cy = chest.get_world_pos(TILE_SIZE)
                 arrived = self._move_towards(cx, cy, dt, arrival_dist=CHEST_INTERACTION_RADIUS, all_entities=all_entities, player=player, building_manager=building_manager, furniture_manager=furniture_manager, exclusive_target=False)
                 if arrived:
@@ -1086,7 +1147,7 @@ class Villager:
                             ground_food = s
                             break
 
-            if ground_food:
+            if ground_food and not needs_household_restock:
                 gx_pos = (ground_food.grid_x + 0.5) * TILE_SIZE
                 gy_pos = (ground_food.grid_y + 0.5) * TILE_SIZE
                 arrived = self._move_towards(gx_pos, gy_pos, dt, arrival_dist=LOOSE_ITEM_ARRIVAL_DIST, all_entities=all_entities, player=player, building_manager=building_manager, furniture_manager=furniture_manager, exclusive_target=False)
@@ -1136,14 +1197,38 @@ class Villager:
                 self.task = "IDLE"
                 return
 
+            purchase_qty = AIFoodPurchasingSystem.get_household_purchase_quantity(
+                self, market, food_item, furniture_manager=furniture_manager,
+                villager_manager=vm, stockpile_manager=stockpile_manager
+            )
+            if purchase_qty <= 0:
+                current_need = MarketService.get_household_food_need(
+                    self, furniture_manager=furniture_manager, villager_manager=vm,
+                    stockpile_manager=stockpile_manager,
+                )
+                if current_need <= 0:
+                    self.task = "IDLE"
+                    self._resume_or_idle_after_need()
+                    return
+
+                if MarketService.get_market_stock(food_item, market) <= 0:
+                    message = f"The market ran out of {food_item}."
+                else:
+                    message = "The household does not have enough coins for food."
+                self.need_seek_cooldown = 4.0
+                self.say(message, duration=2.5)
+                self.task = "IDLE"
+                return
+
             self.purchase_target_market_id = getattr(market, "id", None)
             self.purchase_food_item = food_item
-            self.purchase_target_price = price
+            self.purchase_target_qty = purchase_qty
+            self.purchase_target_price = price * purchase_qty
 
             my_coins = to_copper(normalize_wallet(self.inventory))
-            if my_coins >= price:
+            if my_coins >= self.purchase_target_price:
                 self.task = "BUYING_FOOD_TRAVEL_TO_MARKET"
-                self.say(f"Heading to Market to buy {food_item}!", duration=2.0)
+                self.say(f"Heading to Market to buy {purchase_qty} {food_item}!", duration=2.0)
             else:
                 chest = furniture_manager.get_storage_for_family(self.family_id) if furniture_manager else None
                 if not chest:
@@ -1152,7 +1237,7 @@ class Villager:
                     self.task = "IDLE"
                     return
                 self.task = "BUYING_FOOD_RETRIEVE_COINS"
-                self.say(f"Getting coins from chest to buy {food_item} at Market!", duration=2.0)
+                self.say(f"Getting coins from chest to buy {purchase_qty} {food_item} at Market!", duration=2.0)
             return
 
         # -------------------------------------------------------------
@@ -1198,7 +1283,10 @@ class Villager:
             arrived = self._move_towards(approach_pt[0], approach_pt[1], dt, arrival_dist=32, all_entities=all_entities, player=player, building_manager=building_manager, furniture_manager=furniture_manager, exclusive_target=False)
             if arrived:
                 food_item = getattr(self, "purchase_food_item", "Potato")
-                ok, msg = AIFoodPurchasingSystem.execute_market_transaction(self, market, food_item, building_manager=building_manager)
+                ok, msg = AIFoodPurchasingSystem.execute_market_transaction(
+                    self, market, food_item, building_manager=building_manager,
+                    quantity=getattr(self, "purchase_target_qty", 1)
+                )
                 if ok:
                     self.say(f"Bought {food_item} at Market! Hauling home.", duration=2.5)
                 else:
@@ -1351,16 +1439,13 @@ class Villager:
                     self.task = "LEADING_PRAYER"
                     return
             else:
-                fam_obj = villager_manager.get_family_by_id(self.family_id) if (villager_manager and self.family_id) else None
-                rep = ChurchSystem.select_household_representative(fam_obj, villager_manager)
-
                 church_tile = ChurchSystem.find_free_church_tile(self, church_p, building_manager)
                 if church_tile and church_p:
                     twx = (church_tile[0] + 0.5) * TILE_SIZE
                     twy = (church_tile[1] + 0.5) * TILE_SIZE
                     self.task = "ATTENDING_PRAYER"
                     arrived = self._move_towards(twx, twy, dt, arrival_dist=12, all_entities=all_entities, player=player, building_manager=building_manager, furniture_manager=furniture_manager)
-                    if rep and rep.id == self.id and priest_worker:
+                    if priest_worker:
                         dist_to_church = math.hypot(self.x - twx, self.y - twy)
                         if dist_to_church <= 48.0 or arrived:
                             ChurchSystem.process_church_tax_payment(self, priest_worker, church_p, furniture_manager)
@@ -1659,6 +1744,93 @@ class Villager:
         # -------------------------------------------------------------
         # Rutinitas 1.7: Generic Work Tool Management & Job Workflow
         # -------------------------------------------------------------
+        tool_purchase_tasks = {
+            "BUYING_JOB_TOOLS_RETRIEVE_COINS",
+            "BUYING_JOB_TOOLS_TRAVEL_TO_MARKET",
+            "BUYING_JOB_TOOLS_RETURN_HOME",
+        }
+        if self.task in tool_purchase_tasks:
+            market = getattr(self, "job_tool_purchase_market", None)
+            requested_items = getattr(self, "job_tool_purchase_items", {})
+            if not market or not requested_items:
+                self.task = "IDLE"
+                self.job_tool_purchase_market = None
+                self.job_tool_purchase_items = {}
+                return
+
+            total_cost = sum(
+                MarketService.get_item_price(item, market) * quantity
+                for item, quantity in requested_items.items()
+            )
+            chest = furniture_manager.get_storage_for_family(self.family_id) if furniture_manager else None
+
+            if self.task == "BUYING_JOB_TOOLS_RETRIEVE_COINS":
+                pocket_funds = to_copper(normalize_wallet(self.inventory))
+                if pocket_funds >= total_cost:
+                    self.task = "BUYING_JOB_TOOLS_TRAVEL_TO_MARKET"
+                elif chest:
+                    chest_x, chest_y = chest.get_world_pos(TILE_SIZE)
+                    arrived = self._move_towards(
+                        chest_x, chest_y, dt, arrival_dist=CHEST_INTERACTION_RADIUS,
+                        all_entities=all_entities, player=player,
+                        building_manager=building_manager, furniture_manager=furniture_manager,
+                    )
+                    if arrived:
+                        success, message = AIMarketPurchasingSystem.withdraw_household_coins(
+                            self, total_cost, furniture_manager, villager_manager
+                        )
+                        if success:
+                            self.task = "BUYING_JOB_TOOLS_TRAVEL_TO_MARKET"
+                        else:
+                            self.task = "MISSING_TOOL"
+                            self.say(message, duration=2.5)
+                else:
+                    success, message = AIMarketPurchasingSystem.withdraw_household_coins(
+                        self, total_cost, furniture_manager, villager_manager
+                    )
+                    if success:
+                        self.task = "BUYING_JOB_TOOLS_TRAVEL_TO_MARKET"
+                    else:
+                        self.task = "MISSING_TOOL"
+                        self.say(message, duration=2.5)
+                return
+
+            if self.task == "BUYING_JOB_TOOLS_TRAVEL_TO_MARKET":
+                market_x, market_y = market.get_center_world(TILE_SIZE)
+                arrived = self._move_towards(
+                    market_x, market_y, dt, arrival_dist=CHEST_INTERACTION_RADIUS,
+                    all_entities=all_entities, player=player,
+                    building_manager=building_manager, furniture_manager=furniture_manager,
+                )
+                if arrived:
+                    success, message = AIMarketPurchasingSystem.execute_items_transaction(
+                        self, market, requested_items
+                    )
+                    if success:
+                        self.task = "BUYING_JOB_TOOLS_RETURN_HOME"
+                    else:
+                        self.task = "MISSING_TOOL"
+                        self.say(message, duration=2.5)
+                return
+
+            if self.task == "BUYING_JOB_TOOLS_RETURN_HOME":
+                if chest:
+                    chest_x, chest_y = chest.get_world_pos(TILE_SIZE)
+                    arrived = self._move_towards(
+                        chest_x, chest_y, dt, arrival_dist=CHEST_INTERACTION_RADIUS,
+                        all_entities=all_entities, player=player,
+                        building_manager=building_manager, furniture_manager=furniture_manager,
+                    )
+                    if arrived:
+                        AIMarketPurchasingSystem.deposit_materials_and_change_to_chest(self, furniture_manager)
+                        self.say("Stored market change; tools are ready for work.", duration=2.0)
+                else:
+                    self.task = "IDLE"
+                if self.task == "IDLE":
+                    self.job_tool_purchase_market = None
+                    self.job_tool_purchase_items = {}
+                return
+
         # A. Kembalikan HANYA alat kerja yang tidak lagi relevan (misal setelah berganti job) atau alat berlebih
         irrelevant_tools = self.get_irrelevant_tools()
         if irrelevant_tools and self.task not in ("HAULING_FURNITURE", "FETCHING_FURNITURE", "HAULING_HOME", "FETCHING_POSSESSION"):
@@ -1686,7 +1858,7 @@ class Villager:
         # B. Kumpulkan SEMUA alat kerja yang dibutuhkan untuk pekerjaan saat ini dalam satu kali kunjungan
         # Ketentuan: "Collect ALL tools relevant to the current job before starting work.
         # Do NOT collect one tool, perform one task, return to storage, and collect another tool."
-        if sched_activity in ("WORK", "ANY") and self.task not in ("HAULING_FURNITURE", "FETCHING_FURNITURE", "HAULING_HOME", "FETCHING_POSSESSION"):
+        if self.task not in ("HAULING_FURNITURE", "FETCHING_FURNITURE", "HAULING_HOME", "FETCHING_POSSESSION"):
             missing_tools = self.get_missing_job_tools()
             if missing_tools:
                 available_to_fetch = [t for t, _ in missing_tools if self._has_tool_in_storage(t, furniture_manager, stockpile_manager)]
@@ -1705,16 +1877,31 @@ class Villager:
                             if col:
                                 self.say(f"Equipped {', '.join(col)} for {self.job}!", duration=2.0)
                             self.task = "IDLE"
+                            return
                         else:
                             self.task = "EQUIPPING_JOB_TOOLS"
                             self.active_tool = None
                             self._move_towards(storage_pos[0], storage_pos[1], dt, arrival_dist=TOOL_STOW_ARRIVAL_DIST, all_entities=all_entities, player=player, building_manager=building_manager, furniture_manager=furniture_manager)
                             return
+                else:
+                    requested_items = dict(missing_tools)
+                    market, total_cost = AIMarketPurchasingSystem.find_market_for_items(
+                        self, requested_items, building_manager, furniture_manager, villager_manager
+                    )
+                    if market:
+                        self.job_tool_purchase_market = market
+                        self.job_tool_purchase_items = requested_items
+                        self.task = "BUYING_JOB_TOOLS_RETRIEVE_COINS"
+                        return
+                    self.task = "MISSING_TOOL"
+                    if not getattr(self, "speech_text", None):
+                        self.say("My job tools are missing, and no market can supply the complete set.", duration=2.5)
+                    return
 
         # -------------------------------------------------------------
         # Rutinitas 2: Jam Kerja (WORK / ANY)
         # -------------------------------------------------------------
-        if sched_activity in ("WORK", "ANY"):
+        if sched_activity in ("WORK", "ANY") or self.job == "Gravedigger":
             # Jika sedang membawa hasil panen di tangan, antar langsung ke Household Storage keluarga
             if self.carrying_crop > 0:
                 self.task = "HAULING_HOME"
@@ -2062,14 +2249,46 @@ class Villager:
             # Pekerjaan spesifik: Penggali Kubur (Gravedigger) - AGENT 3
             if self.job == "Gravedigger":
                 from game.systems.cemetery_system import CemeterySystem
-                from game.systems.market_purchasing import AIMarketPurchasingSystem
+                restock_tasks = {
+                    "GRAVEDIGGER_RESTOCK_RETRIEVE_COINS",
+                    "GRAVEDIGGER_RESTOCK_TRAVEL_TO_MARKET",
+                    "GRAVEDIGGER_RESTOCK_HAULING_HOME",
+                }
+                if self.task in restock_tasks and (
+                    not getattr(self, "target_restock_market", None)
+                    or not getattr(self, "target_restock_mat", None)
+                    or getattr(self, "target_restock_qty", 0) <= 0
+                ):
+                    # Save files retain task names but not live market references.
+                    # Rebuild the purchase plan from current stock and funds.
+                    self.task = "IDLE"
+                    self.target_restock_market = None
+                    self.target_restock_mat = None
+                    self.target_restock_qty = 0
+
+                # Buy any missing tools before starting burial work. Process each
+                # missing tool through the same physical market workflow.
+                missing_tools = self.get_missing_job_tools()
+                if missing_tools and self.task not in restock_tasks:
+                    tool_name, tool_qty = missing_tools[0]
+                    market, _, buy_qty = AIMarketPurchasingSystem.find_nearest_market_for_material(
+                        self, tool_name, tool_qty, building_manager, furniture_manager, villager_manager
+                    )
+                    if market and buy_qty > 0:
+                        self.target_restock_market = market
+                        self.target_restock_mat = tool_name
+                        self.target_restock_qty = buy_qty
+                        self.task = "GRAVEDIGGER_RESTOCK_RETRIEVE_COINS"
+                    elif not getattr(self, "speech_text", None):
+                        self.say(f"I need {tool_name} to work, but no market has it in stock.", duration=2.5)
+                    return
 
                 cemetery_p = CemeterySystem.get_cemetery_permit(permit_manager)
                 if cemetery_p:
                     CemeterySystem.update_grave_lifecycles(cemetery_p, cur_day)
 
                 # A. Sedang mengangkut jenazah -> Menuju pemakaman
-                if getattr(self, "carrying_corpse_id", None):
+                if getattr(self, "carrying_corpse_id", None) and self.task not in ("DIGGING_GRAVE", "BURYING_GRAVE"):
                     target_cid = self.carrying_corpse_id
                     grave_tile = getattr(self, "gravedigger_target_grave_tile", None)
                     if not grave_tile and cemetery_p:
@@ -2079,11 +2298,17 @@ class Villager:
                     if not grave_tile or not cemetery_p:
                         # Pemakaman PENUH (Full Cemetery Overflow)
                         corpse_entity = next((v for v in villager_manager.get_all_villagers() if str(v.id) == str(target_cid)), None)
-                        CemeterySystem.handle_full_cemetery_overflow(self, corpse_entity or {"id": target_cid, "first_name": "Villager"}, cemetery_p, TILE_SIZE)
-                        self.carrying_corpse_id = None
-                        self.gravedigger_target_corpse_id = None
-                        self.gravedigger_target_grave_tile = None
-                        self.task = "IDLE"
+                        overflow_corpse = corpse_entity or {"id": target_cid, "first_name": "Villager"}
+                        overflow_x, overflow_y = CemeterySystem.get_overflow_position(cemetery_p, overflow_corpse, TILE_SIZE)
+                        arrived = self._move_towards(overflow_x, overflow_y, dt, arrival_dist=14, all_entities=all_entities, player=player, building_manager=building_manager, furniture_manager=furniture_manager)
+                        if arrived:
+                            CemeterySystem.handle_full_cemetery_overflow(self, overflow_corpse, cemetery_p, TILE_SIZE)
+                            self.carrying_corpse_id = None
+                            self.carrying_corpse_name = None
+                            self.gravedigger_target_corpse_id = None
+                            self.gravedigger_target_grave_tile = None
+                            self.gravedigger_materials_committed = False
+                            self.task = "IDLE"
                         return
 
                     g_wx = (grave_tile[0] + 0.5) * TILE_SIZE
@@ -2091,13 +2316,23 @@ class Villager:
                     self.active_tool = "Hoe"
                     arrived = self._move_towards(g_wx, g_wy, dt, arrival_dist=14, all_entities=all_entities, player=player, building_manager=building_manager, furniture_manager=furniture_manager)
                     if arrived:
-                        self.task = "DIGGING_GRAVE"
-                        self.gravedigger_timer = 0.0
+                        if CemeterySystem.consume_grave_materials(self, furniture_manager):
+                            self.gravedigger_materials_committed = True
+                            self.task = "DIGGING_GRAVE"
+                            self.gravedigger_timer = 0.0
+                        else:
+                            self.say("I need one Wood and one Stone to finish preparing this grave.", duration=2.5)
                     return
 
                 # B. Sedang menggali kubur (1.0 jam in-game)
                 if self.task == "DIGGING_GRAVE":
                     self.active_tool = "Hoe"
+                    if not getattr(self, "gravedigger_materials_committed", False):
+                        if not CemeterySystem.consume_grave_materials(self, furniture_manager):
+                            self.task = "IDLE"
+                            self.say("I need one Wood and one Stone before digging.", duration=2.5)
+                            return
+                        self.gravedigger_materials_committed = True
                     one_hour = (day_cycle.day_length_seconds / 24.0) if day_cycle else 50.0
                     self.gravedigger_timer += dt
                     grave_tile = getattr(self, "gravedigger_target_grave_tile", None)
@@ -2131,24 +2366,29 @@ class Villager:
                             corpse_entity.is_picked_up = False
                         self.say("Burial complete. May they rest in peace.", duration=3.0)
                         self.carrying_corpse_id = None
+                        self.carrying_corpse_name = None
                         self.gravedigger_target_corpse_id = None
                         self.gravedigger_target_grave_tile = None
+                        self.gravedigger_materials_committed = False
                         self.gravedigger_timer = 0.0
                         self.task = "IDLE"
                     return
 
                 # D. Cek apakah ada jenazah yang belum dimakamkan
                 all_vils = villager_manager.get_all_villagers()
+                ready_overflow = CemeterySystem.release_ready_overflow_corpse(cemetery_p, cur_day)
+                overflow_ids = CemeterySystem.get_overflow_corpse_ids()
                 unburied_corpses = [
                     v for v in all_vils
                     if not getattr(v, "is_alive", True)
-                    and getattr(v, "death_reason", None) is not None
                     and not getattr(v, "is_buried", False)
                     and not getattr(v, "is_picked_up", False)
+                    and str(getattr(v, "id", "")) not in overflow_ids
                 ]
+                unburied_corpses.sort(key=lambda v: not getattr(v, "is_cemetery_overflow", False))
 
-                if unburied_corpses:
-                    target_corpse = unburied_corpses[0]
+                if (ready_overflow or unburied_corpses) and self.task not in restock_tasks:
+                    target_corpse = ready_overflow or unburied_corpses[0]
                     w_count, s_count, miss_w, miss_s = CemeterySystem.check_gravedigger_stock(self, furniture_manager)
                     if miss_w > 0 or miss_s > 0:
                         mat_to_buy = "Wood" if miss_w > 0 else "Stone"
@@ -2168,7 +2408,6 @@ class Villager:
 
                     # Bayar komisi & konsumsi material
                     CemeterySystem.commission_burial(target_corpse, villager_manager, furniture_manager, stockpile_manager)
-                    CemeterySystem.consume_grave_materials(self, furniture_manager)
 
                     # Menuju jenazah untuk diangkat
                     self.active_tool = "Hoe"
@@ -2176,6 +2415,7 @@ class Villager:
                     arrived = self._move_towards(target_corpse.x, target_corpse.y, dt, arrival_dist=16, all_entities=all_entities, player=player, building_manager=building_manager, furniture_manager=furniture_manager)
                     if arrived:
                         target_corpse.is_picked_up = True
+                        target_corpse.is_cemetery_overflow = False
                         self.carrying_corpse_id = target_corpse.id
                         self.carrying_corpse_name = target_corpse.full_name
                         self.say(f"Carrying {target_corpse.first_name}'s body to the cemetery...", duration=2.5)
@@ -2198,27 +2438,28 @@ class Villager:
 
                 if self.task == "GRAVEDIGGER_RESTOCK_RETRIEVE_COINS":
                     chest = furniture_manager.get_storage_for_family(self.family_id) if furniture_manager else None
-                    if chest:
+                    mkt = getattr(self, "target_restock_market", None)
+                    mat = getattr(self, "target_restock_mat", "Wood")
+                    qty = getattr(self, "target_restock_qty", 1)
+                    unit_price = MarketService.get_item_price(mat, mkt)
+                    pocket_funds = to_copper(normalize_wallet(self.inventory))
+                    if pocket_funds >= unit_price * qty:
+                        arrived = True
+                    elif chest:
                         cx, cy = chest.get_world_pos(TILE_SIZE)
                         arrived = self._move_towards(cx, cy, dt, arrival_dist=CHEST_INTERACTION_RADIUS, all_entities=all_entities, player=player, building_manager=building_manager, furniture_manager=furniture_manager)
-                        if arrived:
-                            from game.data.config import DEFAULT_ITEM_PRICES
-                            mkt = getattr(self, "target_restock_market", None)
-                            mat = getattr(self, "target_restock_mat", "Wood")
-                            qty = getattr(self, "target_restock_qty", 1)
-                            prices = getattr(mkt, "prices", {}) if mkt else {}
-                            unit_p = prices.get(mat, DEFAULT_ITEM_PRICES.get(mat, 2))
-                            needed_copper = unit_p * qty
-                            avail_cop = to_copper(chest.inventory) if hasattr(chest, "inventory") else 0
-                            take_cop = min(avail_cop, needed_copper + 5)
-                            if take_cop >= unit_p:
-                                cur_w = from_copper(take_cop)
-                                for d, a in cur_w.items():
-                                    chest.inventory[d] = max(0, chest.inventory.get(d, 0) - a)
-                                    self.inventory[d] = self.inventory.get(d, 0) + a
-                                self.task = "GRAVEDIGGER_RESTOCK_TRAVEL_TO_MARKET"
-                            else:
-                                self.task = "IDLE"
+                    else:
+                        arrived = True
+                    if arrived:
+                        enough_coins, message = AIMarketPurchasingSystem.withdraw_household_coins(
+                            self, unit_price * qty, furniture_manager, villager_manager
+                        )
+                        if enough_coins:
+                            self.task = "GRAVEDIGGER_RESTOCK_TRAVEL_TO_MARKET"
+                        else:
+                            self.task = "IDLE"
+                            if not getattr(self, "speech_text", None):
+                                self.say(message, duration=2.5)
                     return
 
                 if self.task == "GRAVEDIGGER_RESTOCK_TRAVEL_TO_MARKET":
@@ -2243,6 +2484,8 @@ class Villager:
                         if arrived:
                             AIMarketPurchasingSystem.deposit_materials_and_change_to_chest(self, furniture_manager)
                             self.say("Stored materials in chest.", duration=2.0)
+                    else:
+                        AIMarketPurchasingSystem.deposit_materials_and_change_to_chest(self, furniture_manager)
                     return
 
         # -------------------------------------------------------------
@@ -2316,7 +2559,7 @@ class Villager:
                     
                     # Rule: Narrow doorways & passages must NEVER become an AI idle position
                     from game.world.pathfinding import is_narrow_passage_tile
-                    open_tiles = [t for t in avail_tiles if not is_narrow_passage_tile(t, building_manager=building_manager, furniture_manager=furniture_manager)]
+                    open_tiles = [t for t in avail_tiles if not is_narrow_passage_tile(t, building_manager=building_manager)]
                     if open_tiles:
                         avail_tiles = open_tiles
 
@@ -2359,10 +2602,10 @@ class Villager:
         from game.world.pathfinding import is_narrow_passage_tile
         cur_gx = int(math.floor(self.x / TILE_SIZE))
         cur_gy = int(math.floor(self.y / TILE_SIZE))
-        if is_narrow_passage_tile((cur_gx, cur_gy), building_manager=building_manager, furniture_manager=furniture_manager):
+        if is_narrow_passage_tile((cur_gx, cur_gy), building_manager=building_manager):
             for dx, dy in ((0, 1), (0, -1), (1, 0), (-1, 0), (1, 1), (-1, -1), (1, -1), (-1, 1)):
                 cand_t = (cur_gx + dx, cur_gy + dy)
-                if not is_narrow_passage_tile(cand_t, building_manager=building_manager, furniture_manager=furniture_manager):
+                if not is_narrow_passage_tile(cand_t, building_manager=building_manager):
                     cand_wx = (cand_t[0] + 0.5) * TILE_SIZE
                     cand_wy = (cand_t[1] + 0.5) * TILE_SIZE
                     self.idle_target = (cand_wx, cand_wy)
@@ -2394,38 +2637,9 @@ class Villager:
         self._move_towards(self.idle_target[0], self.idle_target[1], dt, arrival_dist=16, all_entities=all_entities, player=player, building_manager=building_manager, furniture_manager=furniture_manager, exclusive_target=False)
 
     def _move_towards(self, tx, ty, dt, arrival_dist=10, all_entities=None, player=None, building_manager=None, furniture_manager=None, exclusive_target=False):
-        reg = GlobalPathRegistry.get_instance()
-
         if getattr(self, "player_avoid_speech_cooldown", 0.0) > 0.0:
             self.player_avoid_speech_cooldown = max(0.0, self.player_avoid_speech_cooldown - dt)
-
-        if getattr(self, "collision_bypass_timer", 0.0) > 0.0:
-            self.collision_bypass_timer = max(0.0, self.collision_bypass_timer - dt)
-
-        # 0. Route Lifecycle Tracking
-        if not hasattr(self, "route_state"):
-            self.route_state = ROUTE_STATE_NONE
-        if not hasattr(self, "route_request_timer"):
-            self.route_request_timer = 0.0
-        if not hasattr(self, "route_retry_count"):
-            self.route_retry_count = 0
-        if not hasattr(self, "hard_stuck_timer"):
-            self.hard_stuck_timer = 0.0
-
-        # Check exclusive target occupancy
-        tgt_gx = int(math.floor(tx / TILE_SIZE))
-        tgt_gy = int(math.floor(ty / TILE_SIZE))
-        self.path_target_tile = (tgt_gx, tgt_gy)
-        if exclusive_target and self.path_target_tile:
-            occ = reg.get_tile_occupant(self.path_target_tile)
-            if occ and occ != str(self.id):
-                if getattr(self, "collision_bypass_timer", 0.0) <= 0.0:
-                    self.hard_stuck_timer += dt
-                    if self.hard_stuck_timer >= EMERGENCY_STUCK_TIMEOUT:
-                        self.collision_bypass_timer = EMERGENCY_COLLISION_BYPASS_DURATION
-                        self.hard_stuck_timer = 0.0
-                        self.is_waiting_for_path = False
-                    return False
+        self.path_retry_timer = max(0.0, getattr(self, "path_retry_timer", 0.0) - dt)
 
         # Direct arrival check
         direct_dist = math.hypot(tx - self.x, ty - self.y)
@@ -2436,81 +2650,38 @@ class Villager:
             self.path_target = None
             self.is_waiting_for_path = False
             self.route_state = ROUTE_STATE_COMPLETED
-            self.route_request_timer = 0.0
-            self.route_retry_count = 0
-            reg.release_reservation(self.id)
             return True
 
-        # Check if route already failed for this target
-        if getattr(self, "route_state", None) == ROUTE_STATE_FAILED:
-            if self.path_target and math.hypot(tx - self.path_target[0], ty - self.path_target[1]) > 16.0:
-                self.route_state = ROUTE_STATE_NONE
-                self.route_retry_count = 0
-                self.route_request_timer = 0.0
-            else:
-                self.is_moving = False
-                self.is_waiting_for_path = False
-                return False
-
-        # 1. Path Calculation / Re-pathing
         target_dist = math.hypot(tx - (self.path_target[0] if self.path_target else 999999),
                                  ty - (self.path_target[1] if self.path_target else 999999))
-        needs_new_path = (self.path_target is None or target_dist > 16.0 or not self.current_path or self.path_index >= len(self.current_path))
+        target_changed = self.path_target is None or target_dist > PATH_WAYPOINT_TOLERANCE
+        needs_new_path = (
+            target_changed
+            or (self.current_path and self.path_index >= len(self.current_path))
+            or (not self.current_path and self.path_retry_timer <= 0.0)
+        )
 
         if needs_new_path:
             self.path_target = (tx, ty)
-            tgt_gx = int(math.floor(tx / TILE_SIZE))
-            tgt_gy = int(math.floor(ty / TILE_SIZE))
-            self.path_target_tile = (tgt_gx, tgt_gy)
-            self.path_seq = reg.register_claim(self.id, self.path_target_tile)
-
-            # Furniture avoidance
-            furn_avoid = set()
-            if furniture_manager and hasattr(furniture_manager, "get_occupied_tiles"):
-                furn_avoid.update(furniture_manager.get_occupied_tiles(exclude_tile=self.path_target_tile))
-            furn_avoid.discard(self.path_target_tile)
-
-            cand_path = None
-            if building_manager:
-                cand_path = building_manager.find_path((self.x, self.y), (tx, ty), TILE_SIZE, furniture_manager=furniture_manager, avoid_tiles=furn_avoid)
-                if not cand_path:
-                    for adx, ady in ((0, 1), (1, 0), (0, -1), (-1, 0), (1, 1), (-1, -1), (1, -1), (-1, 1)):
-                        adj_x = (tgt_gx + adx + 0.5) * TILE_SIZE
-                        adj_y = (tgt_gy + ady + 0.5) * TILE_SIZE
-                        adj_cand = building_manager.find_path((self.x, self.y), (adj_x, adj_y), TILE_SIZE, furniture_manager=furniture_manager, avoid_tiles=furn_avoid)
-                        if adj_cand:
-                            cand_path = adj_cand
-                            break
-            else:
-                cand_path = [(tx, ty)]
+            if target_changed:
+                self.path_retry_timer = 0.0
+            cand_path = find_navigation_path(
+                (self.x, self.y), (tx, ty), building_manager,
+                furniture_manager=furniture_manager, tile_size=TILE_SIZE,
+            )
 
             if cand_path:
                 self.current_path = cand_path
                 self.path_index = 0
                 self.is_waiting_for_path = False
-                self.wait_timer = 0.0
                 self.route_state = ROUTE_STATE_ASSIGNED
-                self.route_request_timer = 0.0
-                self.route_retry_count = 0
-                reg.request_path_reservation(self.id, cand_path, (self.x, self.y), self.path_target_tile, building_manager=building_manager, exclusive_target=exclusive_target)
             else:
-                self.route_retry_count += 1
-                if self.route_retry_count >= ROUTE_MAX_RETRIES:
-                    self.route_state = ROUTE_STATE_FAILED
-                    self.is_waiting_for_path = False
-                    self.is_moving = False
-                    self.current_path = []
-                    self.route_request_timer = 0.0
-                    return False
-                self.route_request_timer += dt
-                if self.route_request_timer >= ROUTE_REQUEST_TIMEOUT:
-                    self.route_state = ROUTE_STATE_FAILED
-                    self.is_waiting_for_path = False
-                    self.is_moving = False
-                    self.current_path = []
-                    self.route_request_timer = 0.0
-                    return False
+                self.route_state = ROUTE_STATE_FAILED
+                self.path_retry_timer = NAVIGATION_RETRY_INTERVAL
+                self.current_path = []
+                self.path_index = 0
                 self.is_moving = False
+                self.is_waiting_for_path = False
                 return False
 
         if not self.current_path or self.path_index >= len(self.current_path):
@@ -2533,9 +2704,6 @@ class Villager:
                 self.path_target = None
                 self.is_waiting_for_path = False
                 self.route_state = ROUTE_STATE_COMPLETED
-                self.route_request_timer = 0.0
-                self.route_retry_count = 0
-                reg.release_reservation(self.id)
                 return True
             else:
                 self.path_index += 1
@@ -2677,7 +2845,9 @@ class Villager:
         surface.blit(shadow_surf, (sx - shadow_w // 2, sy + int(r * 0.4)))
 
         # 2. Badan Karakter Villager (Peasant Forest Green Tunic)
-        pygame.draw.circle(surface, COLOR_VILLAGER_BODY, (sx, char_y), r)
+        job_colors = DEDICATED_JOBS.get(self.job, DEDICATED_JOBS["Unassigned"])
+        body_color = job_colors.get("color", DEDICATED_JOBS["Unassigned"]["color"])
+        pygame.draw.circle(surface, body_color, (sx, char_y), r)
         outline_w = max(1, int(3 * camera.zoom))
         pygame.draw.circle(surface, COLOR_VILLAGER_OUTLINE, (sx, char_y), r, outline_w)
 

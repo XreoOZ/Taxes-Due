@@ -314,6 +314,16 @@ def main():
                 elif settings_modal.is_open:
                     continue
 
+                # Route all keyboard input to an open market modal before global shortcuts.
+                if market_modal.is_open:
+                    market_modal.handle_event(
+                        event, resources, stockpile_manager,
+                        servant_manager=servant_manager,
+                        villager_manager=villager_manager,
+                        furniture_manager=furniture_manager,
+                    )
+                    continue
+
                 speed_action = speed_controller.handle_event(event)
                 if speed_action is not None:
                     continue
@@ -1765,7 +1775,7 @@ def main():
             settings_modal.draw_hud_button(screen)
 
             # 10. Resources HUD
-            resource_hud.draw(screen, resources)
+            resource_hud.draw(screen, resources, weekday=day_cycle.get_weekday_name())
 
             # 10.5. AI Paths Toggle Button (Right Side, below Resources HUD)
             screen_w = screen.get_width()

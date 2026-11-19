@@ -3,8 +3,8 @@ Church, Priest, Prayer Time & Church Tax System (AGENT 2)
 Coordinates gameplay logic for:
 1. Church Permit & Building Construction (Wooden/Stone Structure inside Church Permit).
 2. Priest Job Assignment: dynamically selects closest available household member with no other active job, changes title to Priest, and handles worker release via [- Number of Workers +].
-3. Prayer Time Schedule: indivisible contiguous block on Priest schedule, forced onto all other jobs strictly during the prayer block.
-4. Household Prayer & Church Tax Flow: 1 representative per household pays exact coin amount to Priest at church, no partial payment if insufficient, members wait on available church tiles.
+3. Prayer Time Schedule: one indivisible daily block shared by every job.
+4. Household Prayer & Church Tax Flow: the first household member to arrive pays the configured tax, or all remaining coins when short.
 5. Church Tax Settings: configurable in Taxes menu with Gold, Silver, Copper coin stepper controls.
 6. Priest Workflow: travels to Church, receives tithes, remains until prayer ends, deposits coins into household chest, and preaches near village infrastructure during work hours.
 7. Prayer Time Priority: halts normal job activity during prayer time; resumes normal activity afterwards.
@@ -88,6 +88,9 @@ class ChurchSystem:
         """
         if not villager_manager:
             return False, "Villager manager unavailable."
+
+        if cls.get_assigned_priest(permit_manager, villager_manager):
+            return False, "The Church already has its one assigned Priest."
 
         church = target_permit or cls.get_church_permit(permit_manager)
 
@@ -252,7 +255,7 @@ class ChurchSystem:
         """
         Payment rules:
         - If household has enough coins: collects the configured amount.
-        - If household has insufficient coins: DO NOT collect partial payment.
+        - If household has insufficient coins: collect all remaining coins as partial payment.
         - If household has no coins: does not pay.
         - Collected coins transferred directly into Priest's personal inventory.
         - Marked paid once per household per day.
@@ -283,20 +286,21 @@ class ChurchSystem:
 
         available_copper = to_copper(wallet)
 
-        # STRICT RULE: Insufficient or zero coins -> DO NOT collect partial payment!
-        if available_copper < target_copper:
+        if available_copper <= 0:
             cls.mark_tax_paid(fam_id, church_permit)
-            if available_copper == 0:
-                representative.say("We have no coins for Church Tax today, Father.", duration=2.2)
-            else:
-                representative.say(f"We cannot afford {target_copper}c Church Tax today, Father.", duration=2.2)
+            representative.say("We have no coins for Church Tax today, Father.", duration=2.2)
             return 0
 
-        # Sufficient coins -> calculate payment and change using denomination breaking
-        can_pay, payment, change, _ = calculate_payment_and_change(wallet, target_copper)
-        if not can_pay:
-            cls.mark_tax_paid(fam_id, church_permit)
-            return 0
+        if available_copper < target_copper:
+            payment = wallet
+            change = {"Copper": 0, "Silver": 0, "Gold": 0}
+            paid_copper = available_copper
+        else:
+            can_pay, payment, change, _ = calculate_payment_and_change(wallet, target_copper)
+            if not can_pay:
+                cls.mark_tax_paid(fam_id, church_permit)
+                return 0
+            paid_copper = target_copper
 
         if not hasattr(priest, "currency") or not isinstance(priest.currency, dict):
             priest.currency = {"Copper": 0, "Silver": 0, "Gold": 0}
@@ -305,9 +309,9 @@ class ChurchSystem:
 
         if transfer_success:
             cls.mark_tax_paid(fam_id, church_permit)
-            representative.say(f"Paid {target_copper}c Church Tax on behalf of our household.", duration=2.2)
+            representative.say(f"Paid {paid_copper}c Church Tax on behalf of our household.", duration=2.2)
             priest.say("Blessings upon your household.", duration=2.2)
-            return target_copper
+            return paid_copper
 
         return 0
 
