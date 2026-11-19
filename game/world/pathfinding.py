@@ -244,27 +244,30 @@ class Pathfinder:
 
         start_tile = (int(math.floor(sx / tile_size)), int(math.floor(sy / tile_size)))
         target_tile = (int(math.floor(tx / tile_size)), int(math.floor(ty / tile_size)))
-
-        if start_tile == target_tile:
-            return [(tx, ty)]
-
         bm = building_manager or self.building_manager
 
-        # Jika target_tile berada pada sumur (Well), arahkan ke petak kosong terdekat di luarnya untuk interaksi
+        # A well is solid. Normalize an inside target to an outside tile before
+        # the same-tile shortcut, otherwise actors already beside it can receive
+        # a direct waypoint that points through its footprint.
         b_tar = bm.get_building_at(target_tile[0], target_tile[1]) if bm else None
         if b_tar and getattr(b_tar, "building_type", "") == "well":
-            adj_candidates = [
-                (target_tile[0] + 1, target_tile[1]), (target_tile[0] - 1, target_tile[1]),
-                (target_tile[0], target_tile[1] + 1), (target_tile[0], target_tile[1] - 1)
-            ]
+            adj_candidates = []
+            for gx, gy in getattr(b_tar, "tiles", (target_tile,)):
+                adj_candidates.extend((gx + dx, gy + dy) for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)))
+            adj_candidates = list(dict.fromkeys(adj_candidates))
             valid_adj = [t for t in adj_candidates if not bm.get_building_at(t[0], t[1])]
-            if valid_adj:
-                target_tile = min(valid_adj, key=lambda t: abs(t[0] - start_tile[0]) + abs(t[1] - start_tile[1]))
+            if not valid_adj:
+                return []
+            target_tile = min(valid_adj, key=lambda t: abs(t[0] - start_tile[0]) + abs(t[1] - start_tile[1]))
+            tx, ty = ((target_tile[0] + 0.5) * tile_size, (target_tile[1] + 0.5) * tile_size)
         elif b_tar and (getattr(b_tar, "is_solid", False) or not getattr(b_tar, "door_pos", None)):
             # Bangunan tertutup tanpa pintu: target di dalam tidak dapat dijangkau dari luar
             b_start = bm.get_building_at(start_tile[0], start_tile[1]) if bm else None
             if b_start != b_tar:
                 return []
+
+        if start_tile == target_tile:
+            return [(tx, ty)]
 
         # Pastikan target_tile dan start_tile tidak diblokir oleh rute sendiri
         filtered_avoid = set(avoid_tiles) if avoid_tiles else set()
