@@ -5,6 +5,7 @@ Building & Construction System (Arbitrary Connected Shapes, Player-Placed Doors,
 import math
 import time
 import pygame
+from game.render_cache import alpha_fill_surface, ellipse_surface, inset_rect_surface
 from game.config import (
     TILE_SIZE,
     BUILDING_TYPES,
@@ -253,14 +254,23 @@ class ConstructionSite:
         return (best_t[0] + 0.5) * tile_size, (best_t[1] + 0.5) * tile_size
 
     def draw(self, surface, camera, tile_size):
+        if self.tiles and not camera.is_world_rect_visible(
+                self.grid_x * tile_size, self.grid_y * tile_size,
+                self.tiles_w * tile_size, self.tiles_h * tile_size):
+            return
         self._ensure_font()
         scaled_tile = max(1, math.ceil(tile_size * camera.zoom))
 
-        # 1. Blueprint Grid & Foundation per tile
-        for (gx, gy) in self.tiles:
+        # 1. Blueprint Grid & Foundation per visible tile
+        world_bounds = (
+            self.grid_x * tile_size, self.grid_y * tile_size,
+            (self.grid_x + self.tiles_w) * tile_size,
+            (self.grid_y + self.tiles_h) * tile_size,
+        )
+        visible_tiles = list(camera.iter_visible_tiles(self.tiles, tile_size, world_bounds))
+        for (gx, gy) in visible_tiles:
             sx, sy = camera.world_to_screen(gx * tile_size, gy * tile_size)
-            tile_surf = pygame.Surface((scaled_tile + 1, scaled_tile + 1), pygame.SRCALPHA)
-            tile_surf.fill((30, 58, 138, 90))
+            tile_surf = alpha_fill_surface(scaled_tile + 1, scaled_tile + 1, (30, 58, 138, 90))
             surface.blit(tile_surf, (sx, sy))
 
             # Blueprint grid borders
@@ -714,14 +724,23 @@ class DemolitionSite:
         return bool(self.tiles & tiles)
 
     def draw(self, surface, camera, tile_size):
+        if self.tiles and not camera.is_world_rect_visible(
+                self.grid_x * tile_size, self.grid_y * tile_size,
+                self.tiles_w * tile_size, self.tiles_h * tile_size):
+            return
         self._ensure_font()
         scaled_tile = max(1, math.ceil(tile_size * camera.zoom))
 
         # Overlay merah pada bangunan yang sedang dihancurkan
-        for (gx, gy) in self.tiles:
+        world_bounds = (
+            self.grid_x * tile_size, self.grid_y * tile_size,
+            (self.grid_x + self.tiles_w) * tile_size,
+            (self.grid_y + self.tiles_h) * tile_size,
+        )
+        visible_tiles = list(camera.iter_visible_tiles(self.tiles, tile_size, world_bounds))
+        for (gx, gy) in visible_tiles:
             sx, sy = camera.world_to_screen(gx * tile_size, gy * tile_size)
-            tile_surf = pygame.Surface((scaled_tile + 1, scaled_tile + 1), pygame.SRCALPHA)
-            tile_surf.fill((220, 38, 38, 90))
+            tile_surf = alpha_fill_surface(scaled_tile + 1, scaled_tile + 1, (220, 38, 38, 90))
             surface.blit(tile_surf, (sx, sy))
             pygame.draw.rect(surface, (239, 68, 68), (sx, sy, scaled_tile + 1, scaled_tile + 1), width=1)
 
@@ -755,6 +774,8 @@ class BuildingManager:
         self.font = None
         self._pathfinder = None
         self._tile_to_building = {}
+        self._all_wall_rects_cache = {}
+        self._navigation_revision = 0
 
     def rebuild_tile_cache(self):
         """Membangun pemetaan spasial O(1) dari petak (gx, gy) ke objek Building (Demolition sites are not solid)"""
@@ -763,6 +784,8 @@ class BuildingManager:
             for t in b.tiles:
                 tb[t] = b
         self._tile_to_building = tb
+        self._all_wall_rects_cache.clear()
+        self._navigation_revision += 1
 
     @property
     def pathfinder(self):
@@ -858,10 +881,12 @@ class BuildingManager:
         return [b for b in self.buildings if b.building_type == "well"]
 
     def get_all_wall_rects(self, tile_size):
-        all_walls = []
-        for b in self.buildings:
-            all_walls.extend(b.get_wall_rects(tile_size))
-        return all_walls
+        if tile_size not in self._all_wall_rects_cache:
+            self._all_wall_rects_cache[tile_size] = [
+                wall for building in self.buildings
+                for wall in building.get_wall_rects(tile_size)
+            ]
+        return self._all_wall_rects_cache[tile_size]
 
     def get_site_at(self, gx, gy):
         """Mencari construction site yang berada di koordinat tile (gx, gy)"""
@@ -1274,6 +1299,10 @@ class BuildingManager:
             self._draw_building(surface, camera, tile_size, b)
 
     def _draw_building(self, surface, camera, tile_size, b):
+        if b.tiles and not camera.is_world_rect_visible(
+                b.grid_x * tile_size, b.grid_y * tile_size,
+                b.tiles_w * tile_size, b.tiles_h * tile_size):
+            return
         if b.building_type == "well":
             self._draw_well(surface, camera, tile_size, b)
             return
@@ -1283,6 +1312,13 @@ class BuildingManager:
         if b.building_type == "toilet":
             self._draw_toilet(surface, camera, tile_size, b)
             return
+
+        world_bounds = (
+            b.grid_x * tile_size, b.grid_y * tile_size,
+            (b.grid_x + b.tiles_w) * tile_size,
+            (b.grid_y + b.tiles_h) * tile_size,
+        )
+        visible_tiles = list(camera.iter_visible_tiles(b.tiles, tile_size, world_bounds))
 
         scaled_tile = max(1, math.ceil(tile_size * camera.zoom))
         wall_thick = max(2, int(8 * camera.zoom))
@@ -1296,7 +1332,7 @@ class BuildingManager:
         wall_out = COLOR_STONE_WALL_OUTLINE if is_stone else COLOR_BUILDING_WALL_OUTLINE
         door_col = COLOR_STONE_DOOR if is_stone else COLOR_BUILDING_DOOR
 
-        for (gx, gy) in b.tiles:
+        for (gx, gy) in visible_tiles:
             wx = gx * tile_size
             wy = gy * tile_size
             sx, sy = camera.world_to_screen(wx, wy)
@@ -1306,7 +1342,7 @@ class BuildingManager:
             pygame.draw.rect(surface, floor_color, rect)
 
         # 2. Dinding Luar dan Celah Pintu untuk setiap tile
-        for (gx, gy) in b.tiles:
+        for (gx, gy) in visible_tiles:
             wx = gx * tile_size
             wy = gy * tile_size
             sx, sy = camera.world_to_screen(wx, wy)
@@ -1399,8 +1435,7 @@ class BuildingManager:
 
         # Drop shadow
         shadow_rect = pygame.Rect(cx - well_rad - 2, cy - well_rad + 3, (well_rad + 2) * 2, (well_rad + 2) * 2)
-        shadow_surf = pygame.Surface((shadow_rect.w, shadow_rect.h), pygame.SRCALPHA)
-        pygame.draw.ellipse(shadow_surf, (0, 0, 0, 90), (0, 0, shadow_rect.w, shadow_rect.h))
+        shadow_surf = ellipse_surface(shadow_rect.w, shadow_rect.h, (0, 0, 0, 90))
         surface.blit(shadow_surf, shadow_rect.topleft)
 
         # Stone Outer Wall Curb
@@ -1589,8 +1624,7 @@ class BuildingManager:
 
         # Canopy cast shadow
         shadow_rect = pygame.Rect(canopy_x + 4, canopy_y + canopy_h - 2, canopy_w - 8, max(4, int(6 * camera.zoom)))
-        shadow_surf = pygame.Surface((shadow_rect.w, shadow_rect.h), pygame.SRCALPHA)
-        shadow_surf.fill((0, 0, 0, 65))
+        shadow_surf = alpha_fill_surface(shadow_rect.w, shadow_rect.h, (0, 0, 0, 65))
         surface.blit(shadow_surf, shadow_rect.topleft)
 
         # Striped panels
@@ -1654,8 +1688,7 @@ class BuildingManager:
             sx, sy = camera.world_to_screen(gx * tile_size, gy * tile_size)
 
             # 1. Foundation Drop Shadow
-            shadow_surf = pygame.Surface((scaled_tile, scaled_tile), pygame.SRCALPHA)
-            pygame.draw.rect(shadow_surf, (0, 0, 0, 75), (4, 4, scaled_tile - 4, scaled_tile - 4), border_radius=3)
+            shadow_surf = inset_rect_surface(scaled_tile, scaled_tile, (0, 0, 0, 75), 4, 3)
             surface.blit(shadow_surf, (sx, sy))
 
             # 2. Wooden Floor Foundation

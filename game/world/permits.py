@@ -5,6 +5,7 @@ Area Permit System (Free-form Landlord Zoning Deeds, Multi-drag & Arbitrary Conn
 import math
 import random
 import pygame
+from game.render_cache import alpha_fill_surface
 from game.config import (
     PERMIT_TYPES,
     BUILDING_TYPES,
@@ -156,6 +157,7 @@ class AreaPermit:
         self.permit_type = permit_type
         self.crop = None  # None | "Potato" | etc.
         self.tile_crops = {}  # (gx, gy) -> {"crop": str, "growth_days": float, "watered_today": bool, "unwatered_days": int, "is_dead": bool}
+        self._tile_crop_sync_needed = True
         self.growth_days = 0.0  # Legacy / display aggregate
         self.watered_today = False
         self.assigned_workers = []  # List of villager IDs
@@ -181,7 +183,19 @@ class AreaPermit:
             h = th if th is not None else 1
             self.tiles = {(gx + c, gy + r) for c in range(w) for r in range(h)}
 
+        self._tiles_revision = 0
+        self._ordered_tiles_cache = None
         self._recalculate_bounds()
+
+    def get_ordered_tiles(self):
+        """Return the stable row-major tile order used by household floor sleeping."""
+        if self._ordered_tiles_cache is None:
+            self._ordered_tiles_cache = tuple(sorted(self.tiles, key=lambda tile: (tile[1], tile[0])))
+        return self._ordered_tiles_cache
+
+    def _invalidate_tile_cache(self):
+        self._tiles_revision += 1
+        self._ordered_tiles_cache = None
 
     def set_crop(self, crop_name):
         """Menetapkan komoditas yang akan digarap petani pada petak ladang"""
@@ -189,6 +203,7 @@ class AreaPermit:
         self.growth_days = 0.0
         self.watered_today = False
         self.tile_crops.clear()
+        self._tile_crop_sync_needed = True
         self.batches.clear()
         self.active_batch_id = None
         self.batch_counter = 0
@@ -331,16 +346,18 @@ class AreaPermit:
 
     def ensure_tile_crops(self):
         """Memastikan semua tile ladang terdaftar di kamus tile_crops"""
-        if self.crop and self.permit_type == "farm":
-            for t in self.tiles:
-                if t not in self.tile_crops:
-                    self.tile_crops[t] = {
-                        "crop": None,
-                        "growth_days": 0.0,
-                        "watered_today": False,
-                        "unwatered_days": 0,
-                        "is_dead": False
-                    }
+        if not self._tile_crop_sync_needed or not self.crop or self.permit_type != "farm":
+            return
+        for tile in self.tiles:
+            if tile not in self.tile_crops:
+                self.tile_crops[tile] = {
+                    "crop": None,
+                    "growth_days": 0.0,
+                    "watered_today": False,
+                    "unwatered_days": 0,
+                    "is_dead": False
+                }
+        self._tile_crop_sync_needed = False
 
     def get_tile_crop(self, gx, gy):
         self.ensure_tile_crops()
@@ -576,6 +593,8 @@ class AreaPermit:
             }
 
         self.tiles = set(new_tiles)
+        self._invalidate_tile_cache()
+        self._tile_crop_sync_needed = True
         self._recalculate_bounds()
         return True
 
@@ -640,6 +659,8 @@ class AreaPermit:
         else:
             new_tiles = set(tuple(t) for t in new_tiles)
         self.tiles.update(new_tiles)
+        self._invalidate_tile_cache()
+        self._tile_crop_sync_needed = True
         self._recalculate_bounds()
         if self.permit_type == "cemetery":
             from game.systems.cemetery_system import CemeterySystem
@@ -1143,22 +1164,43 @@ class PermitManager:
 
     def draw(self, surface, camera, tile_size, building_manager):
         self._ensure_font()
-        _, occupied_areas = self.get_permits_status(building_manager)
-        occupied_map = {item["permit"].id: len(item["buildings"]) for item in occupied_areas}
+        visible_permits = [
+            p for p in self.permits
+            if p.tiles and camera.is_world_rect_visible(
+                p.grid_x * tile_size, p.grid_y * tile_size,
+                p.tiles_w * tile_size, p.tiles_h * tile_size,
+            )
+        ]
+        occupied_map = {}
+        for p in visible_permits:
+            occupied_map[p.id] = sum(
+                p.overlaps_building(entity)
+                for entity in (
+                    list(building_manager.buildings)
+                    + list(building_manager.construction_sites)
+                    + list(getattr(building_manager, "demolition_sites", []))
+                )
+            )
 
         scaled_tile = int(tile_size * camera.zoom)
 
-        for p in self.permits:
+        for p in visible_permits:
             type_cfg = PERMIT_TYPES.get(p.permit_type, PERMIT_TYPES["housing"])
             b_count = occupied_map.get(p.id, 0)
             color_fill = type_cfg["color"]
             border_col = type_cfg["border_color"]
 
             # 1. Gambar fill dan border untuk setiap tile permit yang saling menyambung
-            for (gx, gy) in p.tiles:
+            permit_world_bounds = (
+                p.grid_x * tile_size,
+                p.grid_y * tile_size,
+                (p.grid_x + p.tiles_w) * tile_size,
+                (p.grid_y + p.tiles_h) * tile_size,
+            )
+            for (gx, gy) in camera.iter_visible_tiles(
+                    p.tiles, tile_size, permit_world_bounds):
                 sx, sy = camera.world_to_screen(gx * tile_size, gy * tile_size)
-                tile_surf = pygame.Surface((scaled_tile, scaled_tile), pygame.SRCALPHA)
-                tile_surf.fill(color_fill)
+                tile_surf = alpha_fill_surface(scaled_tile, scaled_tile, color_fill)
                 surface.blit(tile_surf, (sx, sy))
 
                 # Jika zona pertanian (Farm Permit), gambar visual tanah gembur & tanaman per-tile

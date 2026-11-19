@@ -3,6 +3,7 @@ Day & Night Cycle System (Configurable In-Game Day Length & Ambient Lighting)
 """
 
 import math
+import time
 import pygame
 from game.data.config import DEDICATED_JOBS
 from game.config import (
@@ -14,6 +15,7 @@ from game.config import (
     NIGHT_START_HOUR,
     NIGHT_END_HOUR,
     WEEKDAY_NAMES,
+    VILLAGER_HUD_COUNT_REFRESH_SECONDS,
 )
 
 class DayCycleSystem:
@@ -28,6 +30,23 @@ class DayCycleSystem:
 
         self.font_clock = None
         self.font_sub = None
+        self._ambient_overlay_surface = None
+        self._ambient_overlay_key = None
+        self._population_cache_expiry = 0.0
+        self._population_cache = (0, 0)
+        self._hud_text_cache_key = None
+        self._hud_text_cache = None
+        self._hud_background_cache = {}
+
+    def _ambient_surface(self, screen_w, screen_h, color):
+        key = (screen_w, screen_h, color)
+        if self._ambient_overlay_surface is None or self._ambient_overlay_surface.get_size() != (screen_w, screen_h):
+            self._ambient_overlay_surface = pygame.Surface((screen_w, screen_h), pygame.SRCALPHA)
+            self._ambient_overlay_key = None
+        if self._ambient_overlay_key != key:
+            self._ambient_overlay_surface.fill(color)
+            self._ambient_overlay_key = key
+        return self._ambient_overlay_surface
 
     def _init_fonts(self):
         if self.font_clock is None:
@@ -84,8 +103,6 @@ class DayCycleSystem:
         # 18:00 - 20:00 : Senja / Sunset (Transisi orange ke dusk)
         # 20:00 - 04:30 : Malam (Deep blue moonlight, alpha ~110 agar tetap terlihat jelas)
         # 04:30 - 06:00 : Fajar / Sunrise (Transisi pagi)
-        overlay_surf = pygame.Surface((screen_w, screen_h), pygame.SRCALPHA)
-
         if 6.0 <= time_float < 18.0:
             # Siang terang
             return None
@@ -96,18 +113,15 @@ class DayCycleSystem:
             g = int(140 - 100 * prog)
             b = int(60 + 50 * prog)
             alpha = int(30 + 70 * prog)
-            overlay_surf.fill((r, g, b, alpha))
-            return overlay_surf
+            return self._ambient_surface(screen_w, screen_h, (r, g, b, alpha))
         elif time_float >= 20.0 or time_float < 4.5:
             # Malam hari (Moonlight)
-            overlay_surf.fill((15, 23, 42, 110))
-            return overlay_surf
+            return self._ambient_surface(screen_w, screen_h, (15, 23, 42, 110))
         elif 4.5 <= time_float < 6.0:
             # Fajar (Sunrise)
             prog = (time_float - 4.5) / 1.5  # 0.0 -> 1.0
             alpha = int(110 * (1.0 - prog))
-            overlay_surf.fill((251, 191, 36, alpha))
-            return overlay_surf
+            return self._ambient_surface(screen_w, screen_h, (251, 191, 36, alpha))
 
         return None
 
@@ -118,18 +132,29 @@ class DayCycleSystem:
 
         hour, minute, time_str, is_night = self.get_clock_time()
 
-        villagers = villager_manager.get_all_villagers() if villager_manager else []
-        living = [villager for villager in villagers if getattr(villager, "is_alive", True)]
-        known_jobs = set(DEDICATED_JOBS)
-        assigned_count = sum(
-            1 for villager in living
-            if getattr(villager, "job", None) in known_jobs and getattr(villager, "job", None) != "Unassigned"
-        )
-        unassigned_count = len(living) - assigned_count
-        day_surface = self.font_clock.render(f"Day {self.day_number}", True, (241, 245, 249))
-        unassigned_surface = self.font_sub.render(f"Unassigned {unassigned_count}", True, (203, 213, 225))
-        assigned_surface = self.font_sub.render(f"Assigned {assigned_count}", True, (134, 239, 172))
-        clock_surface = self.font_clock.render(time_str, True, (56, 189, 248))
+        now = time.monotonic()
+        if now >= self._population_cache_expiry:
+            villagers = villager_manager.get_all_villagers() if villager_manager else []
+            living = (villager for villager in villagers if getattr(villager, "is_alive", True))
+            assigned_count = sum(
+                1 for villager in living
+                if getattr(villager, "job", None) in DEDICATED_JOBS
+                and getattr(villager, "job", None) != "Unassigned"
+            )
+            living_count = sum(1 for villager in villagers if getattr(villager, "is_alive", True))
+            self._population_cache = (living_count - assigned_count, assigned_count)
+            self._population_cache_expiry = now + VILLAGER_HUD_COUNT_REFRESH_SECONDS
+        unassigned_count, assigned_count = self._population_cache
+        text_key = (self.day_number, time_str, unassigned_count, assigned_count)
+        if self._hud_text_cache_key != text_key:
+            self._hud_text_cache_key = text_key
+            self._hud_text_cache = (
+                self.font_clock.render(f"Day {self.day_number}", True, (241, 245, 249)),
+                self.font_sub.render(f"Unassigned {unassigned_count}", True, (203, 213, 225)),
+                self.font_sub.render(f"Assigned {assigned_count}", True, (134, 239, 172)),
+                self.font_clock.render(time_str, True, (56, 189, 248)),
+            )
+        day_surface, unassigned_surface, assigned_surface, clock_surface = self._hud_text_cache
         chip_padding = self.font_sub.size("  ")[0]
         chip_gap = max(2, self.font_sub.get_height() // 3)
         chip_h = max(self.font_sub.get_height(), self.font_clock.get_height()) + chip_padding
@@ -145,9 +170,12 @@ class DayCycleSystem:
         pill_x = 16
         pill_y = 16
 
-        bg_surf = pygame.Surface((pill_w, pill_h), pygame.SRCALPHA)
-        pygame.draw.rect(bg_surf, COLOR_HUD_BG, (0, 0, pill_w, pill_h), border_radius=8)
-        pygame.draw.rect(bg_surf, COLOR_HUD_BORDER, (0, 0, pill_w, pill_h), width=1, border_radius=8)
+        bg_surf = self._hud_background_cache.get((pill_w, pill_h))
+        if bg_surf is None:
+            bg_surf = pygame.Surface((pill_w, pill_h), pygame.SRCALPHA)
+            pygame.draw.rect(bg_surf, COLOR_HUD_BG, (0, 0, pill_w, pill_h), border_radius=8)
+            pygame.draw.rect(bg_surf, COLOR_HUD_BORDER, (0, 0, pill_w, pill_h), width=1, border_radius=8)
+            self._hud_background_cache[(pill_w, pill_h)] = bg_surf
         surface.blit(bg_surf, (pill_x, pill_y))
 
         # Procedural Sun / Moon Vector Icon (Zero missing glyphs)

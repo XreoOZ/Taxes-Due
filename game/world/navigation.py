@@ -26,18 +26,27 @@ def find_navigation_path(start, target, building_manager=None, furniture_manager
     }
     fallback_tiles = sorted(
         fallback_tiles,
-        key=lambda tile: abs(tile[0] - start_tile[0]) + abs(tile[1] - start_tile[1]),
+        key=lambda tile: (
+            abs((tile[0] + 0.5) * tile_size - start[0])
+            + abs((tile[1] + 0.5) * tile_size - start[1]),
+            tile,
+        ),
     )
     best_route = None
     best_route_length = float("inf")
     for gx, gy in fallback_tiles:
         fallback_target = ((gx + 0.5) * tile_size, (gy + 0.5) * tile_size)
+        # The Manhattan distance is a lower bound on every walkable route.
+        # Once it cannot beat the best route already found, later A* searches
+        # are unnecessary while the nearest reachable interaction point stays exact.
+        lower_bound = abs(fallback_target[0] - start[0]) + abs(fallback_target[1] - start[1])
+        if lower_bound >= best_route_length:
+            break
         route = building_manager.find_path(start, fallback_target, tile_size)
         if not route:
             continue
-        route_length = sum(
-            math.dist(route[index - 1], route[index])
-            for index in range(1, len(route))
+        route_length = math.dist(start, route[0]) + sum(
+            math.dist(route[index - 1], route[index]) for index in range(1, len(route))
         )
         if route_length < best_route_length:
             best_route = route

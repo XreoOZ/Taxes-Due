@@ -47,6 +47,11 @@ COLOR_SHADOW = (0, 0, 0, 70)             # Semi-transparent black
 
 # Minimum personal space separation between AI entities (px)
 MIN_ENTITY_SEPARATION = 14.0
+VILLAGER_MICRO_SEPARATION_DISTANCE = 1.2
+VILLAGER_MICRO_SEPARATION_PUSH_DISTANCE = 1.5
+VILLAGER_SLEEPING_SEPARATION_DISTANCE = 8.0
+VILLAGER_SEPARATION_PASSES = 2
+VILLAGER_SEPARATION_CELL_SIZE = 8.0
 DOORWAY_CLEARANCE_RADIUS = 36.0
 
 # Servant AI Settings
@@ -90,6 +95,7 @@ EMERGENCY_STUCK_TIMEOUT = 3.0           # Continuous seconds before triggering e
 EMERGENCY_COLLISION_BYPASS_DURATION = 0.8 # Duration (seconds) of collision bypass to unblock deadlock
 PATH_SEGMENT_COLLISION_RADIUS = 12.0    # Radius margin for line-of-sight sweep validation
 PATH_MAX_ASTAR_ITERATIONS = 1500        # Max A* iterations for extensive map searches
+PATH_ROUTE_CACHE_MAX_ENTRIES = 4096
 PATH_RESERVATION_CLEARANCE = 28.0      # Minimum clearance distance between two distinct path reservations
 PATH_WAIT_RECHECK_INTERVAL = 0.25      # Interval in seconds to recheck path availability when waiting
 PATH_RESERVATION_TIMEOUT = 12.0        # Stale reservation safety expiration timeout (seconds)
@@ -139,6 +145,8 @@ LOOSE_ITEM_ARRIVAL_DIST = 24.0                 # Arrival distance for gathering 
 CHEST_INTERACTION_RADIUS = 36.0                # Interaction distance with household chest
 CARPENTER_BUILD_DURATION_INGAME_HOURS = 1.0
 CARPENTER_DEFAULT_LIVING_HOUSEHOLD_SIZE = 1
+FURNITURE_DAILY_BREAK_CHANCE = 0.05
+CARPENTER_REPAIR_FOOD_DAYS = 3
 CARPENTER_TOOL_SWING_SPEED = 7.0
 CARPENTER_TOOL_SWING_ANGLE = 0.55
 FURNITURE_CLAIM_BED_SEARCH_RADIUS = 8.5        # Max tile distance to infer chest household ownership from beds
@@ -385,6 +393,7 @@ MARKET_TRADEABLE_ITEMS = {
 }
 MARKET_CURRENCY_DENOMINATIONS = ("Gold", "Silver", "Copper")
 MARKET_DEFAULT_HOUSEHOLD_SALE_PERCENT = 20
+HOUSEHOLD_STALL_HAUL_CAPACITY = 20
 MARKET_QUANTITY_DEFAULT = 10
 MARKET_QUANTITY_MAX = 1000
 MARKET_PERCENT_STEP = 5
@@ -392,6 +401,8 @@ MARKET_WEALTH_REFERENCE_DAYS = 7.0
 MARKET_WEALTH_PRICE_ELASTICITY = 0.12
 MARKET_WEALTH_PRICE_FACTOR_MIN = 0.75
 MARKET_WEALTH_PRICE_FACTOR_MAX = 1.5
+VILLAGER_HUD_COUNT_REFRESH_SECONDS = 0.5
+MARKET_WEALTH_CONTEXT_REFRESH_SECONDS = 0.5
 
 # -----------------------------------------------------------------------------
 # GENERIC ITEM CATEGORY DEFINITIONS (Single Source of Truth - No Hardcoding)

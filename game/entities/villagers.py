@@ -6,6 +6,7 @@ import math
 import random
 import time
 import pygame
+from collections import defaultdict
 from game.config import (
     VILLAGER_RADIUS,
     VILLAGER_SPEED,
@@ -24,6 +25,11 @@ from game.config import (
     DEDICATED_JOBS,
     ENTITY_AVOIDANCE_RADIUS,
     MIN_ENTITY_SEPARATION,
+    VILLAGER_MICRO_SEPARATION_DISTANCE,
+    VILLAGER_MICRO_SEPARATION_PUSH_DISTANCE,
+    VILLAGER_SLEEPING_SEPARATION_DISTANCE,
+    VILLAGER_SEPARATION_PASSES,
+    VILLAGER_SEPARATION_CELL_SIZE,
     WATERING_DURATION_INGAME_HOURS,
     TILLING_DURATION_INGAME_HOURS,
     FARM_TILE_PROXIMITY_PENALTY_ADJACENT,
@@ -88,6 +94,7 @@ from game.config import (
     TILE_STEP_RESERVATION_TIMEOUT,
     NARROW_PASSAGE_WAIT_DISTANCE
 )
+from game.render_cache import ellipse_surface
 from game.world.pathfinding import GlobalPathRegistry, calculate_collision_slide, is_narrow_passage_tile
 from game.world.navigation import find_navigation_path, find_nearest_target
 from game.systems.market_interface import request_market_food_purchase
@@ -143,6 +150,8 @@ class Villager:
         self.speech_timer = 0.0
         self.idle_wander_timer = random.uniform(2.0, 5.0)
         self.idle_target = (self.x, self.y)
+        self._sleep_floor_target_cache_key = None
+        self._sleep_floor_target_cache = None
 
         # Predetermined Route Navigation
         self.nav_target = None
@@ -204,6 +213,7 @@ class Villager:
         self.market_service = None
         self.water_collect_amount = 0
         self.purchase_target_market_id = None
+        self.purchase_target_market_location = None
         self.purchase_food_item = None
         self.purchase_target_price = 0
         self.purchase_target_qty = 1
@@ -358,6 +368,8 @@ class Villager:
             return "Waiting for furniture commission"
         elif task == "CARPENTER_CONSTRUCTING":
             return "Building furniture"
+        elif task == "CARPENTER_REPAIRING":
+            return "Repairing furniture"
         elif task.startswith("CARPENTER_RESTOCK_"):
             return "Restocking Carpenter materials"
         elif task == "HAULING_STALL_COINS_FETCH":
@@ -1411,6 +1423,9 @@ class Villager:
                 return
 
             self.purchase_target_market_id = getattr(market, "id", None)
+            self.purchase_target_market_location = (
+                getattr(market, "grid_x", None), getattr(market, "grid_y", None)
+            )
             self.purchase_food_item = food_item
             self.purchase_target_qty = purchase_qty
             self.purchase_target_price = price * purchase_qty
@@ -1516,12 +1531,58 @@ class Villager:
         if self.task == "BUYING_FOOD_TRAVEL_TO_MARKET":
             self.active_tool = None
             target_m_id = getattr(self, "purchase_target_market_id", None)
+            target_location = getattr(self, "purchase_target_market_location", None)
             market = None
             if building_manager:
-                if target_m_id:
-                    market = next((b for b in building_manager.buildings if getattr(b, "id", None) == target_m_id and getattr(b, "building_type", "") == "market"), None)
-                if not market:
-                    market = next((b for b in building_manager.buildings if getattr(b, "building_type", "") == "market"), None)
+                if target_m_id is not None:
+                    market = next((b for b in building_manager.buildings
+                                   if str(getattr(b, "id", "")) == str(target_m_id)
+                                   and getattr(b, "building_type", "") == "market"), None)
+                if market is None and target_location and None not in target_location:
+                    market = next((b for b in building_manager.buildings
+                                   if getattr(b, "building_type", "") == "market"
+                                   and (getattr(b, "grid_x", None), getattr(b, "grid_y", None)) == tuple(target_location)), None)
+
+            food_item = getattr(self, "purchase_food_item", "Potato")
+            requested_qty = max(1, int(getattr(self, "purchase_target_qty", 1)))
+            if (market is None
+                    or not AIFoodPurchasingSystem.is_market_available(market, food_item, requested_qty)):
+                market, food_item, unit_price = AIFoodPurchasingSystem.find_nearest_eligible_market(
+                    self, building_manager, furniture_manager=furniture_manager,
+                    villager_manager=villager_manager, preferred_food=food_item,
+                    stockpile_manager=stockpile_manager,
+                )
+                if market:
+                    pocket_copper = to_copper(normalize_wallet(self.inventory))
+                    affordable_qty = pocket_copper // max(1, unit_price)
+                    requested_qty = min(
+                        AIFoodPurchasingSystem.get_household_purchase_quantity(
+                            self, market, food_item, furniture_manager=furniture_manager,
+                            villager_manager=villager_manager, stockpile_manager=stockpile_manager,
+                        ),
+                        requested_qty,
+                        affordable_qty,
+                    )
+                    if requested_qty > 0:
+                        self.purchase_target_market_id = getattr(market, "id", None)
+                        self.purchase_target_market_location = (
+                            getattr(market, "grid_x", None), getattr(market, "grid_y", None)
+                        )
+                        self.purchase_food_item = food_item
+                        self.purchase_target_qty = requested_qty
+                        self.purchase_target_price = unit_price * requested_qty
+                    else:
+                        market = None
+            elif market:
+                unit_price = MarketService.get_item_price(food_item, market)
+                pocket_copper = to_copper(normalize_wallet(self.inventory))
+                affordable_qty = pocket_copper // max(1, unit_price)
+                requested_qty = min(requested_qty, affordable_qty)
+                if requested_qty <= 0:
+                    market = None
+                else:
+                    self.purchase_target_qty = requested_qty
+                    self.purchase_target_price = unit_price * requested_qty
 
             if not market:
                 self.say("Market no longer available, returning coins home!", duration=2.5)
@@ -1727,10 +1788,11 @@ class Villager:
                 )
                 return
 
+            was_sleeping = self.task == "SLEEPING"
             if getattr(self, "carrying_furniture", None):
                 self.carrying_furniture.carrier_id = None
                 self.carrying_furniture = None
-            if furniture_manager:
+            if furniture_manager and not was_sleeping:
                 for f in furniture_manager.furnitures:
                     if f.carrier_id == self.id and not getattr(self, "carrying_furniture", None):
                         f.carrier_id = None
@@ -1761,27 +1823,42 @@ class Villager:
                 self.assigned_bed_id = None
                 # Perilaku alternatif: Tidur di lantai rumah secara tersebar pada petak berbeda (64px separation)
                 p = next((p for p in permit_manager.permits if p.id == self.assigned_permit_id), None) if permit_manager else None
-                id_str = str(self.id)
-                num_part = id_str.split("_")[-1] if "_" in id_str else ""
-                fallback_idx = int(num_part) if num_part.isdigit() else abs(hash(id_str))
-                fam_members = [e for e in all_entities if getattr(e, "family_id", None) == self.family_id] if all_entities else []
-                if not fam_members and getattr(self, "villager_manager", None):
-                    fam_members = [v for v in self.villager_manager.get_all_villagers() if getattr(v, "family_id", None) == self.family_id]
-                m_idx = fam_members.index(self) if self in fam_members else fallback_idx
+                family = villager_manager.get_family_by_id(self.family_id) if villager_manager else None
+                fam_members = list(getattr(family, "members", []))
+                if not fam_members and all_entities:
+                    fam_members = [e for e in all_entities if getattr(e, "family_id", None) == self.family_id]
+                member_ids = tuple(str(getattr(member, "id", "")) for member in fam_members)
+                cache_key = (
+                    str(self.family_id), member_ids,
+                    str(getattr(p, "id", "")), getattr(p, "_tiles_revision", 0),
+                )
+                if self._sleep_floor_target_cache_key != cache_key:
+                    id_str = str(self.id)
+                    num_part = id_str.split("_")[-1] if "_" in id_str else ""
+                    fallback_idx = int(num_part) if num_part.isdigit() else abs(hash(id_str))
+                    try:
+                        member_index = member_ids.index(id_str)
+                    except ValueError:
+                        member_index = fallback_idx
 
-                if p and p.tiles:
-                    sorted_tiles = sorted(list(p.tiles), key=lambda t: (t[1], t[0]))
-                    floor_tile = sorted_tiles[m_idx % len(sorted_tiles)]
-                    slot_ox = ((m_idx % 3) - 1) * 18.0
-                    slot_oy = (((m_idx // 3) % 3) - 1) * 18.0
-                    floor_x = (floor_tile[0] + 0.5) * TILE_SIZE + slot_ox
-                    floor_y = (floor_tile[1] + 0.5) * TILE_SIZE + slot_oy
-                else:
-                    # Homeless at Town Center: spread out radially with generous spacing
-                    total_m = max(1, len(fam_members) or 6)
-                    ang = (m_idx / total_m) * (2.0 * math.pi)
-                    floor_x = math.cos(ang) * 75.0
-                    floor_y = math.sin(ang) * 75.0
+                    if p and p.tiles:
+                        sorted_tiles = p.get_ordered_tiles()
+                        floor_tile = sorted_tiles[member_index % len(sorted_tiles)]
+                        slot_ox = ((member_index % 3) - 1) * 18.0
+                        slot_oy = (((member_index // 3) % 3) - 1) * 18.0
+                        floor_target = (
+                            (floor_tile[0] + 0.5) * TILE_SIZE + slot_ox,
+                            (floor_tile[1] + 0.5) * TILE_SIZE + slot_oy,
+                        )
+                    else:
+                        # Homeless at Town Center: spread out radially with generous spacing
+                        total_members = max(1, len(fam_members) or 6)
+                        angle = (member_index / total_members) * (2.0 * math.pi)
+                        floor_target = (math.cos(angle) * 75.0, math.sin(angle) * 75.0)
+                    self._sleep_floor_target_cache_key = cache_key
+                    self._sleep_floor_target_cache = floor_target
+
+                floor_x, floor_y = self._sleep_floor_target_cache
 
                 arrived = self._move_towards(floor_x, floor_y, dt, arrival_dist=6, all_entities=all_entities, player=player, building_manager=building_manager, furniture_manager=furniture_manager)
                 if not self.speech_text and random.random() < 0.015:
@@ -1873,7 +1950,8 @@ class Villager:
             from game.systems.household_stall_system import HouseholdStallSystem
             handled = HouseholdStallSystem.execute_stall_chores_tick(
                 self, dt, building_manager, furniture_manager,
-                all_entities=all_entities, player=player, tile_size=TILE_SIZE
+                all_entities=all_entities, player=player, tile_size=TILE_SIZE,
+                stockpile_manager=stockpile_manager
             )
             if handled:
                 return
@@ -2854,10 +2932,11 @@ class Villager:
                     return
 
         # Evaluasi Household Market Stall (Stall Chores during Leisure Time)
-        if sched_activity in ("LEISURE", "ANY") and self.task in ("IDLE", "LEISURE", "STROLLING"):
+        if self.task in ("IDLE", "LEISURE", "STROLLING"):
             from game.systems.household_stall_system import HouseholdStallSystem
             started = HouseholdStallSystem.check_and_start_stall_chores(
-                self, building_manager, furniture_manager, all_entities=all_entities
+                self, building_manager, furniture_manager, all_entities=all_entities,
+                allow_restock=sched_activity != "SLEEP",
             )
             if started:
                 return
@@ -3147,8 +3226,7 @@ class Villager:
             # Render Deceased Corpse (Fallen pose, desaturated grey)
             shadow_w = int(r * 2.2)
             shadow_h = max(2, int(r * 0.9))
-            shadow_surf = pygame.Surface((shadow_w, shadow_h), pygame.SRCALPHA)
-            pygame.draw.ellipse(shadow_surf, COLOR_SHADOW, (0, 0, shadow_w, shadow_h))
+            shadow_surf = ellipse_surface(shadow_w, shadow_h, COLOR_SHADOW)
             surface.blit(shadow_surf, (sx - shadow_w // 2, sy + int(r * 0.2)))
 
             corpse_w = int(r * 2.0)
@@ -3165,7 +3243,12 @@ class Villager:
             pygame.draw.line(surface, (255, 255, 255), (eye_x - eye_size, eye_y + eye_size), (eye_x + eye_size, eye_y - eye_size), 1)
 
             if font_bubble:
-                rip_surf = font_bubble.render(f"[RIP] {self.first_name}", True, (203, 213, 225))
+                label = f"[RIP] {self.first_name}"
+                cache_key = (id(font_bubble), label)
+                if getattr(self, "_corpse_label_cache_key", None) != cache_key:
+                    self._corpse_label_cache_key = cache_key
+                    self._corpse_label_surface = font_bubble.render(label, True, (203, 213, 225))
+                rip_surf = self._corpse_label_surface
                 surface.blit(rip_surf, (sx - rip_surf.get_width() // 2, sy - corpse_h - 10))
             return
 
@@ -3175,8 +3258,7 @@ class Villager:
         # 1. Bayangan di tanah
         shadow_w = int(r * 1.8)
         shadow_h = max(2, int(r * 0.9))
-        shadow_surf = pygame.Surface((shadow_w, shadow_h), pygame.SRCALPHA)
-        pygame.draw.ellipse(shadow_surf, COLOR_SHADOW, (0, 0, shadow_w, shadow_h))
+        shadow_surf = ellipse_surface(shadow_w, shadow_h, COLOR_SHADOW)
         surface.blit(shadow_surf, (sx - shadow_w // 2, sy + int(r * 0.4)))
 
         # 2. Badan Karakter Villager (Peasant Forest Green Tunic)
@@ -3319,7 +3401,7 @@ class Villager:
                 pygame.draw.arc(surface, (226, 232, 240), (hx - arc_r // 2, hy - arc_r, arc_r * 2, arc_r * 2), self.facing_angle, self.facing_angle + math.pi * 0.9, max(2, int(2 * camera.zoom)))
 
         elif active_t in ("Saw", "Adze"):
-            is_carpenter_working = self.task == "CARPENTER_CONSTRUCTING" and not self.is_moving
+            is_carpenter_working = self.task in ("CARPENTER_CONSTRUCTING", "CARPENTER_REPAIRING") and not self.is_moving
             phase = time.time() * CARPENTER_TOOL_SWING_SPEED
             swing = math.sin(phase) * CARPENTER_TOOL_SWING_ANGLE if is_carpenter_working else 0.0
             tool_angle = self.facing_angle - 0.55 + swing
@@ -3395,7 +3477,11 @@ class Villager:
 
         # 6. Speech Bubble
         if self.speech_text and font_bubble:
-            txt_surf = font_bubble.render(self.speech_text, True, (15, 23, 42))
+            cache_key = (id(font_bubble), self.speech_text)
+            if getattr(self, "_speech_cache_key", None) != cache_key:
+                self._speech_cache_key = cache_key
+                self._speech_cache_surface = font_bubble.render(self.speech_text, True, (15, 23, 42))
+            txt_surf = self._speech_cache_surface
             bw = txt_surf.get_width() + 16
             bh = txt_surf.get_height() + 10
             bx = sx - bw // 2
@@ -3789,23 +3875,40 @@ class VillagerManager:
         for v in all_vils:
             v.update(dt, permit_manager, building_manager, all_entities, player, stockpile_manager=stockpile_manager, furniture_manager=furniture_manager, day_cycle=day_cycle, schedule_manager=schedule_manager, production_system=production_system, villager_manager=self)
 
-        # AI entities pass freely through each other while moving.
-        # AI must never pass through the Landlord/player.
-        # Gentle micro-separation so no two living AI ever occupy the exact identical coordinate.
-        for _ in range(2):
-            for i in range(len(all_vils)):
-                v1 = all_vils[i]
+        # Spatial buckets keep the existing gentle separation local instead of
+        # checking every villager pair on every physics substep.
+        cell_size = max(1.0, VILLAGER_SEPARATION_CELL_SIZE)
+        neighbor_span = max(
+            1,
+            math.ceil(max(VILLAGER_SLEEPING_SEPARATION_DISTANCE,
+                          VILLAGER_MICRO_SEPARATION_DISTANCE) / cell_size),
+        )
+        for _ in range(VILLAGER_SEPARATION_PASSES):
+            cells = defaultdict(list)
+            for index, villager in enumerate(all_vils):
+                if getattr(villager, "is_alive", True):
+                    cell = (math.floor(villager.x / cell_size), math.floor(villager.y / cell_size))
+                    cells[cell].append(index)
+
+            for i, v1 in enumerate(all_vils):
                 if not getattr(v1, "is_alive", True):
                     continue
-                for j in range(i + 1, len(all_vils)):
+                cell_x = math.floor(v1.x / cell_size)
+                cell_y = math.floor(v1.y / cell_size)
+                nearby_indices = (
+                    j
+                    for cx in range(cell_x - neighbor_span, cell_x + neighbor_span + 1)
+                    for cy in range(cell_y - neighbor_span, cell_y + neighbor_span + 1)
+                    for j in cells.get((cx, cy), ())
+                    if j > i
+                )
+                for j in nearby_indices:
                     v2 = all_vils[j]
-                    if not getattr(v2, "is_alive", True):
-                        continue
                     dx = v1.x - v2.x
                     dy = v1.y - v2.y
                     dist = math.hypot(dx, dy)
-                    if dist < 1.2:
-                        push = (1.5 - dist) if dist > 0.001 else 1.5
+                    if dist < VILLAGER_MICRO_SEPARATION_DISTANCE:
+                        push = (VILLAGER_MICRO_SEPARATION_PUSH_DISTANCE - dist) if dist > 0.001 else VILLAGER_MICRO_SEPARATION_PUSH_DISTANCE
                         angle = (i * 1.57 + j * 0.785)
                         nx = (dx / dist) if dist > 0.001 else math.cos(angle)
                         ny = (dy / dist) if dist > 0.001 else math.sin(angle)
@@ -3813,8 +3916,10 @@ class VillagerManager:
                         v1.y += ny * (push * 0.6)
                         v2.x -= nx * (push * 0.6)
                         v2.y -= ny * (push * 0.6)
-                    elif getattr(v1, "task", "") == "SLEEPING" and getattr(v2, "task", "") == "SLEEPING" and dist < 8.0:
-                        push = (8.0 - dist) * 0.5
+                    elif (getattr(v1, "task", "") == "SLEEPING"
+                          and getattr(v2, "task", "") == "SLEEPING"
+                          and dist < VILLAGER_SLEEPING_SEPARATION_DISTANCE):
+                        push = (VILLAGER_SLEEPING_SEPARATION_DISTANCE - dist) * 0.5
                         v1.x += (dx / dist) * push
                         v1.y += (dy / dist) * push
                         v2.x -= (dx / dist) * push
@@ -3868,5 +3973,8 @@ class VillagerManager:
     def draw(self, surface, camera):
         self._ensure_font()
         for v in self.get_all_villagers():
+            radius = max(0, float(getattr(v, "radius", 0)))
+            if not camera.is_world_rect_visible(v.x - radius, v.y - radius, radius * 2, radius * 2):
+                continue
             v.draw(surface, camera, self.font_bubble)
 

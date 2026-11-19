@@ -21,6 +21,7 @@ def get_job_workplaces(job_id, permit_manager, furniture_manager):
         )
         if (furniture_type and furniture.furniture_type == furniture_type
                 and not furniture.is_dropped and furniture.stored_in_id is None
+                and not getattr(furniture, "is_broken", False)
                 and (furniture.status == "INSTALLED" or unfinished_workplace)):
             workplaces.append(("furniture", furniture))
     return workplaces

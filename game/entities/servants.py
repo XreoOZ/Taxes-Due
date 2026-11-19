@@ -6,6 +6,7 @@ import math
 import random
 import time
 import pygame
+from game.render_cache import ellipse_surface
 from game.config import (
     TILE_SIZE,
     SERVANT_COUNT,
@@ -49,7 +50,7 @@ from game.config import (
     DOORWAY_QUEUE_LATERAL_OFFSET,
     TILE_OCCUPANCY_TIMEOUT,
     TILE_STEP_RESERVATION_TIMEOUT,
-    NARROW_PASSAGE_WAIT_DISTANCE
+    NARROW_PASSAGE_WAIT_DISTANCE,
 )
 from game.data.config import MARKET_TRADEABLE_ITEMS, MARKET_CURRENCY_DENOMINATIONS
 from game.world.pathfinding import GlobalPathRegistry, calculate_collision_slide, is_narrow_passage_tile
@@ -1175,8 +1176,7 @@ class Servant:
         # 1. Bayangan di tanah
         shadow_w = int(r * 1.8)
         shadow_h = max(2, int(r * 0.9))
-        shadow_surf = pygame.Surface((shadow_w, shadow_h), pygame.SRCALPHA)
-        pygame.draw.ellipse(shadow_surf, COLOR_SHADOW, (0, 0, shadow_w, shadow_h))
+        shadow_surf = ellipse_surface(shadow_w, shadow_h, COLOR_SHADOW)
         surface.blit(shadow_surf, (sx - shadow_w // 2, sy + int(r * 0.4)))
 
         # 2. Badan AI Servant (Lingkaran Amber)
@@ -1237,7 +1237,11 @@ class Servant:
 
         # 5. Speech Bubble (Pesan kepada Landlord)
         if self.speech_text and font_bubble:
-            txt_surf = font_bubble.render(self.speech_text, True, (15, 23, 42))
+            cache_key = (id(font_bubble), self.speech_text)
+            if getattr(self, "_speech_cache_key", None) != cache_key:
+                self._speech_cache_key = cache_key
+                self._speech_cache_surface = font_bubble.render(self.speech_text, True, (15, 23, 42))
+            txt_surf = self._speech_cache_surface
             bw = txt_surf.get_width() + 16
             bh = txt_surf.get_height() + 10
             bx = sx - bw // 2
@@ -1397,4 +1401,7 @@ class ServantManager:
     def draw(self, surface, camera):
         self._ensure_font()
         for s in self.servants:
+            radius = max(0, float(getattr(s, "radius", 0)))
+            if not camera.is_world_rect_visible(s.x - radius, s.y - radius, radius * 2, radius * 2):
+                continue
             s.draw(surface, camera, self.font_bubble)

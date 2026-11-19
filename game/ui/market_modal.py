@@ -100,6 +100,7 @@ class MarketProfileModal:
         # Stock management rects
         self.stock_dep_btns = {}
         self.stock_with_btns = {}
+        self.stock_remove_btns = {}
 
         # Allocation controls rects (item_name -> rect)
 
@@ -196,6 +197,15 @@ class MarketProfileModal:
             if self.show_item_picker:
                 for item_name, rect in self.item_picker_rects.items():
                     if rect.collidepoint(mouse_pos):
+                        if getattr(mkt, "assigned_family_id", None):
+                            owned_items = HouseholdStallSystem.get_household_owned_sale_items(
+                                mkt.assigned_family_id, furniture_manager,
+                                villager_manager, stockpile_manager
+                            )
+                            if item_name not in owned_items:
+                                self.show_item_picker = False
+                                self.status_message = "This household no longer has that item in storage."
+                                return "market_item_not_owned"
                         if item_name not in mkt.sale_items:
                             mkt.sale_items.append(item_name)
                             mkt.prices.setdefault(item_name, DEFAULT_ITEM_PRICES.get(item_name, 1))
@@ -210,6 +220,20 @@ class MarketProfileModal:
                 self.show_item_picker = True
                 self.focused_quantity = None
                 return "open_item_picker"
+
+            for item_name, rect in self.stock_remove_btns.items():
+                if (not self.show_assign_dialog and not self.show_coin_dialog
+                        and rect.collidepoint(mouse_pos)):
+                    remaining_stock = max(0, int(getattr(mkt, "inventory", {}).get(item_name, 0)))
+                    if HouseholdStallSystem.remove_sale_item(
+                            mkt, item_name, furniture_manager, stockpile_manager):
+                        if remaining_stock and getattr(mkt, "assigned_family_id", None):
+                            self.status_message = f"Removed {item_name}; remaining stock dropped for the household to haul."
+                        elif remaining_stock:
+                            self.status_message = f"Removed {item_name}; remaining stock dropped near the stall."
+                        else:
+                            self.status_message = f"Removed {item_name} from sale."
+                        return f"market_item_removed_{item_name}"
 
             if not self.show_assign_dialog and not self.show_coin_dialog and self.household_percent_dec_rect and self.household_percent_dec_rect.collidepoint(mouse_pos):
                 mkt.household_sale_percent = max(0, mkt.household_sale_percent - MARKET_PERCENT_STEP)
@@ -248,7 +272,9 @@ class MarketProfileModal:
                 for fam_id, btn_rect in self.family_assign_btn_rects.items():
                     if btn_rect.collidepoint(mouse_pos):
                         HouseholdStallSystem.assign_stall(mkt, fam_id)
-                        HouseholdStallSystem.retain_household_owned_sale_items(mkt, furniture_manager)
+                        HouseholdStallSystem.retain_household_owned_sale_items(
+                            mkt, furniture_manager, villager_manager, stockpile_manager
+                        )
                         for item_name in mkt.sale_items:
                             mkt.item_allocations.setdefault(item_name, MARKET_DEFAULT_HOUSEHOLD_SALE_PERCENT)
                         self.show_assign_dialog = False
@@ -262,6 +288,9 @@ class MarketProfileModal:
 
             # 3. Coin Deposit / Withdraw Dialog Handling
             if self.show_coin_dialog:
+                if getattr(mkt, "assigned_family_id", None):
+                    self.show_coin_dialog = None
+                    return "household_stall_coin_controls_disabled"
                 if self.close_coin_dlg_btn_rect and self.close_coin_dlg_btn_rect.collidepoint(mouse_pos):
                     self.show_coin_dialog = None
                     return "close_coin_dialog"
@@ -316,11 +345,13 @@ class MarketProfileModal:
                 return "open_assign_dialog"
 
             # 5. Open Deposit / Withdraw Dialogs
-            if self.deposit_coin_btn_rect and self.deposit_coin_btn_rect.collidepoint(mouse_pos):
+            if (not getattr(mkt, "assigned_family_id", None)
+                    and self.deposit_coin_btn_rect and self.deposit_coin_btn_rect.collidepoint(mouse_pos)):
                 self.show_coin_dialog = "deposit"
                 return "open_deposit_dialog"
 
-            if self.withdraw_coin_btn_rect and self.withdraw_coin_btn_rect.collidepoint(mouse_pos):
+            if (not getattr(mkt, "assigned_family_id", None)
+                    and self.withdraw_coin_btn_rect and self.withdraw_coin_btn_rect.collidepoint(mouse_pos)):
                 self.show_coin_dialog = "withdraw"
                 return "open_withdraw_dialog"
 
@@ -402,34 +433,32 @@ class MarketProfileModal:
                     else:
                         self.status_message = "No servant available to carry the goods."
 
-            # Stock Withdrawal
-            for it_name, rect in self.stock_with_btns.items():
-                if rect.collidepoint(mouse_pos):
-                    in_market = mkt.inventory.get(it_name, 0)
-                    withdraw_amt = min(self._get_quantity(it_name), in_market)
-                    if withdraw_amt > 0:
-                        mkt.inventory[it_name] -= withdraw_amt
-                        if mkt.inventory[it_name] <= 0:
-                            del mkt.inventory[it_name]
-                            from game.systems.market_pricing import MarketPricingSystem
-                            MarketPricingSystem.update_market_prices(mkt)
-                        if stockpile_manager and getattr(mkt, "tiles", None):
-                            target_res = MARKET_TRADEABLE_ITEMS.get(it_name, it_name)
-                            market_center = mkt.get_center_world(TILE_SIZE)
-                            approach = mkt.get_approach_point(market_center, TILE_SIZE, bm=None)
-                            drop_tile = (int(math.floor(approach[0] / TILE_SIZE)), int(math.floor(approach[1] / TILE_SIZE)))
-                            assigned_family_id = getattr(mkt, "assigned_family_id", None)
-                            owner_id = str(assigned_family_id) if assigned_family_id else None
-                            owner_type = "villager" if assigned_family_id else "landlord"
-                            stockpile_manager.drop_resource(target_res, withdraw_amt, drop_tile[0], drop_tile[1], owner_type=owner_type, owner_id=owner_id)
-                            stockpile_manager.refresh_stacks(resources, None)
-                        else:
-                            self.status_message = "No stockpile available for physical withdrawal."
-                            mkt.inventory[it_name] = mkt.inventory.get(it_name, 0) + withdraw_amt
-                            return f"stock_withdraw_failed_{it_name}"
-                        self.status_message = f"Dropped {withdraw_amt} {it_name} near the market for servant hauling."
-                        return f"stock_withdrawn_{it_name}"
-                    self.status_message = f"Only {in_market} {it_name} available in market."
+            # Physical stock withdrawal belongs to landlord-managed stalls only.
+            if not getattr(mkt, "assigned_family_id", None):
+                for it_name, rect in self.stock_with_btns.items():
+                    if rect.collidepoint(mouse_pos):
+                        in_market = mkt.inventory.get(it_name, 0)
+                        withdraw_amt = min(self._get_quantity(it_name), in_market)
+                        if withdraw_amt > 0:
+                            mkt.inventory[it_name] -= withdraw_amt
+                            if mkt.inventory[it_name] <= 0:
+                                del mkt.inventory[it_name]
+                                from game.systems.market_pricing import MarketPricingSystem
+                                MarketPricingSystem.update_market_prices(mkt)
+                            if stockpile_manager and getattr(mkt, "tiles", None):
+                                target_res = MARKET_TRADEABLE_ITEMS.get(it_name, it_name)
+                                market_center = mkt.get_center_world(TILE_SIZE)
+                                approach = mkt.get_approach_point(market_center, TILE_SIZE, bm=None)
+                                drop_tile = (int(math.floor(approach[0] / TILE_SIZE)), int(math.floor(approach[1] / TILE_SIZE)))
+                                stockpile_manager.drop_resource(target_res, withdraw_amt, drop_tile[0], drop_tile[1], owner_type="landlord")
+                                stockpile_manager.refresh_stacks(resources, None)
+                            else:
+                                self.status_message = "No stockpile available for physical withdrawal."
+                                mkt.inventory[it_name] = mkt.inventory.get(it_name, 0) + withdraw_amt
+                                return f"stock_withdraw_failed_{it_name}"
+                            self.status_message = f"Dropped {withdraw_amt} {it_name} near the market for servant hauling."
+                            return f"stock_withdrawn_{it_name}"
+                        self.status_message = f"Only {in_market} {it_name} available in market."
 
             # Pagination controls for tradeable items
             if self.prev_page_btn_rect and self.prev_page_btn_rect.collidepoint(mouse_pos):
@@ -553,7 +582,8 @@ class MarketProfileModal:
         # -------------------------------------------------------------
         content_y = stats_rect.bottom + 14
 
-        self._draw_goods_tab(surface, mx, content_y, mkt, servant_manager, resources, stockpile_manager, furniture_manager, m_pos)
+        self._draw_goods_tab(surface, mx, content_y, mkt, servant_manager, resources,
+                             stockpile_manager, furniture_manager, villager_manager, m_pos)
 
         # 7. ASSIGN STALL DIALOG OVERLAY (if active)
         if self.show_assign_dialog:
@@ -570,7 +600,8 @@ class MarketProfileModal:
         except (TypeError, ValueError):
             return 0
 
-    def _draw_goods_tab(self, surface, mx, list_y, mkt, servant_manager, resources, stockpile_manager, furniture_manager, m_pos):
+    def _draw_goods_tab(self, surface, mx, list_y, mkt, servant_manager, resources,
+                        stockpile_manager, furniture_manager, villager_manager, m_pos):
         """Draw only explicitly enabled market goods and their physical stock controls."""
         assigned = bool(getattr(mkt, "assigned_family_id", None))
         self.price_g_dec_btns.clear()
@@ -581,6 +612,7 @@ class MarketProfileModal:
         self.price_c_inc_btns.clear()
         self.stock_dep_btns.clear()
         self.stock_with_btns.clear()
+        self.stock_remove_btns.clear()
         self.stock_quantity_rects.clear()
         self.item_allocation_dec_rects.clear()
         self.item_allocation_inc_rects.clear()
@@ -598,7 +630,10 @@ class MarketProfileModal:
 
         table = pygame.Rect(mx + 24, row_top, self.modal_w - 48, 24)
         pygame.draw.rect(surface, (30, 41, 59), table, border_radius=4)
-        labels = ((mx + 36, "ITEM"), (mx + 174, "STOCK"), (mx + 250, "PRICE"), (mx + 326, "SALE %" if assigned else "PRICE"), (mx + 394, "QTY"), (mx + 468, "RESTOCK"), (mx + 570, "WITHDRAW"))
+        labels = ((mx + 36, "ITEM"), (mx + 174, "STOCK"), (mx + 250, "PRICE"), (mx + 326, "SALE %" if assigned else "PRICE"), (mx + 394, "QTY"), (mx + 468, "RESTOCK"))
+        if not assigned:
+            labels += ((mx + 570, "WITHDRAW"),)
+        labels += ((mx + (558 if assigned else 660), "REMOVE"),)
         for x, label in labels:
             surface.blit(self.font_badge.render(label, True, COLOR_TEXT_MUTED), (x, row_top + 5))
 
@@ -658,10 +693,15 @@ class MarketProfileModal:
                 surface.blit(self.font_badge.render("Restock", True, (255, 255, 255)), (restock.x + 12, restock.y + 6))
             else:
                 surface.blit(self.font_badge.render("Auto", True, COLOR_TEXT_MUTED), (restock.x + 22, restock.y + 7))
-            withdraw = pygame.Rect(mx + 558, row_y + 7, 84, 24)
-            self.stock_with_btns[item_name] = withdraw
-            pygame.draw.rect(surface, (127, 29, 29), withdraw, border_radius=3)
-            surface.blit(self.font_badge.render("Withdraw", True, (255, 255, 255)), (withdraw.x + 10, withdraw.y + 6))
+            if not assigned:
+                withdraw = pygame.Rect(mx + 558, row_y + 7, 84, 24)
+                self.stock_with_btns[item_name] = withdraw
+                pygame.draw.rect(surface, (127, 29, 29), withdraw, border_radius=3)
+                surface.blit(self.font_badge.render("Withdraw", True, (255, 255, 255)), (withdraw.x + 10, withdraw.y + 6))
+            remove = pygame.Rect(mx + (558 if assigned else 660), row_y + 7, 60, 24)
+            self.stock_remove_btns[item_name] = remove
+            pygame.draw.rect(surface, (127, 29, 29), remove, border_radius=3)
+            surface.blit(self.font_badge.render("Remove", True, (255, 255, 255)), (remove.x + 8, remove.y + 6))
             row_y += row_h + 3
 
         if not page_items:
@@ -690,11 +730,22 @@ class MarketProfileModal:
             pygame.draw.rect(surface, (15, 23, 42), picker, border_radius=8)
             pygame.draw.rect(surface, (96, 165, 250), picker, width=2, border_radius=8)
             surface.blit(self.font_sub.render("Choose a market item", True, COLOR_TEXT_TITLE), (picker.x + 14, picker.y + 12))
-            # Sale catalogs are per stall: another stall listing an item does not hide it here.
-            # Stock is still supplied from this stall's owner household by the hauling workflow.
-            selectable = [it for it in MARKET_TRADEABLE_ITEMS if it not in getattr(mkt, "sale_items", [])]
+            # Each household may list only goods it currently owns. Landlord stalls
+            # can list any supported trade good from landlord storage.
+            if getattr(mkt, "assigned_family_id", None):
+                owned_items = HouseholdStallSystem.get_household_owned_sale_items(
+                    mkt.assigned_family_id, furniture_manager,
+                    villager_manager, stockpile_manager
+                )
+                selectable = [it for it in MARKET_TRADEABLE_ITEMS
+                              if it in owned_items and it not in getattr(mkt, "sale_items", [])]
+            else:
+                selectable = [it for it in MARKET_TRADEABLE_ITEMS
+                              if it not in getattr(mkt, "sale_items", [])]
             if not selectable:
-                empty_label = "All supported goods are already listed at this stall."
+                empty_label = ("No eligible household goods are available in storage."
+                               if getattr(mkt, "assigned_family_id", None)
+                               else "All supported goods are already listed at this stall.")
                 surface.blit(self.font_body.render(empty_label, True, COLOR_TEXT_MUTED), (picker.x + 14, picker.y + 42))
             for idx, item_name in enumerate(selectable):
                 item_rect = pygame.Rect(picker.x + 12, picker.y + 38 + idx * 34, picker.width - 24, 30)

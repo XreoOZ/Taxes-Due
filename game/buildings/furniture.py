@@ -3,8 +3,11 @@ Furniture System (Household Storages, Chests, Beds, Move & Drop Mechanics)
 """
 
 import math
+import random
 import pygame
 from game.config import FURNITURE_TYPES, TILE_SIZE, FURNITURE_CLAIM_BED_SEARCH_RADIUS
+from game.data.config import FURNITURE_DAILY_BREAK_CHANCE
+from game.render_cache import alpha_fill_surface
 
 class Furniture:
     def __init__(self, furniture_id, furniture_type, gx, gy, permit_id=None, family_id=None, assigned_villager_id=None):
@@ -38,6 +41,9 @@ class Furniture:
             return "MOVING"
         if self.stored_in_id is not None:
             return "STORED"
+        if (self.construction_order and self.construction_order.get("order_type") == "REPAIR"
+                and not self.is_dropped and self.permit_id is not None):
+            return "INSTALLED"
         if self.construction_order and self.construction_order.get("status") != "COMPLETE":
             order_status = self.construction_order.get("status", "ORDERED")
             return {
@@ -55,12 +61,22 @@ class Furniture:
     def is_available_for_use(self):
         """Furniture works only after its construction order is complete and it is installed."""
         order = getattr(self, "construction_order", None)
+        is_repair_order = bool(order and order.get("order_type") == "REPAIR"
+                               and order.get("status") != "COMPLETE")
+        if (self.furniture_type == "household_storage" and is_repair_order
+                and not self.is_dropped and self.stored_in_id is None):
+            return True
         return (
             not self.is_dropped
             and self.stored_in_id is None
             and self.status == "INSTALLED"
             and (not order or order.get("status") == "COMPLETE")
+            and not self.is_broken
         )
+
+    @property
+    def is_broken(self):
+        return float(getattr(self, "condition", 1.0)) <= 0.0
 
     @property
     def can_be_dropped(self):
@@ -211,6 +227,10 @@ class Furniture:
         scaled_w, scaled_h = scaled_t * footprint_w, scaled_t * footprint_h
         if scaled_t < 10:
             return
+        if not camera.is_world_rect_visible(
+                self.grid_x * tile_size, self.grid_y * tile_size,
+                footprint_w * tile_size, footprint_h * tile_size):
+            return
 
         # -------------------------------------------------------------
         # 1. PENDING MOVE BLUEPRINT GHOST AT DESTINATION TILE (RIMWORLD STYLE)
@@ -219,8 +239,7 @@ class Furniture:
             tgx, tgy, _ = self.designated_target
             tsx, tsy = camera.world_to_screen(tgx * tile_size, tgy * tile_size)
             # Translucent blueprint box
-            bp_surf = pygame.Surface((scaled_w, scaled_h), pygame.SRCALPHA)
-            bp_surf.fill((56, 189, 248, 70))
+            bp_surf = alpha_fill_surface(scaled_w, scaled_h, (56, 189, 248, 70))
             surface.blit(bp_surf, (tsx, tsy))
             pygame.draw.rect(surface, (56, 189, 248), (tsx, tsy, scaled_w, scaled_h), width=2, border_radius=4)
             bp_txt = self.font.render("REINSTALL", True, (255, 255, 255))
@@ -242,11 +261,13 @@ class Furniture:
             pygame.draw.rect(surface, (56, 189, 248), (sx - 4, sy - 4, scaled_w + 8, scaled_h + 8), width=1, border_radius=6)
 
         if self.construction_order and self.construction_order.get("status") != "COMPLETE":
-            shade = pygame.Surface((scaled_w, scaled_h), pygame.SRCALPHA)
-            shade.fill((234, 179, 8, 90) if self.construction_order.get("status") == "AWAITING_PAYMENT" else (56, 189, 248, 100))
+            shade_color = (234, 179, 8, 90) if self.construction_order.get("status") == "AWAITING_PAYMENT" else (56, 189, 248, 100)
+            shade = alpha_fill_surface(scaled_w, scaled_h, shade_color)
             surface.blit(shade, (sx, sy))
             pygame.draw.rect(surface, (250, 204, 21), (sx, sy, scaled_w, scaled_h), width=2, border_radius=4)
-            label_text = "BUILD" if self.construction_order.get("status") == "BUILDING" else (
+            is_repair = self.construction_order.get("order_type") == "REPAIR"
+            label_text = "REPAIR" if is_repair else (
+                "BUILD" if self.construction_order.get("status") == "BUILDING" else
                 "PAY" if "PAYMENT" in self.construction_order.get("status", "") or self.construction_order.get("status") == "AWAITING_PAYMENT" else "MATERIAL")
             label = self.font.render(label_text, True, (255, 255, 255))
             surface.blit(label, (sx + (scaled_t - label.get_width()) // 2, sy + 3))
@@ -397,21 +418,56 @@ class FurnitureManager:
         self.building_manager = None
         self.villager_manager = None
         self._dirty = True
+        self._navigation_revision = 0
         self._cached_occupied = set()
+        self._cached_rects_by_tile_size = {}
         self._storage_cache = {}
+        self._bed_cache = {}
 
     def invalidate_cache(self):
         self._dirty = True
+        self._navigation_revision += 1
+        self._cached_rects_by_tile_size.clear()
         self._storage_cache.clear()
+        self._bed_cache.clear()
+
+    def daily_wear_update(self, days=1):
+        """Roll daily wear for completed, installed furniture and commission repairs."""
+        from game.systems.carpenter_system import CarpenterSystem
+
+        newly_broken = []
+        for _ in range(max(0, int(days))):
+            for furniture in self.furnitures:
+                if (furniture.is_dropped or furniture.stored_in_id is not None
+                        or furniture.status != "INSTALLED"
+                        or (furniture.construction_order and furniture.construction_order.get("status") != "COMPLETE")
+                        or furniture.is_broken):
+                    continue
+                if random.random() >= FURNITURE_DAILY_BREAK_CHANCE:
+                    continue
+                furniture.condition = 0.0
+                furniture.construction_progress = 0.0
+                furniture.construction_order = CarpenterSystem.create_repair_order(
+                    furniture, self.building_manager, self.villager_manager
+                )
+                newly_broken.append(furniture)
+        if newly_broken:
+            self.invalidate_cache()
+        return newly_broken
 
     def set_managers(self, building_manager=None, permit_manager=None, villager_manager=None):
+        changed = False
         if building_manager is not None:
+            changed = changed or self.building_manager is not building_manager
             self.building_manager = building_manager
         if permit_manager is not None:
+            changed = changed or self.permit_manager is not permit_manager
             self.permit_manager = permit_manager
         if villager_manager is not None:
+            changed = changed or self.villager_manager is not villager_manager
             self.villager_manager = villager_manager
-        self.invalidate_cache()
+        if changed:
+            self.invalidate_cache()
 
     def get_occupied_tiles(self, exclude_furniture_id=None, exclude_tile=None):
         """
@@ -446,17 +502,30 @@ class FurnitureManager:
         Mengembalikan daftar pygame.Rect dari seluruh perabotan yang terpasang (Beds, Chests),
         digunakan oleh is_segment_clear agar rute tidak memotong menembus ranjang/perabotan lain.
         """
+        cached = self._cached_rects_by_tile_size.get(tile_size)
+        if cached is None:
+            cached = []
+            for furniture in getattr(self, "furnitures", []):
+                if getattr(furniture, "status", "") != "INSTALLED" or getattr(furniture, "is_dropped", False):
+                    continue
+                width_tiles = max(1, int(furniture.type_cfg.get("width_tiles", 1)))
+                height_tiles = max(1, int(furniture.type_cfg.get("height_tiles", 1)))
+                rect = pygame.Rect(furniture.grid_x * tile_size, furniture.grid_y * tile_size,
+                                   width_tiles * tile_size, height_tiles * tile_size)
+                cached.append((furniture, rect, width_tiles, height_tiles))
+            self._cached_rects_by_tile_size[tile_size] = cached
+
+        excluded_tile = tuple(exclude_tile) if exclude_tile else None
         rects = []
-        ex_tile = tuple(exclude_tile) if exclude_tile else None
-        for f in getattr(self, "furnitures", []):
-            if getattr(f, "status", "") == "INSTALLED" and not getattr(f, "is_dropped", False):
-                if exclude_furniture_id and f.id == exclude_furniture_id:
-                    continue
-                if ex_tile and ex_tile in self._furniture_tiles(f):
-                    continue
-                rects.append(pygame.Rect(f.grid_x * tile_size, f.grid_y * tile_size,
-                                         max(1, int(f.type_cfg.get("width_tiles", 1))) * tile_size,
-                                         max(1, int(f.type_cfg.get("height_tiles", 1))) * tile_size))
+        for furniture, rect, width_tiles, height_tiles in cached:
+            if exclude_furniture_id and furniture.id == exclude_furniture_id:
+                continue
+            if excluded_tile and (
+                furniture.grid_x <= excluded_tile[0] < furniture.grid_x + width_tiles
+                and furniture.grid_y <= excluded_tile[1] < furniture.grid_y + height_tiles
+            ):
+                continue
+            rects.append(rect)
         return rects
 
     def add_furniture(self, f_type, gx, gy, permit_manager, villager_manager, resources=None, building_manager=None):
@@ -683,9 +752,17 @@ class FurnitureManager:
         if not villager_id:
             return None
 
+        villager_key = str(villager_id)
+        cached_bed = self._bed_cache.get(villager_key)
+        if (cached_bed and cached_bed.is_available_for_use
+                and str(getattr(cached_bed, "assigned_villager_id", "")) == villager_key):
+            return cached_bed
+        self._bed_cache.pop(villager_key, None)
+
         # 1. Cek apakah villager sudah terikat dengan satu Bed tertentu
         for f in self.furnitures:
             if f.furniture_type == "bed" and f.is_available_for_use and getattr(f, "assigned_villager_id", None) == villager_id:
+                self._bed_cache[villager_key] = f
                 return f
 
         # 2. Jika belum, cari Bed kosong milik keluarga yang belum diisi
@@ -695,6 +772,7 @@ class FurnitureManager:
                 if f.furniture_type == "bed" and f.is_available_for_use and str(getattr(f, "family_id", "")) == fam_str:
                     if getattr(f, "assigned_villager_id", None) is None:
                         f.assigned_villager_id = villager_id
+                        self._bed_cache[villager_key] = f
                         return f
 
         return None

@@ -45,6 +45,24 @@ class MarketService:
         return [b for b in building_manager.buildings if getattr(b, "building_type", "") == "market"]
 
     @classmethod
+    def get_lowest_available_item_quote(cls, item_name, building_manager=None, markets=None,
+                                        minimum_stock=1):
+        """Return the cheapest listed market able to supply the requested quantity."""
+        candidates = markets if markets is not None else cls.get_all_markets(building_manager)
+        minimum_stock = max(1, int(minimum_stock))
+        quotes = [
+            (cls.get_item_price(item_name, market), market)
+            for market in candidates
+            if not getattr(market, "is_under_construction", False)
+            and cls.is_item_for_sale(market, item_name)
+            and cls.get_market_stock(item_name, market) >= minimum_stock
+        ]
+        if not quotes:
+            return None, None
+        price, market = min(quotes, key=lambda quote: quote[0])
+        return market, price
+
+    @classmethod
     def get_item_price(cls, item_name, market=None):
         """
         Membaca harga jual aktif terkini untuk suatu item dalam satuan Copper.

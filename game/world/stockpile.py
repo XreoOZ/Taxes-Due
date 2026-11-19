@@ -212,6 +212,10 @@ class StockpileManager:
         self._ensure_font()
 
         for stack in self.stacks:
+            if not camera.is_world_rect_visible(
+                    stack.grid_x * tile_size, stack.grid_y * tile_size,
+                    tile_size, tile_size):
+                continue
             sx, sy = camera.world_to_screen(stack.grid_x * tile_size, stack.grid_y * tile_size)
             scaled_tile = int(tile_size * camera.zoom)
             if scaled_tile < 10:
@@ -234,8 +238,13 @@ class StockpileManager:
 
             if camera.zoom >= 0.6:
                 amount_text = stack.get_display_text()
-                text_surface = self.font.render(amount_text, True, (255, 255, 255))
-                shadow_surface = self.font.render(amount_text, True, (0, 0, 0))
+                label_key = (id(self.font), amount_text)
+                if getattr(stack, "_label_cache_key", None) != label_key:
+                    stack._label_cache_key = label_key
+                    stack._label_surface = self.font.render(amount_text, True, (255, 255, 255))
+                    stack._label_shadow_surface = self.font.render(amount_text, True, (0, 0, 0))
+                text_surface = stack._label_surface
+                shadow_surface = stack._label_shadow_surface
                 text_x = center_x - text_surface.get_width() // 2
                 text_y = center_y + int(scaled_tile * 0.16)
                 background = pygame.Rect(

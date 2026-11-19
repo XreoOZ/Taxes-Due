@@ -5,6 +5,7 @@ import math
 from game.data.config import (
     CARPENTER_BUILD_DURATION_INGAME_HOURS,
     CARPENTER_DEFAULT_LIVING_HOUSEHOLD_SIZE,
+    CARPENTER_REPAIR_FOOD_DAYS,
     DAILY_FOOD_REQUIREMENT,
     DAY_LENGTH_OPTIONS,
     DEFAULT_DAY_LENGTH_INDEX,
@@ -49,43 +50,34 @@ class CarpenterSystem:
         ))
 
     @classmethod
-    def _food_unit_price(cls, market):
+    def _food_unit_price(cls, market, minimum_stock=1):
         markets = market if isinstance(market, (list, tuple)) else [market] if market else []
         food_items = [item for item, category in MARKET_TRADEABLE_ITEMS.items() if category == "Food"]
-        available_quotes = []
-        for current_market in markets:
-            for item in food_items:
-                stock = max(0, int(getattr(current_market, "inventory", {}).get(item, 0)))
-                if stock and MarketService.is_item_for_sale(current_market, item):
-                    available_quotes.append((MarketService.get_item_price(item, current_market), stock))
+        quotes = [
+            MarketService.get_lowest_available_item_quote(
+                item, markets=markets, minimum_stock=minimum_stock
+            )[1]
+            for item in food_items
+        ]
+        available_quotes = [price for price in quotes if price is not None]
         if available_quotes:
-            quantity = sum(stock for _, stock in available_quotes)
-            return max(1, round(sum(price * stock for price, stock in available_quotes) / quantity))
+            return min(available_quotes)
         fallback_prices = [DEFAULT_ITEM_PRICES[item] for item in food_items if item in DEFAULT_ITEM_PRICES]
-        return max(1, round(sum(fallback_prices) / len(fallback_prices))) if fallback_prices else 1
+        return min(fallback_prices) if fallback_prices else 1
 
     @classmethod
     def quote_order(cls, furniture_type, building_manager=None, villager_manager=None, reference_position=None):
         cfg = FURNITURE_TYPES.get(furniture_type, {})
         markets = MarketService.get_all_markets(building_manager)
-        market = None
-        if reference_position and markets:
-            market = min(markets, key=lambda current_market: math.hypot(
-                current_market.get_center_world(TILE_SIZE)[0] - reference_position[0],
-                current_market.get_center_world(TILE_SIZE)[1] - reference_position[1],
-            ))
         material_cost = 0
         for material, amount in cfg.get("materials", {}).items():
             amount = max(0, int(amount))
             if not amount:
                 continue
-            available_quotes = [
-                MarketService.get_item_price(material, current_market)
-                for current_market in markets
-                if MarketService.is_item_for_sale(current_market, material)
-                and max(0, int(getattr(current_market, "inventory", {}).get(material, 0))) > 0
-            ]
-            unit_price = min(available_quotes) if available_quotes else MarketService.get_item_price(material, market)
+            _, available_price = MarketService.get_lowest_available_item_quote(
+                material, markets=markets, minimum_stock=amount
+            )
+            unit_price = available_price if available_price is not None else MarketService.get_item_price(material)
             material_cost += amount * unit_price
         carpenter_family = None
         if villager_manager:
@@ -93,8 +85,10 @@ class CarpenterSystem:
             if carpenters:
                 carpenter_family = villager_manager.get_family_by_id(carpenters[0].family_id)
         workers_supported = len([m for m in getattr(carpenter_family, "members", []) if getattr(m, "is_alive", True)]) if carpenter_family else 1
-        food_unit_price = cls._food_unit_price(markets)
-        living_wage = food_unit_price * DAILY_FOOD_REQUIREMENT * max(CARPENTER_DEFAULT_LIVING_HOUSEHOLD_SIZE, workers_supported)
+        living_household_size = max(CARPENTER_DEFAULT_LIVING_HOUSEHOLD_SIZE, workers_supported)
+        daily_food_quantity = DAILY_FOOD_REQUIREMENT * living_household_size
+        food_unit_price = cls._food_unit_price(markets, minimum_stock=daily_food_quantity)
+        living_wage = food_unit_price * daily_food_quantity
         return {
             "material_cost_copper": material_cost,
             "living_wage_copper": living_wage,
@@ -110,6 +104,7 @@ class CarpenterSystem:
         )
         order.update({
             "id": str(furniture.id),
+            "order_type": "BUILD",
             "status": "AWAITING_PAYMENT",
             "payer_family_id": furniture.family_id,
             "payer_id": None,
@@ -117,6 +112,26 @@ class CarpenterSystem:
             "commission_paid": False,
         })
         return order
+
+    @classmethod
+    def create_repair_order(cls, furniture, building_manager=None, villager_manager=None):
+        markets = MarketService.get_all_markets(building_manager)
+        food_unit_price = cls._food_unit_price(markets, minimum_stock=DAILY_FOOD_REQUIREMENT)
+        repair_price = food_unit_price * DAILY_FOOD_REQUIREMENT * CARPENTER_REPAIR_FOOD_DAYS
+        return {
+            "id": str(furniture.id),
+            "order_type": "REPAIR",
+            "status": "AWAITING_PAYMENT",
+            "payer_family_id": furniture.family_id,
+            "payer_id": None,
+            "carpenter_id": None,
+            "commission_paid": False,
+            "material_cost_copper": 0,
+            "living_wage_copper": repair_price,
+            "price_copper": repair_price,
+            "food_unit_price_at_order": food_unit_price,
+            "progress_ratio": 0.0,
+        }
 
     @classmethod
     def _get_order(cls, furniture_manager, order_id):
@@ -520,10 +535,11 @@ class CarpenterSystem:
         cfg = DEDICATED_JOBS.get("Carpenter", {})
         chest, totals = cls._materials_in_storage(carpenter, furniture_manager)
         target_stock = cfg.get("material_stock_target", {}) if chest else {}
-        recipe = FURNITURE_TYPES.get(active.furniture_type, {})
+        is_repair = order.get("order_type") == "REPAIR"
+        recipe = {} if is_repair else FURNITURE_TYPES.get(active.furniture_type, {})
         required = {item: max(0, int(amount))
                     for item, amount in recipe.get("materials", {}).items() if int(amount) > 0}
-        missing = {item: max(0, int(target) - int(totals.get(item, 0)))
+        missing = {} if is_repair else {item: max(0, int(target) - int(totals.get(item, 0)))
                    for item, target in target_stock.items()
                    if totals.get(item, 0) < target}
         short_recipe = {item: amount - int(totals.get(item, 0)) for item, amount in required.items()
@@ -552,8 +568,8 @@ class CarpenterSystem:
             order["materials_committed"] = True
             order["status"] = "BUILDING"
 
-        carpenter.task = "CARPENTER_CONSTRUCTING"
-        carpenter.active_tool = "Saw"
+        carpenter.task = "CARPENTER_REPAIRING" if is_repair else "CARPENTER_CONSTRUCTING"
+        carpenter.active_tool = None if is_repair else "Saw"
         if str(getattr(carpenter, "carpenter_target_order_id", None)) != str(active.id):
             carpenter.carpenter_target_order_id = str(active.id)
             carpenter.carpenter_failed_approach_points = set()
@@ -603,12 +619,14 @@ class CarpenterSystem:
             if active.construction_progress >= duration:
                 order["status"] = "COMPLETE"
                 order["progress_ratio"] = 1.0
+                if is_repair:
+                    active.condition = 1.0
                 carpenter.task = "IDLE"
                 carpenter.active_tool = None
                 carpenter.carpenter_payment_order_id = None
                 carpenter.carpenter_target_order_id = None
                 carpenter.carpenter_target_position = None
                 carpenter.carpenter_failed_approach_points = set()
-                carpenter.say(f"Finished {active.name}.", duration=3.0)
+                carpenter.say(f"Repaired {active.name}." if is_repair else f"Finished {active.name}.", duration=3.0)
                 furniture_manager.invalidate_cache()
         return True

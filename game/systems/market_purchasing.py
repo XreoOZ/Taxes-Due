@@ -117,6 +117,18 @@ class AIFoodPurchasingSystem:
         return max(0, min(need, stock, affordable))
 
     @classmethod
+    def is_market_available(cls, market, item_name, quantity=1):
+        """Validate a specific stall against its live listing and stock before travel or purchase."""
+        if not market or getattr(market, "building_type", "") != "market":
+            return False
+        if getattr(market, "is_under_construction", False):
+            return False
+        return (
+            MarketService.is_item_for_sale(market, item_name)
+            and MarketService.get_market_stock(item_name, market) >= max(1, int(quantity))
+        )
+
+    @classmethod
     def is_family_member_purchasing_food(cls, villager, villager_manager=None):
         """
         Prevents multiple household members from independently purchasing duplicate food
@@ -337,6 +349,7 @@ class AIFoodPurchasingSystem:
 
         # 4. Clear purchasing tracking attributes
         villager.purchase_target_market_id = None
+        villager.purchase_target_market_location = None
         villager.purchase_food_item = None
         villager.purchase_target_price = 0
 
@@ -359,6 +372,7 @@ class AIFoodPurchasingSystem:
             compact_currency_wallet(chest.inventory)
 
         villager.purchase_target_market_id = None
+        villager.purchase_target_market_location = None
         villager.purchase_food_item = None
         villager.purchase_target_price = 0
         villager.task = "IDLE"

@@ -4,6 +4,7 @@ Player Entity (Dummy Character)
 
 import math
 import pygame
+from game.render_cache import ellipse_surface
 from game.config import (
     TILE_SIZE,
     PLAYER_RADIUS,
@@ -80,8 +81,7 @@ class Player:
         # 1. Bayangan di tanah (Drop Shadow transparan)
         shadow_w = int(r * 1.8)
         shadow_h = max(2, int(r * 0.9))
-        shadow_surf = pygame.Surface((shadow_w, shadow_h), pygame.SRCALPHA)
-        pygame.draw.ellipse(shadow_surf, COLOR_SHADOW, (0, 0, shadow_w, shadow_h))
+        shadow_surf = ellipse_surface(shadow_w, shadow_h, COLOR_SHADOW)
         surface.blit(shadow_surf, (sx - shadow_w // 2, sy + int(r * 0.4)))
 
         # 2. Badan Karakter (Lingkaran Dummy)

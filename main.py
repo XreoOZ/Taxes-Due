@@ -33,6 +33,7 @@ from game.config import (
     COST_PER_BLOCK_STONE,
     PATH_TOGGLE_BTN_WIDTH,
     PATH_TOGGLE_BTN_HEIGHT,
+    MARKET_WEALTH_CONTEXT_REFRESH_SECONDS,
 )
 from game.camera import Camera
 from game.player import Player
@@ -205,6 +206,7 @@ def main():
     btn_door_mode_rect = pygame.Rect(0, 0, 130, 36)
 
     running = True
+    wealth_context_timer = 0.0
     while running:
         real_dt = min(clock.tick(FPS) / 1000.0, 0.1)
         game_dt = speed_controller.get_game_dt(real_dt)
@@ -1012,25 +1014,29 @@ def main():
                 for p in permit_manager.permits:
                     p.reset_daily_watering()
                 villager_manager.daily_midnight_update(day_cycle.day_number)
+                furniture_manager.daily_wear_update(days_passed)
 
             day_dt = game_dt / max(1.0, day_cycle.day_length_seconds)
             cur_day_time = day_cycle.day_number + (day_cycle.current_hour / 24.0)
-            wealth_data = VillageWealthSystem.calculate_village_wealth(
-                resources=resources,
-                villager_manager=villager_manager,
-                furniture_manager=furniture_manager,
-                building_manager=building_manager,
-                stockpile_manager=stockpile_manager,
-            )
-            living_population = sum(
-                1 for villager in villager_manager.get_all_villagers()
-                if getattr(villager, "is_alive", True)
-            )
-            wealth_factor = MarketPricingSystem.get_village_wealth_factor(
-                wealth_data["total_wealth_copper"], living_population
-            )
-            for market in MarketService.get_all_markets(building_manager):
-                market.village_wealth_factor = wealth_factor
+            wealth_context_timer -= real_dt
+            if wealth_context_timer <= 0.0:
+                wealth_data = VillageWealthSystem.calculate_village_wealth(
+                    resources=resources,
+                    villager_manager=villager_manager,
+                    furniture_manager=furniture_manager,
+                    building_manager=building_manager,
+                    stockpile_manager=stockpile_manager,
+                )
+                living_population = sum(
+                    1 for villager in villager_manager.get_all_villagers()
+                    if getattr(villager, "is_alive", True)
+                )
+                wealth_factor = MarketPricingSystem.get_village_wealth_factor(
+                    wealth_data["total_wealth_copper"], living_population
+                )
+                for market in MarketService.get_all_markets(building_manager):
+                    market.village_wealth_factor = wealth_factor
+                wealth_context_timer = MARKET_WEALTH_CONTEXT_REFRESH_SECONDS
             for p in permit_manager.permits:
                 p.update_growth(day_dt, current_day=cur_day_time)
 

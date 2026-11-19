@@ -12,6 +12,7 @@ from game.config import (
     PATH_WAYPOINT_TOLERANCE,
     PATH_SEGMENT_COLLISION_RADIUS,
     PATH_MAX_ASTAR_ITERATIONS,
+    PATH_ROUTE_CACHE_MAX_ENTRIES,
     PATH_RESERVATION_CLEARANCE,
     PATH_WAIT_RECHECK_INTERVAL,
     PATH_RESERVATION_TIMEOUT,
@@ -121,6 +122,12 @@ def dist_segment_to_segment(p1, p2, p3, p4):
 class Pathfinder:
     def __init__(self, building_manager=None):
         self.building_manager = building_manager
+        self._route_cache = {}
+
+    def _cache_route(self, key, route):
+        self._route_cache[key] = tuple(route)
+        if len(self._route_cache) > PATH_ROUTE_CACHE_MAX_ENTRIES:
+            self._route_cache.pop(next(iter(self._route_cache)))
 
     def is_segment_clear(self, p1, p2, building_manager=None, radius=PATH_SEGMENT_COLLISION_RADIUS, tile_size=TILE_SIZE, furniture_manager=None, exclude_tile=None):
         """
@@ -281,6 +288,16 @@ class Pathfinder:
         if start_tile in filtered_avoid:
             filtered_avoid.remove(start_tile)
 
+        cache_key = (
+            id(bm), getattr(bm, "_navigation_revision", 0),
+            id(furniture_manager), getattr(furniture_manager, "_navigation_revision", 0),
+            tile_size, start_tile, target_tile, (tx, ty),
+            tuple(sorted(filtered_avoid)),
+        )
+        cached_route = self._route_cache.get(cache_key)
+        if cached_route is not None:
+            return list(cached_route)
+
         # Algoritma A* Search
         h_start = abs(start_tile[0] - target_tile[0]) + abs(start_tile[1] - target_tile[1])
         open_heap = [(h_start, h_start, start_tile)]
@@ -325,6 +342,7 @@ class Pathfinder:
 
         if not found:
             # Jika target tidak dapat dijangkau bebas rintangan, kembalikan rute kosong (AI akan menunggu rute dibuka)
+            self._cache_route(cache_key, ())
             return []
 
         # Rekonstruksi urutan petak
@@ -363,7 +381,12 @@ class Pathfinder:
                 raw_waypoints.append((tx, ty))
 
         # Haluskan waypoint kolinear dengan validasi segment collision
-        return self._simplify_waypoints(raw_waypoints, bm=bm, tile_size=tile_size, furniture_manager=furniture_manager, exclude_tile=target_tile)
+        route = self._simplify_waypoints(
+            raw_waypoints, bm=bm, tile_size=tile_size,
+            furniture_manager=furniture_manager, exclude_tile=target_tile,
+        )
+        self._cache_route(cache_key, route)
+        return route
 
     def _simplify_waypoints(self, waypoints, bm=None, tile_size=TILE_SIZE, furniture_manager=None, exclude_tile=None):
         """Menyederhanakan waypoint yang berada pada satu garis lurus dengan validasi bebas tabrakan dinding & perabotan"""
