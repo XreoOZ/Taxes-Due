@@ -328,13 +328,13 @@ COLOR_KBD_BG = (51, 65, 85)
 
 # Resource System & HUD Settings
 DEFAULT_RESOURCES = {
-    "Wood": 1000,
-    "Food": 1000,
-    "Stone": 1000,
-    "Water": 1000,
-    "Copper": 1000,
-    "Silver": 1000,
-    "Gold": 1000,
+    "Wood": 0,
+    "Food": 0,
+    "Stone": 0,
+    "Water": 0,
+    "Copper": 0,
+    "Silver": 0,
+    "Gold": 0,
 }
 MAX_STACK_SIZE = 100
 MAX_TILE_CAPACITY = 1000  # Up to 10 stacks of 100 per tile (kotak)
@@ -560,10 +560,10 @@ TOOL_TYPES = {
 }
 
 DEFAULT_STARTER_TOOLS = {
-    "Hoe": 10,
-    "Sickle": 10,
-    "Watering_Can": 10,
-    "Hammer": 5
+    "Hoe": 0,
+    "Sickle": 0,
+    "Watering_Can": 0,
+    "Hammer": 0
 }
 
 def get_job_required_tools(job_id):

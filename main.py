@@ -298,7 +298,9 @@ def main():
                     continue
 
                 s_action = settings_modal.handle_event(event, day_cycle, is_ingame=True)
-                if s_action == "unpause_game":
+                if s_action == "close_settings":
+                    continue
+                elif s_action == "unpause_game":
                     settings_modal.close()
                     continue
                 elif s_action == "open_save_modal":
