@@ -91,7 +91,7 @@ from game.world.navigation import find_navigation_path
 from game.systems.market_interface import request_market_food_purchase
 from game.systems.market_purchasing import AIFoodPurchasingSystem, AIMarketPurchasingSystem
 from game.systems.market_service import MarketService
-from game.systems.currency import to_copper, normalize_wallet, from_copper
+from game.systems.currency import to_copper, normalize_wallet, from_copper, canonical_denomination
 from game.systems.job_tool_system import (
     get_job_required_tools,
     get_missing_tools_for_worker,
@@ -1170,7 +1170,7 @@ class Villager:
             if building_manager and household_food_need > 0:
                 candidate_market, candidate_food, _ = AIFoodPurchasingSystem.find_nearest_eligible_market(
                     self, building_manager, furniture_manager=furniture_manager,
-                    villager_manager=villager_manager
+                    villager_manager=villager_manager, stockpile_manager=stockpile_manager
                 )
                 needs_household_restock = bool(candidate_market and AIFoodPurchasingSystem.get_household_purchase_quantity(
                     self, candidate_market, candidate_food, furniture_manager=furniture_manager,
@@ -1260,7 +1260,8 @@ class Villager:
                 return
 
             market, food_item, price = AIFoodPurchasingSystem.find_nearest_eligible_market(
-                self, building_manager, furniture_manager=furniture_manager, villager_manager=vm
+                self, building_manager, furniture_manager=furniture_manager, villager_manager=vm,
+                stockpile_manager=stockpile_manager
             )
             if not market:
                 self.need_seek_cooldown = 4.0
@@ -1302,13 +1303,20 @@ class Villager:
                 self.say(f"Heading to Market to buy {purchase_qty} {food_item}!", duration=2.0)
             else:
                 chest = furniture_manager.get_storage_for_family(self.family_id) if furniture_manager else None
-                if not chest:
+                chest_wallet = normalize_wallet(getattr(chest, "inventory", {})) if chest else {}
+                remaining_cost = self.purchase_target_price - my_coins
+                ground_stack = AIFoodPurchasingSystem.find_nearest_household_currency_stack(self, stockpile_manager)
+                if ground_stack and to_copper(chest_wallet) < remaining_cost:
+                    self.target_loose_stack = ground_stack
+                    self.task = "BUYING_FOOD_RETRIEVE_GROUND_COINS"
+                    self.say("Picking up household coins from the ground before buying food.", duration=2.0)
+                elif chest:
+                    self.task = "BUYING_FOOD_RETRIEVE_COINS"
+                    self.say(f"Getting coins from household storage to buy {purchase_qty} {food_item} at Market!", duration=2.0)
+                else:
                     self.need_seek_cooldown = 4.0
-                    self.say("Cannot afford food: no household storage chest!", duration=2.5)
+                    self.say("Household coins could not be collected.", duration=2.5)
                     self.task = "IDLE"
-                    return
-                self.task = "BUYING_FOOD_RETRIEVE_COINS"
-                self.say(f"Getting coins from chest to buy {purchase_qty} {food_item} at Market!", duration=2.0)
             return
 
         # -------------------------------------------------------------
@@ -1333,6 +1341,38 @@ class Villager:
                     self.say("Not enough coins in chest for Market food!", duration=2.5)
                     self.task = "IDLE"
                     self.need_seek_cooldown = 4.0
+            return
+
+        if self.task == "BUYING_FOOD_RETRIEVE_GROUND_COINS":
+            self.active_tool = None
+            stack = getattr(self, "target_loose_stack", None)
+            if not stockpile_manager or stack not in getattr(stockpile_manager, "stacks", []):
+                stack = AIFoodPurchasingSystem.find_nearest_household_currency_stack(self, stockpile_manager)
+                self.target_loose_stack = stack
+            if not stack:
+                chest = furniture_manager.get_storage_for_family(self.family_id) if furniture_manager else None
+                if chest:
+                    self.task = "BUYING_FOOD_RETRIEVE_COINS"
+                else:
+                    self.task = "IDLE"
+                    self.need_seek_cooldown = 4.0
+                return
+            tx = (stack.grid_x + 0.5) * TILE_SIZE
+            ty = (stack.grid_y + 0.5) * TILE_SIZE
+            arrived = self._move_towards(tx, ty, dt, arrival_dist=LOOSE_ITEM_ARRIVAL_DIST,
+                all_entities=all_entities, player=player, building_manager=building_manager,
+                furniture_manager=furniture_manager, exclusive_target=False)
+            if arrived:
+                amount = stockpile_manager.take_from_stack(stack, min(stack.amount, VILLAGER_CARRY_CAPACITY))
+                denomination = canonical_denomination(stack.resource_type)
+                if amount > 0 and denomination:
+                    self.inventory[denomination] = self.inventory.get(denomination, 0) + amount
+                self.target_loose_stack = None
+                if to_copper(normalize_wallet(self.inventory)) >= getattr(self, "purchase_target_price", 0):
+                    self.task = "BUYING_FOOD_TRAVEL_TO_MARKET"
+                else:
+                    self.target_loose_stack = AIFoodPurchasingSystem.find_nearest_household_currency_stack(self, stockpile_manager)
+                    self.task = "BUYING_FOOD_RETRIEVE_GROUND_COINS" if self.target_loose_stack else "BUYING_FOOD_RETRIEVE_COINS"
             return
 
         if self.task == "BUYING_FOOD_TRAVEL_TO_MARKET":
@@ -2155,7 +2195,7 @@ class Villager:
                                 return
 
                     # B. Nyangkul & Menanam Benih menggunakan CANGKUL (Hoe)
-                    # 1 Tile membutuhkan 1 jam in-game labor
+                    # Each tile uses the configured in-game labor duration.
                     untilled_tiles = assigned_farm.get_untilled_tiles()
                     if untilled_tiles:
                         if self.inventory.get("Hoe", 0) <= 0:
@@ -2208,7 +2248,7 @@ class Villager:
                                         self.tilling_timer = 0.0
                                         self.current_work_tile = None
                                         GlobalPathRegistry.get_instance().release_reservation(self.id)
-                                        self.say("Finished tilling & sowing tile (1h labor completed)!", duration=1.5)
+                                        self.say("Finished tilling and sowing tile!", duration=1.5)
                                 return
 
                     # C. Menyiram petak ladang menggunakan SIRAMAN (Watering Can)
@@ -2321,7 +2361,7 @@ class Villager:
                                         self.watering_timer = 0.0
                                         self.current_work_tile = None
                                         GlobalPathRegistry.get_instance().release_reservation(self.id)
-                                        self.say("Watered crop tile (30m labor completed)!", duration=1.5)
+                                        self.say("Watered crop tile!", duration=1.5)
                                 return
 
                     # Selesai seluruh garapan ladang hari ini atau seluruh tile sedang dikerjakan pekerja lain

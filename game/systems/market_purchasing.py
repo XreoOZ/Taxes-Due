@@ -32,6 +32,39 @@ class AIFoodPurchasingSystem:
     """
 
     @classmethod
+    def get_household_ground_currency(cls, villager, stockpile_manager=None):
+        """Return currency dropped by this household, using the same ownership rules as loose-item recovery."""
+        manager = stockpile_manager or getattr(villager, "stockpile_manager", None)
+        family_id = str(getattr(villager, "family_id", ""))
+        wallet = {}
+        if not manager or not family_id:
+            return wallet
+        for stack in getattr(manager, "stacks", []):
+            if getattr(stack, "owner_type", None) != "villager" or str(getattr(stack, "owner_id", "")) != family_id:
+                continue
+            denomination = canonical_denomination(getattr(stack, "resource_type", ""))
+            if denomination and getattr(stack, "amount", 0) > 0:
+                wallet[denomination] = wallet.get(denomination, 0) + int(stack.amount)
+        return wallet
+
+    @classmethod
+    def find_nearest_household_currency_stack(cls, villager, stockpile_manager=None):
+        manager = stockpile_manager or getattr(villager, "stockpile_manager", None)
+        family_id = str(getattr(villager, "family_id", ""))
+        candidates = [
+            stack for stack in getattr(manager, "stacks", [])
+            if getattr(stack, "owner_type", None) == "villager"
+            and str(getattr(stack, "owner_id", "")) == family_id
+            and canonical_denomination(getattr(stack, "resource_type", ""))
+            and getattr(stack, "amount", 0) > 0
+        ] if manager and family_id else []
+        candidates.sort(key=lambda stack: math.hypot(
+            (stack.grid_x + 0.5) * TILE_SIZE - villager.x,
+            (stack.grid_y + 0.5) * TILE_SIZE - villager.y,
+        ))
+        return candidates[0] if candidates else None
+
+    @classmethod
     def check_household_has_food(cls, villager, furniture_manager=None, villager_manager=None, stockpile_manager=None):
         """
         Returns True if the household already possesses at least 1 FOOD-category item.
@@ -56,7 +89,13 @@ class AIFoodPurchasingSystem:
             villager_manager=villager_manager, stockpile_manager=stockpile_manager
         )
         stock = MarketService.get_market_stock(food_item, market)
-        wallet, _ = MarketService.get_household_funds_and_source(villager, furniture_manager, villager_manager)
+        wallet, source = MarketService.get_household_funds_and_source(villager, furniture_manager, villager_manager)
+        if source is not getattr(villager, "inventory", None):
+            for denomination, count in normalize_wallet(getattr(villager, "inventory", {})).items():
+                wallet[denomination] = wallet.get(denomination, 0) + count
+        ground_wallet = cls.get_household_ground_currency(villager, stockpile_manager)
+        for denomination, count in ground_wallet.items():
+            wallet[denomination] = wallet.get(denomination, 0) + count
         unit_price = MarketService.get_item_price(food_item, market)
         affordable = to_copper(wallet) // max(1, unit_price)
         return max(0, min(need, stock, affordable))
@@ -78,6 +117,7 @@ class AIFoodPurchasingSystem:
             if member != villager and getattr(member, "task", "") in (
                 "SEEKING_FOOD",
                 "BUYING_FOOD_RETRIEVE_COINS",
+                "BUYING_FOOD_RETRIEVE_GROUND_COINS",
                 "BUYING_FOOD_TRAVEL_TO_MARKET",
                 "BUYING_FOOD_HAULING_HOME"
             ):
@@ -85,7 +125,7 @@ class AIFoodPurchasingSystem:
         return False
 
     @classmethod
-    def find_nearest_eligible_market(cls, villager, building_manager, furniture_manager=None, villager_manager=None, preferred_food=None):
+    def find_nearest_eligible_market(cls, villager, building_manager, furniture_manager=None, villager_manager=None, preferred_food=None, stockpile_manager=None):
         """
         Finds the nearest completed Market that:
         1. Sells an eligible food item (is_food_item).
@@ -100,7 +140,12 @@ class AIFoodPurchasingSystem:
             return None, None, 0
 
         # Calculate total household funds (pocket + chest)
-        wallet, _ = MarketService.get_household_funds_and_source(villager, furniture_manager, villager_manager)
+        wallet, source = MarketService.get_household_funds_and_source(villager, furniture_manager, villager_manager)
+        if source is not getattr(villager, "inventory", None):
+            for denomination, count in normalize_wallet(getattr(villager, "inventory", {})).items():
+                wallet[denomination] = wallet.get(denomination, 0) + count
+        for denomination, count in cls.get_household_ground_currency(villager, stockpile_manager).items():
+            wallet[denomination] = wallet.get(denomination, 0) + count
         total_funds_copper = to_copper(wallet)
 
         completed_markets = [

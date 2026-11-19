@@ -128,8 +128,8 @@ DOORWAY_WAYPOINT_DISTANCE = 24.0
 DEFAULT_PLOT_MAX_WORKERS = 2
 
 # Farming Task Durations & Dispersion Settings (Config-Driven, Zero Hardcode)
-WATERING_DURATION_INGAME_HOURS = 0.5   # 30 in-game minutes per tile
-TILLING_DURATION_INGAME_HOURS = 1.0    # 1 in-game hour per tile
+WATERING_DURATION_INGAME_HOURS = 0.25  # 15 in-game minutes per tile
+TILLING_DURATION_INGAME_HOURS = 0.5    # 30 in-game minutes per tile
 FARM_TILE_PROXIMITY_PENALTY_ADJACENT = 3000.0  # Heavy penalty for tiles adjacent to other active workers (< 1.5 grid units)
 FARM_TILE_PROXIMITY_PENALTY_NEAR = 1500.0      # Penalty for tiles within 2.5 grid units
 FARM_TILE_ARRIVAL_DIST = 20.0                  # Arrival radius inside target work tile
