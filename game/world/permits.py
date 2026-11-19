@@ -700,7 +700,10 @@ def get_villager_home_position(villager, villager_manager=None, permit_manager=N
     # 2. Check assigned furniture (bed or family chest)
     if furniture_manager:
         if hasattr(furniture_manager, "get_bed_for_villager"):
-            bed = furniture_manager.get_bed_for_villager(getattr(villager, "id", None))
+            bed = furniture_manager.get_bed_for_villager(
+                getattr(villager, "id", None),
+                getattr(villager, "family_id", None),
+            )
             if bed and hasattr(bed, "grid_x"):
                 return (bed.grid_x + 0.5) * TILE_SIZE, (bed.grid_y + 0.5) * TILE_SIZE
         f_id = getattr(fam, "id", None) or getattr(villager, "family_id", None)
