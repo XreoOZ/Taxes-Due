@@ -61,6 +61,7 @@ from game.config import (
     COLOR_STATUS_DECEASED,
     COLOR_CORPSE_BODY,
     COLOR_CORPSE_OUTLINE,
+    CORPSE_CARRY_SPEED_RATIO,
     is_food_item,
     is_water_item,
     get_item_category,
