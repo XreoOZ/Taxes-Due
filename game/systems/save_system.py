@@ -235,6 +235,8 @@ def serialize_game_state(day_cycle, resources, player, permit_manager, building_
                     "death_reason": getattr(m, "death_reason", None),
                     "death_day": getattr(m, "death_day", None),
                     "carrying_corpse_id": getattr(m, "carrying_corpse_id", None),
+                    "burial_payment_target_corpse_id": getattr(m, "burial_payment_target_corpse_id", None),
+                    "burial_payment_gravedigger_id": getattr(m, "burial_payment_gravedigger_id", None),
                     "is_buried": getattr(m, "is_buried", False),
                     "is_picked_up": getattr(m, "is_picked_up", False)
                 } for m in fam.members
@@ -272,6 +274,13 @@ def serialize_game_state(day_cycle, resources, player, permit_manager, building_
             "history": list(rec.get("history", []))
         }
 
+    from game.systems.cemetery_system import CemeterySystem
+    burial_commissions = [
+        {key: value for key, value in commission.items()
+         if key in ("corpse_id", "corpse_name", "fee_paid", "fee_available", "payer_type", "payer_id", "gravedigger_id", "status")}
+        for commission in CemeterySystem.get_instance().pending_commissions
+    ]
+
     return {
         "timestamp": time.strftime("%Y-%m-%d %H:%M"),
         "day_number": day_cycle.day_number,
@@ -289,7 +298,8 @@ def serialize_game_state(day_cycle, resources, player, permit_manager, building_
         "families": families_data,
         "servants": servants_data,
         "schedules": schedules_data,
-        "production_records": serialized_prod
+        "production_records": serialized_prod,
+        "burial_commissions": burial_commissions,
     }
 
 def save_to_slot(slot_id, day_cycle, resources, player, permit_manager, building_manager, stockpile_manager, furniture_manager, villager_manager, servant_manager, schedule_manager):
@@ -545,6 +555,8 @@ def deserialize_game_state(data, day_cycle, resources, player, permit_manager, b
             v.death_reason = m_d.get("death_reason", None)
             v.death_day = m_d.get("death_day", None)
             v.carrying_corpse_id = m_d.get("carrying_corpse_id", None)
+            v.burial_payment_target_corpse_id = m_d.get("burial_payment_target_corpse_id", None)
+            v.burial_payment_gravedigger_id = m_d.get("burial_payment_gravedigger_id", None)
             v.is_buried = bool(m_d.get("is_buried", False))
             v.is_picked_up = bool(m_d.get("is_picked_up", False))
             v.assigned_permit_id = fam.assigned_permit_id
@@ -560,6 +572,20 @@ def deserialize_game_state(data, day_cycle, resources, player, permit_manager, b
         villager_manager.families.append(fam)
 
     villager_manager.ensure_unique_family_ids()
+
+    from game.systems.cemetery_system import CemeterySystem
+    cemetery_system = CemeterySystem.get_instance()
+    corpse_by_id = {
+        str(v.id): v for v in villager_manager.get_all_villagers()
+        if not getattr(v, "is_alive", True)
+    }
+    cemetery_system.pending_commissions = []
+    for saved_commission in data.get("burial_commissions", []):
+        commission = dict(saved_commission)
+        corpse = corpse_by_id.get(str(commission.get("corpse_id", "")))
+        if corpse:
+            commission["corpse_obj"] = corpse
+            cemetery_system.pending_commissions.append(commission)
 
     # 9. Servants - reset tasks to clean IDLE state so no dangling references exist
     for s_d in data.get("servants", []):

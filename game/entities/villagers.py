@@ -215,6 +215,8 @@ class Villager:
         self.gravedigger_target_corpse_id = None
         self.gravedigger_target_grave_tile = None
         self.gravedigger_timer = 0.0
+        self.burial_payment_target_corpse_id = None
+        self.burial_payment_gravedigger_id = None
         self.target_restock_market = None
         self.target_restock_mat = None
         self.target_restock_qty = 0
@@ -334,6 +336,12 @@ class Villager:
             return "Burying deceased in Cemetery"
         elif task == "CARRYING_CORPSE":
             return "Transporting corpse to Cemetery"
+        elif task == "WAITING_FOR_BURIAL_PAYMENT":
+            return "Waiting for burial fee"
+        elif task == "GRAVEDIGGER_BURIAL_PAYMENT_RETRIEVE":
+            return "Collecting burial fee from landlord storage"
+        elif task in ("BURIAL_PAYMENT_RETRIEVE", "BURIAL_PAYMENT_TRAVEL"):
+            return "Collecting or delivering household burial fee"
         elif task == "GRAVEDIGGER_RESTOCK_RETRIEVE_COINS":
             return "Walking to household storage for grave supplies" if getattr(self, "is_moving", False) else "Preparing coins for grave supplies"
         elif task == "GRAVEDIGGER_RESTOCK_TRAVEL_TO_MARKET":
@@ -817,6 +825,47 @@ class Villager:
         chest.store_item(item_name, actual)
         return True, f"Deposited {actual}x {item_name} to household chest."
 
+    def _get_unneeded_inventory(self):
+        required_tools = get_job_required_tools(self.job)
+        return {
+            item: amount - required_tools.get(item, 0)
+            for item, amount in self.inventory.items()
+            if amount > required_tools.get(item, 0)
+        }
+
+    def _deposit_unneeded_inventory(self, dt, furniture_manager, all_entities,
+                                    player, building_manager):
+        chest = furniture_manager.get_storage_for_family(self.family_id) if furniture_manager else None
+        if not chest:
+            self.task = "IDLE"
+            return False
+
+        target = chest.get_approach_point(
+            self.x, self.y, worker_id=self.id, all_entities=all_entities,
+            tile_size=TILE_SIZE, bm=building_manager,
+        )
+        arrived = self._move_towards(
+            target[0], target[1], dt, arrival_dist=CHEST_INTERACTION_RADIUS,
+            all_entities=all_entities, player=player,
+            building_manager=building_manager, furniture_manager=furniture_manager,
+        )
+        if arrived:
+            deposited = []
+            for item, amount in self._get_unneeded_inventory().items():
+                if amount <= 0:
+                    continue
+                chest.store_item(item, amount)
+                self.inventory[item] -= amount
+                if self.inventory[item] <= 0:
+                    self.inventory.pop(item, None)
+                deposited.append((item, amount))
+            if deposited:
+                summary = ", ".join(f"{amount}x {item}" for item, amount in deposited)
+                self.say(f"Stored unused items in household chest: {summary}.", duration=2.5)
+            self.task = "IDLE"
+            self.active_tool = None
+        return True
+
     def withdraw_item_from_chest(self, item_name, amount, furniture_manager):
         """Memindahkan item dari Chest keluarga ke Inventory individu tanpa mengubah total Household Possession"""
         if amount <= 0:
@@ -1019,6 +1068,13 @@ class Villager:
                 sched_activity = "WORK"
             else:
                 sched_activity = "LEISURE"
+
+        from game.systems.cemetery_system import CemeterySystem
+        if CemeterySystem.update_burial_payment_task(
+            self, dt, building_manager, furniture_manager, stockpile_manager,
+            all_entities, player,
+        ):
+            return
 
         # Finish an active task before honoring the next scheduled activity.
         # Cargo is also considered active work so older saves with a carried
@@ -1428,6 +1484,12 @@ class Villager:
             if handled:
                 return
 
+        if self.task == "DEPOSITING_UNUSED_ITEMS":
+            self._deposit_unneeded_inventory(
+                dt, furniture_manager, all_entities, player, building_manager
+            )
+            return
+
         # -------------------------------------------------------------
         # Rutinitas Sholat / Doa (Church & Prayer Time) - AGENT 3
         # -------------------------------------------------------------
@@ -1494,6 +1556,14 @@ class Villager:
         # Rutinitas 1: Tidur Malam (SLEEP)
         # -------------------------------------------------------------
         if sched_activity == "SLEEP":
+            if (self._get_unneeded_inventory() and furniture_manager
+                    and furniture_manager.get_storage_for_family(self.family_id)):
+                self.task = "DEPOSITING_UNUSED_ITEMS"
+                self._deposit_unneeded_inventory(
+                    dt, furniture_manager, all_entities, player, building_manager
+                )
+                return
+
             if getattr(self, "carrying_furniture", None):
                 self.carrying_furniture.carrier_id = None
                 self.carrying_furniture = None
@@ -2377,6 +2447,7 @@ class Villager:
                         target_cid = getattr(self, "gravedigger_target_corpse_id", None)
                         corpse_entity = next((v for v in villager_manager.get_all_villagers() if str(v.id) == str(target_cid)), None)
                         CemeterySystem.complete_burial_on_tile(cemetery_p, grave_tile, corpse_entity or {"id": target_cid, "first_name": "Villager"}, cur_day)
+                        CemeterySystem.complete_burial_commission(target_cid)
                         if corpse_entity:
                             corpse_entity.is_buried = True
                             corpse_entity.is_picked_up = False
@@ -2422,8 +2493,19 @@ class Villager:
                             self.say("Need 1 Wood and 1 Stone to prepare grave.", duration=2.5)
                             return
 
-                    # Bayar komisi & konsumsi material
-                    CemeterySystem.commission_burial(target_corpse, villager_manager, furniture_manager, stockpile_manager)
+                    # Arrange payment first. The family representative visits the
+                    # gravedigger, or the gravedigger collects from landlord storage.
+                    commission = CemeterySystem.commission_burial(
+                        target_corpse, villager_manager, furniture_manager,
+                        stockpile_manager, gravedigger=self,
+                    )
+                    if (commission and commission.get("gravedigger_id")
+                            and str(commission["gravedigger_id"]) != str(self.id)):
+                        return
+                    if commission and commission.get("status") != "PAID":
+                        if self.task != "GRAVEDIGGER_BURIAL_PAYMENT_RETRIEVE":
+                            self.task = "WAITING_FOR_BURIAL_PAYMENT"
+                        return
 
                     # Menuju jenazah untuk diangkat
                     self.active_tool = "Hoe"
@@ -2511,6 +2593,13 @@ class Villager:
         # -------------------------------------------------------------
         self.task = "IDLE"
         self.active_tool = None
+
+        if self._get_unneeded_inventory() and furniture_manager and furniture_manager.get_storage_for_family(self.family_id):
+            self.task = "DEPOSITING_UNUSED_ITEMS"
+            self._deposit_unneeded_inventory(
+                dt, furniture_manager, all_entities, player, building_manager
+            )
+            return
 
         # Evaluasi Kebutuhan Air Rumah Tangga (Household Water Shortage Check)
         if sched_activity in ("LEISURE", "ANY") and furniture_manager:

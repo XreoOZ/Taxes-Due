@@ -155,6 +155,10 @@ def main():
         nonlocal session_planned_furniture, selected_planned_furniture
         nonlocal editing_permit_id, original_permit_tiles, selected_furniture, moving_furniture, selected_entity
 
+        from game.systems.cemetery_system import CemeterySystem
+        cemetery_system = CemeterySystem.get_instance()
+        cemetery_system.pending_commissions.clear()
+        cemetery_system.overflow_corpses.clear()
 
         player = Player(0.0, 0.0)
         camera.x = 0.0
