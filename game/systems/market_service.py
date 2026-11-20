@@ -42,7 +42,9 @@ class MarketService:
         """Mendapatkan seluruh gedung market aktif"""
         if not building_manager:
             return []
-        return [b for b in building_manager.buildings if getattr(b, "building_type", "") == "market"]
+        return [b for b in building_manager.buildings
+                if getattr(b, "building_type", "") == "market"
+                and getattr(b, "is_available_for_use", True)]
 
     @classmethod
     def get_lowest_available_item_quote(cls, item_name, building_manager=None, markets=None,
@@ -376,7 +378,7 @@ class MarketService:
         return True, "Ready for purchase", unit_price, total_price
 
     @classmethod
-    def execute_purchase(cls, household, item_name, quantity=1, building_manager=None, furniture_manager=None, villager_manager=None, stockpile_manager=None, enforce_food_restriction=False, bypass_food_restriction=False):
+    def execute_purchase(cls, household, item_name, quantity=1, building_manager=None, furniture_manager=None, villager_manager=None, stockpile_manager=None, enforce_food_restriction=False, bypass_food_restriction=False, day_number=None):
         """
         EKSEKUSI TRANSAKSI PEMBELIAN PASAR SECARA ATOMIK:
         1. Menerima purchasing household & requested food item.
@@ -476,6 +478,9 @@ class MarketService:
         else:
             delivered_to = "source_dict"
             source_dict[item_name] = source_dict.get(item_name, 0) + quantity
+
+        from game.systems.market_sales_report import MarketSalesReportSystem
+        MarketSalesReportSystem.record_sale(market, item_name, quantity, unit_price, day_number)
 
         receipt = {
             "success": True,

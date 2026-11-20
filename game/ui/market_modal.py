@@ -51,6 +51,7 @@ class MarketProfileModal:
         # Modal bounds
         self.modal_w = 780
         self.modal_h = 560
+        self.modal_top = 0
 
         # Tabs & Sub-views
         self.active_tab = "goods"
@@ -106,8 +107,7 @@ class MarketProfileModal:
 
         # Pagination for tradeable goods
         self.goods_page = 0
-        self.prev_page_btn_rect = None
-        self.next_page_btn_rect = None
+        self.goods_list_rect = None
 
     def _ensure_fonts(self):
         if self.font_title is None:
@@ -326,6 +326,8 @@ class MarketProfileModal:
                                 drop_tile = (int(math.floor(approach[0] / TILE_SIZE)), int(math.floor(approach[1] / TILE_SIZE)))
                                 stockpile_manager.drop_resource(denom, actual, drop_tile[0], drop_tile[1], owner_type="landlord")
                                 stockpile_manager.refresh_stacks(resources, None)
+                                from game.systems.wealth_system import VillageWealthSystem
+                                VillageWealthSystem.mark_dirty()
                                 self.status_message = f"Dropped {actual} {denom} near the market for servant hauling."
                                 return f"coin_withdrawn_{actual}_{denom}"
                             self.status_message = f"Only {market_wallet.get(denom, 0)} {denom} available in market."
@@ -460,18 +462,20 @@ class MarketProfileModal:
                             return f"stock_withdrawn_{it_name}"
                         self.status_message = f"Only {in_market} {it_name} available in market."
 
-            # Pagination controls for tradeable items
-            if self.prev_page_btn_rect and self.prev_page_btn_rect.collidepoint(mouse_pos):
-                self.goods_page = max(0, getattr(self, "goods_page", 0) - 1)
-                return "market_prev_page"
-
-            if self.next_page_btn_rect and self.next_page_btn_rect.collidepoint(mouse_pos):
-                self.goods_page = getattr(self, "goods_page", 0) + 1
-                return "market_next_page"
+        elif event.type == pygame.MOUSEWHEEL:
+            mouse_pos = pygame.mouse.get_pos()
+            if self.goods_list_rect and self.goods_list_rect.collidepoint(mouse_pos):
+                tradeable_count = sum(
+                    1 for item in getattr(mkt, "sale_items", [])
+                    if item in MARKET_TRADEABLE_ITEMS
+                )
+                total_pages = max(1, math.ceil(tradeable_count / 4))
+                self.goods_page = max(0, min(total_pages - 1, self.goods_page - event.y))
+                return "market_goods_scrolled"
 
         return None
 
-    def draw(self, surface, resources=None, stockpile_manager=None, servant_manager=None, villager_manager=None, furniture_manager=None):
+    def draw(self, surface, resources=None, stockpile_manager=None, servant_manager=None, villager_manager=None, furniture_manager=None, day_number=1):
         if not self.is_open or not self.target_market:
             return
 
@@ -489,6 +493,7 @@ class MarketProfileModal:
         # 2. Main Modal Box
         mx = (sw - self.modal_w) // 2
         my = (sh - self.modal_h) // 2
+        self.modal_top = my
         modal_rect = pygame.Rect(mx, my, self.modal_w, self.modal_h)
 
         pygame.draw.rect(surface, COLOR_MODAL_BG, modal_rect, border_radius=10)
@@ -583,7 +588,8 @@ class MarketProfileModal:
         content_y = stats_rect.bottom + 14
 
         self._draw_goods_tab(surface, mx, content_y, mkt, servant_manager, resources,
-                             stockpile_manager, furniture_manager, villager_manager, m_pos)
+                             stockpile_manager, furniture_manager, villager_manager, m_pos,
+                             day_number)
 
         # 7. ASSIGN STALL DIALOG OVERLAY (if active)
         if self.show_assign_dialog:
@@ -601,7 +607,8 @@ class MarketProfileModal:
             return 0
 
     def _draw_goods_tab(self, surface, mx, list_y, mkt, servant_manager, resources,
-                        stockpile_manager, furniture_manager, villager_manager, m_pos):
+                        stockpile_manager, furniture_manager, villager_manager, m_pos,
+                        day_number=1):
         """Draw only explicitly enabled market goods and their physical stock controls."""
         assigned = bool(getattr(mkt, "assigned_family_id", None))
         self.price_g_dec_btns.clear()
@@ -711,18 +718,54 @@ class MarketProfileModal:
             surface.blit(empty_text, (empty.centerx - empty_text.get_width() // 2, empty.centery - empty_text.get_height() // 2))
 
         page_y = max(row_y + 4, row_top + 28 + items_per_page * (row_h + 3))
-        self.prev_page_btn_rect = pygame.Rect(mx + 24, page_y, 90, 22)
-        self.next_page_btn_rect = pygame.Rect(mx + self.modal_w - 114, page_y, 90, 22)
-        has_prev = self.goods_page > 0
-        has_next = self.goods_page < total_pages - 1
-        for rect, label, enabled in ((self.prev_page_btn_rect, "< Prev", has_prev), (self.next_page_btn_rect, "Next >", has_next)):
-            pygame.draw.rect(surface, (30, 58, 138) if enabled else (51, 65, 85), rect, border_radius=3)
-            text = self.font_badge.render(label, True, (255, 255, 255) if enabled else COLOR_TEXT_MUTED)
-            surface.blit(text, (rect.centerx - text.get_width() // 2, rect.centery - text.get_height() // 2))
+        self.goods_list_rect = pygame.Rect(
+            mx + 24, row_top + 28, self.modal_w - 48,
+            max(1, page_y - (row_top + 28)),
+        )
+        if total_pages > 1:
+            scroll_hint = self.font_badge.render("Scroll list for more items", True, COLOR_TEXT_MUTED)
+            surface.blit(scroll_hint, (mx + self.modal_w - 24 - scroll_hint.get_width(), list_y + 5))
 
         if self.status_message:
             status = self.font_badge.render(self.status_message, True, (248, 113, 113) if "No Goods" in self.status_message else (134, 239, 172))
             surface.blit(status, (mx + 130, page_y + 5))
+
+        from game.systems.market_sales_report import MarketSalesReportSystem
+        report = MarketSalesReportSystem.get_report(mkt, day_number)
+        report_top = page_y + 30
+        report_bottom = self.modal_top + self.modal_h - 14
+        report_rect = pygame.Rect(mx + 24, report_top, self.modal_w - 48,
+                                  max(42, report_bottom - report_top))
+        pygame.draw.rect(surface, (15, 23, 42), report_rect, border_radius=5)
+        pygame.draw.rect(surface, (51, 65, 85), report_rect, width=1, border_radius=5)
+        report_title = self.font_badge.render(
+            f"TOTAL SALES - DAYS {report['start_day']} to {report['end_day']} (THROUGH DAY {min(day_number, report['end_day'])})",
+            True, COLOR_TEXT_TITLE,
+        )
+        surface.blit(report_title, (report_rect.x + 10, report_rect.y + 7))
+        sold_items = sorted(report["items"].items(), key=lambda pair: pair[0].casefold())
+        if not sold_items:
+            surface.blit(self.font_body.render("No sales recorded in this 10-day period.", True, COLOR_TEXT_MUTED),
+                         (report_rect.x + 10, report_rect.y + 27))
+        else:
+            row_height = 16
+            rows_per_column = max(1, (report_rect.height - 28) // row_height)
+            visible_count = min(len(sold_items), rows_per_column * 2)
+            column_width = (report_rect.width - 20) // 2
+            for idx, (item_name, sale) in enumerate(sold_items[:visible_count]):
+                col, row = divmod(idx, rows_per_column)
+                item_x = report_rect.x + 10 + col * column_width
+                item_y = report_rect.y + 25 + row * row_height
+                qty = max(0, int(sale.get("quantity", 0)))
+                revenue = from_copper(max(0, int(sale.get("revenue_copper", 0))))
+                earnings = f"{revenue['Gold']}g {revenue['Silver']}s {revenue['Copper']}c"
+                label = self.font_badge.render(
+                    f"{item_name}: {qty} sold, {earnings} earned", True, COLOR_TEXT_MAIN,
+                )
+                surface.blit(label, (item_x, item_y))
+            if visible_count < len(sold_items):
+                more = self.font_badge.render(f"+ {len(sold_items) - visible_count} more items", True, COLOR_TEXT_MUTED)
+                surface.blit(more, (report_rect.right - more.get_width() - 10, report_rect.bottom - more.get_height() - 5))
 
         self.item_picker_rects.clear()
         if self.show_item_picker:

@@ -46,7 +46,9 @@ class ToiletSystem:
             return []
         return [
             b for b in getattr(building_manager, "buildings", [])
-            if getattr(b, "building_type", "") == "toilet" and not getattr(b, "is_under_construction", False)
+            if (getattr(b, "building_type", "") == "toilet"
+                and getattr(b, "is_available_for_use", True)
+                and not getattr(b, "is_under_construction", False))
         ]
 
     @classmethod

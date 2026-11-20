@@ -32,13 +32,21 @@ class ResourceHUD:
             self.font_item = pygame.font.SysFont("Segoe UI", 13)
             self.font_val = pygame.font.SysFont("Consolas", 13, bold=True)
 
-    def draw(self, surface, resources, weekday=None):
+    def draw(self, surface, resources, weekday=None, furniture_manager=None):
         self._init_fonts()
         screen_w, _ = surface.get_size()
 
         # Strict core resources filter: never overflow HUD with non-core items
         core_keys = ["Wood", "Food", "Stone", "Water", "Copper", "Silver", "Gold"]
         core_resources = {k: resources.get(k, 0) for k in core_keys}
+        if furniture_manager and hasattr(furniture_manager, "get_lord_treasury_chest"):
+            treasury = furniture_manager.get_lord_treasury_chest()
+            if treasury:
+                from game.systems.currency import canonical_denomination
+                for item, amount in getattr(treasury, "inventory", {}).items():
+                    denomination = canonical_denomination(item)
+                    if denomination in core_resources:
+                        core_resources[denomination] += max(0, int(amount))
 
         # Hitung tinggi kartu berdasarkan jumlah core resource
         num_items = len(core_resources)

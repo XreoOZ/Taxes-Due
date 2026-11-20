@@ -54,6 +54,14 @@ VILLAGER_SEPARATION_PASSES = 2
 VILLAGER_SEPARATION_CELL_SIZE = 8.0
 DOORWAY_CLEARANCE_RADIUS = 36.0
 
+# AI decision updates are time-sliced independently from physics/rendering.
+# The interval grows with population to keep per-simulated-second decision work scalable.
+AI_DECISION_TICK_INTERVAL_SECONDS = 0.05
+AI_DECISION_REFERENCE_POPULATION = 50
+AI_DECISION_MAX_INTERVAL_SECONDS = 0.5
+SERVANT_AI_DECISION_TICK_INTERVAL_SECONDS = AI_DECISION_TICK_INTERVAL_SECONDS
+SIMULATION_PROFILE_REPORT_SECONDS = 5.0
+
 # Servant AI Settings
 SERVANT_COUNT = 2
 SERVANT_RADIUS = 20
@@ -73,6 +81,11 @@ COLOR_PATH_SERVANT = (245, 158, 11)      # Amber orange for servant path lines
 COLOR_PATH_TARGET_RING = (56, 189, 248)  # Cyan for target destination reticle
 PATH_LINE_WIDTH = 2
 PATH_ARROW_SPACING = 36.0                # Distance in screen pixels between directional arrows
+PATH_ARROW_HEAD_LENGTH = 8
+PATH_ARROW_HEAD_WIDTH = 6
+PATH_ROUTE_WAYPOINT_RADIUS = 3
+COLOR_PATH_ROUTE = COLOR_PATH_TARGET_RING
+COLOR_PATH_ROUTE_FAILED = (239, 68, 68)
 PATH_WAYPOINT_TOLERANCE = 14.0           # Waypoint arrival threshold
 NAVIGATION_RETRY_INTERVAL = 0.5          # Seconds before retrying an unreachable destination
 NAVIGATION_BLOCKED_TILE_TIMEOUT = 8.0    # Seconds to avoid a tile that stopped an actor
@@ -83,6 +96,7 @@ PATH_TARGET_FALLBACK_OFFSETS = (
 )
 PATH_TOGGLE_BTN_WIDTH = 180
 PATH_TOGGLE_BTN_HEIGHT = 32
+PATH_TOGGLE_BTN_MARGIN = 8
 COLOR_PATH_TOGGLE_ON = (16, 185, 129)        # Emerald green when active
 COLOR_PATH_TOGGLE_OFF = (51, 65, 85)         # Slate gray when inactive
 COLOR_PATH_TOGGLE_BORDER = (100, 116, 139)   # Border outline
@@ -120,6 +134,10 @@ ROUTE_STATE_FAILED = "FAILED"
 
 # Tile Occupancy, Narrow Doorways & Passage Management (Agent 1)
 DOORWAY_IDLE_MIN_DISTANCE = 48.0          # Minimum distance (px) AI must keep from any doorway when idling/wandering
+PLACEMENT_ORIENTATION_MARKER_LENGTH_RATIO = 0.34
+PLACEMENT_ORIENTATION_MARKER_HEAD_RATIO = 0.42
+PLACEMENT_ORIENTATION_MARKER_COLOR = (255, 255, 255)
+PLACEMENT_ORIENTATION_MARKER_OUTLINE = (15, 23, 42)
 DOORWAY_QUEUE_LATERAL_OFFSET = 36.0       # Lateral offset (px) for doorway queueing to clear passage line
 TILE_OCCUPANCY_TIMEOUT = 5.0              # Timeout (seconds) for physical tile occupancy tracking
 TILE_STEP_RESERVATION_TIMEOUT = 1.5       # Timeout (seconds) for step reservation ahead
@@ -128,14 +146,13 @@ NARROW_PASSAGE_WAIT_DISTANCE = 32.0       # Distance to halt outside narrow pass
 # Villager & Family Settings
 VILLAGER_RADIUS = 20
 VILLAGER_SPEED = 180.0
-VILLAGER_CARRY_CAPACITY = 5
 WATERING_DURATION_SECONDS = 2.0
 DOORWAY_WAYPOINT_DISTANCE = 24.0
 DEFAULT_PLOT_MAX_WORKERS = 2
 
 # Farming Task Durations & Dispersion Settings (Config-Driven, Zero Hardcode)
-WATERING_DURATION_INGAME_HOURS = 0.25  # 15 in-game minutes per tile
-TILLING_DURATION_INGAME_HOURS = 0.5    # 30 in-game minutes per tile
+WATERING_DURATION_INGAME_HOURS = 20.0 / 60.0  # 20 in-game minutes per tile
+TILLING_DURATION_INGAME_HOURS = 1.0           # 1 in-game hour per tile
 FARM_TILE_PROXIMITY_PENALTY_ADJACENT = 3000.0  # Heavy penalty for tiles adjacent to other active workers (< 1.5 grid units)
 FARM_TILE_PROXIMITY_PENALTY_NEAR = 1500.0      # Penalty for tiles within 2.5 grid units
 FARM_TILE_ARRIVAL_DIST = 20.0                  # Arrival radius inside target work tile
@@ -312,10 +329,23 @@ SCHEDULE_TYPES = {
 # Any other active task is allowed to finish before the schedule changes activity.
 SCHEDULE_NON_WORK_TASKS = frozenset({
     "IDLE", "DECEASED", "SEEKING_FOOD", "SEEKING_WATER", "SEEKING_TOILET",
-    "RECOVER_DEATH_ITEMS", "SLEEPING", "LEISURE", "STROLLING",
+    "RECOVER_DEATH_ITEMS", "SLEEPING", "ZONKED_SLEEP", "LEISURE", "STROLLING",
     "LEADING_PRAYER", "ATTENDING_PRAYER", "PRAYING", "PREACHING",
     "RETURNING_TITHES_HOME",
+    "WAITING_FOR_CARPENTER_COMMISSION",
+    "CONFESSION_QUEUED", "WAITING_FOR_CONFESSION", "CONFESSION_RETRIEVE_COINS",
+    "CONFESSION_TRAVEL_TO_PRIEST", "GOING_TO_CONFESSION_BOX", "CONFESSING",
+    "HEARING_CONFESSION",
 })
+FREE_TIME_SCHEDULE_ACTIVITIES = frozenset({"LEISURE", "ANY"})
+MARKET_SALES_REPORT_PERIOD_DAYS = 10
+CARPENTER_INSUFFICIENT_LANDLORD_COIN_MESSAGES = (
+    "The treasury does not hold enough coin for this commission, my Lord.",
+    "I cannot pay the Carpenter yet; the treasury is short on coin.",
+    "The available coin falls short of the Carpenter's price, Sire.",
+    "We need more treasury coin before this work can be commissioned.",
+    "The Carpenter's fee exceeds our current coin reserve, my Lord.",
+)
 
 DEFAULT_JOB_SCHEDULE = [
     # 00:00 - 05:00: Night Sleep
@@ -644,6 +674,8 @@ DAY_LENGTH_OPTIONS = [
     {"id": "30_min", "label": "30 minutes per day", "short_label": "30 Min", "seconds": 1800.0},
 ]
 DEFAULT_DAY_LENGTH_INDEX = 1  # 20 minutes default (1200.0 seconds)
+DEFAULT_DAY_LENGTH_SECONDS = DAY_LENGTH_OPTIONS[DEFAULT_DAY_LENGTH_INDEX]["seconds"]
+HOURS_PER_DAY = 24.0
 STARTING_HOUR = 8.0
 NIGHT_START_HOUR = 20
 NIGHT_END_HOUR = 5
@@ -714,25 +746,32 @@ BUILDING_TYPES = {
         "id": "well",
         "name": "Well",
         "category": "Well",
-        "category_id": "well",
+        "category_id": "public_structure",
+        "public_structure": True,
+        "maintainable": True,
         "desc": "Fresh water well built of masonry and timber. Impenetrable 4-tile solid structure.",
         "cost_wood": 5,
         "cost_stone": 20,
         "fixed_cost": True,
         "fixed_tiles_count": 4,
+        "width_tiles": 2,
+        "height_tiles": 2,
         "is_solid": True,
         "has_door": False,
         "color": (56, 189, 248),
         "border_color": (96, 165, 250),
         "required_permit": "any",
         "allowed_permits": ["housing", "storage", "landlord_private", "church"],
+        "carpenter_commissionable": True,
     },
     "market": {
         "id": "market",
         "name": "Market",
         "title": "Market Stall",
         "category": "Market Stall",
-        "category_id": "market",
+        "category_id": "public_structure",
+        "public_structure": True,
+        "maintainable": True,
         "desc": "Medieval marketplace stall for trading food, goods, and currency. Footprint: 3x2 tiles.",
         "cost_wood": 15,
         "cost_stone": 5,
@@ -746,12 +785,15 @@ BUILDING_TYPES = {
         "border_color": (251, 191, 36),
         "required_permit": "any",
         "allowed_permits": ["market", "storage", "landlord_private", "housing"],
+        "carpenter_commissionable": True,
     },
     "toilet": {
         "id": "toilet",
         "name": "Toilet",
         "category": "Toilet",
-        "category_id": "toilet",
+        "category_id": "public_structure",
+        "public_structure": True,
+        "maintainable": True,
         "desc": "Medieval wooden outhouse latrine. Footprint: 1x1 tile. Does not require a Permit.",
         "cost_wood": 5,
         "cost_stone": 0,
@@ -765,8 +807,12 @@ BUILDING_TYPES = {
         "border_color": (160, 110, 60),
         "required_permit": None,
         "allowed_permits": None,
+        "carpenter_commissionable": True,
     }
 }
+# Placeable structures and furniture share quarter-turn rotation behavior.
+for _building_config in BUILDING_TYPES.values():
+    _building_config.setdefault("rotatable", True)
 # Backward compatibility aliases
 BUILDING_TYPES["house"] = BUILDING_TYPES["wooden_structure"]
 BUILDING_TYPES["storage"] = BUILDING_TYPES["wooden_structure"]
@@ -774,22 +820,43 @@ BUILDING_TYPES["manor"] = BUILDING_TYPES["stone_structure"]
 
 def get_building_categories():
     """
-    Returns the two top-level Building menu categories. Structure blueprints
-    remain data-driven by BUILDING_TYPES; furniture comes from FURNITURE_TYPES.
+    Returns the top-level Building menu categories from asset configuration.
     """
-    # The Building menu has two top-level choices: Structure and Furniture.
     structure_types = [
-        building_id for building_id in BUILDING_TYPES
-        if building_id not in ("house", "storage", "manor")
+        building_id for building_id, config in BUILDING_TYPES.items()
+        if config.get("category_id", "structure") == "structure"
+        and building_id not in ("house", "storage", "manor")
+    ]
+    public_building_types = [
+        building_id for building_id, config in BUILDING_TYPES.items()
+        if config.get("category_id") == "public_structure"
+        and building_id not in ("house", "storage", "manor")
+    ]
+    public_furniture_types = [
+        furniture_id for furniture_id, config in FURNITURE_TYPES.items()
+        if config.get("category_id") == "public_structure"
+    ]
+    household_furniture_types = [
+        furniture_id for furniture_id, config in FURNITURE_TYPES.items()
+        if config.get("category_id", "furniture") == "furniture"
     ]
     categories = {
         "structure": {
             "id": "structure",
             "name": "Structure",
-            "desc": "Wooden and stone structures, wells, market stalls, and toilets.",
+            "desc": "Wooden and stone buildings.",
             "color": (59, 130, 246),
             "kind": "structure",
             "building_types": structure_types,
+        },
+        "public_structure": {
+            "id": "public_structure",
+            "name": "Public Structure",
+            "desc": "Shared public buildings and fixtures maintained by the Lord.",
+            "color": (34, 197, 94),
+            "kind": "public",
+            "building_types": public_building_types,
+            "furniture_types": public_furniture_types,
         },
     }
     categories["furniture"] = {
@@ -798,7 +865,7 @@ def get_building_categories():
         "desc": "Household storage chests, beds, and interior living fixtures.",
         "color": (250, 204, 21),
         "kind": "furniture",
-        "building_types": list(FURNITURE_TYPES.keys())
+        "building_types": household_furniture_types
     }
     return list(categories.values())
 
@@ -975,12 +1042,57 @@ FURNITURE_TYPES = {
         "color_frame": (112, 72, 38),
         "color_top": (170, 119, 70),
         "color_iron": (82, 91, 101)
+    },
+    "confession_box": {
+        "id": "confession_box",
+        "name": "Confession Box",
+        "category_id": "public_structure",
+        "public_structure": True,
+        "maintainable": True,
+        "desc": "A private medieval confessional for church visitors.",
+        "capacity": 0,
+        "materials": {"Wood": 5, "Stone": 0},
+        "width_tiles": 1,
+        "height_tiles": 1,
+        "max_workers": 0,
+        "allowed_permits": ["church"],
+        "household_owned": False,
+        "carpenter_commissionable": True,
+        "color_frame": (92, 57, 34),
+        "color_panel": (122, 75, 42),
+        "color_cloth": (112, 35, 42),
+        "color_trim": (190, 151, 83)
+    },
+    "lord_treasury_chest": {
+        "id": "lord_treasury_chest",
+        "name": "Lord Treasury Chest",
+        "category_id": "furniture",
+        "desc": "A reinforced royal coffer for landlord coin only. Free and ready to use immediately.",
+        "capacity": 0,
+        "materials": {},
+        "width_tiles": 1,
+        "height_tiles": 1,
+        "household_owned": False,
+        "instant_place": True,
+        "placement_anywhere": True,
+        "unique": True,
+        "rotatable": False,
+        "maintainable": False,
+        "color_body": (70, 55, 38),
+        "color_lid": (112, 85, 48),
+        "color_clasp": (250, 204, 21),
+        "color_trim": (203, 213, 225)
     }
 }
 
 # Furniture is represented by the same movable world-item entity after removal.
 for _furniture_config in FURNITURE_TYPES.values():
     _furniture_config.setdefault("can_be_dropped", True)
+    _furniture_config.setdefault("rotatable", True)
+
+PUBLIC_STRUCTURE_DAILY_BREAK_CHANCE = FURNITURE_DAILY_BREAK_CHANCE
+LORD_TREASURY_START_TILE = (1, 0)
+LORD_TREASURY_PLACEMENT_SEARCH_RADIUS = 8
 
 # =====================================================================
 # Needs, Survival & Household Consumption System (Agent 1)
@@ -995,6 +1107,90 @@ DAILY_WATER_REQUIREMENT = 1            # 1 water per day per living individual
 AI_NEED_FOOD_RESTORE = 100.0           # Need restored when consuming food
 AI_NEED_WATER_RESTORE = 100.0          # Need restored when drinking water
 HOUSEHOLD_WATER_MAX_COLLECTORS = 2     # Maximum concurrent household members hauling water
+AI_NEED_FAITH_MAX = 100.0
+AI_NEED_FAITH_DAILY_DECAY_MIN = 10.0
+AI_NEED_FAITH_DAILY_DECAY_MAX = 35.0
+AI_NEED_FAITH_CONFESSION_THRESHOLD = 20.0
+AI_NEED_FAITH_CONFESSION_RESTORE_MIN = 85.0
+AI_NEED_FAITH_CONFESSION_RESTORE_MAX = 100.0
+AI_NEED_FAITH_PRAYER_RESTORE_MIN = 10.0
+AI_NEED_FAITH_PRAYER_RESTORE_MAX = 20.0
+CONFESSION_DURATION_INGAME_HOURS = 20.0 / 60.0
+CONFESSION_BUBBLE_DURATION_SECONDS = 5.0
+CONFESSION_MAX_WAIT_HOURS = 2.0
+
+# Individual happiness modifiers and their performance effects.
+# Conditions are evaluated by HappinessSystem; this data owns all tuning values.
+HAPPINESS_INITIAL_VALUE = 70.0
+HAPPINESS_MIN_VALUE = 0.0
+HAPPINESS_MAX_VALUE = 100.0
+HAPPINESS_WEALTH_DENOMINATION = "Gold"
+HAPPINESS_STATUS_BANDS = (
+    {"id": "miserable", "label": "Miserable", "min": 0.0, "max": 24.0},
+    {"id": "unhappy", "label": "Unhappy", "min": 25.0, "max": 49.0},
+    {"id": "happy", "label": "Happy", "min": 50.0, "max": 74.0},
+    {"id": "very_happy", "label": "Very Happy", "min": 75.0, "max": 100.0},
+)
+HAPPINESS_STATUS_COLORS = {
+    "miserable": (239, 68, 68),
+    "unhappy": (245, 158, 11),
+    "happy": (34, 197, 94),
+    "very_happy": (56, 189, 248),
+}
+HAPPINESS_ACTIVITY_MULTIPLIERS = {
+    "miserable": 0.80,
+    "unhappy": 0.90,
+    "happy": 1.0,
+    "very_happy": 1.0,
+}
+HAPPINESS_MODIFIERS = {
+    "ate_varied_food": {"amount": 5.0, "duration_days": 1, "food_variety_required": 2},
+    "needs_comfortable": {"amount": 5.0, "duration_days": 1, "threshold": 50.0},
+    "usable_bed": {"amount": 5.0, "persistent": True},
+    "leisure_per_hour": {"amount": 3.0, "duration_days": 1},
+    "prayer_completed": {"amount": 5.0, "duration_days": 1},
+    "confession_completed": {"amount": 5.0, "duration_days": 1},
+    "gold_coin": {"amount_per_coin": 1.0},
+    "small_home": {"amount": -10.0, "max_tiles": 10},
+    "need_low": {"amount": -10.0, "threshold": 20.0, "duration_days": 1},
+    "need_empty": {"amount": -20.0, "threshold": 0.0, "duration_days": 1},
+    "no_home": {"amount": -20.0, "persistent": True},
+    "no_bed": {"amount": -5.0, "persistent": True},
+    "purchase_unaffordable": {"amount": -10.0, "duration_days": 1},
+    "unemployed": {"amount": -20.0, "persistent": True},
+    "bereavement": {"amount": -50.0, "duration_days": 5},
+    "sleep_fatigue": {"duration_days": 1},
+}
+
+# Individual sleep need and pacing. A full awake cycle drains the meter over
+# the configured waking hours; sleep restores it over the configured duration.
+SLEEP_INITIAL_VALUE = 100.0
+SLEEP_MIN_VALUE = 0.0
+SLEEP_MAX_VALUE = 100.0
+SLEEP_FULL_RECOVERY_INGAME_HOURS = 8.0
+SLEEP_WAKE_DRAIN_INGAME_HOURS = 16.0
+SLEEP_NO_BED_RECOVERY_DURATION_MULTIPLIER = 1.3
+SLEEP_FORCED_WAKE_THRESHOLD = 30.0
+SLEEP_STATUS_BANDS = (
+    {"id": "rested", "label": "Rested", "min": 50.0},
+    {"id": "sluggish", "label": "Sluggish", "min": 31.0},
+    {"id": "drowsy", "label": "Drowsy", "min": 21.0},
+    {"id": "half_asleep", "label": "Half Asleep", "min": 0.001},
+    {"id": "zonked", "label": "Zonked", "min": 0.0},
+)
+SLEEP_STATUS_COLORS = {
+    "rested": (34, 197, 94),
+    "sluggish": (234, 179, 8),
+    "drowsy": (249, 115, 22),
+    "half_asleep": (239, 68, 68),
+    "zonked": (190, 24, 93),
+}
+SLEEP_HAPPINESS_PENALTIES = {
+    "sluggish": -2.0,
+    "drowsy": -5.0,
+    "half_asleep": -7.0,
+    "zonked": -20.0,
+}
 
 # Visual Colors for Needs & Corpse States
 COLOR_NEED_HUNGER_HIGH = (34, 197, 94)    # Green (Fulfilling)

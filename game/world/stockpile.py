@@ -55,6 +55,25 @@ class StockpileManager:
     def __init__(self):
         self.stacks = []
         self.font = None
+        self._totals_dirty = True
+        self._totals_resource_target = None
+        self._spatial_index_dirty = True
+        self._stacks_by_tile = {}
+
+    def mark_totals_dirty(self, spatial=True):
+        """Invalidate the cached landlord resource totals after a physical stack changes."""
+        self._totals_dirty = True
+        if spatial:
+            self._spatial_index_dirty = True
+
+    def _get_stacks_by_tile(self):
+        if self._spatial_index_dirty:
+            index = {}
+            for stack in self.stacks:
+                index.setdefault((stack.grid_x, stack.grid_y), []).append(stack)
+            self._stacks_by_tile = index
+            self._spatial_index_dirty = False
+        return self._stacks_by_tile
 
     def _ensure_font(self):
         if self.font is None:
@@ -63,6 +82,7 @@ class StockpileManager:
     def initialize_starter_stockpile(self, initial_resources, permit_manager, starter_tools=None):
         """Menempatkan item awal di atas tanah pada lot storage starter"""
         self.stacks = []
+        self.mark_totals_dirty()
 
         # Cari starter storage permit
         storage_tiles = []
@@ -108,11 +128,13 @@ class StockpileManager:
                 add_amt = min(space_left, amount)
                 s.amount += add_amt
                 amount -= add_amt
+                self.mark_totals_dirty(spatial=False)
                 if amount <= 0:
                     return
 
         # Jika masih ada sisa atau petak belum ada stack sejenis, buat stack baru
         self.stacks.append(ResourceStack(resource_type, amount, gx, gy, owner_type=owner_type, owner_id=owner_id))
+        self.mark_totals_dirty()
 
     def get_stack_at(self, gx, gy):
         for s in self.stacks:
@@ -131,6 +153,8 @@ class StockpileManager:
         if stack.amount <= 0:
             if stack in self.stacks:
                 self.stacks.remove(stack)
+        if actual > 0:
+            self.mark_totals_dirty(spatial=stack.amount <= 0)
         return actual
 
     def deposit_to_tile(self, resource_type, amount, gx, gy, owner_type="landlord", owner_id=None):
@@ -201,21 +225,27 @@ class StockpileManager:
         return totals
 
     def refresh_stacks(self, resources, permit_manager):
-        """Sinkronisasi berkala (tidak menghapus barang yang tercecer)"""
-        # Sinkronkan nilai total resources agar selalu akurat dengan jumlah fisik
-        current_totals = self.get_total_resources()
-        if resources is not None and isinstance(resources, dict):
+        """Synchronize cached physical totals only when stacks or the target change."""
+        needs_refresh = self._totals_dirty or self._totals_resource_target is not resources
+        if needs_refresh and resources is not None and isinstance(resources, dict):
+            current_totals = self.get_total_resources()
             for res, amt in current_totals.items():
                 resources[res] = amt
+            self._totals_dirty = False
+            self._totals_resource_target = resources
 
     def draw(self, surface, camera, tile_size, permit_manager=None):
         self._ensure_font()
+        visible_stacks = []
+        tile_bounds = camera.get_visible_tile_bounds(tile_size)
+        if tile_bounds:
+            min_x, min_y, max_x, max_y = tile_bounds
+            spatial_index = self._get_stacks_by_tile()
+            for gy in range(min_y, max_y + 1):
+                for gx in range(min_x, max_x + 1):
+                    visible_stacks.extend(spatial_index.get((gx, gy), ()))
 
-        for stack in self.stacks:
-            if not camera.is_world_rect_visible(
-                    stack.grid_x * tile_size, stack.grid_y * tile_size,
-                    tile_size, tile_size):
-                continue
+        for stack in visible_stacks:
             sx, sy = camera.world_to_screen(stack.grid_x * tile_size, stack.grid_y * tile_size)
             scaled_tile = int(tile_size * camera.zoom)
             if scaled_tile < 10:

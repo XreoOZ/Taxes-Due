@@ -7,6 +7,7 @@ import os
 import json
 import time
 from game.data.config import MARKET_TRADEABLE_ITEMS, MARKET_DEFAULT_HOUSEHOLD_SALE_PERCENT
+from game.config import TILE_SIZE, HAPPINESS_INITIAL_VALUE, SLEEP_INITIAL_VALUE
 
 SAVE_DIR = "saves"
 
@@ -101,6 +102,10 @@ def serialize_game_state(day_cycle, resources, player, permit_manager, building_
             "tiles": [[gx, gy] for gx, gy in b.tiles],
             "door_pos": list(b.door_pos) if b.door_pos else None,
             "door_side": getattr(b, "door_side", "bottom"),
+            "rotation": int(getattr(b, "_rotation", 0)),
+                "condition": float(getattr(b, "condition", 1.0)),
+                "construction_order": dict(getattr(b, "construction_order", {}) or {}),
+                "construction_progress": float(getattr(b, "construction_progress", 0.0)),
             "owner": getattr(b, "owner", "landlord"),
             "inventory": dict(getattr(b, "inventory", {})),
             "currency": dict(getattr(b, "currency", {})),
@@ -109,6 +114,9 @@ def serialize_game_state(day_cycle, resources, player, permit_manager, building_
             "assigned_household_id": getattr(b, "assigned_household_id", None),
             "item_allocations": dict(getattr(b, "item_allocations", {})),
             "sale_items": list(getattr(b, "sale_items", [])),
+            "sales_report_period": getattr(b, "sales_report_period", None),
+            "sales_report_by_item": dict(getattr(b, "sales_report_by_item", {})),
+            "sales_report_last_day": getattr(b, "sales_report_last_day", 1),
             "household_sale_percent": getattr(b, "household_sale_percent", MARKET_DEFAULT_HOUSEHOLD_SALE_PERCENT),
             "household_sale_limits": dict(getattr(b, "household_sale_limits", {})),
             "stall_requested_qty": dict(getattr(b, "_stall_requested_qty", {})),
@@ -122,9 +130,11 @@ def serialize_game_state(day_cycle, resources, player, permit_manager, building_
             "tiles": [[gx, gy] for gx, gy in s.tiles],
             "door_pos": list(s.door_pos) if s.door_pos else None,
             "door_side": getattr(s, "door_side", "bottom"),
+            "rotation": int(getattr(s, "_rotation", 0)),
             "build_progress": getattr(s, "build_progress", 0.0),
             "delivered_cost": dict(getattr(s, "delivered_cost", {})),
-            "required_cost": dict(getattr(s, "required_cost", {}))
+            "required_cost": dict(getattr(s, "required_cost", {})),
+            "construction_order": dict(getattr(s, "construction_order", {}) or {})
         })
 
     demolition_data = []
@@ -178,6 +188,7 @@ def serialize_game_state(day_cycle, resources, player, permit_manager, building_
             "furniture_type": f.furniture_type,
             "gx": f.grid_x,
             "gy": f.grid_y,
+            "rotation": getattr(f, "rotation", 0),
             "permit_id": f.permit_id,
             "family_id": f.family_id,
             "assigned_villager_id": getattr(f, "assigned_villager_id", None),
@@ -189,7 +200,8 @@ def serialize_game_state(day_cycle, resources, player, permit_manager, building_
             "designated_target": desig_target,
             "carrier_id": getattr(f, "carrier_id", None),
             "condition": getattr(f, "condition", 1.0),
-            "inventory": dict(getattr(f, "inventory", {}))
+            "inventory": dict(getattr(f, "inventory", {})),
+            "currency": dict(getattr(f, "currency", {}))
         })
 
     # 7. Villagers & Families
@@ -201,6 +213,9 @@ def serialize_game_state(day_cycle, resources, player, permit_manager, building_
             "assigned_permit_id": fam.assigned_permit_id,
             "generations_present": fam.generations_present,
             "pending_death_recovery": [dict(d) for d in getattr(fam, "pending_death_recovery", [])],
+            "income_report_period": getattr(fam, "income_report_period", None),
+            "income_report_by_source": dict(getattr(fam, "income_report_by_source", {}) or {}),
+            "income_report_last_day": getattr(fam, "income_report_last_day", 1),
             "members": [
                 {
                     "id": m.id,
@@ -217,6 +232,7 @@ def serialize_game_state(day_cycle, resources, player, permit_manager, building_
                     "task": m.task,
                     "carrying_crop": getattr(m, "carrying_crop", 0),
                     "inventory": dict(getattr(m, "inventory", {})),
+                    "currency": dict(getattr(m, "currency", {})),
                     "active_tool": getattr(m, "active_tool", None),
                     "has_water": getattr(m, "has_water", False),
                     "water_day": getattr(m, "water_day", -1),
@@ -228,6 +244,22 @@ def serialize_game_state(day_cycle, resources, player, permit_manager, building_
                     "hunger": getattr(m, "hunger", 100.0),
                     "thirst": getattr(m, "thirst", 100.0),
                     "need_toilet": getattr(m, "need_toilet", 100.0),
+                    "faith": getattr(m, "faith", 100.0),
+                    "sleep_need": getattr(m, "sleep_need", SLEEP_INITIAL_VALUE),
+                    "sleep_forced": getattr(m, "sleep_forced", False),
+                    "sleeping_recharge_active": getattr(m, "sleeping_recharge_active", False),
+                    "happiness": getattr(m, "happiness", HAPPINESS_INITIAL_VALUE),
+                    "happiness_effects": dict(getattr(m, "happiness_effects", {}) or {}),
+                    "happiness_trigger_days": dict(getattr(m, "happiness_trigger_days", {}) or {}),
+                    "happiness_food_day": getattr(m, "happiness_food_day", None),
+                    "happiness_food_types": list(getattr(m, "happiness_food_types", []) or []),
+                    "last_faith_decay_day": getattr(m, "last_faith_decay_day", 1),
+                    "prayer_attendance_day": getattr(m, "prayer_attendance_day", None),
+                    "last_faith_prayer_day": getattr(m, "last_faith_prayer_day", None),
+                    "last_confession_day": getattr(m, "last_confession_day", None),
+                    "pending_commission_task": getattr(m, "pending_commission_task", None),
+                    "pending_commission_data": dict(getattr(m, "pending_commission_data", {}) or {}),
+                    "pending_commission_tasks": [dict(entry) for entry in getattr(m, "pending_commission_tasks", [])],
                     "interrupted_task_state": getattr(m, "interrupted_task_state", None),
                     "activity_description": getattr(m, "activity_description", None),
                     "hunger_death_timer": getattr(m, "hunger_death_timer", None),
@@ -258,7 +290,15 @@ def serialize_game_state(day_cycle, resources, player, permit_manager, building_
             "x": s.x,
             "y": s.y,
             "work_priorities": dict(s.work_priorities),
-            "carrying_furniture_id": getattr(s.carrying_furniture, "id", None) if getattr(s, "carrying_furniture", None) else None
+            "carrying_furniture_id": getattr(s.carrying_furniture, "id", None) if getattr(s, "carrying_furniture", None) else None,
+            "state": getattr(s, "state", "IDLE"),
+            "inventory": dict(getattr(s, "inventory", {})),
+            "carpenter_commission_order_id": getattr(s, "carpenter_commission_order_id", None),
+            "carpenter_commission_carpenter_id": getattr(s, "carpenter_commission_carpenter_id", None),
+            "carpenter_commission_fee_copper": getattr(s, "carpenter_commission_fee_copper", 0),
+            "carpenter_commission_remaining_copper": getattr(s, "carpenter_commission_remaining_copper", 0),
+            "carpenter_commission_storage_tile": getattr(s, "carpenter_commission_storage_tile", None),
+            "carpenter_commission_treasury_id": getattr(s, "carpenter_commission_treasury_id", None)
         })
 
     # 9. Schedules
@@ -286,6 +326,8 @@ def serialize_game_state(day_cycle, resources, player, permit_manager, building_
          if key in ("corpse_id", "corpse_name", "fee_paid", "fee_available", "payer_type", "payer_id", "gravedigger_id", "status")}
         for commission in CemeterySystem.get_instance().pending_commissions
     ]
+    from game.systems.confession_system import ConfessionSystem
+    confession_state = ConfessionSystem.get_instance().to_dict()
 
     return {
         "timestamp": time.strftime("%Y-%m-%d %H:%M"),
@@ -306,6 +348,7 @@ def serialize_game_state(day_cycle, resources, player, permit_manager, building_
         "schedules": schedules_data,
         "production_records": serialized_prod,
         "burial_commissions": burial_commissions,
+        "confession_state": confession_state,
     }
 
 def save_to_slot(slot_id, day_cycle, resources, player, permit_manager, building_manager, stockpile_manager, furniture_manager, villager_manager, servant_manager, schedule_manager):
@@ -416,7 +459,10 @@ def deserialize_game_state(data, day_cycle, resources, player, permit_manager, b
     for b_d in data.get("buildings", []):
         tiles = {(t[0], t[1]) for t in b_d.get("tiles", [])}
         door_pos = tuple(b_d["door_pos"]) if b_d.get("door_pos") else None
-        b = Building(b_d["building_type"], tiles, door_pos=door_pos, door_side=b_d.get("door_side", "bottom"))
+        b = Building(b_d["building_type"], tiles, door_pos=door_pos, door_side=b_d.get("door_side", "bottom"), rotation=b_d.get("rotation", 0))
+        b.condition = float(b_d.get("condition", 1.0))
+        b.construction_order = dict(b_d.get("construction_order", {}) or {}) or None
+        b.construction_progress = float(b_d.get("construction_progress", 0.0))
         if "owner" in b_d:
             b.owner = b_d["owner"]
         if "inventory" in b_d:
@@ -432,6 +478,9 @@ def deserialize_game_state(data, day_cycle, resources, player, permit_manager, b
         if "item_allocations" in b_d:
             b.item_allocations = dict(b_d["item_allocations"])
         b.sale_items = list(b_d.get("sale_items", [item for item in b.inventory if item in MARKET_TRADEABLE_ITEMS]))
+        b.sales_report_period = b_d.get("sales_report_period")
+        b.sales_report_by_item = dict(b_d.get("sales_report_by_item", {}))
+        b.sales_report_last_day = int(b_d.get("sales_report_last_day", data.get("day_number", 1)))
         b.household_sale_percent = b_d.get("household_sale_percent", MARKET_DEFAULT_HOUSEHOLD_SALE_PERCENT)
         b.household_sale_limits = dict(b_d.get("household_sale_limits", {}))
         b._stall_requested_qty = dict(b_d.get("stall_requested_qty", {}))
@@ -442,10 +491,11 @@ def deserialize_game_state(data, day_cycle, resources, player, permit_manager, b
     for s_d in data.get("construction_sites", []):
         tiles = {(t[0], t[1]) for t in s_d.get("tiles", [])}
         door_pos = tuple(s_d["door_pos"]) if s_d.get("door_pos") else None
-        s = ConstructionSite(s_d["building_type"], tiles, door_pos=door_pos, door_side=s_d.get("door_side", "bottom"))
+        s = ConstructionSite(s_d["building_type"], tiles, door_pos=door_pos, door_side=s_d.get("door_side", "bottom"), rotation=s_d.get("rotation", 0))
         s.build_progress = s_d.get("build_progress", 0.0)
         s.delivered_cost = dict(s_d.get("delivered_cost", {}))
         s.required_cost = dict(s_d.get("required_cost", {}))
+        s.construction_order = dict(s_d.get("construction_order", {}) or {}) or s.construction_order
         building_manager.construction_sites.append(s)
 
     building_manager.demolition_sites.clear()
@@ -485,6 +535,7 @@ def deserialize_game_state(data, day_cycle, resources, player, permit_manager, b
             owner_id=st_d.get("owner_id", None)
         )
         stockpile_manager.stacks.append(s)
+    stockpile_manager.mark_totals_dirty()
 
     # 7. Furniture
     furniture_manager.furnitures.clear()
@@ -496,9 +547,11 @@ def deserialize_game_state(data, day_cycle, resources, player, permit_manager, b
             f_d["gy"],
             permit_id=f_d.get("permit_id", None),
             family_id=f_d.get("family_id", None),
-            assigned_villager_id=f_d.get("assigned_villager_id", None)
+            assigned_villager_id=f_d.get("assigned_villager_id", None),
+            rotation=f_d.get("rotation", 0)
         )
         f.inventory = dict(f_d.get("inventory", {}))
+        f.currency = dict(f_d.get("currency", {}))
         f.is_dropped = f_d.get("is_dropped", False)
         f.stored_in_id = f_d.get("stored_in_id", None)
         f.construction_order = dict(f_d.get("construction_order", {}) or {}) or None
@@ -513,10 +566,14 @@ def deserialize_game_state(data, day_cycle, resources, player, permit_manager, b
 
     # 8. Villagers & Families
     villager_manager.families.clear()
+    villager_manager.invalidate_villager_cache()
     for fam_d in data.get("families", []):
         fam = Family(fam_d["id"], fam_d["surname"])
         fam.assigned_permit_id = fam_d.get("assigned_permit_id", None)
         fam.pending_death_recovery = list(fam_d.get("pending_death_recovery", []))
+        fam.income_report_period = fam_d.get("income_report_period")
+        fam.income_report_by_source = dict(fam_d.get("income_report_by_source", {}) or {})
+        fam.income_report_last_day = int(fam_d.get("income_report_last_day", 1))
         fam.members = []
         for m_d in fam_d.get("members", []):
             v = Villager(
@@ -536,6 +593,7 @@ def deserialize_game_state(data, day_cycle, resources, player, permit_manager, b
             v.task = m_d.get("task", "IDLE")
             v.carrying_crop = m_d.get("carrying_crop", 0)
             v.inventory = dict(m_d.get("inventory", {}))
+            v.currency = dict(m_d.get("currency", {}))
             v.active_tool = m_d.get("active_tool", None)
             v.has_water = m_d.get("has_water", False)
             v.water_day = m_d.get("water_day", -1)
@@ -546,6 +604,22 @@ def deserialize_game_state(data, day_cycle, resources, player, permit_manager, b
             v.hunger = float(m_d.get("hunger", 100.0))
             v.thirst = float(m_d.get("thirst", 100.0))
             v.need_toilet = float(m_d.get("need_toilet", 100.0))
+            v.faith = float(m_d.get("faith", 100.0))
+            v.sleep_need = float(m_d.get("sleep_need", SLEEP_INITIAL_VALUE))
+            v.sleep_forced = bool(m_d.get("sleep_forced", False))
+            v.sleeping_recharge_active = bool(m_d.get("sleeping_recharge_active", False))
+            v.happiness = float(m_d.get("happiness", HAPPINESS_INITIAL_VALUE))
+            v.happiness_effects = dict(m_d.get("happiness_effects", {}) or {})
+            v.happiness_trigger_days = dict(m_d.get("happiness_trigger_days", {}) or {})
+            v.happiness_food_day = m_d.get("happiness_food_day")
+            v.happiness_food_types = list(m_d.get("happiness_food_types", []) or [])
+            v.last_faith_decay_day = int(m_d.get("last_faith_decay_day", data.get("day_number", 1)))
+            v.prayer_attendance_day = m_d.get("prayer_attendance_day", None)
+            v.last_faith_prayer_day = m_d.get("last_faith_prayer_day", None)
+            v.last_confession_day = m_d.get("last_confession_day", None)
+            v.pending_commission_task = m_d.get("pending_commission_task", None)
+            v.pending_commission_data = dict(m_d.get("pending_commission_data", {}) or {})
+            v.pending_commission_tasks = [dict(entry) for entry in m_d.get("pending_commission_tasks", []) if isinstance(entry, dict)]
             v.interrupted_task_state = m_d.get("interrupted_task_state", None)
             v.activity_description = m_d.get("activity_description", None)
             v.hunger_death_timer = float(m_d["hunger_death_timer"]) if m_d.get("hunger_death_timer") is not None else None
@@ -583,6 +657,10 @@ def deserialize_game_state(data, day_cycle, resources, player, permit_manager, b
         villager_manager.families.append(fam)
 
     villager_manager.ensure_unique_family_ids()
+    villager_manager.invalidate_villager_cache()
+
+    from game.systems.confession_system import ConfessionSystem
+    ConfessionSystem.get_instance().load_dict(data.get("confession_state", {}))
 
     from game.systems.cemetery_system import CemeterySystem
     cemetery_system = CemeterySystem.get_instance()
@@ -606,6 +684,13 @@ def deserialize_game_state(data, day_cycle, resources, player, permit_manager, b
                 s.y = s_d.get("y", s.y)
                 if "work_priorities" in s_d:
                     s.work_priorities = dict(s_d["work_priorities"])
+                s.inventory = dict(s_d.get("inventory", getattr(s, "inventory", {})))
+                s.carpenter_commission_order_id = s_d.get("carpenter_commission_order_id")
+                s.carpenter_commission_carpenter_id = s_d.get("carpenter_commission_carpenter_id")
+                s.carpenter_commission_fee_copper = int(s_d.get("carpenter_commission_fee_copper", 0))
+                s.carpenter_commission_remaining_copper = int(s_d.get("carpenter_commission_remaining_copper", 0))
+                s.carpenter_commission_storage_tile = s_d.get("carpenter_commission_storage_tile")
+                s.carpenter_commission_treasury_id = s_d.get("carpenter_commission_treasury_id")
                 
                 # Reconnect carrying furniture if applicable
                 scf_id = s_d.get("carrying_furniture_id", None)
@@ -614,8 +699,11 @@ def deserialize_game_state(data, day_cycle, resources, player, permit_manager, b
                 else:
                     s.carrying_furniture = None
                 
-                # Reset any in-progress tasks to prevent stale references
-                if not s.carrying_furniture:
+                # Reconnect the public commission courier task by its stable order IDs.
+                if s_d.get("state") in ("CARPENTER_COMMISSION_RETRIEVE", "CARPENTER_COMMISSION_DELIVER") and s.carpenter_commission_order_id:
+                    s.state = s_d["state"]
+                # Reset other in-progress tasks to prevent stale references.
+                elif not s.carrying_furniture:
                     s.state = "IDLE"
                     s.carried_res = None
                     s.carried_amount = 0
@@ -682,4 +770,8 @@ def load_from_slot(slot_id, day_cycle, resources, player, permit_manager, buildi
         return False, f"Failed to read slot {slot_id}: {e}"
 
     deserialize_game_state(data, day_cycle, resources, player, permit_manager, building_manager, stockpile_manager, furniture_manager, villager_manager, servant_manager, schedule_manager)
+    furniture_manager.ensure_lord_treasury_chest(
+        permit_manager, villager_manager, building_manager, stockpile_manager,
+        preferred_tile=(int(player.x // TILE_SIZE), int(player.y // TILE_SIZE)),
+    )
     return True, f"Loaded Slot {slot_id} successfully!"

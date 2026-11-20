@@ -32,12 +32,25 @@ from game.config import (
 from game.permits import get_exterior_edges_for_tile
 
 class ConstructionSite:
-    def __init__(self, building_type, tiles, door_pos=None, door_side=None):
+    def __init__(self, building_type, tiles, door_pos=None, door_side=None, rotation=0):
         self.building_type = building_type
+        self._rotation = int(rotation) % 360
         self.type_cfg = BUILDING_TYPES.get(building_type, BUILDING_TYPES["wooden_structure"])
         self.tiles = set(tiles)
         self._recalculate_bounds()
         self.name = f"{self.type_cfg['name']} ({len(self.tiles)} tiles)"
+        self.construction_order = None
+        if self.type_cfg.get("carpenter_commissionable"):
+            self.construction_order = {
+                "id": f"public:{building_type}:{self.grid_x}:{self.grid_y}",
+                "order_type": "PUBLIC_BUILD",
+                "building_type": building_type,
+                "status": "AWAITING_PAYMENT",
+                "payer_family_id": None,
+                "payer_id": None,
+                "carpenter_id": None,
+                "commission_paid": False,
+            }
 
         # Door Placement
         if self.type_cfg.get("has_door", True) is False or self.building_type in ("well", "market"):
@@ -105,7 +118,7 @@ class ConstructionSite:
     @property
     def rotation(self):
         side_map = {"bottom": 0, "left": 1, "top": 2, "right": 3}
-        return side_map.get(getattr(self, "door_side", "bottom"), 0)
+        return getattr(self, "_rotation", side_map.get(getattr(self, "door_side", "bottom"), 0) * 90) // 90
 
     def total_required(self):
         return sum(self.required_cost.values())
@@ -117,7 +130,11 @@ class ConstructionSite:
         return all(self.delivered_cost[res] >= self.required_cost[res] for res in self.required_cost)
 
     def is_complete(self):
-        return self.build_progress >= BUILD_DURATION_SECONDS
+        duration = BUILD_DURATION_SECONDS
+        order = getattr(self, "construction_order", None)
+        if order and order.get("order_type") == "PUBLIC_BUILD":
+            duration = max(1.0, float(order.get("build_duration_seconds", duration)))
+        return self.build_progress >= duration
 
     def overlaps_tiles(self, tiles):
         return bool(self.tiles & tiles)
@@ -190,14 +207,18 @@ class ConstructionSite:
         dx, dy = self.door_pos
         return (dx + 0.5) * tile_size, (dy + 0.5) * tile_size
 
-    def is_in_door_threshold(self, x, y, tile_size=TILE_SIZE):
-        """Mengecek apakah posisi (x, y) tepat berada di dalam celah kusen dinding pintu atau petak pintu"""
+    def is_in_door_threshold(self, x, y, tile_size=TILE_SIZE, radius=0.0):
+        """Check doorway transit while accounting for the actor's body clearance."""
         if not self.door_pos or not self.door_side:
             return False
         dx, dy = self.door_pos
         cx = (dx + 0.5) * tile_size
         cy = (dy + 0.5) * tile_size
-        return abs(x - cx) < 32.0 and abs(y - cy) < 32.0
+        half_tile = tile_size / 2.0
+        clearance = max(0.0, float(radius))
+        if self.door_side in ("top", "bottom"):
+            return abs(x - cx) < half_tile and abs(y - cy) < half_tile + clearance
+        return abs(y - cy) < half_tile and abs(x - cx) < half_tile + clearance
 
     def get_approach_point(self, worker_x, worker_y=None, worker_id=None, all_entities=None, tile_size=TILE_SIZE, bm=None):
         """
@@ -237,7 +258,11 @@ class ConstructionSite:
 
         occupied = set()
         if all_entities:
-            for other in all_entities:
+            nearby_entities = (
+                all_entities.for_tiles(perimeter_tiles)
+                if hasattr(all_entities, "for_tiles") else all_entities
+            )
+            for other in nearby_entities:
                 if worker_id is not None and str(getattr(other, "id", "")) == str(worker_id):
                     continue
                 ogx = int(math.floor(other.x / tile_size))
@@ -268,13 +293,41 @@ class ConstructionSite:
             (self.grid_y + self.tiles_h) * tile_size,
         )
         visible_tiles = list(camera.iter_visible_tiles(self.tiles, tile_size, world_bounds))
+        order = getattr(self, "construction_order", None) or {}
+        is_public_build = order.get("order_type") == "PUBLIC_BUILD"
+        public_status = order.get("status")
+        if public_status == "BUILDING":
+            public_label = "BUILD"
+        elif "PAYMENT" in str(public_status) or public_status in ("AWAITING_PAYMENT", "LANDLORD_RETRIEVING"):
+            public_label = "PAY"
+        else:
+            public_label = "MATERIAL"
+        public_color = (234, 179, 8) if public_status == "AWAITING_PAYMENT" else (56, 189, 248)
+        public_shade_color = (234, 179, 8) if public_status == "AWAITING_PAYMENT" else (56, 189, 248)
+        label_tile = min(
+            self.tiles,
+            key=lambda tile: math.hypot(tile[0] - (self.grid_x + self.tiles_w / 2),
+                                        tile[1] - (self.grid_y + self.tiles_h / 2)),
+        ) if self.tiles else None
+        visible_label_tile = label_tile if label_tile in visible_tiles else (visible_tiles[0] if visible_tiles else None)
+        if is_public_build and visible_tiles:
+            # Match the full-footprint state overlay used by commissioned furniture.
+            overlay = alpha_fill_surface(
+                max(1, self.tiles_w * scaled_tile),
+                max(1, self.tiles_h * scaled_tile),
+                (*public_shade_color, 90 if public_status != "BUILDING" else 58),
+            )
+            overlay_x, overlay_y = camera.world_to_screen(self.grid_x * tile_size, self.grid_y * tile_size)
+            surface.blit(overlay, (overlay_x, overlay_y))
         for (gx, gy) in visible_tiles:
             sx, sy = camera.world_to_screen(gx * tile_size, gy * tile_size)
-            tile_surf = alpha_fill_surface(scaled_tile + 1, scaled_tile + 1, (30, 58, 138, 90))
-            surface.blit(tile_surf, (sx, sy))
+            if not is_public_build:
+                tile_surf = alpha_fill_surface(scaled_tile + 1, scaled_tile + 1, (30, 58, 138, 90))
+                surface.blit(tile_surf, (sx, sy))
 
             # Blueprint grid borders
-            pygame.draw.rect(surface, (59, 130, 246, 120), (sx, sy, scaled_tile + 1, scaled_tile + 1), width=1)
+            border_color = (*public_color, 190) if is_public_build else (59, 130, 246, 120)
+            pygame.draw.rect(surface, border_color, (sx, sy, scaled_tile + 1, scaled_tile + 1), width=1)
 
             # Exterior perimeter lines
             if (gx, gy - 1) not in self.tiles:
@@ -285,6 +338,23 @@ class ConstructionSite:
                 pygame.draw.line(surface, (96, 165, 250), (sx, sy), (sx, sy + scaled_tile), 2)
             if (gx + 1, gy) not in self.tiles:
                 pygame.draw.line(surface, (96, 165, 250), (sx + scaled_tile, sy), (sx + scaled_tile, sy + scaled_tile), 2)
+
+            if is_public_build and (gx, gy) == visible_label_tile:
+                state_text = self.font.render(public_label, True, (255, 255, 255))
+                if scaled_tile < max(state_text.get_width() + 10, state_text.get_height() + 6):
+                    continue
+                label_bg = pygame.Rect(0, 0, state_text.get_width() + 10, state_text.get_height() + 6)
+                label_bg.center = (sx + scaled_tile // 2, sy + scaled_tile // 2)
+                pygame.draw.rect(surface, (15, 23, 42), label_bg, border_radius=4)
+                pygame.draw.rect(surface, public_color, label_bg, width=1, border_radius=4)
+                surface.blit(state_text, (label_bg.x + 5, label_bg.y + 3))
+
+        if is_public_build and visible_tiles:
+            pygame.draw.rect(
+                surface, (250, 204, 21),
+                (overlay_x, overlay_y, self.tiles_w * scaled_tile, self.tiles_h * scaled_tile),
+                width=2, border_radius=4,
+            )
 
         # 2. Door Marker
         if self.door_pos:
@@ -307,26 +377,37 @@ class ConstructionSite:
         pygame.draw.rect(surface, (15, 23, 42, 220), (bar_x - 2, bar_y - 2, bar_w + 4, bar_h + 4), border_radius=4)
         pygame.draw.rect(surface, (71, 85, 105), (bar_x - 2, bar_y - 2, bar_w + 4, bar_h + 4), width=1, border_radius=4)
 
-        if not self.is_materials_complete():
+        if is_public_build and public_status in ("AWAITING_PAYMENT", "LANDLORD_PAYMENT_PENDING",
+                                                 "LANDLORD_RETRIEVING", "PAYMENT_TRAVELING"):
+            lbl_txt = "Awaiting Carpenter commission"
+        elif not self.is_materials_complete():
             pct = self.total_delivered() / max(1, self.total_required())
             fill_w = int(bar_w * pct)
             if fill_w > 0:
                 pygame.draw.rect(surface, (234, 179, 8), (bar_x, bar_y, fill_w, bar_h), border_radius=3)
-            lbl_txt = f"{self.name}: {self.total_delivered()}/{self.total_required()}"
+            lbl_txt = ("Carpenter gathering materials" if is_public_build
+                       else f"{self.name}: {self.total_delivered()}/{self.total_required()}")
         else:
-            pct = min(1.0, self.build_progress / BUILD_DURATION_SECONDS)
+            duration = BUILD_DURATION_SECONDS
+            if is_public_build:
+                duration = max(1.0, float(order.get("build_duration_seconds", duration)))
+            pct = min(1.0, self.build_progress / duration)
             fill_w = int(bar_w * pct)
             if fill_w > 0:
                 pygame.draw.rect(surface, (34, 197, 94), (bar_x, bar_y, fill_w, bar_h), border_radius=3)
-            lbl_txt = f"Building: {int(pct * 100)}%"
+            lbl_txt = f"{public_label}: {int(pct * 100)}%" if is_public_build else f"Building: {int(pct * 100)}%"
 
         txt_surf = self.font.render(lbl_txt, True, (255, 255, 255))
         surface.blit(txt_surf, (bar_x + (bar_w - txt_surf.get_width()) // 2, bar_y - 14))
 
 
 class Building:
-    def __init__(self, building_type, tiles, door_pos=None, door_side="bottom"):
+    def __init__(self, building_type, tiles, door_pos=None, door_side="bottom", rotation=0):
         self.building_type = building_type
+        self._rotation = int(rotation) % 360
+        self.condition = 1.0
+        self.construction_order = None
+        self.construction_progress = 0.0
         self.type_cfg = BUILDING_TYPES.get(building_type, BUILDING_TYPES["wooden_structure"])
         self.tiles = set(tiles)
         self._recalculate_bounds()
@@ -381,6 +462,15 @@ class Building:
     @assigned_household_id.setter
     def assigned_household_id(self, value):
         self.assigned_family_id = value
+
+    @property
+    def is_broken(self):
+        return float(getattr(self, "condition", 1.0)) <= 0.0
+
+    @property
+    def is_available_for_use(self):
+        order = getattr(self, "construction_order", None) or {}
+        return not self.is_broken and order.get("status") in (None, "COMPLETE")
 
     def request_door_passage(self, entity_id, is_outside, tile_size=TILE_SIZE):
         """
@@ -504,7 +594,7 @@ class Building:
     @property
     def rotation(self):
         side_map = {"bottom": 0, "left": 1, "top": 2, "right": 3}
-        return side_map.get(getattr(self, "door_side", "bottom"), 0)
+        return getattr(self, "_rotation", side_map.get(getattr(self, "door_side", "bottom"), 0) * 90) // 90
 
     def occupies_tile(self, tx, ty):
         return (tx, ty) in self.tiles
@@ -559,14 +649,42 @@ class Building:
         dx, dy = self.door_pos
         return (dx + 0.5) * tile_size, (dy + 0.5) * tile_size
 
-    def is_in_door_threshold(self, x, y, tile_size=TILE_SIZE):
-        """Mengecek apakah posisi (x, y) tepat berada di dalam celah kusen dinding pintu atau petak pintu"""
+    def is_in_door_threshold(self, x, y, tile_size=TILE_SIZE, radius=0.0):
+        """Check doorway transit while accounting for the actor's body clearance."""
         if not self.door_pos or not self.door_side:
             return False
         dx, dy = self.door_pos
         cx = (dx + 0.5) * tile_size
         cy = (dy + 0.5) * tile_size
-        return abs(x - cx) < 32.0 and abs(y - cy) < 32.0
+        half_tile = tile_size / 2.0
+        clearance = max(0.0, float(radius))
+        if self.door_side in ("top", "bottom"):
+            return abs(x - cx) < half_tile and abs(y - cy) < half_tile + clearance
+        return abs(y - cy) < half_tile and abs(x - cx) < half_tile + clearance
+
+    def crosses_doorway(self, old_x, old_y, new_x, new_y, tile_size=TILE_SIZE, radius=0.0):
+        """True when one movement step crosses this building's actual doorway plane."""
+        if not self.door_pos or not self.door_side:
+            return False
+        dx, dy = self.door_pos
+        cx, cy = (dx + 0.5) * tile_size, (dy + 0.5) * tile_size
+        if self.door_side in ("top", "bottom"):
+            plane = (dy * tile_size + self.wall_thickness / 2
+                     if self.door_side == "top"
+                     else (dy + 1) * tile_size - self.wall_thickness / 2)
+            old_side, new_side = old_y - plane, new_y - plane
+            if old_side * new_side > 0 or abs(new_y - old_y) < 0.001:
+                return False
+            crossing_x = old_x + (new_x - old_x) * (-old_side / (new_side - old_side))
+            return abs(crossing_x - cx) <= tile_size / 2
+        plane = (dx * tile_size + self.wall_thickness / 2
+                 if self.door_side == "left"
+                 else (dx + 1) * tile_size - self.wall_thickness / 2)
+        old_side, new_side = old_x - plane, new_x - plane
+        if old_side * new_side > 0 or abs(new_x - old_x) < 0.001:
+            return False
+        crossing_y = old_y + (new_y - old_y) * (-old_side / (new_side - old_side))
+        return abs(crossing_y - cy) <= tile_size / 2
 
     def get_approach_point(self, worker_x, worker_y=None, worker_id=None, all_entities=None, tile_size=TILE_SIZE, bm=None):
         """
@@ -606,7 +724,11 @@ class Building:
 
         occupied = set()
         if all_entities:
-            for other in all_entities:
+            nearby_entities = (
+                all_entities.for_tiles(perimeter_tiles)
+                if hasattr(all_entities, "for_tiles") else all_entities
+            )
+            for other in nearby_entities:
                 if worker_id is not None and str(getattr(other, "id", "")) == str(worker_id):
                     continue
                 ogx = int(math.floor(other.x / tile_size))
@@ -804,6 +926,10 @@ class BuildingManager:
 
     def can_afford(self, building_type, resources, tile_count):
         b_cfg = BUILDING_TYPES.get(building_type, BUILDING_TYPES["wooden_structure"])
+        # Commissionable public structures are paid for through the Carpenter's
+        # landlord commission, not by consuming the Lord's construction stockpile.
+        if b_cfg.get("carpenter_commissionable"):
+            return True
         if b_cfg.get("fixed_cost", False):
             cost_w = b_cfg.get("cost_wood", 5)
             cost_s = b_cfg.get("cost_stone", 20)
@@ -845,7 +971,7 @@ class BuildingManager:
             if site.overlaps_tiles(tiles):
                 return False
 
-        site = ConstructionSite(building_type, tiles, door_pos, door_side)
+        site = ConstructionSite(building_type, tiles, door_pos, door_side, rotation=rotation)
         self.construction_sites.append(site)
         return True
 
@@ -855,7 +981,8 @@ class BuildingManager:
             if site.is_complete():
                 b = Building(
                     site.building_type, site.tiles,
-                    door_pos=site.door_pos, door_side=site.door_side
+                    door_pos=site.door_pos, door_side=site.door_side,
+                    rotation=getattr(site, "_rotation", 0)
                 )
                 self.buildings.append(b)
                 completed.append(site)
@@ -872,13 +999,50 @@ class BuildingManager:
 
     def get_pending_site(self):
         for site in self.construction_sites:
-            if not site.is_complete():
-                return site
+            if site.is_complete():
+                continue
+            order = getattr(site, "construction_order", None) or {}
+            if order.get("order_type") == "PUBLIC_BUILD":
+                # The Carpenter sources and pays for public-build materials from
+                # the commission. Servants must not fetch them from the Lord's stockpile.
+                continue
+            return site
         return None
+
+    def daily_public_maintenance_update(self, days=1):
+        """Apply configured wear to public structures and create carpenter repair orders."""
+        import random
+        from game.data.config import BUILDING_TYPES, PUBLIC_STRUCTURE_DAILY_BREAK_CHANCE
+        from game.systems.carpenter_system import CarpenterSystem
+
+        damaged = []
+        for _ in range(max(0, int(days))):
+            for building in self.buildings:
+                cfg = BUILDING_TYPES.get(getattr(building, "building_type", ""), {})
+                order = getattr(building, "construction_order", None) or {}
+                if (not cfg.get("public_structure") or not cfg.get("maintainable", True)
+                        or building.is_broken or order.get("status") not in (None, "COMPLETE")):
+                    continue
+                if random.random() >= PUBLIC_STRUCTURE_DAILY_BREAK_CHANCE:
+                    continue
+                building.condition = 0.0
+                order = CarpenterSystem.create_repair_order(
+                    building, self, getattr(self, "villager_manager", None)
+                )
+                order.update({
+                    "id": f"building:{building.building_type}:{building.grid_x}:{building.grid_y}",
+                    "status": "LANDLORD_PAYMENT_PENDING",
+                    "payer_type": "landlord",
+                    "payer_id": "landlord",
+                })
+                building.construction_order = order
+                damaged.append(building)
+        return damaged
 
     def get_completed_wells(self):
         """Mendapatkan daftar seluruh bangunan sumur yang sudah selesai dibangun"""
-        return [b for b in self.buildings if b.building_type == "well"]
+        return [b for b in self.buildings
+                if b.building_type == "well" and b.is_available_for_use]
 
     def get_all_wall_rects(self, tile_size):
         if tile_size not in self._all_wall_rects_cache:
@@ -1057,11 +1221,21 @@ class BuildingManager:
 
             ref_x = old_x if old_x is not None else px
             ref_y = old_y if old_y is not None else py
-            in_door = b.is_in_door_threshold(ref_x, ref_y, tile_size) or b.is_in_door_threshold(new_x, new_y, tile_size)
+            in_door = (
+                b.is_in_door_threshold(ref_x, ref_y, tile_size, radius=radius)
+                or b.is_in_door_threshold(new_x, new_y, tile_size, radius=radius)
+                or b.crosses_doorway(ref_x, ref_y, new_x, new_y, tile_size, radius=radius)
+            )
             was_inside = b.occupies_tile(int(math.floor(ref_x / tile_size)), int(math.floor(ref_y / tile_size)))
 
             for wr, side in b.get_oriented_walls(tile_size):
                 if side == "door_post":
+                    # Door posts are only the visible ends of an opening. Once
+                    # an actor is crossing the doorway, their body radius must
+                    # not turn those decorative edges into a narrow collision
+                    # funnel that traps actors against the jamb.
+                    if in_door:
+                        continue
                     closest_x = max(wr.left, min(new_x, wr.right))
                     closest_y = max(wr.top, min(new_y, wr.bottom))
                     dist_x = new_x - closest_x
@@ -1165,7 +1339,11 @@ class BuildingManager:
 
         b = self.get_building_at(door_pos[0], door_pos[1]) if isinstance(door_pos, (tuple, list)) else None
         if b:
-            for e in all_entities:
+            nearby_entities = (
+                all_entities.for_tiles([door_pos], include_targets=False)
+                if hasattr(all_entities, "for_tiles") else all_entities
+            )
+            for e in nearby_entities:
                 if e == exclude_entity:
                     continue
                 if b.is_in_door_threshold(e.x, e.y, tile_size):
@@ -1174,7 +1352,11 @@ class BuildingManager:
 
         cx = (door_pos[0] + 0.5) * tile_size
         cy = (door_pos[1] + 0.5) * tile_size
-        for e in all_entities:
+        nearby_entities = (
+            all_entities.for_tiles([door_pos], include_targets=False)
+            if hasattr(all_entities, "for_tiles") else all_entities
+        )
+        for e in nearby_entities:
             if e == exclude_entity:
                 continue
             dist = math.hypot(e.x - cx, e.y - cy)
@@ -1297,6 +1479,68 @@ class BuildingManager:
 
         for b in self.buildings:
             self._draw_building(surface, camera, tile_size, b)
+            self._draw_public_repair_order(surface, camera, tile_size, b)
+
+    def _draw_public_repair_order(self, surface, camera, tile_size, building):
+        """Show public structure repairs with the same visible repair state as furniture orders."""
+        order = getattr(building, "construction_order", None) or {}
+        if (not (getattr(building, "type_cfg", {}) or {}).get("public_structure")
+                or order.get("order_type") != "REPAIR"
+                or order.get("status") == "COMPLETE"):
+            return
+        if building.tiles and not camera.is_world_rect_visible(
+                building.grid_x * tile_size, building.grid_y * tile_size,
+                building.tiles_w * tile_size, building.tiles_h * tile_size):
+            return
+
+        status_colors = {
+            "AWAITING_PAYMENT": (234, 179, 8),
+            "LANDLORD_PAYMENT_PENDING": (234, 179, 8),
+            "LANDLORD_RETRIEVING": (56, 189, 248),
+            "PAYMENT_TRAVELING": (56, 189, 248),
+            "PAID": (56, 189, 248),
+            "BUILDING": (34, 197, 94),
+        }
+        color = status_colors.get(order.get("status"), (56, 189, 248))
+        scaled_tile = max(1, math.ceil(tile_size * camera.zoom))
+        world_bounds = (
+            building.grid_x * tile_size, building.grid_y * tile_size,
+            (building.grid_x + building.tiles_w) * tile_size,
+            (building.grid_y + building.tiles_h) * tile_size,
+        )
+        visible_tiles = list(camera.iter_visible_tiles(building.tiles, tile_size, world_bounds))
+        for gx, gy in visible_tiles:
+            sx, sy = camera.world_to_screen(gx * tile_size, gy * tile_size)
+            overlay = alpha_fill_surface(scaled_tile + 1, scaled_tile + 1, (*color, 58))
+            surface.blit(overlay, (sx, sy))
+            pygame.draw.rect(surface, color, (sx, sy, scaled_tile + 1, scaled_tile + 1), width=1)
+
+        if not visible_tiles:
+            return
+        self._ensure_font()
+        anchor = min(visible_tiles, key=lambda tile: (
+            (tile[0] - (building.grid_x + building.tiles_w / 2)) ** 2
+            + (tile[1] - (building.grid_y + building.tiles_h / 2)) ** 2
+        ))
+        sx, sy = camera.world_to_screen(anchor[0] * tile_size, anchor[1] * tile_size)
+        label = self.font.render("REPAIR", True, (255, 255, 255))
+        if scaled_tile >= max(label.get_width() + 10, label.get_height() + 6):
+            badge = pygame.Rect(0, 0, label.get_width() + 10, label.get_height() + 6)
+            badge.center = (sx + scaled_tile // 2, sy + scaled_tile // 2)
+            pygame.draw.rect(surface, (15, 23, 42), badge, border_radius=4)
+            pygame.draw.rect(surface, color, badge, width=1, border_radius=4)
+            surface.blit(label, (badge.x + 5, badge.y + 3))
+
+        center_x, center_y = building.get_center_world(tile_size)
+        bar_center_x, bar_top_y = camera.world_to_screen(center_x, building.grid_y * tile_size)
+        bar_width = max(1, min(240, int(len(building.tiles) * 12 * camera.zoom)))
+        bar_height = max(3, math.ceil(5 * camera.zoom))
+        bar_x, bar_y = bar_center_x - bar_width // 2, bar_top_y - 20
+        pygame.draw.rect(surface, (15, 23, 42), (bar_x - 2, bar_y - 2, bar_width + 4, bar_height + 4), border_radius=4)
+        pygame.draw.rect(surface, color, (bar_x - 2, bar_y - 2, bar_width + 4, bar_height + 4), width=1, border_radius=4)
+        fill = pygame.Rect(bar_x, bar_y, int(bar_width * max(0.0, min(1.0, float(order.get("progress_ratio", 0.0))))), bar_height)
+        if fill.width:
+            pygame.draw.rect(surface, color, fill, border_radius=3)
 
     def _draw_building(self, surface, camera, tile_size, b):
         if b.tiles and not camera.is_world_rect_visible(

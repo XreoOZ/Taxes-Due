@@ -280,7 +280,9 @@ class ChurchSystem:
         return adults[0] if adults else alive_members[0]
 
     @classmethod
-    def process_church_tax_payment(cls, representative, priest, church_permit, furniture_manager=None):
+    def process_church_tax_payment(cls, representative, priest, church_permit,
+                                  furniture_manager=None, villager_manager=None,
+                                  day_number=1):
         """
         Payment rules:
         - If household has enough coins: collects the configured amount.
@@ -338,6 +340,12 @@ class ChurchSystem:
 
         if transfer_success:
             cls.mark_tax_paid(fam_id, church_permit)
+            from game.systems.market_sales_report import MarketSalesReportSystem
+            if str(getattr(priest, "family_id", "")) != str(fam_id):
+                MarketSalesReportSystem.record_household_income(
+                    villager_manager, getattr(priest, "family_id", None),
+                    "Church Tax", paid_copper, day_number,
+                )
             representative.say(f"Paid {paid_copper}c Church Tax on behalf of our household.", duration=2.2)
             priest.say("Blessings upon your household.", duration=2.2)
             return paid_copper

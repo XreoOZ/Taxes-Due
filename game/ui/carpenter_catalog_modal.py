@@ -2,7 +2,7 @@
 
 import pygame
 
-from game.data.config import FURNITURE_TYPES, COLOR_MODAL_BG, COLOR_MODAL_BORDER, COLOR_TEXT_TITLE, COLOR_TEXT_MAIN, COLOR_TEXT_MUTED
+from game.data.config import BUILDING_TYPES, FURNITURE_TYPES, COLOR_MODAL_BG, COLOR_MODAL_BORDER, COLOR_TEXT_TITLE, COLOR_TEXT_MAIN, COLOR_TEXT_MUTED
 from game.systems.carpenter_system import CarpenterSystem
 from game.systems.currency import from_copper
 from game.config import TILE_SIZE
@@ -56,10 +56,11 @@ class CarpenterCatalogModal:
                 self.close()
                 return "close"
             if self.viewport_rect and self.viewport_rect.collidepoint(event.pos):
-                for furniture_type, rect in self.order_rects.items():
+                for order_key, rect in self.order_rects.items():
                     if rect.collidepoint(event.pos):
                         self.close()
-                        return f"commission_{furniture_type}"
+                        kind, item_type = order_key.split(":", 1)
+                        return f"commission_{kind}_{item_type}"
             return "blocked"
         return None
 
@@ -87,7 +88,7 @@ class CarpenterCatalogModal:
 
         title = self.font_title.render("CARPENTER WORKBENCH", True, COLOR_TEXT_TITLE)
         surface.blit(title, (modal_x + 24, modal_y + 18))
-        subtitle = self.font_sub.render("Furniture commission catalogue — current prices use market material costs and living wages.", True, COLOR_TEXT_MUTED)
+        subtitle = self.font_sub.render("Furniture and public build quotes use market material costs and living wages.", True, COLOR_TEXT_MUTED)
         surface.blit(subtitle, (modal_x + 26, modal_y + 48))
 
         self.close_rect = pygame.Rect(modal_x + modal_w - 42, modal_y + 16, 26, 26)
@@ -101,7 +102,9 @@ class CarpenterCatalogModal:
         viewport_bottom = modal_y + modal_h - footer_h - 12
         self.viewport_rect = pygame.Rect(modal_x + 20, viewport_top, modal_w - 40,
                                          max(0, viewport_bottom - viewport_top))
-        item_types = list(FURNITURE_TYPES.items())
+        item_types = [(key, cfg, "furniture") for key, cfg in FURNITURE_TYPES.items()]
+        item_types.extend((key, cfg, "building") for key, cfg in BUILDING_TYPES.items()
+                          if cfg.get("carpenter_commissionable"))
         row_h = 90
         row_step = row_h + 8
         content_h = len(item_types) * row_step
@@ -112,36 +115,41 @@ class CarpenterCatalogModal:
         surface.set_clip(self.viewport_rect)
 
         reference_position = self.workbench.get_world_pos(TILE_SIZE)
-        for index, (furniture_type, cfg) in enumerate(item_types):
+        for index, (item_type, cfg, item_kind) in enumerate(item_types):
+            order_key = f"{item_kind}:{item_type}"
             row = pygame.Rect(self.viewport_rect.x,
                               self.viewport_rect.y + index * row_step - self.scroll_y,
                               self.viewport_rect.width, row_h)
             pygame.draw.rect(surface, (15, 23, 42), row, border_radius=7)
             pygame.draw.rect(surface, (51, 65, 85), row, width=1, border_radius=7)
-            name = self.font_body.render(cfg.get("name", furniture_type), True, COLOR_TEXT_MAIN)
+            name = self.font_body.render(cfg.get("name", item_type.replace("_", " ").title()), True, COLOR_TEXT_MAIN)
             surface.blit(name, (row.x + 14, row.y + 10))
             desc = self.font_sub.render(cfg.get("desc", ""), True, COLOR_TEXT_MUTED)
             surface.blit(desc, (row.x + 14, row.y + 31))
             materials = cfg.get("materials", {})
+            if item_kind == "building":
+                quote = CarpenterSystem.quote_building_order(item_type, building_manager, villager_manager)
+                materials = quote.get("materials", {})
             material_text = ", ".join(f"{amount}x {item}" for item, amount in materials.items() if amount)
             if not material_text:
                 material_text = "No material cost"
             material_label = self.font_sub.render(f"Materials: {material_text}", True, COLOR_TEXT_MUTED)
             surface.blit(material_label, (row.x + 14, row.y + 56))
 
-            quote = CarpenterSystem.quote_order(
-                furniture_type, building_manager, villager_manager,
-                reference_position=reference_position,
-            )
+            if item_kind == "furniture":
+                quote = CarpenterSystem.quote_order(
+                    item_type, building_manager, villager_manager,
+                    reference_position=reference_position,
+                )
             price = self._format_price(quote["price_copper"])
             price_label = self.font_badge.render(f"{price}  (material + living wage)", True, (250, 204, 21))
             surface.blit(price_label, (row.right - 218, row.y + 14))
             order_rect = pygame.Rect(row.right - 128, row.y + 49, 112, 28)
-            self.order_rects[furniture_type] = order_rect
+            self.order_rects[order_key] = order_rect
             hovered = order_rect.collidepoint(pygame.mouse.get_pos())
             pygame.draw.rect(surface, (16, 185, 129) if hovered else (5, 150, 105), order_rect, border_radius=5)
             pygame.draw.rect(surface, (52, 211, 153), order_rect, width=1, border_radius=5)
-            order_label = self.font_badge.render("Commission", True, (255, 255, 255))
+            order_label = self.font_badge.render("Commission" if item_kind == "furniture" else "Plan", True, (255, 255, 255))
             surface.blit(order_label, (order_rect.centerx - order_label.get_width() // 2,
                                        order_rect.centery - order_label.get_height() // 2))
 

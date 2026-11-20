@@ -18,6 +18,7 @@ if sys.platform == "win32":
         pass
 
 import math
+from time import perf_counter
 import pygame
 from game.config import (
     WINDOW_TITLE,
@@ -34,6 +35,19 @@ from game.config import (
     PATH_TOGGLE_BTN_WIDTH,
     PATH_TOGGLE_BTN_HEIGHT,
     MARKET_WEALTH_CONTEXT_REFRESH_SECONDS,
+    SIMULATION_PROFILE_REPORT_SECONDS,
+    PLACEMENT_ORIENTATION_MARKER_LENGTH_RATIO,
+    PLACEMENT_ORIENTATION_MARKER_HEAD_RATIO,
+    PLACEMENT_ORIENTATION_MARKER_COLOR,
+    PLACEMENT_ORIENTATION_MARKER_OUTLINE,
+    LORD_TREASURY_START_TILE,
+    HAPPINESS_MIN_VALUE,
+    HAPPINESS_MAX_VALUE,
+    HAPPINESS_STATUS_BANDS,
+    HAPPINESS_STATUS_COLORS,
+    SLEEP_MAX_VALUE,
+    SLEEP_MIN_VALUE,
+    SLEEP_STATUS_COLORS,
 )
 from game.camera import Camera
 from game.player import Player
@@ -50,6 +64,7 @@ from game.ui_raport import RaportUI
 from game.ui.market_modal import MarketProfileModal
 from game.ui.add_item_modal import AddItemModal
 from game.ui.carpenter_catalog_modal import CarpenterCatalogModal
+from game.ui.path_debug_overlay import PathDebugOverlay
 from game.systems.production_distribution import ProductionDistributionSystem
 from game.speed_control import SpeedController
 from game.day_cycle import DayCycleSystem
@@ -74,6 +89,26 @@ def get_rect_tiles(start_pt, cur_pt):
     th = abs(cur_pt[1] - start_pt[1]) + 1
     return {(gx + c, gy + r) for c in range(tw) for r in range(th)}
 
+def draw_placement_orientation(surface, rect, rotation):
+    """Draw a clear compass arrow for square one-tile placement previews."""
+    if rect.width <= 0 or rect.height <= 0:
+        return
+    directions = ((0.0, -1.0), (1.0, 0.0), (0.0, 1.0), (-1.0, 0.0))
+    direction = directions[(int(rotation) // 90) % len(directions)]
+    center = pygame.Vector2(rect.center)
+    length = min(rect.width, rect.height) * PLACEMENT_ORIENTATION_MARKER_LENGTH_RATIO
+    tip = center + pygame.Vector2(direction) * length
+    base = tip - pygame.Vector2(direction) * length * PLACEMENT_ORIENTATION_MARKER_HEAD_RATIO
+    side = pygame.Vector2(-direction[1], direction[0]) * length * PLACEMENT_ORIENTATION_MARKER_HEAD_RATIO * 0.65
+    head = (tip, base + side, base - side)
+    line_width = max(2, int(min(rect.width, rect.height) * 0.055))
+    pygame.draw.line(surface, PLACEMENT_ORIENTATION_MARKER_OUTLINE,
+                     center, tip, line_width + 2)
+    pygame.draw.line(surface, PLACEMENT_ORIENTATION_MARKER_COLOR,
+                     center, tip, line_width)
+    pygame.draw.polygon(surface, PLACEMENT_ORIENTATION_MARKER_OUTLINE, head)
+    pygame.draw.polygon(surface, PLACEMENT_ORIENTATION_MARKER_COLOR, head, width=1)
+
 def main():
     pygame.init()
 
@@ -97,6 +132,7 @@ def main():
     market_modal = MarketProfileModal()
     add_item_modal = AddItemModal()
     carpenter_catalog_modal = CarpenterCatalogModal()
+    path_debug_overlay = PathDebugOverlay(enabled=True)
     production_system = ProductionDistributionSystem.get_instance()
     speed_controller = SpeedController()
     settings_modal = SettingsModal()
@@ -123,11 +159,13 @@ def main():
     permit_erase_start = None
     planning_building_type = None
     planning_building_tiles = set()
+    planning_building_rotation = 0
     planned_door_tile = None
     planned_door_side = "bottom"
     building_drag_start = None
     building_erase_start = None
     planning_furniture_type = None
+    planning_furniture_rotation = 0
     session_planned_furniture = []
     selected_planned_furniture = None
     selected_furniture = None
@@ -141,6 +179,7 @@ def main():
     btn_furn_house_rect = pygame.Rect(0, 0, 116, 26)
     btn_furn_poss_rect = pygame.Rect(0, 0, 116, 26)
     btn_furn_store_rect = pygame.Rect(0, 0, 252, 24)
+    btn_furn_pay_carpenter_rect = pygame.Rect(0, 0, 252, 24)
 
     entity_card_rect = pygame.Rect(0, 0, 310, 180)
     btn_entity_close_rect = pygame.Rect(0, 0, 22, 22)
@@ -154,6 +193,7 @@ def main():
         nonlocal player, resources, building_manager, permit_manager, stockpile_manager
         nonlocal servant_manager, villager_manager, furniture_manager, day_cycle, schedule_manager
         nonlocal planning_mode, planning_permit_type, planning_building_type, planning_furniture_type
+        nonlocal planning_building_rotation, planning_furniture_rotation
         nonlocal session_planned_furniture, selected_planned_furniture
         nonlocal editing_permit_id, original_permit_tiles, selected_furniture, moving_furniture, selected_entity
 
@@ -161,6 +201,10 @@ def main():
         cemetery_system = CemeterySystem.get_instance()
         cemetery_system.pending_commissions.clear()
         cemetery_system.overflow_corpses.clear()
+        from game.systems.confession_system import ConfessionSystem
+        confession_system = ConfessionSystem.get_instance()
+        confession_system.queues.clear()
+        confession_system.active.clear()
 
         player = Player(0.0, 0.0)
         camera.x = 0.0
@@ -176,6 +220,14 @@ def main():
         servant_manager = ServantManager()
         villager_manager = VillagerManager()
         furniture_manager = FurnitureManager()
+        furniture_manager.set_managers(
+            building_manager=building_manager, permit_manager=permit_manager,
+            villager_manager=villager_manager,
+        )
+        furniture_manager.ensure_lord_treasury_chest(
+            permit_manager, villager_manager, building_manager,
+            preferred_tile=LORD_TREASURY_START_TILE,
+        )
         day_cycle = DayCycleSystem()
         if day_length_index is not None:
             day_cycle.set_day_length_index(day_length_index)
@@ -189,6 +241,8 @@ def main():
         planning_permit_type = None
         planning_building_type = None
         planning_furniture_type = None
+        planning_building_rotation = 0
+        planning_furniture_rotation = 0
         session_planned_furniture.clear()
         selected_planned_furniture = None
         editing_permit_id = None
@@ -207,8 +261,14 @@ def main():
 
     running = True
     wealth_context_timer = 0.0
+    profile_enabled = os.environ.get("TAXES_DUE_PROFILE", "").strip().lower() in ("1", "true", "yes")
+    profile_elapsed = 0.0
+    profile_frame_count = 0
+    profile_frame_ms = 0.0
+    profile_simulation_ms = 0.0
     while running:
         real_dt = min(clock.tick(FPS) / 1000.0, 0.1)
+        profile_frame_start = perf_counter() if profile_enabled else 0.0
         game_dt = speed_controller.get_game_dt(real_dt)
         if current_state == STATE_PLAYING and (settings_modal.is_open or save_modal.is_open):
             game_dt = 0.0
@@ -335,12 +395,19 @@ def main():
 
                 if carpenter_catalog_modal.is_open:
                     catalog_action = carpenter_catalog_modal.handle_event(event)
-                    if catalog_action and catalog_action.startswith("commission_"):
+                    if catalog_action and catalog_action.startswith("commission_furniture_"):
                         planning_mode = "FURNITURE"
-                        planning_furniture_type = catalog_action.removeprefix("commission_")
+                        planning_furniture_type = catalog_action.removeprefix("commission_furniture_")
                         session_planned_furniture.clear()
                         selected_planned_furniture = None
                         selected_furniture = None
+                    elif catalog_action and catalog_action.startswith("commission_building_"):
+                        planning_mode = "BUILDING"
+                        planning_building_type = catalog_action.removeprefix("commission_building_")
+                        planning_building_rotation = 0
+                        planning_building_tiles.clear()
+                        planned_door_tile = None
+                        planned_door_side = "bottom"
                     continue
 
                 speed_action = speed_controller.handle_event(event)
@@ -348,6 +415,8 @@ def main():
                     continue
 
                 if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                    if not raport_ui.is_open and path_debug_overlay.handle_event(event):
+                        continue
                     if not raport_ui.is_open and btn_add_item_cheat_rect.collidepoint(event.pos):
                         tgt = selected_furniture if (selected_furniture and getattr(selected_furniture, "furniture_type", "") == "household_storage") else None
                         add_item_modal.open(target_storage=tgt)
@@ -488,12 +557,35 @@ def main():
                         elif event.key == pygame.K_BACKSPACE or event.key == pygame.K_DELETE:
                             planning_building_tiles.clear()
                             planned_door_tile = None
+                        elif event.key == pygame.K_r and b_cfg.get("rotatable", True):
+                            planning_building_rotation = (planning_building_rotation + 90) % 360
+                            if planning_building_tiles:
+                                min_x = min(tile[0] for tile in planning_building_tiles)
+                                min_y = min(tile[1] for tile in planning_building_tiles)
+                                max_x = max(tile[0] for tile in planning_building_tiles)
+                                max_y = max(tile[1] for tile in planning_building_tiles)
+                                old_door = planned_door_tile
+                                planning_building_tiles = {
+                                    (min_x + (tile[1] - min_y), min_y + (max_x - tile[0]))
+                                    for tile in planning_building_tiles
+                                }
+                                if old_door:
+                                    planned_door_tile = (min_x + (old_door[1] - min_y), min_y + (max_x - old_door[0]))
+                                planned_door_side = {"top": "right", "right": "bottom", "bottom": "left", "left": "top"}.get(planned_door_side, planned_door_side)
                         elif event.key == pygame.K_RETURN:
                             if is_valid_build:
-                                building_manager.start_construction(
+                                started = building_manager.start_construction(
                                     planning_building_type, planning_building_tiles,
-                                    planned_door_tile, planned_door_side, permit_manager
+                                    planned_door_tile, planned_door_side, permit_manager,
+                                    rotation=planning_building_rotation
                                 )
+                                if started and b_cfg.get("carpenter_commissionable"):
+                                    from game.systems.carpenter_system import CarpenterSystem
+                                    CarpenterSystem.dispatch_pending_public_commissions(
+                                        building_manager, servant_manager, villager_manager,
+                                        furniture_manager, day_cycle=day_cycle,
+                                        stockpile_manager=stockpile_manager,
+                                    )
                                 planning_mode = "NONE"
                                 planning_building_tiles.clear()
                                 planned_door_tile = None
@@ -502,10 +594,18 @@ def main():
                         # UI button checks
                         if btn_confirm_rect.collidepoint(event.pos):
                             if is_valid_build:
-                                building_manager.start_construction(
+                                started = building_manager.start_construction(
                                     planning_building_type, planning_building_tiles,
-                                    planned_door_tile, planned_door_side, permit_manager
+                                    planned_door_tile, planned_door_side, permit_manager,
+                                    rotation=planning_building_rotation
                                 )
+                                if started and b_cfg.get("carpenter_commissionable"):
+                                    from game.systems.carpenter_system import CarpenterSystem
+                                    CarpenterSystem.dispatch_pending_public_commissions(
+                                        building_manager, servant_manager, villager_manager,
+                                        furniture_manager, day_cycle=day_cycle,
+                                        stockpile_manager=stockpile_manager,
+                                    )
                                 planning_mode = "NONE"
                                 planning_building_tiles.clear()
                                 planned_door_tile = None
@@ -530,15 +630,22 @@ def main():
                                     building_drag_start = None
                                     continue
                             elif planning_building_type == "well":
-                                # Tempatkan footprint 2x2 secara instan pada tile mouse
-                                planning_building_tiles = {(m_gx, m_gy), (m_gx + 1, m_gy), (m_gx, m_gy + 1), (m_gx + 1, m_gy + 1)}
+                                # Place the configured footprint, transposed when rotated.
+                                w_w = int(b_cfg.get("width_tiles", 2))
+                                w_h = int(b_cfg.get("height_tiles", 2))
+                                if planning_building_rotation % 180:
+                                    w_w, w_h = w_h, w_w
+                                planning_building_tiles = {(m_gx + dx, m_gy + dy) for dx in range(w_w) for dy in range(w_h)}
                                 planned_door_tile = None
                                 planned_door_side = None
                                 building_drag_start = None
                                 continue
                             elif planning_building_type == "market":
-                                # Tempatkan footprint 3x2 secara instan pada tile mouse (Footprint pasar persis 3x2)
-                                planning_building_tiles = {(m_gx + c, m_gy + r) for c in range(3) for r in range(2)}
+                                w_w = int(b_cfg.get("width_tiles", 3))
+                                w_h = int(b_cfg.get("height_tiles", 2))
+                                if planning_building_rotation % 180:
+                                    w_w, w_h = w_h, w_w
+                                planning_building_tiles = {(m_gx + dx, m_gy + dy) for dx in range(w_w) for dy in range(w_h)}
                                 planned_door_tile = None
                                 planned_door_side = None
                                 building_drag_start = None
@@ -589,17 +696,26 @@ def main():
                 # -------------------------------------------------------------
                 elif planning_mode == "FURNITURE":
                     f_cfg = FURNITURE_TYPES.get(planning_furniture_type, FURNITURE_TYPES["household_storage"])
-                    footprint = {(m_gx + dx, m_gy + dy) for dx in range(max(1, int(f_cfg.get("width_tiles", 1)))) for dy in range(max(1, int(f_cfg.get("height_tiles", 1))))}
+                    fw, fh = max(1, int(f_cfg.get("width_tiles", 1))), max(1, int(f_cfg.get("height_tiles", 1)))
+                    if planning_furniture_rotation % 180:
+                        fw, fh = fh, fw
+                    footprint = {(m_gx + dx, m_gy + dy) for dx in range(fw) for dy in range(fh)}
                     footprint_context = []
                     for tx, ty in footprint:
                         target_permit = permit_manager.get_permit_at(tx, ty)
                         b_at = building_manager.get_building_at(tx, ty)
                         inside = b_at is not None and not getattr(b_at, "is_solid", False) and getattr(b_at, "building_type", "") != "well" and (tx, ty) != getattr(b_at, "door_pos", None)
-                        footprint_context.append((target_permit is not None or inside, furniture_manager.get_furniture_at(tx, ty) is not None))
+                        allowed = f_cfg.get("allowed_permits")
+                        permit_allowed = f_cfg.get("placement_anywhere") or not allowed or (target_permit is not None and target_permit.permit_type in allowed)
+                        footprint_context.append(((f_cfg.get("placement_anywhere") or target_permit is not None or inside) and permit_allowed,
+                                                 furniture_manager.get_furniture_at(tx, ty) is not None))
                     planned_tiles = set()
                     for pf in session_planned_furniture:
                         p_cfg = FURNITURE_TYPES.get(pf.get("type", planning_furniture_type), f_cfg)
-                        planned_tiles.update((pf["gx"] + dx, pf["gy"] + dy) for dx in range(max(1, int(p_cfg.get("width_tiles", 1)))) for dy in range(max(1, int(p_cfg.get("height_tiles", 1)))))
+                        p_w, p_h = max(1, int(p_cfg.get("width_tiles", 1))), max(1, int(p_cfg.get("height_tiles", 1)))
+                        if int(pf.get("rotation", 0)) % 180:
+                            p_w, p_h = p_h, p_w
+                        planned_tiles.update((pf["gx"] + dx, pf["gy"] + dy) for dx in range(p_w) for dy in range(p_h))
                     is_valid_place = all(valid and not occupied for valid, occupied in footprint_context) and not (footprint & planned_tiles)
 
                     is_valid_build = bool(session_planned_furniture)
@@ -616,13 +732,23 @@ def main():
                                 selected_planned_furniture = None
                             else:
                                 session_planned_furniture.clear()
+                        elif event.key == pygame.K_r and f_cfg.get("rotatable", True):
+                            if selected_planned_furniture is not None:
+                                planned_item = next((item for item in session_planned_furniture
+                                                     if (item["gx"], item["gy"]) == selected_planned_furniture), None)
+                                if planned_item:
+                                    planned_item["rotation"] = (int(planned_item.get("rotation", 0)) + 90) % 360
+                                    planning_furniture_rotation = planned_item["rotation"]
+                            else:
+                                planning_furniture_rotation = (planning_furniture_rotation + 90) % 360
                         elif event.key in (pygame.K_RETURN, pygame.K_KP_ENTER):
                             if is_valid_build:
                                 for pf in session_planned_furniture:
                                     furniture_manager.add_furniture(
                                         pf["type"], pf["gx"], pf["gy"],
                                         permit_manager, villager_manager, resources,
-                                        building_manager=building_manager
+                                        building_manager=building_manager,
+                                        rotation=pf.get("rotation", 0)
                                     )
                                 session_planned_furniture.clear()
                                 selected_planned_furniture = None
@@ -636,7 +762,8 @@ def main():
                                     furniture_manager.add_furniture(
                                         pf["type"], pf["gx"], pf["gy"],
                                         permit_manager, villager_manager, resources,
-                                        building_manager=building_manager
+                                        building_manager=building_manager,
+                                        rotation=pf.get("rotation", 0)
                                     )
                                 session_planned_furniture.clear()
                                 selected_planned_furniture = None
@@ -669,7 +796,8 @@ def main():
                                 session_planned_furniture.append({
                                     "gx": m_gx,
                                     "gy": m_gy,
-                                    "type": planning_furniture_type
+                                    "type": planning_furniture_type,
+                                    "rotation": planning_furniture_rotation
                                 })
                                 selected_planned_furniture = None
 
@@ -679,22 +807,34 @@ def main():
                 elif planning_mode == "MOVE_FURNITURE" and moving_furniture:
                     target_permit = permit_manager.get_permit_at(m_gx, m_gy)
                     b_at = building_manager.get_building_at(m_gx, m_gy)
-                    other_f = furniture_manager.get_furniture_at(m_gx, m_gy)
-                    is_occupied = (other_f is not None and other_f.id != moving_furniture.id and not other_f.is_dropped)
-
+                    move_w, move_h = moving_furniture.footprint_dimensions
+                    move_tiles = {(m_gx + dx, m_gy + dy) for dx in range(move_w) for dy in range(move_h)}
                     is_blocked = False
-                    if b_at is not None:
-                        if getattr(b_at, "is_solid", False) or getattr(b_at, "building_type", "") == "well" or not getattr(b_at, "door_pos", None):
+                    for move_tx, move_ty in move_tiles:
+                        tile_building = building_manager.get_building_at(move_tx, move_ty)
+                        tile_permit = permit_manager.get_permit_at(move_tx, move_ty)
+                        allowed = moving_furniture.type_cfg.get("allowed_permits")
+                        allowed_here = not allowed or (tile_permit is not None and tile_permit.permit_type in allowed)
+                        inside = (tile_building is not None
+                                  and not getattr(tile_building, "is_solid", False)
+                                  and getattr(tile_building, "building_type", "") != "well"
+                                  and (move_tx, move_ty) != getattr(tile_building, "door_pos", None))
+                        if (not allowed_here and not inside) or (tile_building is not None and not inside):
                             is_blocked = True
-                        elif (m_gx, m_gy) == getattr(b_at, "door_pos", None):
-                            is_blocked = True
-
-                    is_valid_dest = not is_blocked and not is_occupied
+                            break
+                    other_tiles = set()
+                    for existing_furniture in furniture_manager.furnitures:
+                        if existing_furniture.id != moving_furniture.id and not existing_furniture.is_dropped:
+                            other_tiles.update(furniture_manager._furniture_tiles(existing_furniture))
+                    is_valid_dest = not is_blocked and not bool(move_tiles & other_tiles)
 
                     if event.type == pygame.KEYDOWN:
                         if event.key == pygame.K_ESCAPE or event.key == pygame.K_BACKSPACE:
                             planning_mode = "NONE"
                             moving_furniture = None
+                        elif event.key == pygame.K_r and moving_furniture.type_cfg.get("rotatable", True):
+                            moving_furniture.rotation = (moving_furniture.rotation + 90) % 360
+                            furniture_manager.invalidate_cache()
                     elif event.type == pygame.MOUSEBUTTONDOWN:
                         if btn_cancel_rect.collidepoint(event.pos) or event.button == 3:
                             planning_mode = "NONE"
@@ -728,6 +868,7 @@ def main():
                         elif raport_ui.selected_building_type is not None:
                             planning_mode = "BUILDING"
                             planning_building_type = raport_ui.selected_building_type
+                            planning_building_rotation = 0
                             raport_ui.selected_building_type = None
                             planning_building_tiles.clear()
                             planned_door_tile = None
@@ -735,6 +876,7 @@ def main():
                         elif raport_ui.selected_furniture_type is not None:
                             planning_mode = "FURNITURE"
                             planning_furniture_type = raport_ui.selected_furniture_type
+                            planning_furniture_rotation = 0
                             raport_ui.selected_furniture_type = None
                             session_planned_furniture.clear()
                             selected_planned_furniture = None
@@ -809,6 +951,7 @@ def main():
                         if raport_ui.selected_building_type is not None:
                             planning_mode = "BUILDING"
                             planning_building_type = raport_ui.selected_building_type
+                            planning_building_rotation = 0
                             raport_ui.selected_building_type = None
                             planning_building_tiles.clear()
                             planned_door_tile = None
@@ -816,6 +959,7 @@ def main():
                         elif raport_ui.selected_furniture_type is not None:
                             planning_mode = "FURNITURE"
                             planning_furniture_type = raport_ui.selected_furniture_type
+                            planning_furniture_rotation = 0
                             raport_ui.selected_furniture_type = None
                             session_planned_furniture.clear()
                             selected_planned_furniture = None
@@ -850,6 +994,7 @@ def main():
                         elif not raport_ui.is_open:
                             # 0A. Klik pada Tombol di Menu Konteks Furniture jika sedang terbuka
                             if selected_furniture is not None:
+                                order = getattr(selected_furniture, "construction_order", None) or {}
                                 if btn_furn_move_rect and btn_furn_move_rect.collidepoint(event.pos):
                                     moving_furniture = selected_furniture
                                     planning_mode = "MOVE_FURNITURE"
@@ -1010,12 +1155,15 @@ def main():
             save_modal.draw(screen)
         elif current_state == STATE_PLAYING:
             days_passed = day_cycle.update(game_dt)
+            for market_building in building_manager.buildings:
+                if getattr(market_building, "building_type", "") == "market":
+                    market_building.current_day_number = day_cycle.day_number
             if days_passed > 0:
                 for p in permit_manager.permits:
                     p.reset_daily_watering()
                 villager_manager.daily_midnight_update(day_cycle.day_number)
                 furniture_manager.daily_wear_update(days_passed)
-
+                building_manager.daily_public_maintenance_update(days_passed)
             day_dt = game_dt / max(1.0, day_cycle.day_length_seconds)
             cur_day_time = day_cycle.day_number + (day_cycle.current_hour / 24.0)
             wealth_context_timer -= real_dt
@@ -1046,14 +1194,31 @@ def main():
             is_modal_open = raport_ui.is_open or settings_modal.is_open or save_modal.is_open or market_modal.is_open or add_item_modal.is_open
             keys = pygame.key.get_pressed() if not is_modal_open else None
 
+            profile_simulation_start = perf_counter() if profile_enabled else 0.0
+            run_ai_scheduler = True
             while sub_time > 0.0:
                 step_dt = min(sub_time, MAX_PHYSICS_SUB_DT)
                 if not is_modal_open:
                     player.handle_input(keys, step_dt, building_manager, TILE_SIZE)
                 building_manager.update(step_dt)
-                servant_manager.update(step_dt, building_manager, permit_manager, stockpile_manager, resources, player, furniture_manager=furniture_manager, villager_manager=villager_manager)
-                villager_manager.update(step_dt, permit_manager, building_manager, servant_manager.servants, player, stockpile_manager=stockpile_manager, furniture_manager=furniture_manager, day_cycle=day_cycle, schedule_manager=schedule_manager, production_system=production_system)
+                servant_manager.update(
+                    step_dt, building_manager, permit_manager, stockpile_manager,
+                    resources, player, furniture_manager=furniture_manager,
+                    villager_manager=villager_manager,
+                    run_ai_scheduler=run_ai_scheduler, ai_dt=game_dt,
+                    day_cycle=day_cycle,
+                )
+                villager_manager.update(
+                    step_dt, permit_manager, building_manager, servant_manager.servants,
+                    player, stockpile_manager=stockpile_manager,
+                    furniture_manager=furniture_manager, day_cycle=day_cycle,
+                    schedule_manager=schedule_manager, production_system=production_system,
+                    run_ai_scheduler=run_ai_scheduler, ai_dt=game_dt,
+                )
+                run_ai_scheduler = False
                 sub_time -= step_dt
+            if profile_enabled:
+                profile_simulation_ms += (perf_counter() - profile_simulation_start) * 1000.0
 
             camera.follow(player)
 
@@ -1081,6 +1246,9 @@ def main():
             ambient_surf = day_cycle.get_ambient_overlay(screen.get_width(), screen.get_height())
             if ambient_surf:
                 screen.blit(ambient_surf, (0, 0))
+
+            route_actors = villager_manager.get_all_villagers() + servant_manager.servants
+            path_debug_overlay.draw_routes(screen, camera, route_actors)
 
             # -------------------------------------------------------------
             # 6. OVERLAYS: PERMIT PLANNING MODE
@@ -1279,6 +1447,8 @@ def main():
                 if planning_building_type in ("well", "market", "toilet") and not planning_building_tiles and not building_drag_start:
                     w_w = b_cfg.get("width_tiles", 1 if planning_building_type == "toilet" else 2)
                     w_h = b_cfg.get("height_tiles", 1 if planning_building_type == "toilet" else 2)
+                    if planning_building_rotation % 180:
+                        w_w, w_h = w_h, w_w
                     preview_box = {(m_gx + c, m_gy + r) for c in range(w_w) for r in range(w_h)}
                     can_fit, _ = permit_manager.find_matching_permit_for_tiles(planning_building_type, preview_box, building_manager, furniture_manager=furniture_manager)
                     fit_tint = (34, 197, 94, 100) if can_fit else (239, 68, 68, 100)
@@ -1288,6 +1458,11 @@ def main():
                         t_surf.fill(fit_tint)
                         screen.blit(t_surf, (sx, sy))
                         pygame.draw.rect(screen, (34, 197, 94) if can_fit else (239, 68, 68), (sx, sy, scaled_t, scaled_t), width=1)
+                    if w_w == 1 and w_h == 1 and b_cfg.get("rotatable", True):
+                        draw_placement_orientation(
+                            screen, pygame.Rect(sx, sy, scaled_t, scaled_t),
+                            planning_building_rotation,
+                        )
 
                 # D. Render Active Drag Box Preview
                 if building_drag_start:
@@ -1322,7 +1497,10 @@ def main():
 
                 can_afford = building_manager.can_afford(planning_building_type, resources, len(planning_building_tiles))
                 is_valid_tile_count = (len(planning_building_tiles) == b_cfg["fixed_tiles_count"]) if b_cfg.get("fixed_tiles_count") else (len(planning_building_tiles) > 0)
-                dim_str = f"({b_cfg.get('width_tiles', 2)}x{b_cfg.get('height_tiles', 2)})" if b_cfg.get("fixed_tiles_count") else ""
+                dim_w, dim_h = b_cfg.get("width_tiles", 2), b_cfg.get("height_tiles", 2)
+                if planning_building_rotation % 180:
+                    dim_w, dim_h = dim_h, dim_w
+                dim_str = f"({dim_w}x{dim_h})" if b_cfg.get("fixed_tiles_count") else ""
                 if b_cfg.get("fixed_tiles_count") and len(planning_building_tiles) > 0 and len(planning_building_tiles) != b_cfg["fixed_tiles_count"]:
                     status_msg = f"Must be exactly {b_cfg['fixed_tiles_count']} tiles {dim_str}"
                 is_valid = (matching_permit is not None) and can_afford and is_valid_tile_count
@@ -1339,16 +1517,19 @@ def main():
 
                 # Header & Cost
                 tiles_label = f"Fixed: {b_cfg['fixed_tiles_count']} Tiles {dim_str}" if b_cfg.get("fixed_tiles_count") else f"Tiles: {len(planning_building_tiles)}"
-                info_txt = f"Design {b_cfg['name']} | {tiles_label} | Cost: {cost_w} Wood, {cost_s} Stone"
+                if b_cfg.get("carpenter_commissionable"):
+                    info_txt = f"Design {b_cfg['name']} | {tiles_label} | Lord pays Carpenter commission"
+                else:
+                    info_txt = f"Design {b_cfg['name']} | {tiles_label} | Cost: {cost_w} Wood, {cost_s} Stone"
                 screen.blit(font_card.render(info_txt, True, (56, 189, 248)), (bar_x + 16, bar_y + 10))
 
                 # Status & Door info
                 if not b_cfg.get("has_door", True):
                     door_str = "Solid Structure (Impenetrable)" if b_cfg.get("is_solid", False) else "Open-air Market Stall"
-                    help_str = f"(Click to place {dim_str} {b_cfg['name']})" if b_cfg.get("fixed_tiles_count") else "(Drag to place)"
+                    help_str = f"(R: Rotate | Click to place {dim_str} {b_cfg['name']})" if b_cfg.get("fixed_tiles_count") else "(R: Rotate | Drag to place)"
                 else:
                     door_str = f"Door: {planned_door_tile} [{planned_door_side}]" if planned_door_tile else "Click any exterior wall tile to place Door"
-                    help_str = "(Drag to expand, Right-Click to erase)"
+                    help_str = "(R: Rotate | Drag to expand, Right-Click to erase)"
                 stat_col = (34, 197, 94) if is_valid else (239, 68, 68)
                 stat_txt = f"Status: {status_msg} | {door_str} | {help_str}"
                 screen.blit(font_hud.render(stat_txt, True, stat_col), (bar_x + 16, bar_y + 32))
@@ -1382,17 +1563,25 @@ def main():
                 f_cfg = FURNITURE_TYPES.get(planning_furniture_type, FURNITURE_TYPES["household_storage"])
                 scaled_t = int(TILE_SIZE * camera.zoom)
                 fw, fh = max(1, int(f_cfg.get("width_tiles", 1))), max(1, int(f_cfg.get("height_tiles", 1)))
+                if planning_furniture_rotation % 180:
+                    fw, fh = fh, fw
                 planned_coords = set()
                 for pf in session_planned_furniture:
                     p_cfg = FURNITURE_TYPES.get(pf.get("type", planning_furniture_type), f_cfg)
-                    planned_coords.update((pf["gx"] + dx, pf["gy"] + dy) for dx in range(max(1, int(p_cfg.get("width_tiles", 1)))) for dy in range(max(1, int(p_cfg.get("height_tiles", 1)))))
+                    p_w, p_h = max(1, int(p_cfg.get("width_tiles", 1))), max(1, int(p_cfg.get("height_tiles", 1)))
+                    if int(pf.get("rotation", 0)) % 180:
+                        p_w, p_h = p_h, p_w
+                    planned_coords.update((pf["gx"] + dx, pf["gy"] + dy) for dx in range(p_w) for dy in range(p_h))
 
                 # 1. Render all planned unbuilt furniture objects in the current session
                 for pf in session_planned_furniture:
                     psx, psy = camera.world_to_screen(pf["gx"] * TILE_SIZE, pf["gy"] * TILE_SIZE)
                     if -scaled_t <= psx <= screen.get_width() and -scaled_t <= psy <= screen.get_height():
-                        p_w = scaled_t * max(1, int(FURNITURE_TYPES.get(pf.get("type", planning_furniture_type), f_cfg).get("width_tiles", 1)))
-                        p_h = scaled_t * max(1, int(FURNITURE_TYPES.get(pf.get("type", planning_furniture_type), f_cfg).get("height_tiles", 1)))
+                        p_cfg = FURNITURE_TYPES.get(pf.get("type", planning_furniture_type), f_cfg)
+                        p_fw, p_fh = max(1, int(p_cfg.get("width_tiles", 1))), max(1, int(p_cfg.get("height_tiles", 1)))
+                        if int(pf.get("rotation", 0)) % 180:
+                            p_fw, p_fh = p_fh, p_fw
+                        p_w, p_h = scaled_t * p_fw, scaled_t * p_fh
                         p_surf = pygame.Surface((p_w, p_h), pygame.SRCALPHA)
                         is_sel = (selected_planned_furniture == (pf["gx"], pf["gy"]))
                         p_tint = (250, 204, 21, 140) if is_sel else (34, 197, 94, 120)
@@ -1400,6 +1589,11 @@ def main():
                         screen.blit(p_surf, (psx, psy))
                         p_border_c = (250, 204, 21) if is_sel else (34, 197, 94)
                         pygame.draw.rect(screen, p_border_c, (psx, psy, p_w, p_h), width=3 if is_sel else 2, border_radius=4)
+
+                        if p_fw == 1 and p_fh == 1 and p_cfg.get("rotatable", True):
+                            draw_placement_orientation(
+                                screen, pygame.Rect(psx, psy, p_w, p_h), pf.get("rotation", 0),
+                            )
 
                         lbl = font_badge.render("PLAN", True, (255, 255, 255))
                         screen.blit(lbl, (psx + 4, psy + 4))
@@ -1413,7 +1607,10 @@ def main():
                     target_permit = permit_manager.get_permit_at(tx, ty)
                     b_at = building_manager.get_building_at(tx, ty)
                     inside = b_at is not None and not getattr(b_at, "is_solid", False) and getattr(b_at, "building_type", "") != "well" and (tx, ty) != getattr(b_at, "door_pos", None)
-                    valid_cells.append((target_permit is not None or inside, furniture_manager.get_furniture_at(tx, ty) is not None))
+                    allowed = f_cfg.get("allowed_permits")
+                    permit_allowed = f_cfg.get("placement_anywhere") or not allowed or (target_permit is not None and target_permit.permit_type in allowed)
+                    valid_cells.append(((f_cfg.get("placement_anywhere") or target_permit is not None or inside) and permit_allowed,
+                                        furniture_manager.get_furniture_at(tx, ty) is not None))
                 is_occupied_planned = bool(footprint & planned_coords)
                 is_occupied_existing = any(occupied for _, occupied in valid_cells)
                 is_valid_location = all(valid for valid, _ in valid_cells)
@@ -1425,6 +1622,11 @@ def main():
                     f_surf.fill(tile_tint)
                     screen.blit(f_surf, (fsx, fsy))
                     pygame.draw.rect(screen, (34, 197, 94) if is_valid_place else (239, 68, 68), (fsx, fsy, scaled_t * fw, scaled_t * fh), width=2)
+                    if fw == 1 and fh == 1 and f_cfg.get("rotatable", True):
+                        draw_placement_orientation(
+                            screen, pygame.Rect(fsx, fsy, scaled_t * fw, scaled_t * fh),
+                            planning_furniture_rotation,
+                        )
                 else:
                     # Hovering an already planned tile: show distinct highlight
                     pygame.draw.rect(screen, (239, 68, 68), (fsx, fsy, scaled_t, scaled_t), width=2)
@@ -1443,7 +1645,10 @@ def main():
                 planned_count = len(session_planned_furniture)
                 is_valid_build = planned_count > 0
 
-                info_txt = f"Order {f_cfg['name']} | Planned: {planned_count} | Household pays commission; Carpenter supplies materials"
+                if f_cfg.get("instant_place"):
+                    info_txt = f"Place {f_cfg['name']} | Planned: {planned_count} | Free and ready immediately"
+                else:
+                    info_txt = f"Order {f_cfg['name']} | Planned: {planned_count} | Household pays commission; Carpenter supplies materials"
                 screen.blit(font_card.render(info_txt, True, (250, 204, 21)), (bar_x + 16, bar_y + 10))
 
                 if is_occupied_planned:
@@ -1460,7 +1665,7 @@ def main():
                     if target_permit:
                         owner_family = next((fam for fam in villager_manager.families if fam.assigned_permit_id == target_permit.id), None)
                     fam_str = f"The {owner_family.surname} Family" if owner_family else "Tenant house / lot"
-                    stat_msg = f"Ready to order! (Left-Click to place, Right-Click to erase. {fam_str})"
+                    stat_msg = f"Ready to order! (R: rotate | Left-Click to place, Right-Click to erase. {fam_str})"
                     stat_col = (34, 197, 94)
 
                 screen.blit(font_hud.render(stat_msg, True, stat_col), (bar_x + 16, bar_y + 32))
@@ -1562,9 +1767,18 @@ def main():
                 # Modal popup positioned conveniently above/below the tile
                 has_owner = bool(selected_furniture.family_id)
                 is_uninstalled = selected_furniture.status == "UNINSTALLED"
+                furniture_cfg = getattr(selected_furniture, "type_cfg", {})
+                public_order_pending = (
+                    not has_owner
+                    and not furniture_cfg.get("household_owned", True)
+                    and (getattr(selected_furniture, "construction_order", None) or {}).get("status")
+                    in ("AWAITING_PAYMENT", "LANDLORD_PAYMENT_PENDING")
+                )
                 cw, ch = 280, (152 if has_owner else 134)
                 if is_uninstalled:
                     ch = 152
+                if public_order_pending:
+                    ch = max(ch, 112)
                 cx = max(12, min(screen.get_width() - cw - 12, fsx + scaled_t // 2 - cw // 2))
                 cy = fsy - ch - 12
                 if cy < 50:
@@ -1610,8 +1824,14 @@ def main():
                     order = selected_furniture.construction_order
                     fee = from_copper(order.get("price_copper", 0))
                     fee_txt = f"{fee['Gold']}g {fee['Silver']}s {fee['Copper']}c"
-                    was_paid = order.get("commission_paid", order.get("status") in ("PAID", "BUILDING"))
-                    payment_txt = "Paid" if was_paid else "Awaiting payment"
+                    order_status = order.get("status")
+                    was_paid = order.get("commission_paid", order_status in ("PAID", "BUILDING"))
+                    payment_txt = (
+                        "Paid" if was_paid or order_status in ("PAID", "BUILDING", "COMPLETE")
+                        else "Retrieving landlord coins" if order_status == "LANDLORD_RETRIEVING"
+                        else "Payment traveling" if order_status == "PAYMENT_TRAVELING"
+                        else "Awaiting payment"
+                    )
                     det_txt = f"Commission: {fee_txt} | {payment_txt}"
                 elif selected_furniture.furniture_type == "bed":
                     det_txt = f"Assigned: {selected_furniture.assigned_villager_id or 'Vacant Bed'}"
@@ -1653,6 +1873,21 @@ def main():
                     screen.blit(store_txt, (btn_furn_store_rect.centerx - store_txt.get_width() // 2, btn_furn_store_rect.centery - store_txt.get_height() // 2))
                 else:
                     btn_furn_store_rect.x = -9999
+                if public_order_pending:
+                    order_status = (getattr(selected_furniture, "construction_order", None) or {}).get("status")
+                    status_labels = {
+                        "AWAITING_PAYMENT": "Awaiting landlord payment",
+                        "LANDLORD_PAYMENT_PENDING": "Awaiting landlord funds",
+                        "LANDLORD_RETRIEVING": "Servant collecting commission",
+                        "PAYMENT_TRAVELING": "Servant delivering commission",
+                        "PAID": "Commission paid — Carpenter assigned",
+                        "BUILDING": "Carpenter building",
+                        "AWAITING_MATERIAL": "Carpenter gathering materials",
+                    }
+                    order_text = font_badge.render(status_labels.get(order_status, "Carpenter order"), True, (56, 189, 248))
+                    screen.blit(order_text, (cx + 14, cy + 82))
+                else:
+                    btn_furn_pay_carpenter_rect.x = -9999
 
                 # Buttons: Move & Destroy
                 btn_furn_move_rect.x = cx + 14
@@ -1681,7 +1916,7 @@ def main():
                 # Ring indicator around entity
                 pygame.draw.circle(screen, (56, 189, 248), (esx, esy), er + 6, 2)
 
-                cw, ch = 380, 225
+                cw, ch = 380, (259 if hasattr(selected_entity, "happiness") else 225)
                 cx = max(12, min(screen.get_width() - cw - 12, esx - cw // 2))
                 cy = esy - ch - 16
                 if cy < 50:
@@ -1775,51 +2010,103 @@ def main():
                     task_name = str(raw_act).replace("_", " ").title()
                 screen.blit(font_body.render(f"Profession: {job_name}  |  Activity: {task_name}", True, (226, 232, 240)), (cx + 14, act_y))
 
-                # Row 4: Hunger Bar
+                # Happiness is the first need meter on the profile card.
                 bar_y1 = act_y + 19
+                if hasattr(selected_entity, "happiness"):
+                    happiness_val = max(
+                        HAPPINESS_MIN_VALUE,
+                        min(HAPPINESS_MAX_VALUE, float(selected_entity.happiness)),
+                    )
+                    happiness_status = getattr(selected_entity, "happiness_status", "happy")
+                    happiness_band = next(
+                        (band for band in HAPPINESS_STATUS_BANDS if band["id"] == happiness_status),
+                        HAPPINESS_STATUS_BANDS[0],
+                    )
+                    happiness_color = HAPPINESS_STATUS_COLORS.get(happiness_status, (148, 163, 184))
+                    screen.blit(font_badge.render("Happiness:", True, (241, 245, 249)), (cx + 14, bar_y1))
+                    happiness_bg = pygame.Rect(cx + 68, bar_y1, 150, 14)
+                    pygame.draw.rect(screen, (30, 41, 59), happiness_bg, border_radius=4)
+                    happiness_range = max(1.0, HAPPINESS_MAX_VALUE - HAPPINESS_MIN_VALUE)
+                    happiness_fill = max(0, int(150 * ((happiness_val - HAPPINESS_MIN_VALUE) / happiness_range)))
+                    if happiness_fill > 0:
+                        pygame.draw.rect(screen, happiness_color, (cx + 68, bar_y1, happiness_fill, 14), border_radius=4)
+                    pygame.draw.rect(screen, (71, 85, 105), happiness_bg, width=1, border_radius=4)
+                    screen.blit(font_badge.render(happiness_band.get("label", "Happy"), True, happiness_color), (cx + 226, bar_y1))
+
+                # Sleep follows happiness, then bodily needs and faith.
+                bar_y2 = bar_y1 + 17
+                if hasattr(selected_entity, "sleep_need"):
+                    sleep_val = max(SLEEP_MIN_VALUE, min(SLEEP_MAX_VALUE, float(selected_entity.sleep_need)))
+                    sleep_status = getattr(selected_entity, "sleep_status", "rested")
+                    sleep_color = SLEEP_STATUS_COLORS.get(sleep_status, (148, 163, 184))
+                    screen.blit(font_badge.render("Sleep:", True, (241, 245, 249)), (cx + 14, bar_y2))
+                    sleep_bg = pygame.Rect(cx + 68, bar_y2, 150, 14)
+                    pygame.draw.rect(screen, (30, 41, 59), sleep_bg, border_radius=4)
+                    sleep_range = max(1.0, SLEEP_MAX_VALUE - SLEEP_MIN_VALUE)
+                    sleep_fill = max(0, int(150 * ((sleep_val - SLEEP_MIN_VALUE) / sleep_range)))
+                    if sleep_fill > 0:
+                        pygame.draw.rect(screen, sleep_color, (cx + 68, bar_y2, sleep_fill, 14), border_radius=4)
+                    pygame.draw.rect(screen, (71, 85, 105), sleep_bg, width=1, border_radius=4)
+                    screen.blit(font_badge.render(f"{int(sleep_val)}% {sleep_status.replace('_', ' ').title()}", True, sleep_color), (cx + 226, bar_y2))
+
+                # Hunger, thirst, toilet, and faith follow the sleep bar.
+                bar_y3 = bar_y2 + 17
                 h_val = max(0.0, min(100.0, getattr(selected_entity, "hunger", 100.0)))
-                screen.blit(font_badge.render("Hunger:", True, (241, 245, 249)), (cx + 14, bar_y1))
-                h_bg = pygame.Rect(cx + 68, bar_y1, 150, 14)
+                screen.blit(font_badge.render("Hunger:", True, (241, 245, 249)), (cx + 14, bar_y3))
+                h_bg = pygame.Rect(cx + 68, bar_y3, 150, 14)
                 pygame.draw.rect(screen, (30, 41, 59), h_bg, border_radius=4)
                 h_fill = max(0, int(150 * (h_val / 100.0)))
                 if h_fill > 0:
                     h_c = (34, 197, 94) if h_val > 50 else ((234, 179, 8) if h_val > 20 else (239, 68, 68))
-                    pygame.draw.rect(screen, h_c, (cx + 68, bar_y1, h_fill, 14), border_radius=4)
+                    pygame.draw.rect(screen, h_c, (cx + 68, bar_y3, h_fill, 14), border_radius=4)
                 pygame.draw.rect(screen, (71, 85, 105), h_bg, width=1, border_radius=4)
                 h_str = f"{int(h_val)}%" if h_timer is None else f"{int(h_val)}% ({h_timer:.1f}h)"
                 h_color = (255, 255, 255) if h_timer is None else (239, 68, 68)
-                screen.blit(font_badge.render(h_str, True, h_color), (cx + 226, bar_y1))
+                screen.blit(font_badge.render(h_str, True, h_color), (cx + 226, bar_y3))
 
                 # Row 5: Thirst Bar
-                bar_y2 = bar_y1 + 17
+                bar_y4 = bar_y3 + 17
                 t_val = max(0.0, min(100.0, getattr(selected_entity, "thirst", 100.0)))
-                screen.blit(font_badge.render("Thirst:", True, (241, 245, 249)), (cx + 14, bar_y2))
-                t_bg = pygame.Rect(cx + 68, bar_y2, 150, 14)
+                screen.blit(font_badge.render("Thirst:", True, (241, 245, 249)), (cx + 14, bar_y4))
+                t_bg = pygame.Rect(cx + 68, bar_y4, 150, 14)
                 pygame.draw.rect(screen, (30, 41, 59), t_bg, border_radius=4)
                 t_fill = max(0, int(150 * (t_val / 100.0)))
                 if t_fill > 0:
                     t_c = (56, 189, 248) if t_val > 50 else ((59, 130, 246) if t_val > 20 else (239, 68, 68))
-                    pygame.draw.rect(screen, t_c, (cx + 68, bar_y2, t_fill, 14), border_radius=4)
+                    pygame.draw.rect(screen, t_c, (cx + 68, bar_y4, t_fill, 14), border_radius=4)
                 pygame.draw.rect(screen, (71, 85, 105), t_bg, width=1, border_radius=4)
                 t_str = f"{int(t_val)}%" if t_timer is None else f"{int(t_val)}% ({t_timer:.1f}h)"
                 t_color = (255, 255, 255) if t_timer is None else (239, 68, 68)
-                screen.blit(font_badge.render(t_str, True, t_color), (cx + 226, bar_y2))
+                screen.blit(font_badge.render(t_str, True, t_color), (cx + 226, bar_y4))
 
                 # Row 6: Need Toilet Bar
-                bar_y3 = bar_y2 + 17
+                bar_y5 = bar_y4 + 17
                 tl_val = max(0.0, min(100.0, getattr(selected_entity, "toilet", getattr(selected_entity, "need_toilet", 100.0))))
-                screen.blit(font_badge.render("Toilet:", True, (241, 245, 249)), (cx + 14, bar_y3))
-                tl_bg = pygame.Rect(cx + 68, bar_y3, 150, 14)
+                screen.blit(font_badge.render("Toilet:", True, (241, 245, 249)), (cx + 14, bar_y5))
+                tl_bg = pygame.Rect(cx + 68, bar_y5, 150, 14)
                 pygame.draw.rect(screen, (30, 41, 59), tl_bg, border_radius=4)
                 tl_fill = max(0, int(150 * (tl_val / 100.0)))
                 if tl_fill > 0:
                     tl_c = (16, 185, 129) if tl_val > 50 else ((245, 158, 11) if tl_val > 20 else (239, 68, 68))
-                    pygame.draw.rect(screen, tl_c, (cx + 68, bar_y3, tl_fill, 14), border_radius=4)
+                    pygame.draw.rect(screen, tl_c, (cx + 68, bar_y5, tl_fill, 14), border_radius=4)
                 pygame.draw.rect(screen, (71, 85, 105), tl_bg, width=1, border_radius=4)
-                screen.blit(font_badge.render(f"{int(tl_val)}%", True, (255, 255, 255)), (cx + 226, bar_y3))
+                screen.blit(font_badge.render(f"{int(tl_val)}%", True, (255, 255, 255)), (cx + 226, bar_y5))
 
-                # Row 7: Inventory Information
-                info_y1 = bar_y3 + 19
+                # Faith meter is individual and does not decay continuously like bodily needs.
+                info_y1 = bar_y5 + 19
+                if hasattr(selected_entity, "faith"):
+                    bar_y6 = bar_y5 + 17
+                    faith_val = max(0.0, min(100.0, selected_entity.faith))
+                    screen.blit(font_badge.render("Faith:", True, (241, 245, 249)), (cx + 14, bar_y6))
+                    faith_bg = pygame.Rect(cx + 68, bar_y6, 150, 14)
+                    pygame.draw.rect(screen, (30, 41, 59), faith_bg, border_radius=4)
+                    faith_fill = max(0, int(150 * (faith_val / 100.0)))
+                    if faith_fill > 0:
+                        faith_color = (34, 197, 94) if faith_val > 50 else ((234, 179, 8) if faith_val > 20 else (239, 68, 68))
+                        pygame.draw.rect(screen, faith_color, (cx + 68, bar_y6, faith_fill, 14), border_radius=4)
+                    pygame.draw.rect(screen, (71, 85, 105), faith_bg, width=1, border_radius=4)
+                    screen.blit(font_badge.render(f"{int(faith_val)}%", True, (255, 255, 255)), (cx + 226, bar_y6))
+                    info_y1 = bar_y6 + 19
                 inv_items = []
                 for it, c in getattr(selected_entity, "inventory", {}).items():
                     if c > 0:
@@ -1849,11 +2136,13 @@ def main():
             settings_modal.draw_hud_button(screen)
 
             # 10. Resources HUD
-            resource_hud.draw(screen, resources, weekday=day_cycle.get_weekday_name())
+            resource_hud.draw(screen, resources, weekday=day_cycle.get_weekday_name(),
+                              furniture_manager=furniture_manager)
 
             # 10.5. Add Item Cheat Button (below Resources HUD)
             screen_w = screen.get_width()
-            res_card_h = resource_hud.header_height + (len(resources) * resource_hud.row_height) + resource_hud.padding
+            res_card_h = (resource_hud.header_height + 7 * resource_hud.row_height
+                          + resource_hud.padding)
             btn_add_item_cheat_rect.x = screen_w - PATH_TOGGLE_BTN_WIDTH - resource_hud.margin
             btn_add_item_cheat_rect.y = resource_hud.margin + res_card_h + 10
             m_pos = pygame.mouse.get_pos()
@@ -1863,6 +2152,7 @@ def main():
             pygame.draw.rect(screen, (245, 158, 11), btn_add_item_cheat_rect, width=1, border_radius=6)
             cheat_txt = font_btn.render("Add Item", True, (255, 255, 255))
             screen.blit(cheat_txt, cheat_txt.get_rect(center=btn_add_item_cheat_rect.center))
+            path_debug_overlay.draw_toggle(screen, btn_add_item_cheat_rect, font_btn)
 
             if cheat_notice_timer > 0.0:
                 cheat_notice_timer = max(0.0, cheat_notice_timer - game_dt)
@@ -1874,7 +2164,7 @@ def main():
             raport_ui.draw(screen, building_manager, permit_manager, resources, servant_manager, villager_manager, schedule_manager=schedule_manager, day_cycle=day_cycle, furniture_manager=furniture_manager, stockpile_manager=stockpile_manager, production_system=production_system)
 
             # 11.5. Market Profile Modal Dialog (AGENT 2)
-            market_modal.draw(screen, resources, stockpile_manager, servant_manager=servant_manager, villager_manager=villager_manager, furniture_manager=furniture_manager)
+            market_modal.draw(screen, resources, stockpile_manager, servant_manager=servant_manager, villager_manager=villager_manager, furniture_manager=furniture_manager, day_number=day_cycle.day_number)
 
             # 11.6. Add Item Cheat Modal Dialog (AGENT 2)
             add_item_modal.draw(screen, permit_manager, stockpile_manager)
@@ -1892,6 +2182,30 @@ def main():
             save_modal.draw(screen)
 
         pygame.display.flip()
+
+        if profile_enabled:
+            profile_elapsed += real_dt
+            profile_frame_count += 1
+            profile_frame_ms += (perf_counter() - profile_frame_start) * 1000.0
+            report_interval = max(0.1, SIMULATION_PROFILE_REPORT_SECONDS)
+            if profile_elapsed >= report_interval:
+                frame_ms = profile_frame_ms / max(1, profile_frame_count)
+                simulation_ms = profile_simulation_ms / max(1, profile_frame_count)
+                path_stats = building_manager.pathfinder.get_performance_stats(reset=True)
+                population = len(villager_manager.get_all_villagers())
+                print(
+                    f"[perf] pop={population} frame={frame_ms:.2f}ms "
+                    f"simulation={simulation_ms:.2f}ms "
+                    f"AI ticks={villager_manager.ai_updates_since_profile + servant_manager.ai_updates_since_profile} "
+                    f"paths={path_stats['queries']} cache_hits={path_stats['cache_hits']} "
+                    f"A*_nodes={path_stats['astar_nodes']}"
+                )
+                villager_manager.ai_updates_since_profile = 0
+                servant_manager.ai_updates_since_profile = 0
+                profile_elapsed = 0.0
+                profile_frame_count = 0
+                profile_frame_ms = 0.0
+                profile_simulation_ms = 0.0
 
     pygame.quit()
     sys.exit(0)

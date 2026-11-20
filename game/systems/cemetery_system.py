@@ -373,10 +373,10 @@ class CemeterySystem:
             else:
                 payer_type = "landlord"
                 payer = gravedigger
-                available = cls._landlord_coin_value(stockpile_manager)
+                available = cls._landlord_coin_value(stockpile_manager, furniture_manager)
         else:
             payer = gravedigger
-            available = cls._landlord_coin_value(stockpile_manager)
+            available = cls._landlord_coin_value(stockpile_manager, furniture_manager)
 
         fee_available = min(BURIAL_FEE_MAX_SILVER * COPPER_PER_SILVER, available)
         commission = {
@@ -394,13 +394,19 @@ class CemeterySystem:
         inst.pending_commissions.append(commission)
 
         if fee_available > 0 and payer_type == "representative" and payer:
-            payer.interrupt_task("BURIAL_PAYMENT", activity_label="Collecting the household burial fee")
-            payer.burial_payment_target_corpse_id = corpse_id
-            payer.burial_payment_gravedigger_id = getattr(gravedigger, "id", None)
-            payer.task = "BURIAL_PAYMENT_RETRIEVE"
+            from game.systems.commission_schedule import CommissionScheduleSystem
+            CommissionScheduleSystem.queue(
+                payer, "BURIAL_PAYMENT_RETRIEVE",
+                burial_payment_target_corpse_id=corpse_id,
+                burial_payment_gravedigger_id=getattr(gravedigger, "id", None),
+            )
         elif fee_available > 0 and gravedigger:
-            gravedigger.burial_payment_target_corpse_id = corpse_id
-            gravedigger.task = "GRAVEDIGGER_BURIAL_PAYMENT_RETRIEVE"
+            from game.systems.commission_schedule import CommissionScheduleSystem
+            CommissionScheduleSystem.queue(
+                gravedigger, "GRAVEDIGGER_BURIAL_PAYMENT_RETRIEVE",
+                burial_payment_target_corpse_id=corpse_id,
+                burial_payment_gravedigger_id=getattr(gravedigger, "id", None),
+            )
         elif payer_type == "representative" and payer:
             payer.say("No household coins were available for the burial fee.", duration=2.5)
         return commission
@@ -415,7 +421,11 @@ class CemeterySystem:
         ]
 
     @classmethod
-    def _landlord_coin_value(cls, stockpile_manager):
+    def _landlord_coin_value(cls, stockpile_manager, furniture_manager=None):
+        from game.systems.lord_treasury import LordTreasurySystem
+        treasury_value = LordTreasurySystem.value(furniture_manager)
+        if furniture_manager and LordTreasurySystem.get_chest(furniture_manager):
+            return treasury_value
         wallet = {"Copper": 0, "Silver": 0, "Gold": 0}
         for stack in cls._landlord_coin_stacks(stockpile_manager):
             denom = canonical_denomination(stack.resource_type)
@@ -473,7 +483,25 @@ class CemeterySystem:
         return fee
 
     @classmethod
-    def _collect_landlord_fee(cls, gravedigger, commission, stockpile_manager):
+    def _collect_landlord_fee(cls, gravedigger, commission, stockpile_manager, furniture_manager=None):
+        from game.systems.lord_treasury import LordTreasurySystem
+        if furniture_manager and LordTreasurySystem.get_chest(furniture_manager):
+            fee = min(BURIAL_FEE_MAX_SILVER * COPPER_PER_SILVER,
+                      LordTreasurySystem.value(furniture_manager))
+            success, _ = LordTreasurySystem.withdraw_covering(
+                furniture_manager, gravedigger.inventory, fee
+            )
+            commission["fee_paid"] = fee if success else 0
+            commission["status"] = "PAID"
+            if success and fee > 0:
+                from game.systems.market_sales_report import MarketSalesReportSystem
+                villager_manager = getattr(gravedigger, "villager_manager", None)
+                MarketSalesReportSystem.record_household_income(
+                    villager_manager, getattr(gravedigger, "family_id", None),
+                    "Burial Services", fee,
+                    getattr(villager_manager, "current_day_number", 1),
+                )
+            return commission["fee_paid"]
         stacks = cls._landlord_coin_stacks(stockpile_manager)
         wallet = {"Copper": 0, "Silver": 0, "Gold": 0}
         for stack in stacks:
@@ -487,6 +515,7 @@ class CemeterySystem:
             for stack in stacks:
                 if stack in stockpile_manager.stacks:
                     stockpile_manager.stacks.remove(stack)
+            stockpile_manager.mark_totals_dirty()
             for denom, amount in remainder.items():
                 if amount:
                     stockpile_manager.drop_resource(denom, amount, *drop_tile, owner_type="landlord")
@@ -499,11 +528,20 @@ class CemeterySystem:
         commission["fee_paid"] = fee
         commission["status"] = "PAID"
         cls._mark_wealth_dirty()
+        if fee > 0:
+            from game.systems.market_sales_report import MarketSalesReportSystem
+            villager_manager = getattr(gravedigger, "villager_manager", None)
+            MarketSalesReportSystem.record_household_income(
+                villager_manager, getattr(gravedigger, "family_id", None),
+                "Burial Services", fee,
+                getattr(villager_manager, "current_day_number", 1),
+            )
         return fee
 
     @classmethod
     def update_burial_payment_task(cls, villager, dt, building_manager, furniture_manager,
-                                   stockpile_manager, all_entities, player):
+                                   stockpile_manager, all_entities, player,
+                                   villager_manager=None, day_number=1):
         task = getattr(villager, "task", "")
         if task not in ("BURIAL_PAYMENT_RETRIEVE", "BURIAL_PAYMENT_TRAVEL",
                         "GRAVEDIGGER_BURIAL_PAYMENT_RETRIEVE"):
@@ -550,8 +588,12 @@ class CemeterySystem:
             return True
 
         if task == "BURIAL_PAYMENT_TRAVEL":
-            gravedigger = next((entity for entity in all_entities
-                               if str(getattr(entity, "id", "")) == str(commission.get("gravedigger_id"))), None)
+            gravedigger = (
+                all_entities.by_id(commission.get("gravedigger_id"))
+                if hasattr(all_entities, "by_id")
+                else next((entity for entity in all_entities
+                           if str(getattr(entity, "id", "")) == str(commission.get("gravedigger_id"))), None)
+            )
             if not gravedigger or not getattr(gravedigger, "is_alive", True):
                 chest = furniture_manager.get_storage_for_family(villager.family_id) if furniture_manager else None
                 if chest:
@@ -581,6 +623,12 @@ class CemeterySystem:
                 from game.systems.currency import compact_currency_wallet
                 compact_currency_wallet(villager.inventory)
                 compact_currency_wallet(gravedigger.inventory)
+                from game.systems.market_sales_report import MarketSalesReportSystem
+                if str(getattr(gravedigger, "family_id", "")) != str(getattr(villager, "family_id", "")):
+                    MarketSalesReportSystem.record_household_income(
+                        villager_manager, getattr(gravedigger, "family_id", None),
+                        "Burial Services", commission.get("fee_paid", 0), day_number,
+                    )
                 commission["status"] = "PAID"
                 cls._mark_wealth_dirty()
                 villager.say(f"Paid the burial fee for {commission['corpse_name']}.", duration=2.5)
@@ -590,12 +638,40 @@ class CemeterySystem:
                 villager._resume_or_idle_after_need()
             return True
 
+        from game.systems.lord_treasury import LordTreasurySystem
+        treasury = LordTreasurySystem.get_chest(furniture_manager)
+        if treasury:
+            available = LordTreasurySystem.value(furniture_manager)
+            if available <= 0:
+                cls._collect_landlord_fee(villager, commission, stockpile_manager, furniture_manager)
+                villager.burial_payment_target_corpse_id = None
+                villager.burial_payment_gravedigger_id = None
+                villager._resume_or_idle_after_need()
+                return True
+            pos = treasury.get_approach_point(
+                villager.x, villager.y, worker_id=villager.id,
+                all_entities=all_entities, tile_size=TILE_SIZE, bm=building_manager,
+            )
+            arrived = villager._move_towards(
+                pos[0], pos[1], dt, arrival_dist=CHEST_INTERACTION_RADIUS,
+                all_entities=all_entities, player=player,
+                building_manager=building_manager, furniture_manager=furniture_manager,
+            )
+            if arrived:
+                fee = cls._collect_landlord_fee(villager, commission, stockpile_manager, furniture_manager)
+                villager.burial_payment_target_corpse_id = None
+                villager.burial_payment_gravedigger_id = None
+                villager._resume_or_idle_after_need()
+                if fee:
+                    villager.say(f"Collected {fee}c from the Lord's Treasury for the burial.", duration=2.5)
+            return True
+
         stacks = cls._landlord_coin_stacks(stockpile_manager)
         if not stacks:
-            cls._collect_landlord_fee(villager, commission, stockpile_manager)
+            cls._collect_landlord_fee(villager, commission, stockpile_manager, furniture_manager)
             villager.burial_payment_target_corpse_id = None
             villager.burial_payment_gravedigger_id = None
-            villager.task = "IDLE"
+            villager._resume_or_idle_after_need()
             return True
         target = min(stacks, key=lambda stack: math.hypot(
             (stack.grid_x + 0.5) * TILE_SIZE - villager.x,
@@ -609,10 +685,10 @@ class CemeterySystem:
             building_manager=building_manager, furniture_manager=furniture_manager,
         )
         if arrived:
-            fee = cls._collect_landlord_fee(villager, commission, stockpile_manager)
+            fee = cls._collect_landlord_fee(villager, commission, stockpile_manager, furniture_manager)
             villager.burial_payment_target_corpse_id = None
             villager.burial_payment_gravedigger_id = None
-            villager.task = "IDLE"
+            villager._resume_or_idle_after_need()
             if fee:
                 villager.say(f"Collected {fee}c from landlord storage for the burial.", duration=2.5)
         return True

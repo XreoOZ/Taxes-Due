@@ -25,16 +25,12 @@ from game.systems.currency import (
     canonical_denomination,
 )
 from game.systems.market_service import MarketService
+from game.systems.household_inventory import get_inventory_room
 from game.world.navigation import find_nearest_target
 
 
-def _inventory_load(inventory):
-    return sum(max(0, int(amount)) for item, amount in inventory.items()
-               if not canonical_denomination(item))
-
-
 def _inventory_room(inventory):
-    return max(0, int(VILLAGER_INVENTORY_CAPACITY) - _inventory_load(inventory))
+    return get_inventory_room(inventory, VILLAGER_INVENTORY_CAPACITY)
 
 
 class AIFoodPurchasingSystem:
@@ -255,7 +251,7 @@ class AIFoodPurchasingSystem:
         return True, "Successfully retrieved coins from household storage."
 
     @classmethod
-    def execute_market_transaction(cls, villager, market, food_item, building_manager=None, quantity=1):
+    def execute_market_transaction(cls, villager, market, food_item, building_manager=None, quantity=1, day_number=None):
         """
         Executes the atomic purchase transaction physically at the Market interaction location.
         Returns:
@@ -308,10 +304,14 @@ class AIFoodPurchasingSystem:
         # Add item to villager inventory
         villager.inventory[food_item] = villager.inventory.get(food_item, 0) + quantity
 
+        from game.systems.market_sales_report import MarketSalesReportSystem
+        MarketSalesReportSystem.record_sale(market, food_item, quantity, unit_price, day_number)
+
         return True, f"Successfully purchased {quantity}x {food_item} for {total_price} Copper."
 
     @classmethod
-    def deliver_and_consume_food(cls, villager, furniture_manager=None, stockpile_manager=None):
+    def deliver_and_consume_food(cls, villager, furniture_manager=None, stockpile_manager=None,
+                                 day_number=1):
         """
         Delivers change back to household chest, consumes purchased food,
         recovers hunger, and resumes activity.
@@ -338,6 +338,8 @@ class AIFoodPurchasingSystem:
             villager.hunger = min(AI_NEED_MAX, villager.hunger + AI_NEED_FOOD_RESTORE)
             villager.hunger_death_timer = None
             villager.daily_food_consumed += 1
+            from game.systems.happiness_system import HappinessSystem
+            HappinessSystem.record_food_eaten(villager, food_it, day_number)
             villager.say(f"Ate hearty meal of {food_it} brought from Market!", duration=2.5)
 
         # 3. If any extra food remains, store it in the chest
@@ -486,7 +488,7 @@ class AIMarketPurchasingSystem:
         return purchase_items, total_cost
 
     @classmethod
-    def execute_items_transaction(cls, villager, market, requested_items):
+    def execute_items_transaction(cls, villager, market, requested_items, day_number=None):
         """Buy the requested affordable item quantities atomically."""
         if not market or not requested_items:
             return False, "Market or requested items are unavailable."
@@ -517,10 +519,13 @@ class AIMarketPurchasingSystem:
             return False, f"Currency transfer failed: {error}"
 
         for item_name, quantity in requested_items.items():
+            unit_price = MarketService.get_item_price(item_name, market)
             market.inventory[item_name] -= quantity
             if market.inventory[item_name] <= 0:
                 del market.inventory[item_name]
             villager.inventory[item_name] = villager.inventory.get(item_name, 0) + quantity
+            from game.systems.market_sales_report import MarketSalesReportSystem
+            MarketSalesReportSystem.record_sale(market, item_name, quantity, unit_price, day_number)
 
         from game.systems.market_pricing import MarketPricingSystem
         MarketPricingSystem.update_market_prices(market)
@@ -628,7 +633,7 @@ class AIMarketPurchasingSystem:
         return None, None, 0, 0
 
     @classmethod
-    def execute_material_transaction(cls, villager, market, material_name, quantity=1):
+    def execute_material_transaction(cls, villager, market, material_name, quantity=1, day_number=None):
         """
         Executes atomic purchase of material at the market counter.
         Returns (success: bool, msg: str).
@@ -660,6 +665,8 @@ class AIMarketPurchasingSystem:
             del market.inventory[material_name]
 
         villager.inventory[material_name] = villager.inventory.get(material_name, 0) + quantity
+        from game.systems.market_sales_report import MarketSalesReportSystem
+        MarketSalesReportSystem.record_sale(market, material_name, quantity, unit_price, day_number)
         return True, f"Successfully purchased {quantity}x {material_name} for {total_cost} Copper."
 
     @classmethod

@@ -123,6 +123,14 @@ class Pathfinder:
     def __init__(self, building_manager=None):
         self.building_manager = building_manager
         self._route_cache = {}
+        self._performance_stats = {"queries": 0, "cache_hits": 0, "astar_nodes": 0}
+
+    def get_performance_stats(self, reset=False):
+        stats = dict(self._performance_stats)
+        if reset:
+            for key in self._performance_stats:
+                self._performance_stats[key] = 0
+        return stats
 
     def _cache_route(self, key, route):
         self._route_cache[key] = tuple(route)
@@ -249,6 +257,7 @@ class Pathfinder:
         """
         sx, sy = start_world
         tx, ty = target_world
+        self._performance_stats["queries"] += 1
 
         start_tile = (int(math.floor(sx / tile_size)), int(math.floor(sy / tile_size)))
         target_tile = (int(math.floor(tx / tile_size)), int(math.floor(ty / tile_size)))
@@ -296,6 +305,7 @@ class Pathfinder:
         )
         cached_route = self._route_cache.get(cache_key)
         if cached_route is not None:
+            self._performance_stats["cache_hits"] += 1
             return list(cached_route)
 
         # Algoritma A* Search
@@ -339,6 +349,8 @@ class Pathfinder:
                     h_val = abs(n[0] - target_tile[0]) + abs(n[1] - target_tile[1])
                     f_val = tentative_g + h_val
                     heapq.heappush(open_heap, (f_val, h_val, n))
+
+        self._performance_stats["astar_nodes"] += iterations
 
         if not found:
             # Jika target tidak dapat dijangkau bebas rintangan, kembalikan rute kosong (AI akan menunggu rute dibuka)

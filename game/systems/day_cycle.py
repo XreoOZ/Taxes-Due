@@ -149,38 +149,30 @@ class DayCycleSystem:
         if self._hud_text_cache_key != text_key:
             self._hud_text_cache_key = text_key
             self._hud_text_cache = (
-                self.font_clock.render(f"Day {self.day_number}", True, (241, 245, 249)),
+                self.font_clock.render(f"Day {self.day_number}  {time_str}", True, (241, 245, 249)),
                 self.font_sub.render(f"Unassigned {unassigned_count}", True, (203, 213, 225)),
                 self.font_sub.render(f"Assigned {assigned_count}", True, (134, 239, 172)),
-                self.font_clock.render(time_str, True, (56, 189, 248)),
             )
-        day_surface, unassigned_surface, assigned_surface, clock_surface = self._hud_text_cache
-        chip_padding = self.font_sub.size("  ")[0]
-        chip_gap = max(2, self.font_sub.get_height() // 3)
-        chip_h = max(self.font_sub.get_height(), self.font_clock.get_height()) + chip_padding
-        day_chip_w = day_surface.get_width() + chip_padding
-        unassigned_chip_w = unassigned_surface.get_width() + chip_padding
-        assigned_chip_w = assigned_surface.get_width() + chip_padding
-        pill_w = max(
-            175,
-            34 + day_chip_w + chip_gap + unassigned_chip_w + chip_gap
-            + assigned_chip_w + chip_gap + clock_surface.get_width() + 12,
+        day_surface, unassigned_surface, assigned_surface = self._hud_text_cache
+        padding = self.font_sub.size("  ")[0]
+        gap = max(3, self.font_sub.get_height() // 3)
+        card_h = max(self.font_sub.get_height(), self.font_clock.get_height()) + padding
+        card_y = 16
+        day_w = day_surface.get_width() + padding * 2 + 26
+        unassigned_w = unassigned_surface.get_width() + padding * 2
+        assigned_w = assigned_surface.get_width() + padding * 2
+        card_specs = (
+            (day_w, day_surface, True),
+            (unassigned_w, unassigned_surface, False),
+            (assigned_w, assigned_surface, False),
         )
-        pill_h = 36
-        pill_x = 16
-        pill_y = 16
-
-        bg_surf = self._hud_background_cache.get((pill_w, pill_h))
-        if bg_surf is None:
-            bg_surf = pygame.Surface((pill_w, pill_h), pygame.SRCALPHA)
-            pygame.draw.rect(bg_surf, COLOR_HUD_BG, (0, 0, pill_w, pill_h), border_radius=8)
-            pygame.draw.rect(bg_surf, COLOR_HUD_BORDER, (0, 0, pill_w, pill_h), width=1, border_radius=8)
-            self._hud_background_cache[(pill_w, pill_h)] = bg_surf
-        surface.blit(bg_surf, (pill_x, pill_y))
+        total_w = sum(spec[0] for spec in card_specs) + gap * (len(card_specs) - 1)
+        card_x = min(16, max(0, screen_w - total_w))
 
         # Procedural Sun / Moon Vector Icon (Zero missing glyphs)
-        icon_cx = pill_x + 20
-        icon_cy = pill_y + pill_h // 2
+        first_card_x = card_x
+        icon_cx = first_card_x + padding
+        icon_cy = card_y + card_h // 2
         if is_night:
             pygame.draw.circle(surface, (226, 232, 240), (icon_cx, icon_cy), 7)
             pygame.draw.circle(surface, COLOR_HUD_BG, (icon_cx + 3, icon_cy - 2), 6)
@@ -188,20 +180,12 @@ class DayCycleSystem:
             pygame.draw.circle(surface, (245, 158, 11), (icon_cx, icon_cy), 7)
             pygame.draw.circle(surface, (254, 240, 138), (icon_cx, icon_cy), 5)
 
-        # Distinct, adjacent status chips inside one shared HUD card.
-        chip_x = pill_x + 34
-        chip_y = pill_y + (pill_h - chip_h) // 2
-        for text_surface, chip_w in (
-            (day_surface, day_chip_w),
-            (unassigned_surface, unassigned_chip_w),
-            (assigned_surface, assigned_chip_w),
-        ):
-            chip_rect = pygame.Rect(chip_x, chip_y, chip_w, chip_h)
-            pygame.draw.rect(surface, (30, 41, 59), chip_rect, border_radius=5)
-            surface.blit(
-                text_surface,
-                (chip_rect.centerx - text_surface.get_width() // 2,
-                 chip_rect.centery - text_surface.get_height() // 2),
-            )
-            chip_x = chip_rect.right + chip_gap
-        surface.blit(clock_surface, (pill_x + pill_w - clock_surface.get_width() - 12, pill_y + 8))
+        for width, text_surface, has_icon in card_specs:
+            card = pygame.Rect(card_x, card_y, width, card_h)
+            pygame.draw.rect(surface, COLOR_HUD_BG, card, border_radius=8)
+            pygame.draw.rect(surface, COLOR_HUD_BORDER, card, width=1, border_radius=8)
+            text_x = card.centerx - text_surface.get_width() // 2
+            if has_icon:
+                text_x = card_x + padding * 2 + 14
+            surface.blit(text_surface, (text_x, card.centery - text_surface.get_height() // 2))
+            card_x = card.right + gap

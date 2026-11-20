@@ -12,6 +12,22 @@ from game.data.config import (
 from game.systems.currency import canonical_denomination, is_currency_item
 
 
+def get_inventory_load(inventory):
+    """Count carried goods against item capacity while keeping currency stackable."""
+    if not isinstance(inventory, dict):
+        return 0
+    return sum(
+        max(0, int(amount))
+        for item, amount in inventory.items()
+        if not canonical_denomination(item)
+    )
+
+
+def get_inventory_room(inventory, capacity):
+    """Return remaining item capacity using the same rules for every AI workflow."""
+    return max(0, int(capacity) - get_inventory_load(inventory))
+
+
 def canonical_item_name(raw_name):
     """
     Returns the canonical display name for an item or resource without hardcoding logic.

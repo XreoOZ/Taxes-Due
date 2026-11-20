@@ -10,7 +10,7 @@ from game.data.config import FURNITURE_DAILY_BREAK_CHANCE
 from game.render_cache import alpha_fill_surface
 
 class Furniture:
-    def __init__(self, furniture_id, furniture_type, gx, gy, permit_id=None, family_id=None, assigned_villager_id=None):
+    def __init__(self, furniture_id, furniture_type, gx, gy, permit_id=None, family_id=None, assigned_villager_id=None, rotation=0):
         self.id = furniture_id
         self.furniture_type = furniture_type
         self.type_cfg = FURNITURE_TYPES.get(furniture_type, FURNITURE_TYPES.get("household_storage", {}))
@@ -19,6 +19,7 @@ class Furniture:
         self.permit_id = permit_id
         self.family_id = family_id
         self.assigned_villager_id = assigned_villager_id  # For beds: 1 bed = 1 villager
+        self.rotation = int(rotation) % 360
         self.inventory = {}  # For chests: {item_name: amount}
         self.is_dropped = False  # True when lot was deleted/revoked (becomes a droppable item on the ground)
         self.stored_in_id = None
@@ -49,11 +50,14 @@ class Furniture:
             return {
                 "AWAITING_PAYMENT": "AWAITING PAYMENT",
                 "PAYMENT_REQUESTED": "PAYMENT REQUESTED",
+                "LANDLORD_RETRIEVING": "RETRIEVING LANDLORD COINS",
                 "PAYMENT_TRAVELING": "PAYMENT TRAVELING",
                 "LANDLORD_PAYMENT_PENDING": "AWAITING PAYMENT",
                 "PAID": "AWAITING MATERIALS",
             }.get(order_status, order_status)
-        if self.is_dropped or self.permit_id is None:
+        if self.is_dropped or (
+                self.permit_id is None
+                and not self.type_cfg.get("placement_anywhere")):
             return "UNINSTALLED"
         return "INSTALLED"
 
@@ -103,11 +107,22 @@ class Furniture:
     def store_item(self, item_name, amount):
         if amount <= 0:
             return 0
+        if self.furniture_type == "lord_treasury_chest":
+            from game.systems.currency import canonical_denomination
+            denomination = canonical_denomination(item_name)
+            if not denomination:
+                return 0
+            item_name = denomination
         current = self.inventory.get(item_name, 0)
         self.inventory[item_name] = current + amount
         return amount
 
     def take_item(self, item_name, amount):
+        if self.furniture_type == "lord_treasury_chest":
+            from game.systems.currency import canonical_denomination
+            item_name = canonical_denomination(item_name)
+            if not item_name:
+                return 0
         if item_name not in self.inventory:
             return 0
         avail = self.inventory[item_name]
@@ -123,8 +138,7 @@ class Furniture:
     def get_approach_point(self, worker_x, worker_y, worker_id=None, all_entities=None, tile_size=TILE_SIZE, bm=None, excluded_points=None):
         """Mendapatkan titik pendekatan bebas rintangan di sekeliling furniture untuk multi-worker concurrency"""
         gx, gy = self.grid_x, self.grid_y
-        width = max(1, int(self.type_cfg.get("width_tiles", 1)))
-        height = max(1, int(self.type_cfg.get("height_tiles", 1)))
+        width, height = self.footprint_dimensions
         cardinals = ([(gx + dx, gy - 1) for dx in range(width)]
                      + [(gx + dx, gy + height) for dx in range(width)]
                      + [(gx - 1, gy + dy) for dy in range(height)]
@@ -141,7 +155,11 @@ class Furniture:
 
         occupied = set()
         if all_entities:
-            for other in all_entities:
+            nearby_entities = (
+                all_entities.for_tiles(cardinals)
+                if hasattr(all_entities, "for_tiles") else all_entities
+            )
+            for other in nearby_entities:
                 if worker_id is not None and str(getattr(other, "id", "")) == str(worker_id):
                     continue
                 ogx = int(math.floor(other.x / tile_size))
@@ -174,6 +192,12 @@ class Furniture:
                 return reachable[0][1]
         return candidates[0]
 
+    @property
+    def footprint_dimensions(self):
+        width = max(1, int(self.type_cfg.get("width_tiles", 1)))
+        height = max(1, int(self.type_cfg.get("height_tiles", 1)))
+        return (height, width) if self.rotation % 180 else (width, height)
+
     def drop_to_ground(self, stockpile_manager=None):
         """Ketika Lot dihapus, furniture beralih ke status UNINSTALLED tanpa menghilangkan kepemilikan maupun isi inventarisnya"""
         if not self.can_be_dropped:
@@ -202,10 +226,10 @@ class Furniture:
 
     def destroy(self, stockpile_manager=None, resources=None):
         """Menghancurkan furniture: keluarkan seluruh isi chest ke tanah dan kembalikan sebagian kayu"""
-        if self.furniture_type == "household_storage" and stockpile_manager:
+        if self.furniture_type in ("household_storage", "lord_treasury_chest") and stockpile_manager:
             for item_name, count in list(self.inventory.items()):
                 if count > 0:
-                    owner_type = "villager" if self.family_id else "landlord"
+                    owner_type = "villager" if self.family_id and self.furniture_type != "lord_treasury_chest" else "landlord"
                     owner_id = self.family_id if self.family_id else None
                     stockpile_manager.drop_resource(
                         item_name, count, self.grid_x, self.grid_y,
@@ -222,8 +246,7 @@ class Furniture:
         self._ensure_font()
         sx, sy = camera.world_to_screen(self.grid_x * tile_size, self.grid_y * tile_size)
         scaled_t = int(tile_size * camera.zoom)
-        footprint_w = max(1, int(self.type_cfg.get("width_tiles", 1)))
-        footprint_h = max(1, int(self.type_cfg.get("height_tiles", 1)))
+        footprint_w, footprint_h = self.footprint_dimensions
         scaled_w, scaled_h = scaled_t * footprint_w, scaled_t * footprint_h
         if scaled_t < 10:
             return
@@ -285,9 +308,9 @@ class Furniture:
             return
 
         # -------------------------------------------------------------
-        # TIPE 1: HOUSEHOLD STORAGE (CHEST)
+        # Storage furniture
         # -------------------------------------------------------------
-        if self.furniture_type == "household_storage":
+        if self.furniture_type in ("household_storage", "lord_treasury_chest"):
             margin = max(4, int(10 * camera.zoom))
             cw = scaled_t - (margin * 2)
             ch = max(14, int(scaled_t * 0.55))
@@ -319,6 +342,18 @@ class Furniture:
             clasp_rect = pygame.Rect(cx + (cw - clasp_w) // 2, cy + lid_h - 2, clasp_w, clasp_h)
             pygame.draw.rect(surface, clasp_col, clasp_rect, border_radius=2)
 
+            if self.furniture_type == "lord_treasury_chest":
+                trim = self.type_cfg.get("color_trim", (203, 213, 225))
+                band_w = max(2, int(4 * camera.zoom))
+                for band_x in (cx + cw // 4, cx + (cw * 3) // 4):
+                    pygame.draw.rect(surface, trim, (band_x, cy, band_w, ch), border_radius=1)
+                crown_w = max(7, int(cw * 0.34))
+                crown_h = max(5, int(ch * 0.24))
+                crown = pygame.Rect(cx + (cw - crown_w) // 2, cy - crown_h // 2,
+                                    crown_w, crown_h)
+                pygame.draw.rect(surface, clasp_col, crown, border_radius=2)
+                pygame.draw.rect(surface, (65, 48, 22), crown, width=1, border_radius=2)
+
             # Stored Inventory Badge
             if self.total_stored > 0:
                 inv_str = f"x{self.inventory.get('Potato', 0)}" if "Potato" in self.inventory and len(self.inventory) == 1 else f"x{self.total_stored}"
@@ -334,8 +369,8 @@ class Furniture:
         # TIPE 2: BED (TEMPAT TIDUR INDIVIDUAL)
         # -------------------------------------------------------------
         elif self.furniture_type == "bed":
-            bw = int(scaled_t * 0.72)
-            bh = int(scaled_t * 0.86)
+            bw = int(scaled_t * (0.86 if self.rotation % 180 else 0.72))
+            bh = int(scaled_t * (0.72 if self.rotation % 180 else 0.86))
             bx = sx + (scaled_t - bw) // 2
             by = sy + (scaled_t - bh) // 2
 
@@ -383,7 +418,11 @@ class Furniture:
         elif self.furniture_type == "carpenter_workbench":
             inset = max(2, int(scaled_t * 0.09))
             top_h = max(6, int(scaled_t * 0.24))
-            table = pygame.Rect(sx + inset, sy + int(scaled_t * 0.35), scaled_w - inset * 2, top_h)
+            if self.rotation % 180:
+                table = pygame.Rect(sx + int(scaled_t * 0.35), sy + inset,
+                                    max(6, int(scaled_t * 0.24)), scaled_h - inset * 2)
+            else:
+                table = pygame.Rect(sx + inset, sy + int(scaled_t * 0.35), scaled_w - inset * 2, top_h)
             wood = self.type_cfg.get("color_frame", (112, 72, 38))
             top = self.type_cfg.get("color_top", (170, 119, 70))
             iron = self.type_cfg.get("color_iron", (82, 91, 101))
@@ -391,14 +430,49 @@ class Furniture:
             pygame.draw.rect(surface, top, table, border_radius=2)
             pygame.draw.rect(surface, (75, 48, 27), table, width=1, border_radius=2)
             leg_w, leg_h = max(2, int(scaled_t * 0.07)), max(3, int(scaled_t * 0.25))
-            for lx in (table.left + leg_w, table.right - leg_w * 2):
-                pygame.draw.rect(surface, wood, (lx, table.bottom - 1, leg_w, leg_h))
+            if self.rotation % 180:
+                for ly in (table.top + leg_h, table.bottom - leg_h * 2):
+                    pygame.draw.rect(surface, wood, (table.right - 1, ly, leg_h, leg_w))
+            else:
+                for lx in (table.left + leg_w, table.right - leg_w * 2):
+                    pygame.draw.rect(surface, wood, (lx, table.bottom - 1, leg_w, leg_h))
             vise = pygame.Rect(table.left + int(table.width * 0.15), table.top - max(2, int(scaled_t * 0.07)), max(4, int(scaled_t * 0.24)), max(2, int(scaled_t * 0.08)))
             pygame.draw.rect(surface, iron, vise, border_radius=1)
             swing = math.sin(pygame.time.get_ticks() / 150.0) if getattr(self, "assigned_workers", []) else 0.0
             tool_end = (table.centerx + max(3, int(scaled_t * (0.12 + swing * 0.025))),
                         table.top - max(2, int(scaled_t * (0.10 + abs(swing) * 0.025))))
             pygame.draw.line(surface, iron, (table.centerx, table.top + 1), tool_end, max(1, int(camera.zoom * 2)))
+
+        elif self.furniture_type == "confession_box":
+            frame = self.type_cfg.get("color_frame", (92, 57, 34))
+            panel = self.type_cfg.get("color_panel", (122, 75, 42))
+            cloth = self.type_cfg.get("color_cloth", (112, 35, 42))
+            trim = self.type_cfg.get("color_trim", (190, 151, 83))
+            inset = max(2, int(scaled_t * 0.12))
+            body = pygame.Rect(sx + inset, sy + int(scaled_t * 0.12),
+                               max(4, scaled_w - inset * 2), int(scaled_t * 0.76))
+            pygame.draw.rect(surface, (30, 20, 15), body.move(1, max(1, int(2 * camera.zoom))), border_radius=3)
+            pygame.draw.rect(surface, frame, body, border_radius=3)
+            pygame.draw.rect(surface, panel, body.inflate(-max(2, inset // 2), -max(2, inset // 2)), border_radius=2)
+            if self.rotation % 180:
+                opening = pygame.Rect(body.left + max(2, int(body.width * 0.12)),
+                                      body.centery - max(2, int(body.height * 0.16)),
+                                      max(5, int(body.width * 0.58)), max(4, int(body.height * 0.32)))
+            else:
+                opening = pygame.Rect(body.centerx - max(2, int(body.width * 0.16)),
+                                      body.top + max(2, int(body.height * 0.12)),
+                                      max(4, int(body.width * 0.32)), max(5, int(body.height * 0.58)))
+            pygame.draw.rect(surface, (32, 24, 20), opening, border_radius=max(1, int(camera.zoom * 2)))
+            curtain_w = max(2, opening.width // 3)
+            pygame.draw.rect(surface, cloth, (opening.left, opening.top, curtain_w, opening.height))
+            pygame.draw.rect(surface, cloth, (opening.right - curtain_w, opening.top, curtain_w, opening.height))
+            pygame.draw.line(surface, trim, (body.left + 2, body.bottom - 2),
+                             (body.right - 2, body.bottom - 2), max(1, int(camera.zoom * 2)))
+            cross_x = body.centerx
+            cross_y = body.top - max(1, int(camera.zoom * 2))
+            pygame.draw.line(surface, trim, (cross_x, cross_y), (cross_x, cross_y + max(3, int(scaled_t * 0.12))), max(1, int(camera.zoom * 2)))
+            pygame.draw.line(surface, trim, (cross_x - max(2, int(scaled_t * 0.06)), cross_y + max(2, int(scaled_t * 0.04))),
+                             (cross_x + max(2, int(scaled_t * 0.06)), cross_y + max(2, int(scaled_t * 0.04))), max(1, int(camera.zoom * 2)))
 
         # -------------------------------------------------------------
         # DROPPED ITEM INDICATOR (Bila kehilangan Lot)
@@ -438,9 +512,23 @@ class FurnitureManager:
         newly_broken = []
         for _ in range(max(0, int(days))):
             for furniture in self.furnitures:
+                # Wear is a household maintenance expense. Public and unowned
+                # furniture has no household payer, so it must never enter the
+                # repair-order flow (including old saves with stale repair orders).
+                is_household_owned = (
+                    furniture.type_cfg.get("household_owned", True)
+                    and getattr(furniture, "family_id", None) is not None
+                )
+                is_public_maintainable = (
+                    furniture.type_cfg.get("public_structure")
+                    and furniture.type_cfg.get("maintainable", True)
+                )
+                order = getattr(furniture, "construction_order", None) or {}
+                if not is_household_owned and not is_public_maintainable:
+                    continue
                 if (furniture.is_dropped or furniture.stored_in_id is not None
                         or furniture.status != "INSTALLED"
-                        or (furniture.construction_order and furniture.construction_order.get("status") != "COMPLETE")
+                        or (order and order.get("status") != "COMPLETE")
                         or furniture.is_broken):
                     continue
                 if random.random() >= FURNITURE_DAILY_BREAK_CHANCE:
@@ -450,6 +538,12 @@ class FurnitureManager:
                 furniture.construction_order = CarpenterSystem.create_repair_order(
                     furniture, self.building_manager, self.villager_manager
                 )
+                if is_public_maintainable:
+                    furniture.construction_order.update({
+                        "status": "LANDLORD_PAYMENT_PENDING",
+                        "payer_type": "landlord",
+                        "payer_id": "landlord",
+                    })
                 newly_broken.append(furniture)
         if newly_broken:
             self.invalidate_cache()
@@ -478,8 +572,9 @@ class FurnitureManager:
             self._cached_occupied = set()
             for f in getattr(self, "furnitures", []):
                 if getattr(f, "status", "") == "INSTALLED" and not getattr(f, "is_dropped", False):
-                    for dx in range(max(1, int(f.type_cfg.get("width_tiles", 1)))):
-                        for dy in range(max(1, int(f.type_cfg.get("height_tiles", 1)))):
+                    width, height = f.footprint_dimensions
+                    for dx in range(width):
+                        for dy in range(height):
                             self._cached_occupied.add((int(f.grid_x) + dx, int(f.grid_y) + dy))
             self._dirty = False
 
@@ -490,8 +585,9 @@ class FurnitureManager:
         if exclude_furniture_id:
             for f in self.furnitures:
                 if f.id == exclude_furniture_id:
-                    for dx in range(max(1, int(f.type_cfg.get("width_tiles", 1)))):
-                        for dy in range(max(1, int(f.type_cfg.get("height_tiles", 1)))):
+                    width, height = f.footprint_dimensions
+                    for dx in range(width):
+                        for dy in range(height):
                             occupied.discard((int(f.grid_x) + dx, int(f.grid_y) + dy))
         if exclude_tile:
             occupied.discard(tuple(exclude_tile))
@@ -508,8 +604,7 @@ class FurnitureManager:
             for furniture in getattr(self, "furnitures", []):
                 if getattr(furniture, "status", "") != "INSTALLED" or getattr(furniture, "is_dropped", False):
                     continue
-                width_tiles = max(1, int(furniture.type_cfg.get("width_tiles", 1)))
-                height_tiles = max(1, int(furniture.type_cfg.get("height_tiles", 1)))
+                width_tiles, height_tiles = furniture.footprint_dimensions
                 rect = pygame.Rect(furniture.grid_x * tile_size, furniture.grid_y * tile_size,
                                    width_tiles * tile_size, height_tiles * tile_size)
                 cached.append((furniture, rect, width_tiles, height_tiles))
@@ -528,20 +623,44 @@ class FurnitureManager:
             rects.append(rect)
         return rects
 
-    def add_furniture(self, f_type, gx, gy, permit_manager, villager_manager, resources=None, building_manager=None):
+    def add_furniture(self, f_type, gx, gy, permit_manager, villager_manager, resources=None, building_manager=None, rotation=0):
         cfg = FURNITURE_TYPES.get(f_type, FURNITURE_TYPES.get("household_storage", {}))
+        if cfg.get("unique") and any(
+            f.furniture_type == f_type and not f.is_dropped for f in self.furnitures
+        ):
+            return None, f"{cfg.get('name', 'Furniture')} already exists."
+        allowed_permits = cfg.get("allowed_permits")
+        placement_permit = permit_manager.get_permit_at(gx, gy) if permit_manager else None
+        if (allowed_permits and not cfg.get("placement_anywhere")
+                and (not placement_permit or placement_permit.permit_type not in allowed_permits)):
+            return None, f"{cfg.get('name', 'Furniture')} must be placed on an allowed permit."
         # Check existing furniture on this tile
         fw, fh = max(1, int(cfg.get("width_tiles", 1))), max(1, int(cfg.get("height_tiles", 1)))
+        if int(rotation) % 180:
+            fw, fh = fh, fw
         target_tiles = {(int(gx) + dx, int(gy) + dy) for dx in range(fw) for dy in range(fh)}
+        bm_for_placement = building_manager or self.building_manager
+        if cfg.get("placement_anywhere") and bm_for_placement and any(
+            bm_for_placement.get_building_at(tx, ty) for tx, ty in target_tiles
+        ):
+            return None, f"{cfg.get('name', 'Furniture')} cannot overlap a structure."
+        if allowed_permits and not cfg.get("placement_anywhere") and any(
+            not (permit_manager and (tile_permit := permit_manager.get_permit_at(tx, ty))
+                 and tile_permit.permit_type in allowed_permits)
+            for tx, ty in target_tiles
+        ):
+            return None, f"{cfg.get('name', 'Furniture')} must fit inside an allowed permit."
         for f in self.furnitures:
-            occupied = {(int(f.grid_x) + dx, int(f.grid_y) + dy) for dx in range(max(1, int(f.type_cfg.get("width_tiles", 1)))) for dy in range(max(1, int(f.type_cfg.get("height_tiles", 1))))}
+            ow, oh = f.footprint_dimensions
+            occupied = {(int(f.grid_x) + dx, int(f.grid_y) + dy) for dx in range(ow) for dy in range(oh)}
             if target_tiles & occupied and not f.is_dropped and f.stored_in_id is None:
                 return None, "Tile already occupied by furniture!"
 
         # Identify permit and owner family
         p = permit_manager.get_permit_at(gx, gy) if permit_manager else None
         family_id = None
-        if p and villager_manager:
+        p = placement_permit
+        if cfg.get("household_owned", True) and p and villager_manager:
             for fam in villager_manager.families:
                 if fam.assigned_permit_id == p.id:
                     family_id = fam.id
@@ -551,7 +670,7 @@ class FurnitureManager:
         vm = villager_manager or getattr(self, "villager_manager", None)
         pm = permit_manager or getattr(self, "permit_manager", None)
 
-        if not family_id and bm:
+        if not family_id and bm and cfg.get("household_owned", True):
             b_at = bm.get_building_at(gx, gy)
             if b_at:
                 # 1. Apakah bangunan ini sudah memiliki ranjang/perabotan milik keluarga tertentu?
@@ -570,7 +689,7 @@ class FurnitureManager:
                                 break
 
         # 3. Cek kedekatan dengan ranjang keluarga terdekat dalam radius
-        if not family_id and vm:
+        if not family_id and vm and cfg.get("household_owned", True):
             closest_bed_dist = float('inf')
             closest_fam = None
             for other_f in self.furnitures:
@@ -586,14 +705,20 @@ class FurnitureManager:
 
         f_id = f"furn_{self.counter}"
         self.counter += 1
-        f = Furniture(f_id, f_type, gx, gy, permit_id=p.id if p else None, family_id=family_id)
-        from game.systems.carpenter_system import CarpenterSystem
-        f.construction_order = CarpenterSystem.create_order(f, bm, vm)
+        f = Furniture(f_id, f_type, gx, gy, permit_id=p.id if p else None,
+                      family_id=family_id, rotation=rotation)
+        if cfg.get("instant_place"):
+            f.construction_order = None
+        else:
+            from game.systems.carpenter_system import CarpenterSystem
+            f.construction_order = CarpenterSystem.create_order(f, bm, vm)
         self.furnitures.append(f)
         self.invalidate_cache()
 
         owner_txt = f" (Owned by Family {family_id})" if family_id else ""
         item_name = cfg.get("name", "Furniture")
+        if cfg.get("instant_place"):
+            return f, f"{item_name} placed and ready to use{owner_txt}!"
         return f, f"{item_name} order submitted{owner_txt}!"
 
     @property
@@ -612,9 +737,10 @@ class FurnitureManager:
 
     @staticmethod
     def _furniture_tiles(furniture):
+        width, height = furniture.footprint_dimensions
         return {(int(furniture.grid_x) + dx, int(furniture.grid_y) + dy)
-                for dx in range(max(1, int(furniture.type_cfg.get("width_tiles", 1))))
-                for dy in range(max(1, int(furniture.type_cfg.get("height_tiles", 1))))}
+                for dx in range(width)
+                for dy in range(height)}
 
     def get_furniture_at(self, gx, gy):
         point = (int(gx), int(gy))
@@ -675,6 +801,62 @@ class FurnitureManager:
         furniture.assigned_workers = []
         self.invalidate_cache()
         return True
+
+    def get_lord_treasury_chest(self):
+        return next((f for f in self.furnitures
+                     if f.furniture_type == "lord_treasury_chest"
+                     and not f.is_dropped and f.stored_in_id is None), None)
+
+    def ensure_lord_treasury_chest(self, permit_manager=None, villager_manager=None,
+                                  building_manager=None, stockpile_manager=None,
+                                  preferred_tile=None):
+        """Create the free royal coffer once and migrate legacy landlord coin stacks."""
+        chest = self.get_lord_treasury_chest()
+        if chest:
+            return chest
+
+        from game.data.config import LORD_TREASURY_PLACEMENT_SEARCH_RADIUS, LORD_TREASURY_START_TILE
+        pm = permit_manager or self.permit_manager
+        vm = villager_manager or self.villager_manager
+        bm = building_manager or self.building_manager
+        origin = preferred_tile or LORD_TREASURY_START_TILE
+        ox, oy = int(origin[0]), int(origin[1])
+        candidates = sorted(
+            ((ox + dx, oy + dy) for dx in range(-LORD_TREASURY_PLACEMENT_SEARCH_RADIUS,
+                                                LORD_TREASURY_PLACEMENT_SEARCH_RADIUS + 1)
+             for dy in range(-LORD_TREASURY_PLACEMENT_SEARCH_RADIUS,
+                             LORD_TREASURY_PLACEMENT_SEARCH_RADIUS + 1)
+             if abs(dx) + abs(dy) <= LORD_TREASURY_PLACEMENT_SEARCH_RADIUS),
+            key=lambda tile: (abs(tile[0] - ox) + abs(tile[1] - oy), tile[1], tile[0]),
+        )
+        for gx, gy in candidates:
+            if bm and bm.get_building_at(gx, gy):
+                continue
+            if self.get_furniture_at(gx, gy):
+                continue
+            chest, _ = self.add_furniture(
+                "lord_treasury_chest", gx, gy, pm, vm, building_manager=bm,
+            )
+            if chest:
+                self._move_legacy_landlord_coins_to_treasury(chest, stockpile_manager)
+                return chest
+        return None
+
+    @staticmethod
+    def _move_legacy_landlord_coins_to_treasury(chest, stockpile_manager):
+        if not chest or not stockpile_manager:
+            return
+        from game.data.config import CURRENCY_DENOMINATIONS
+        moved = False
+        for stack in list(getattr(stockpile_manager, "stacks", [])):
+            if (getattr(stack, "owner_type", "landlord") != "landlord"
+                    or stack.resource_type not in CURRENCY_DENOMINATIONS):
+                continue
+            chest.store_item(stack.resource_type, stack.amount)
+            stockpile_manager.stacks.remove(stack)
+            moved = True
+        if moved:
+            stockpile_manager.mark_totals_dirty()
 
     def get_storage_for_family(self, family_id, building_manager=None, villager_manager=None, permit_manager=None):
         if family_id is None:
@@ -793,15 +975,21 @@ class FurnitureManager:
             return False, "Furniture not found!"
 
         # Check the complete configured footprint, while allowing overlap with the furniture's old cells.
+        width, height = f.footprint_dimensions
         target_tiles = {(int(new_gx) + dx, int(new_gy) + dy)
-                        for dx in range(max(1, int(f.type_cfg.get("width_tiles", 1))))
-                        for dy in range(max(1, int(f.type_cfg.get("height_tiles", 1))))}
+                        for dx in range(width) for dy in range(height)}
         for other in self.furnitures:
             if (other.id != f.id and not other.is_dropped and other.stored_in_id is None
                     and target_tiles & self._furniture_tiles(other)):
                 return False, "Target tile already occupied by furniture!"
 
         p = permit_manager.get_permit_at(new_gx, new_gy) if permit_manager else None
+        allowed_permits = f.type_cfg.get("allowed_permits")
+        if allowed_permits:
+            for tx, ty in target_tiles:
+                tile_permit = permit_manager.get_permit_at(tx, ty) if permit_manager else None
+                if not tile_permit or tile_permit.permit_type not in allowed_permits:
+                    return False, f"{f.name} must remain inside an allowed permit."
         vm = villager_manager or getattr(self, "villager_manager", None)
         bm = building_manager or getattr(self, "building_manager", None)
 

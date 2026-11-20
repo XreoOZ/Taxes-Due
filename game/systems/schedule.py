@@ -10,12 +10,16 @@ from game.config import (
     DEFAULT_PRAYER_END_HOUR,
 )
 
+UNIVERSAL_SCHEDULE_ID = "__UNIVERSAL__"
+
 
 class ScheduleManager:
     """Stores one 24-hour schedule per job; legacy ``day`` args are ignored."""
 
     def __init__(self):
         self.default_schedule = list(DEFAULT_JOB_SCHEDULE)
+        self.universal_schedule = list(self.default_schedule)
+        self.universal_schedule_enabled = False
         self.prayer_start_hour = DEFAULT_PRAYER_START_HOUR
         self.prayer_end_hour = DEFAULT_PRAYER_END_HOUR
         self.prayer_override_all = True
@@ -51,13 +55,25 @@ class ScheduleManager:
 
     def get_schedule(self, job_id, day=None):
         """Return the job's single daily schedule (``day`` is legacy only)."""
+        if job_id == UNIVERSAL_SCHEDULE_ID:
+            return self.universal_schedule if self.universal_schedule_enabled else self.get_schedule("Unassigned")
         if job_id not in self.job_schedules:
-            self.job_schedules[job_id] = list(self.default_schedule)
+            base_schedule = self.universal_schedule if self.universal_schedule_enabled else self.default_schedule
+            self.job_schedules[job_id] = list(base_schedule)
         schedule = self.job_schedules[job_id]
         if isinstance(schedule, dict):
             schedule = schedule.get("Monday") or next(iter(schedule.values()), self.default_schedule)
             self.job_schedules[job_id] = list(schedule)
         return schedule
+
+    def activate_universal_schedule(self):
+        """Seed the shared schedule from the current Unassigned schedule, then apply it to every job."""
+        if not self.universal_schedule_enabled:
+            self.universal_schedule = list(self.get_schedule("Unassigned"))
+        self.universal_schedule_enabled = True
+        for job_id in list(self.job_schedules):
+            self.job_schedules[job_id] = list(self.universal_schedule)
+        self._sync_priest_prayer_block()
 
     def get_schedule_view(self, job_id):
         """Return a display copy with the enforced Prayer Time block applied."""
@@ -86,6 +102,13 @@ class ScheduleManager:
             return False
         if self.is_prayer_hour(hour_idx):
             return False
+        if job_id == UNIVERSAL_SCHEDULE_ID:
+            self.universal_schedule[hour_idx] = activity_type
+            self.universal_schedule_enabled = True
+            for existing_job_id in list(self.job_schedules):
+                self.job_schedules[existing_job_id] = list(self.universal_schedule)
+            self._sync_priest_prayer_block()
+            return True
         self.get_schedule(job_id)[hour_idx] = activity_type
         return True
 
@@ -95,14 +118,26 @@ class ScheduleManager:
     def fill_all_hours(self, job_id, activity_type, day=None):
         if activity_type not in SCHEDULE_TYPES or activity_type == SCHEDULE_PRAYER:
             return False
-        schedule = self.get_schedule(job_id)
+        if job_id == UNIVERSAL_SCHEDULE_ID:
+            self.universal_schedule_enabled = True
+            schedules = [self.universal_schedule] + list(self.job_schedules.values())
+        else:
+            schedules = [self.get_schedule(job_id)]
         for hour in range(24):
             if self.is_prayer_hour(hour):
                 continue
-            schedule[hour] = activity_type
+            for schedule in schedules:
+                schedule[hour] = activity_type
         return True
 
     def reset_to_default(self, job_id, day=None):
+        if job_id == UNIVERSAL_SCHEDULE_ID:
+            self.universal_schedule = list(self.default_schedule)
+            self.universal_schedule_enabled = True
+            for existing_job_id in list(self.job_schedules):
+                self.job_schedules[existing_job_id] = list(self.default_schedule)
+            self._sync_priest_prayer_block()
+            return
         self.job_schedules[job_id] = list(self.default_schedule)
         if job_id == "Priest":
             self._sync_priest_prayer_block()
@@ -111,6 +146,8 @@ class ScheduleManager:
         return {
             "prayer_start_hour": self.prayer_start_hour,
             "prayer_end_hour": self.prayer_end_hour,
+            "universal_schedule": list(self.universal_schedule),
+            "universal_schedule_enabled": self.universal_schedule_enabled,
             "job_schedules": {
                 job_id: list(self.get_schedule(job_id))
                 for job_id in self.job_schedules
@@ -123,6 +160,11 @@ class ScheduleManager:
         self.prayer_start_hour = int(data.get("prayer_start_hour", self.prayer_start_hour))
         self.prayer_end_hour = int(data.get("prayer_end_hour", self.prayer_end_hour))
         self.set_prayer_time(self.prayer_start_hour, self.prayer_end_hour)
+
+        saved_universal = data.get("universal_schedule")
+        if isinstance(saved_universal, list) and len(saved_universal) == 24:
+            self.universal_schedule = list(saved_universal)
+        self.universal_schedule_enabled = bool(data.get("universal_schedule_enabled", False))
 
         saved_jobs = data.get("job_schedules", data)
         for job_id, schedule in saved_jobs.items():
@@ -140,3 +182,7 @@ class ScheduleManager:
                         restored[hour] = SCHEDULE_WORK
                 self.job_schedules[job_id] = restored
         self._sync_priest_prayer_block()
+        if self.universal_schedule_enabled:
+            for job_id in list(self.job_schedules):
+                self.job_schedules[job_id] = list(self.universal_schedule)
+            self._sync_priest_prayer_block()

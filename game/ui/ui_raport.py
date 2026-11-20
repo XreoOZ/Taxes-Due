@@ -53,6 +53,7 @@ from game.systems.household_inventory import (
     canonical_item_name
 )
 from game.systems.wealth_system import VillageWealthSystem
+from game.systems.schedule import UNIVERSAL_SCHEDULE_ID
 from game.ui.item_icons import draw_item_icon
 
 GRANTABLE_ITEMS = [
@@ -139,6 +140,7 @@ class RaportUI:
         self.schedule_hour_cell_rects = {}
         self.schedule_preset_btn_rects = {}
         self.schedule_back_btn_rect = None
+        self.universal_schedule_btn_rect = None
 
         # Member Job Assignment State
         self.member_job_btn_rects = {}
@@ -205,6 +207,8 @@ class RaportUI:
         self.building_household_btn_rects = {}
         self.household_view_permit_btn_rect = None
         self.cancel_construction_btn_rects = {}
+        self.public_commission_btn_rects = {}
+        self.selected_public_commission = None
         self.cancel_demolition_btn_rects = {}
 
         self.modal_w = RAPORT_MODAL_WIDTH
@@ -648,6 +652,7 @@ class RaportUI:
                     self.cancel_demolition_btn_rects.clear()
                     return "cancel_demolition"
 
+            # Public carpenter commissions are dispatched automatically from the Lord's Treasury.
             # Check Cancel Construction buttons
             for s, rect in list(self.cancel_construction_btn_rects.items()):
                 if rect.collidepoint(mouse_pos):
@@ -1129,6 +1134,12 @@ class RaportUI:
                             if station and villager_manager:
                                 change_workplace_workers(job_id, station, delta, permit_manager, furniture_manager, villager_manager)
                             return f"workplace_worker_{delta}_{job_id}"
+                if self.universal_schedule_btn_rect and self.universal_schedule_btn_rect.collidepoint(mouse_pos):
+                    if schedule_manager:
+                        schedule_manager.activate_universal_schedule()
+                    self.selected_schedule_job_id = UNIVERSAL_SCHEDULE_ID
+                    return "edit_universal_schedule"
+
                 if self.auto_sort_all_btn_rect and self.auto_sort_all_btn_rect.collidepoint(mouse_pos):
                     if villager_manager:
                         permit_manager.auto_sort_workers(villager_manager, furniture_manager=furniture_manager)
@@ -1306,12 +1317,12 @@ class RaportUI:
         elif self.active_tab == 3:
             self._draw_schedule_tab(surface, mx, content_y, schedule_manager=schedule_manager, day_cycle=day_cycle)
         elif self.active_tab == 4:
-            self._draw_villagers_tab(surface, mx, content_y, villager_manager, permit_manager, building_manager, furniture_manager=furniture_manager, stockpile_manager=stockpile_manager, resources=resources, servant_manager=servant_manager, production_system=production_system)
+            self._draw_villagers_tab(surface, mx, content_y, villager_manager, permit_manager, building_manager, furniture_manager=furniture_manager, stockpile_manager=stockpile_manager, resources=resources, servant_manager=servant_manager, production_system=production_system, day_cycle=day_cycle)
         elif self.active_tab == 5:
             if self.selected_schedule_job_id is not None:
                 self._draw_schedule_tab(surface, mx, content_y, schedule_manager=schedule_manager, day_cycle=day_cycle)
             else:
-                self._draw_workers_tab(surface, mx, content_y, villager_manager, permit_manager, furniture_manager)
+                self._draw_workers_tab(surface, mx, content_y, villager_manager, permit_manager, furniture_manager, schedule_manager=schedule_manager)
         elif self.active_tab == 6:
             self._draw_production_tab(surface, mx, content_y, villager_manager, permit_manager, furniture_manager=furniture_manager, stockpile_manager=stockpile_manager, production_system=production_system)
         elif self.active_tab == 7:
@@ -1383,6 +1394,8 @@ class RaportUI:
             card_gap = 12
             card_x = mx + 24
             card_width = (self.modal_w - 48 - card_gap) // 2
+            category_count = max(1, len(categories))
+            card_width = (self.modal_w - 48 - card_gap * (category_count - 1)) // category_count
             for index, category in enumerate(categories):
                 card = pygame.Rect(card_x + index * (card_width + card_gap), card_top, card_width, card_height)
                 self.building_category_btn_rects[category["id"]] = card
@@ -1424,6 +1437,15 @@ class RaportUI:
             if current_cat.get("kind") == "furniture":
                 cat_items = [f for f in getattr(furniture_manager, "furniture", []) if f.furniture_type in cat_types] if furniture_manager else []
                 b_built, b_sites, b_demos = [], [], []
+            elif current_cat.get("kind") == "public":
+                furniture_types = set(current_cat.get("furniture_types", ()))
+                cat_items = [f for f in getattr(furniture_manager, "furniture", [])
+                             if f.furniture_type in furniture_types] if furniture_manager else []
+                b_built = [b for b in building_manager.buildings if getattr(b, "building_type", "") in cat_types]
+                b_sites = [s for s in building_manager.construction_sites if getattr(s, "building_type", "") in cat_types]
+                b_demos = [d for d in demos if getattr(d, "building_type", "") in cat_types
+                           or getattr(getattr(d, "building", None), "building_type", "") in cat_types]
+                cat_items.extend(b_built + b_sites + b_demos)
             elif current_cat.get("kind") == "all":
                 furniture_items = list(getattr(furniture_manager, "furniture", [])) if furniture_manager else []
                 b_built = list(getattr(building_manager, "buildings", []))
@@ -1459,14 +1481,21 @@ class RaportUI:
             if self.selected_building_owner is not None:
                 selected_group = owner_groups.get(str(self.selected_building_owner), {"items": []})
                 selected_items = selected_group.get("items", [])
-                if current_cat.get("kind") in ("furniture", "all"):
-                    cat_items = selected_items
+                if current_cat.get("kind") in ("furniture", "all", "public"):
+                    cat_items = [item for item in selected_items
+                                 if (hasattr(item, "furniture_type")
+                                     if current_cat.get("kind") == "public" else True)]
                 if current_cat.get("kind") in ("structure", "all"):
                     b_built = [item for item in b_built if item in selected_items]
                     b_sites = [item for item in b_sites if item in selected_items]
                     b_demos = [item for item in b_demos if item in selected_items]
                     if current_cat.get("kind") != "all":
                         cat_items = selected_items
+                elif current_cat.get("kind") == "public":
+                    b_built = [item for item in b_built if item in selected_items]
+                    b_sites = [item for item in b_sites if item in selected_items]
+                    b_demos = [item for item in b_demos if item in selected_items]
+                    cat_items.extend(b_built + b_sites + b_demos)
 
             # 1. Back button to return to household and public locations
             back_btn = pygame.Rect(mx + 24, cy, 160, 26)
@@ -1513,7 +1542,7 @@ class RaportUI:
                 surface.blit(self.font_body.render(msg2, True, COLOR_TEXT_MUTED), (empty_box.x + 16, empty_box.y + 30))
                 y_cur = empty_box.bottom + 16
             else:
-                if current_cat.get("kind") in ("furniture", "all"):
+                if current_cat.get("kind") in ("furniture", "all", "public"):
                     for f in cat_items:
                         if not hasattr(f, "furniture_type"):
                             continue
@@ -1580,6 +1609,22 @@ class RaportUI:
                     for s in b_sites:
                         txt = f"[Building] {s.name} ({s.total_delivered()}/{s.total_required()} Materials)"
                         surface.blit(self.font_body.render(txt, True, (245, 158, 11)), (mx + 36, y_cur + 2))
+
+                        cfg = BUILDING_TYPES.get(getattr(s, "building_type", ""), {})
+                        order = getattr(s, "construction_order", None) or {}
+                        if cfg.get("carpenter_commissionable"):
+                            status_labels = {
+                                "AWAITING_PAYMENT": "Awaiting landlord payment",
+                                "LANDLORD_PAYMENT_PENDING": "Awaiting landlord payment",
+                                "LANDLORD_RETRIEVING": "Servant collecting commission",
+                                "PAID": "Commission paid — awaiting Carpenter",
+                                "BUILDING": "Carpenter building",
+                                "AWAITING_MATERIAL": "Carpenter gathering materials",
+                                "COMPLETE": "Complete",
+                            }
+                            status = status_labels.get(order.get("status"), "Carpenter order")
+                            status_text = self.font_badge.render(status, True, (56, 189, 248))
+                            surface.blit(status_text, (mx + self.modal_w - status_text.get_width() - 136, y_cur + 4))
 
                         c_btn = pygame.Rect(mx + self.modal_w - 120, y_cur - 1, 80, 22)
                         self.cancel_construction_btn_rects[s] = c_btn
@@ -1654,28 +1699,37 @@ class RaportUI:
             inst_txt = self.font_sub.render(f"Construct / Place {cat_name} (Select to Place on Map):", True, (56, 189, 248))
             surface.blit(inst_txt, (mx + 24, btn_y))
 
-            if current_cat.get("kind") == "furniture":
+            if current_cat.get("kind") in ("furniture", "public"):
                 avail_w = self.modal_w - 48
-                f_keys = list(FURNITURE_TYPES.keys())
-                f_btn_w = (avail_w - ((len(f_keys) - 1) * 8)) // max(1, len(f_keys))
+                f_keys = (list(current_cat.get("furniture_types", ()))
+                          if current_cat.get("kind") == "public"
+                          else list(cat_types))
+                columns = max(1, min(len(f_keys), avail_w // 180))
+                f_btn_w = (avail_w - ((columns - 1) * 8)) // columns
                 for idx, f_id in enumerate(f_keys):
                     f_cfg = FURNITURE_TYPES[f_id]
-                    f_btn = pygame.Rect(mx + 24 + idx * (f_btn_w + 8), btn_y + 26, f_btn_w, 36)
+                    row, col = divmod(idx, columns)
+                    f_btn = pygame.Rect(mx + 24 + col * (f_btn_w + 8), btn_y + 26 + row * 42, f_btn_w, 36)
                     self.furniture_select_rects[f_id] = f_btn
                     hov = f_btn.collidepoint(m_pos)
                     b_col = (16, 185, 129) if hov else (5, 150, 105)
                     pygame.draw.rect(surface, b_col, f_btn, border_radius=6)
-                    lbl_txt = f"+ Order {f_cfg['name']}"
+                    lbl_txt = (f"+ Place {f_cfg['name']}" if f_cfg.get("instant_place")
+                               else f"+ Order {f_cfg['name']}")
                     lbl = self.font_btn.render(lbl_txt, True, (255, 255, 255))
                     surface.blit(lbl, (f_btn.centerx - lbl.get_width() // 2, f_btn.centery - lbl.get_height() // 2))
-            else:
+            if current_cat.get("kind") != "furniture":
                 avail_w = self.modal_w - 48
                 b_keys = list(cat_types)
-                b_btn_w = (avail_w - ((len(b_keys) - 1) * 8)) // max(1, len(b_keys))
+                columns = max(1, min(len(b_keys), avail_w // 180))
+                b_btn_w = (avail_w - ((columns - 1) * 8)) // columns
                 for idx, b_id in enumerate(b_keys):
                     b_cfg = BUILDING_TYPES.get(b_id, {})
-                    has_permit = permit_manager.has_permit_type(b_id)
-                    b_btn = pygame.Rect(mx + 24 + idx * (b_btn_w + 8), btn_y + 26, b_btn_w, 36)
+                    has_permit = (not b_cfg.get("allowed_permits")
+                                  or any(permit_manager.has_permit_type(p_type)
+                                         for p_type in b_cfg.get("allowed_permits", ())))
+                    row, col = divmod(idx, columns)
+                    b_btn = pygame.Rect(mx + 24 + col * (b_btn_w + 8), btn_y + 26 + row * 42, b_btn_w, 36)
                     self.building_select_rects[b_id] = b_btn
                     hov = b_btn.collidepoint(m_pos)
                     b_col = (16, 185, 129) if has_permit else (71, 85, 105)
@@ -2309,7 +2363,8 @@ class RaportUI:
         # =============================================================
         else:
             job_cfg = DEDICATED_JOBS.get(self.selected_schedule_job_id, {})
-            job_name = job_cfg.get("name", self.selected_schedule_job_id)
+            job_name = ("Universal" if self.selected_schedule_job_id == UNIVERSAL_SCHEDULE_ID
+                        else job_cfg.get("name", self.selected_schedule_job_id))
 
             # Header & Back Button
             back_w = 140
@@ -2470,7 +2525,7 @@ class RaportUI:
             note2 = self.font_body.render("• During SLEEP, villagers return to their family household. During LEISURE, they relax near Town Center.", True, COLOR_TEXT_MUTED)
             surface.blit(note2, (mx + 24, note_y + 18))
 
-    def _draw_villagers_tab(self, surface, mx, cy, villager_manager, permit_manager, building_manager, furniture_manager=None, stockpile_manager=None, resources=None, servant_manager=None, production_system=None):
+    def _draw_villagers_tab(self, surface, mx, cy, villager_manager, permit_manager, building_manager, furniture_manager=None, stockpile_manager=None, resources=None, servant_manager=None, production_system=None, day_cycle=None):
         if villager_manager:
             villager_manager.ensure_unique_family_ids()
         mouse_pos = pygame.mouse.get_pos()
@@ -2764,7 +2819,7 @@ class RaportUI:
 
             # Land Deed & Household Status Banner
             banner_y = cy + 30
-            banner_rect = pygame.Rect(mx + 24, banner_y, self.modal_w - 48, 54)
+            banner_rect = pygame.Rect(mx + 24, banner_y, self.modal_w - 48, 70)
             pygame.draw.rect(surface, (24, 34, 52), banner_rect, border_radius=8)
             pygame.draw.rect(surface, (71, 85, 105), banner_rect, width=1, border_radius=8)
 
@@ -2804,6 +2859,20 @@ class RaportUI:
             econ_text = f"Treasury: {curr_balance} Copper Coins   |   Production: x{potatoes_earned} Potatoes Harvested ({assigned_work_count} Farmers in Fields)"
             surface.blit(self.font_badge.render(econ_text, True, (56, 189, 248)), (banner_rect.x + 14, banner_rect.y + 37))
 
+            from game.systems.market_sales_report import MarketSalesReportSystem
+            from game.systems.currency import from_copper
+            income_report = MarketSalesReportSystem.get_household_report(
+                building_manager, fam.id, getattr(day_cycle, "day_number", 1),
+                villager_manager=villager_manager,
+            )
+            income_wallet = from_copper(income_report["revenue_copper"])
+            income_text = (
+                f"Household Income (Days {income_report['start_day']}–{income_report['end_day']}): "
+                f"{income_wallet['Gold']}g {income_wallet['Silver']}s {income_wallet['Copper']}c"
+            )
+            surface.blit(self.font_badge.render(income_text, True, (250, 204, 21)),
+                         (banner_rect.x + 14, banner_rect.y + 52))
+
             # Button: [Assign / Change Deed]
             self.assign_permit_btn_rects = {}
             self.revoke_deed_btn_rect = None
@@ -2818,7 +2887,7 @@ class RaportUI:
 
             # Member Roster Grouped by Generation
             self.member_inventory_btn_rects.clear()
-            y_cur = banner_y + 64
+            y_cur = banner_y + 80
             m_header = self.font_sub.render(f"Household Members Roster ({fam.member_count} Members across {fam.get_generation_label()}):", True, COLOR_TEXT_TITLE)
             surface.blit(m_header, (mx + 24, y_cur))
 
@@ -3133,8 +3202,9 @@ class RaportUI:
             y += 62
         surface.set_clip(old_clip)
 
-    def _draw_workers_tab(self, surface, mx, cy, villager_manager, permit_manager, furniture_manager=None):
+    def _draw_workers_tab(self, surface, mx, cy, villager_manager, permit_manager, furniture_manager=None, schedule_manager=None):
         mouse_pos = pygame.mouse.get_pos()
+        self.universal_schedule_btn_rect = None
 
         # =============================================================
         # VIEW 1: Dedicated Jobs Directory
@@ -3157,7 +3227,27 @@ class RaportUI:
             sub_txt = self.font_body.render("Job roles dictate villager daily routines. Workers prioritize nearest designated lots.", True, COLOR_TEXT_MUTED)
             surface.blit(sub_txt, (mx + 24, cy + 22))
 
-            y_cur = cy + 46
+            universal_y = cy + 42
+            self.universal_schedule_btn_rect = pygame.Rect(mx + 24, universal_y, self.modal_w - 48, 36)
+            universal_hover = self.universal_schedule_btn_rect.collidepoint(mouse_pos)
+            pygame.draw.rect(surface, (30, 58, 88) if universal_hover else (24, 34, 52), self.universal_schedule_btn_rect, border_radius=7)
+            pygame.draw.rect(surface, (56, 189, 248), self.universal_schedule_btn_rect, width=1, border_radius=7)
+            universal_label = self.font_badge.render("Universal Schedule — Edit all jobs together", True, (241, 245, 249))
+            surface.blit(universal_label, (self.universal_schedule_btn_rect.x + 12,
+                                           self.universal_schedule_btn_rect.centery - universal_label.get_height() // 2))
+            if schedule_manager:
+                preview = schedule_manager.get_schedule_view(UNIVERSAL_SCHEDULE_ID)
+                work_count = sum(1 for activity in preview if activity == "WORK")
+                sleep_count = sum(1 for activity in preview if activity == "SLEEP")
+                summary = self.font_badge.render(
+                    f"{work_count}h Work  |  {sleep_count}h Sleep  |  Applies to every job, including Unassigned",
+                    True, COLOR_TEXT_MUTED,
+                )
+                if summary.get_width() < self.universal_schedule_btn_rect.width - universal_label.get_width() - 40:
+                    surface.blit(summary, (self.universal_schedule_btn_rect.right - summary.get_width() - 12,
+                                           self.universal_schedule_btn_rect.centery - summary.get_height() // 2))
+
+            y_cur = cy + 86
             screen_h = surface.get_height()
             content_bottom = (screen_h + self.modal_h) // 2 - 14
             self.jobs_viewport_rect = pygame.Rect(mx + 16, y_cur, self.modal_w - 32, max(0, content_bottom - y_cur))

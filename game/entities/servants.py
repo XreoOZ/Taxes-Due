@@ -9,10 +9,13 @@ import pygame
 from game.render_cache import ellipse_surface
 from game.config import (
     TILE_SIZE,
+    LOOSE_ITEM_ARRIVAL_DIST,
+    INTERACTION_CONTACT_RADIUS,
     SERVANT_COUNT,
     SERVANT_RADIUS,
     SERVANT_SPEED,
     SERVANT_CARRY_CAPACITY,
+    SERVANT_AI_DECISION_TICK_INTERVAL_SECONDS,
     DEFAULT_PRIORITIES,
     ENTITY_AVOIDANCE_RADIUS,
     SERVANT_YIELD_FORCE,
@@ -46,13 +49,14 @@ from game.config import (
     ROUTE_STATE_ACTIVE,
     ROUTE_STATE_COMPLETED,
     ROUTE_STATE_FAILED,
-    DOORWAY_IDLE_MIN_DISTANCE,
     DOORWAY_QUEUE_LATERAL_OFFSET,
     TILE_OCCUPANCY_TIMEOUT,
     TILE_STEP_RESERVATION_TIMEOUT,
     NARROW_PASSAGE_WAIT_DISTANCE,
 )
 from game.data.config import MARKET_TRADEABLE_ITEMS, MARKET_CURRENCY_DENOMINATIONS
+from game.systems.ai_simulation_scheduler import AISimulationScheduler
+from game.systems.spatial_entities import SpatialEntityIndex
 from game.world.pathfinding import GlobalPathRegistry, calculate_collision_slide, is_narrow_passage_tile
 from game.world.navigation import find_navigation_path
 from game.systems.job_tool_system import (
@@ -93,6 +97,7 @@ class Servant:
 
         # Loose items hauling targets
         self.target_loose_stack = None
+        self.target_treasury_chest = None
         self.target_storage_tile = None
 
         # Royal Grant hauling targets
@@ -112,6 +117,12 @@ class Servant:
         self.target_restock_dest = None
         self.target_restock_res = None
         self.target_restock_amount = 0
+        self.carpenter_commission_order_id = None
+        self.carpenter_commission_carpenter_id = None
+        self.carpenter_commission_fee_copper = 0
+        self.carpenter_commission_remaining_copper = 0
+        self.carpenter_commission_storage_tile = None
+        self.carpenter_commission_treasury_id = None
 
         # Carried items (Max 5 items)
         self.carried_res = None
@@ -219,6 +230,158 @@ class Servant:
             if self.speech_timer <= 0:
                 self.speech_text = None
 
+        if self.state in ("CARPENTER_COMMISSION_RETRIEVE", "CARPENTER_COMMISSION_DELIVER"):
+            from game.systems.carpenter_system import CarpenterSystem
+            from game.systems.cemetery_system import CemeterySystem
+            from game.systems.currency import compact_currency_wallet, from_copper, to_copper
+            order_subject = next((entity for entity in (
+                list(getattr(furniture_manager, "furnitures", []))
+                + list(getattr(building_manager, "buildings", []))
+                + list(getattr(building_manager, "construction_sites", []))
+            ) if str((getattr(entity, "construction_order", None) or {}).get("id"))
+                 == str(self.carpenter_commission_order_id)), None)
+            order = getattr(order_subject, "construction_order", None) if order_subject else None
+            carpenter = next((worker for worker in (villager_manager.get_all_villagers() if villager_manager else [])
+                              if str(getattr(worker, "id", "")) == str(self.carpenter_commission_carpenter_id)
+                              and getattr(worker, "is_alive", True)), None)
+            if not order or order.get("status") not in ("LANDLORD_RETRIEVING", "PAYMENT_TRAVELING") or not carpenter:
+                CarpenterSystem.refund_public_courier_coins(self, stockpile_manager, furniture_manager)
+                if order and order.get("payer_type") == "landlord":
+                    order["status"] = "AWAITING_PAYMENT"
+                    order["payer_id"] = None
+                self.carpenter_commission_order_id = None
+                self.carpenter_commission_carpenter_id = None
+                self.state = "IDLE"
+                return
+
+            if self.state == "CARPENTER_COMMISSION_RETRIEVE":
+                from game.systems.lord_treasury import LordTreasurySystem
+                treasury = LordTreasurySystem.get_chest(furniture_manager)
+                if treasury and str(getattr(treasury, "id", "")) == str(
+                        getattr(self, "carpenter_commission_treasury_id", treasury.id)):
+                    approach_x, approach_y = treasury.get_approach_point(
+                        self.x, self.y, worker_id=self.id, all_entities=all_entities,
+                        tile_size=TILE_SIZE, bm=building_manager,
+                    )
+                    arrived = self._move_towards(
+                        approach_x, approach_y, dt, arrival_dist=LOOSE_ITEM_ARRIVAL_DIST,
+                        all_servants=all_servants, player=player,
+                        building_manager=building_manager, all_entities=all_entities,
+                        furniture_manager=furniture_manager,
+                    )
+                    if arrived:
+                        fee = max(0, int(self.carpenter_commission_remaining_copper))
+                        success, _ = LordTreasurySystem.withdraw_covering(
+                            furniture_manager, self.inventory, fee
+                        )
+                        if success:
+                            self.carpenter_commission_remaining_copper = 0
+                            order["status"] = "PAYMENT_TRAVELING"
+                            self.state = "CARPENTER_COMMISSION_DELIVER"
+                            self.say("I have the commission coins; taking them to the Carpenter, my Lord.", duration=2.5)
+                        else:
+                            order["status"] = "LANDLORD_PAYMENT_PENDING"
+                            self.say("The Lord's Treasury Chest no longer has enough coin, my Lord.", duration=3.0)
+                    return
+
+                stacks = CemeterySystem._landlord_coin_stacks(stockpile_manager)
+                remaining = max(0, int(self.carpenter_commission_remaining_copper))
+                if not stacks:
+                    CarpenterSystem.refund_public_courier_coins(self, stockpile_manager, furniture_manager)
+                    if order:
+                        order["status"] = "AWAITING_PAYMENT"
+                        order["payer_id"] = None
+                    self.say("Landlord storage has no commission coins, my Lord.", duration=3.0)
+                    self.carpenter_commission_order_id = None
+                    self.carpenter_commission_carpenter_id = None
+                    self.state = "IDLE"
+                    return
+                target_stack = min(stacks, key=lambda stack: math.hypot(
+                    (stack.grid_x + 0.5) * TILE_SIZE - self.x,
+                    (stack.grid_y + 0.5) * TILE_SIZE - self.y,
+                ))
+                target_x = (target_stack.grid_x + 0.5) * TILE_SIZE
+                target_y = (target_stack.grid_y + 0.5) * TILE_SIZE
+                arrived = self._move_towards(
+                    target_x, target_y, dt, arrival_dist=LOOSE_ITEM_ARRIVAL_DIST,
+                    all_servants=all_servants, player=player,
+                    building_manager=building_manager, all_entities=all_entities,
+                    furniture_manager=furniture_manager,
+                )
+                if arrived:
+                    denomination = CemeterySystem._landlord_coin_stacks(stockpile_manager)
+                    if target_stack not in denomination:
+                        return
+                    from game.systems.currency import canonical_denomination
+                    coin_type = canonical_denomination(target_stack.resource_type)
+                    unit_value = to_copper({coin_type: 1})
+                    available = max(0, int(getattr(target_stack, "available_amount", target_stack.amount)))
+                    take = min(available, (remaining + unit_value - 1) // unit_value)
+                    if take <= 0:
+                        return
+                    value_taken = take * unit_value
+                    target_stack.amount -= take
+                    target_tile = [target_stack.grid_x, target_stack.grid_y]
+                    if value_taken >= remaining:
+                        exact_fee = remaining
+                        change = from_copper(value_taken - exact_fee)
+                        for change_type, change_amount in change.items():
+                            if change_amount:
+                                stockpile_manager.drop_resource(change_type, change_amount, *target_tile, owner_type="landlord")
+                        for coin, amount in from_copper(exact_fee).items():
+                            if amount:
+                                self.inventory[coin] = self.inventory.get(coin, 0) + amount
+                        self.carpenter_commission_remaining_copper = 0
+                    else:
+                        for coin, amount in from_copper(value_taken).items():
+                            if amount:
+                                self.inventory[coin] = self.inventory.get(coin, 0) + amount
+                        self.carpenter_commission_remaining_copper = remaining - value_taken
+                    if target_stack.amount <= 0 and target_stack in stockpile_manager.stacks:
+                        stockpile_manager.stacks.remove(target_stack)
+                    stockpile_manager.mark_totals_dirty()
+                    compact_currency_wallet(self.inventory)
+                    if self.carpenter_commission_remaining_copper <= 0:
+                        order["status"] = "PAYMENT_TRAVELING"
+                        self.state = "CARPENTER_COMMISSION_DELIVER"
+                        self.say("I have the commission coins; taking them to the Carpenter, my Lord.", duration=2.5)
+                return
+
+            arrived = self._move_towards(
+                carpenter.x, carpenter.y, dt, arrival_dist=INTERACTION_CONTACT_RADIUS,
+                all_servants=all_servants, player=player, building_manager=building_manager,
+                all_entities=all_entities, furniture_manager=furniture_manager,
+            )
+            if arrived:
+                fee = max(0, int(order.get("price_copper", 0)))
+                if CarpenterSystem._move_exact_value(self.inventory, carpenter.inventory, fee):
+                    order["status"] = "PAID"
+                    order["commission_paid"] = True
+                    order["paid_by_id"] = "landlord"
+                    order["paid_amount_copper"] = fee
+                    from game.systems.market_sales_report import MarketSalesReportSystem
+                    MarketSalesReportSystem.record_household_income(
+                        villager_manager, getattr(carpenter, "family_id", None),
+                        "Public Carpenter Commissions", fee,
+                        getattr(villager_manager, "current_day_number", 1),
+                    )
+                    carpenter.say(f"Public commission received: {fee} Copper.", duration=3.0)
+                    self.say("Commission delivered to the Carpenter, my Lord.", duration=2.5)
+                    CarpenterSystem.refund_public_courier_coins(self, stockpile_manager, furniture_manager)
+                else:
+                    CarpenterSystem.refund_public_courier_coins(self, stockpile_manager, furniture_manager)
+                    order["status"] = "AWAITING_PAYMENT"
+                    order["payer_id"] = None
+                    self.say("The commission coins could not be transferred, my Lord.", duration=3.0)
+                self.carpenter_commission_order_id = None
+                self.carpenter_commission_carpenter_id = None
+                self.carpenter_commission_fee_copper = 0
+                self.carpenter_commission_remaining_copper = 0
+                self.carpenter_commission_storage_tile = None
+                self.carpenter_commission_treasury_id = None
+                self.state = "IDLE"
+            return
+
         pending_demo = building_manager.get_pending_demolition()
         pending_site = building_manager.get_pending_site()
 
@@ -233,8 +396,9 @@ class Servant:
                 self.state = "IDLE"
             else:
                 tgx, tgy, target_permit_id = f.designated_target
-                dest_x = (tgx + 0.5) * TILE_SIZE
-                dest_y = (tgy + 0.5) * TILE_SIZE
+                width, height = f.footprint_dimensions
+                dest_x = (tgx + width / 2.0) * TILE_SIZE
+                dest_y = (tgy + height / 2.0) * TILE_SIZE
                 self.state = "HAULING"
                 arrived = self._move_towards(dest_x, dest_y, dt, arrival_dist=18, all_servants=all_servants, player=player, building_manager=building_manager, all_entities=all_entities, furniture_manager=furniture_manager)
                 if arrived:
@@ -343,7 +507,10 @@ class Servant:
 
                 # Check if materials complete or need to re-evaluate next action
                 if self.target_site.is_materials_complete():
-                    if self.work_priorities.get("Building", 0) > 0:
+                    order = getattr(self.target_site, "construction_order", None) or {}
+                    if order.get("order_type") == "PUBLIC_BUILD":
+                        self._reset_task()
+                    elif self.work_priorities.get("Building", 0) > 0:
                         self.state = "BUILDING"
                         self.say("Materials delivered! Constructing building...")
                     else:
@@ -355,6 +522,10 @@ class Servant:
 
         elif self.state == "BUILDING":
             if not pending_site or pending_site != self.target_site:
+                self._reset_task()
+                return
+            order = getattr(self.target_site, "construction_order", None) or {}
+            if order.get("order_type") == "PUBLIC_BUILD":
                 self._reset_task()
                 return
 
@@ -389,7 +560,14 @@ class Servant:
             if self._move_towards(tx, ty, dt, arrival_dist=24, all_servants=all_servants, player=player, building_manager=building_manager, all_entities=all_entities, furniture_manager=furniture_manager, exclusive_target=True):
                 # Arrived at loose item! Pick it up
                 res_type = self.target_loose_stack.resource_type
-                avail_dest = stockpile_manager.get_available_storage_tile(permit_manager, res_type)
+                treasury_chest = None
+                if res_type in MARKET_CURRENCY_DENOMINATIONS:
+                    from game.systems.lord_treasury import LordTreasurySystem
+                    treasury_chest = LordTreasurySystem.get_chest(furniture_manager)
+                avail_dest = (
+                    (treasury_chest.grid_x, treasury_chest.grid_y)
+                    if treasury_chest else stockpile_manager.get_available_storage_tile(permit_manager, res_type)
+                )
 
                 if not avail_dest:
                     self.say("No storage lot available to haul to, Lord!")
@@ -402,32 +580,52 @@ class Servant:
                     self.carried_res = res_type
                     self.carried_amount = actual
                     self.target_storage_tile = avail_dest
+                    self.target_treasury_chest = treasury_chest
                     self.state = "HAULING_LOOSE_DELIVER"
-                    self.say(f"Hauling {self.carried_res} to storage...")
+                    self.say("Hauling coins to the Lord's Treasury Chest..." if treasury_chest
+                             else f"Hauling {self.carried_res} to storage...")
                 else:
                     self._reset_task()
 
         elif self.state == "HAULING_LOOSE_DELIVER":
-            # Delivering loose items into an active storage permit tile
+            # Coins go to the dedicated Lord Treasury Chest; other goods use storage permits.
             if not self.target_storage_tile:
                 self._reset_task()
                 return
 
-            tx = (self.target_storage_tile[0] + 0.5) * TILE_SIZE
-            ty = (self.target_storage_tile[1] + 0.5) * TILE_SIZE
+            treasury_chest = self.target_treasury_chest
+            if treasury_chest:
+                tx, ty = treasury_chest.get_approach_point(
+                    self.x, self.y, worker_id=self.id, all_entities=all_entities,
+                    tile_size=TILE_SIZE, bm=building_manager,
+                )
+            else:
+                tx = (self.target_storage_tile[0] + 0.5) * TILE_SIZE
+                ty = (self.target_storage_tile[1] + 0.5) * TILE_SIZE
 
             if self._move_towards(tx, ty, dt, arrival_dist=24, all_servants=all_servants, player=player, building_manager=building_manager, all_entities=all_entities, furniture_manager=furniture_manager):
-                # Arrived at storage! Deposit item
-                stockpile_manager.deposit_to_tile(
-                    self.carried_res, self.carried_amount,
-                    self.target_storage_tile[0], self.target_storage_tile[1]
-                )
-                stockpile_manager.refresh_stacks(resources, permit_manager)
-                self.say(f"Stored {self.carried_amount} {self.carried_res} in stockpile!")
+                if treasury_chest:
+                    stored = treasury_chest.store_item(self.carried_res, self.carried_amount)
+                    if stored < self.carried_amount:
+                        stockpile_manager.drop_resource(
+                            self.carried_res, self.carried_amount - stored,
+                            self.target_storage_tile[0], self.target_storage_tile[1], owner_type="landlord",
+                        )
+                    from game.systems.lord_treasury import LordTreasurySystem
+                    LordTreasurySystem._mark_wealth_dirty()
+                    self.say(f"Stored {stored} {self.carried_res} in the Lord's Treasury Chest!")
+                else:
+                    stockpile_manager.deposit_to_tile(
+                        self.carried_res, self.carried_amount,
+                        self.target_storage_tile[0], self.target_storage_tile[1]
+                    )
+                    stockpile_manager.refresh_stacks(resources, permit_manager)
+                    self.say(f"Stored {self.carried_amount} {self.carried_res} in stockpile!")
                 self.carried_res = None
                 self.carried_amount = 0
                 self.target_storage_tile = None
                 self.target_loose_stack = None
+                self.target_treasury_chest = None
                 self.state = "IDLE"
 
         elif self.state == "ALERTING":
@@ -779,10 +977,12 @@ class Servant:
                 # B. Construction site (Fetch required materials for site OR hammer structure)
                 if pending_site:
                     if pending_site.is_materials_complete():
-                        self.target_site = pending_site
-                        self.state = "BUILDING"
-                        self.say("Constructing building, my Lord!")
-                        return True
+                        order = getattr(pending_site, "construction_order", None) or {}
+                        if order.get("order_type") != "PUBLIC_BUILD":
+                            self.target_site = pending_site
+                            self.state = "BUILDING"
+                            self.say("Constructing building, my Lord!")
+                            return True
                     else:
                         assigned = self._assign_construction_task(pending_site, stockpile_manager, resources, player, all_servants=all_servants)
                         if assigned:
@@ -798,9 +998,17 @@ class Servant:
                         if stack in claimed_loose_stacks and stack.amount <= SERVANT_CARRY_CAPACITY:
                             continue
 
-                        dest_tile = stockpile_manager.get_available_storage_tile(permit_manager, stack.resource_type)
+                        treasury_chest = None
+                        if stack.resource_type in MARKET_CURRENCY_DENOMINATIONS:
+                            from game.systems.lord_treasury import LordTreasurySystem
+                            treasury_chest = LordTreasurySystem.get_chest(furniture_manager)
+                        dest_tile = (
+                            (treasury_chest.grid_x, treasury_chest.grid_y)
+                            if treasury_chest else stockpile_manager.get_available_storage_tile(permit_manager, stack.resource_type)
+                        )
                         if dest_tile:
                             self.target_loose_stack = stack
+                            self.target_treasury_chest = treasury_chest
                             self.state = "HAULING_LOOSE_FETCH"
                             self.say(f"Hauling loose {stack.resource_type} to storage!")
                             return True
@@ -819,6 +1027,9 @@ class Servant:
         self.target_site = site
 
         if site.is_materials_complete():
+            order = getattr(site, "construction_order", None) or {}
+            if order.get("order_type") == "PUBLIC_BUILD":
+                return False
             if self.work_priorities.get("Building", 0) > 0:
                 self.state = "BUILDING"
                 self.say("Constructing building, my Lord!")
@@ -927,6 +1138,7 @@ class Servant:
         self.target_res = None
         self.target_storage_pos = None
         self.target_loose_stack = None
+        self.target_treasury_chest = None
         self.target_storage_tile = None
         self.target_grant_order = None
         self.target_grant_stack = None
@@ -946,12 +1158,6 @@ class Servant:
             offset_y = random.uniform(-90, 90)
             tx = player.x + offset_x
             ty = player.y + offset_y
-            if building_manager and building_manager.is_near_any_door(tx, ty, min_dist=DOORWAY_IDLE_MIN_DISTANCE):
-                tx += 50.0 if offset_x >= 0 else -50.0
-                ty += 50.0 if offset_y >= 0 else -50.0
-                if building_manager.is_near_any_door(tx, ty, min_dist=DOORWAY_IDLE_MIN_DISTANCE):
-                    tx = player.x + (60.0 if offset_x >= 0 else -60.0)
-                    ty = player.y + (60.0 if offset_y >= 0 else -60.0)
             self.idle_target = (tx, ty)
 
         # Bebaskan lorong sempit jika tanpa sengaja berada di lorong sempit saat idle
@@ -966,18 +1172,6 @@ class Servant:
                     self.idle_target = (cand_wx, cand_wy)
                     self._move_towards(cand_wx, cand_wy, dt, arrival_dist=16, all_servants=all_servants, player=player, building_manager=building_manager, all_entities=all_entities, furniture_manager=furniture_manager)
                     break
-
-        # Bebaskan celah pintu jika tanpa sengaja berada di threshold saat idle
-        if building_manager and building_manager.is_near_any_door(self.x, self.y, min_dist=32.0):
-            for b in getattr(building_manager, "buildings", []):
-                if b.door_pos and b.is_in_door_threshold(self.x, self.y, TILE_SIZE):
-                    d_out = b.get_door_world_outside(TILE_SIZE)
-                    n_dx = d_out[0] - self.x
-                    n_dy = d_out[1] - self.y
-                    n_dist = math.hypot(n_dx, n_dy)
-                    if n_dist > 0.1:
-                        self.x += (n_dx / n_dist) * (self.speed * dt * 0.8)
-                        self.y += (n_dy / n_dist) * (self.speed * dt * 0.8)
 
         self.is_waiting_for_path = False
         self._move_towards(self.idle_target[0], self.idle_target[1], dt, arrival_dist=20, all_servants=all_servants, player=player, building_manager=building_manager, all_entities=all_entities, furniture_manager=furniture_manager, exclusive_target=False)
@@ -1167,8 +1361,9 @@ class Servant:
         sh = (getattr(site, "tiles_h", 2) * TILE_SIZE) / 2.0 + 20.0
         return cx + math.cos(ang) * sw, cy + math.sin(ang) * sh
 
-    def draw(self, surface, camera, font_bubble):
-        sx, sy = camera.world_to_screen(self.x, self.y)
+    def draw(self, surface, camera, font_bubble, render_position=None):
+        render_x, render_y = render_position or (self.x, self.y)
+        sx, sy = camera.world_to_screen(render_x, render_y)
         r = max(4, int(self.radius * camera.zoom))
         bob = math.sin(self.walk_cycle) * (2.5 * camera.zoom) if self.is_moving else 0.0
         char_y = sy + int(bob)
@@ -1270,6 +1465,7 @@ class ServantManager:
         self.grant_orders = []
         self.restock_orders = []
         self.font_bubble = None
+        self.ai_updates_since_profile = 0
 
         # Inisialisasi 2 Servant awal
         names = ["Servant Alden", "Servant Barnaby"]
@@ -1336,14 +1532,34 @@ class ServantManager:
         if self.font_bubble is None:
             self.font_bubble = pygame.font.SysFont("Segoe UI", 11, bold=True)
 
-    def update(self, dt, building_manager, permit_manager, stockpile_manager, resources, player, furniture_manager=None, villager_manager=None):
+    def update(self, dt, building_manager, permit_manager, stockpile_manager, resources, player, furniture_manager=None, villager_manager=None, run_ai_scheduler=True, ai_dt=None, day_cycle=None):
         all_vils = villager_manager.get_all_villagers() if villager_manager else []
-        all_entities = list(self.servants) + all_vils
 
-        # 1. Update State Machine & Desired Movements
-        for s in self.servants:
-            s.update(dt, building_manager, permit_manager, stockpile_manager, resources, player, self.servants,
-                     furniture_manager=furniture_manager, villager_manager=villager_manager, servant_manager=self, all_entities=all_entities)
+        if run_ai_scheduler:
+            from game.systems.carpenter_system import CarpenterSystem
+            CarpenterSystem.dispatch_pending_public_commissions(
+                building_manager, self, villager_manager, furniture_manager,
+                day_cycle=day_cycle, stockpile_manager=stockpile_manager,
+            )
+            all_entities = SpatialEntityIndex(
+                list(self.servants) + list(all_vils), TILE_SIZE
+            )
+
+            def update_servant(servant, actor_dt):
+                servant.update(
+                    actor_dt, building_manager, permit_manager, stockpile_manager,
+                    resources, player, self.servants,
+                    furniture_manager=furniture_manager, villager_manager=villager_manager,
+                    servant_manager=self, all_entities=all_entities,
+                )
+                all_entities.update(servant)
+
+            self.last_ai_update_count = AISimulationScheduler.update_actors(
+                self.servants, dt if ai_dt is None else ai_dt,
+                SERVANT_AI_DECISION_TICK_INTERVAL_SECONDS, update_servant,
+                active_interval=SERVANT_AI_DECISION_TICK_INTERVAL_SECONDS,
+            )
+            self.ai_updates_since_profile += self.last_ai_update_count
 
         # AI entities pass freely through each other.
         # AI must never pass through the Landlord/player.
@@ -1401,7 +1617,13 @@ class ServantManager:
     def draw(self, surface, camera):
         self._ensure_font()
         for s in self.servants:
+            render_position = AISimulationScheduler.render_position(
+                s, AISimulationScheduler.render_alpha(
+                    s, SERVANT_AI_DECISION_TICK_INTERVAL_SECONDS
+                )
+            )
+            render_x, render_y = render_position
             radius = max(0, float(getattr(s, "radius", 0)))
-            if not camera.is_world_rect_visible(s.x - radius, s.y - radius, radius * 2, radius * 2):
+            if not camera.is_world_rect_visible(render_x - radius, render_y - radius, radius * 2, radius * 2):
                 continue
-            s.draw(surface, camera, self.font_bubble)
+            s.draw(surface, camera, self.font_bubble, render_position=render_position)

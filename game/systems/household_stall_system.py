@@ -340,7 +340,11 @@ class HouseholdStallSystem:
         # Ensure no other family member is already executing stall chores
         fam_str = str(fam_id)
         if all_entities:
-            for other in all_entities:
+            family_entities = (
+                all_entities.by_family(fam_str)
+                if hasattr(all_entities, "by_family") else all_entities
+            )
+            for other in family_entities:
                 if other != villager and str(getattr(other, "family_id", "")) == fam_str:
                     o_task = getattr(other, "task", "")
                     if o_task.startswith("HAULING_STALL_"):

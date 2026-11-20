@@ -25,6 +25,16 @@ HOUSEHOLD_PALETTE = [
 ]
 
 
+def _wallet_with_mirror_fallback(primary, fallback):
+    """Prefer physical inventory; use a mirrored wallet only when that coin is absent."""
+    primary_wallet = normalize_wallet(primary)
+    fallback_wallet = normalize_wallet(fallback)
+    return {
+        denom: primary_wallet[denom] if primary_wallet[denom] > 0 else fallback_wallet[denom]
+        for denom in CURRENCY_DENOMINATIONS
+    }
+
+
 class VillageWealthSystem:
     _cached_result = None
     _is_dirty = True
@@ -79,6 +89,16 @@ class VillageWealthSystem:
                     if canon:
                         ll_wallet[canon] += max(0, int(getattr(s, "amount", 0)))
 
+        # The treasury chest is the authoritative landlord coin container after
+        # migration; it is separate from legacy resource mirrors and market vaults.
+        if furniture_manager and hasattr(furniture_manager, "get_lord_treasury_chest"):
+            treasury = furniture_manager.get_lord_treasury_chest()
+            if treasury:
+                for denom in CURRENCY_DENOMINATIONS:
+                    ll_wallet[denom] += normalize_wallet(
+                        getattr(treasury, "inventory", {})
+                    )[denom]
+
         # B. Coins in Unassigned (Landlord-owned) Market Stalls
         if building_manager:
             for b in getattr(building_manager, "buildings", []):
@@ -106,59 +126,37 @@ class VillageWealthSystem:
                     for furn in furn_list:
                         if str(getattr(furn, "family_id", "")) == fam_id_str:
                             visited_chests.add(id(furn))
-                            # Check currency container if separate
-                            if hasattr(furn, "currency") and isinstance(furn.currency, dict):
-                                f_curr = normalize_wallet(furn.currency)
-                                for denom in ("Copper", "Silver", "Gold"):
-                                    fam_wallet[denom] += f_curr[denom]
-                            # Check inventory dict for coins (avoid double-counting if identical to currency)
-                            if hasattr(furn, "inventory") and isinstance(furn.inventory, dict):
-                                if getattr(furn, "inventory") is not getattr(furn, "currency", None):
-                                    for item_name, count in furn.inventory.items():
-                                        canon = canonical_denomination(item_name)
-                                        if canon and canon not in getattr(furn, "currency", {}):
-                                            fam_wallet[canon] += max(0, int(count))
+                            f_wallet = _wallet_with_mirror_fallback(
+                                getattr(furn, "inventory", None),
+                                getattr(furn, "currency", None),
+                            )
+                            for denom in CURRENCY_DENOMINATIONS:
+                                fam_wallet[denom] += f_wallet[denom]
 
                     # Fallback lookup by method
                     if hasattr(furniture_manager, "get_storage_for_family"):
                         st = furniture_manager.get_storage_for_family(fam_id_str)
                         if st and id(st) not in visited_chests:
-                            if hasattr(st, "currency") and isinstance(st.currency, dict):
-                                f_curr = normalize_wallet(st.currency)
-                                for denom in ("Copper", "Silver", "Gold"):
-                                    fam_wallet[denom] += f_curr[denom]
-                            if hasattr(st, "inventory") and isinstance(st.inventory, dict):
-                                if getattr(st, "inventory") is not getattr(st, "currency", None):
-                                    for item_name, count in st.inventory.items():
-                                        canon = canonical_denomination(item_name)
-                                        if canon and canon not in getattr(st, "currency", {}):
-                                            fam_wallet[canon] += max(0, int(count))
+                            f_wallet = _wallet_with_mirror_fallback(
+                                getattr(st, "inventory", None),
+                                getattr(st, "currency", None),
+                            )
+                            for denom in CURRENCY_DENOMINATIONS:
+                                fam_wallet[denom] += f_wallet[denom]
 
                 # B. Coins physically carried in member pockets / personal inventories
                 for m in getattr(fam, "members", []):
-                    counted_denoms = set()
-                    # Wallet / currency dict
                     if hasattr(m, "currency") and isinstance(m.currency, dict):
-                        m_curr = normalize_wallet(m.currency)
-                        for denom in ("Copper", "Silver", "Gold"):
-                            fam_wallet[denom] += m_curr[denom]
-                            if m_curr[denom] > 0:
-                                counted_denoms.add(denom)
+                        mirror_wallet = m.currency
                     elif hasattr(m, "wallet") and isinstance(m.wallet, dict):
-                        m_w = normalize_wallet(m.wallet)
-                        for denom in ("Copper", "Silver", "Gold"):
-                            fam_wallet[denom] += m_w[denom]
-                            if m_w[denom] > 0:
-                                counted_denoms.add(denom)
-
-                    # Personal inventory dict (ensure no double-counting with currency/wallet)
-                    if hasattr(m, "inventory") and isinstance(m.inventory, dict):
-                        if getattr(m, "inventory") is not getattr(m, "currency", None) and \
-                           getattr(m, "inventory") is not getattr(m, "wallet", None):
-                            for item_name, count in m.inventory.items():
-                                canon = canonical_denomination(item_name)
-                                if canon and canon not in counted_denoms:
-                                    fam_wallet[canon] += max(0, int(count))
+                        mirror_wallet = m.wallet
+                    else:
+                        mirror_wallet = None
+                    m_wallet = _wallet_with_mirror_fallback(
+                        getattr(m, "inventory", None), mirror_wallet
+                    )
+                    for denom in CURRENCY_DENOMINATIONS:
+                        fam_wallet[denom] += m_wallet[denom]
 
                 # C. Coins in Market Stalls assigned to this household
                 if building_manager:
