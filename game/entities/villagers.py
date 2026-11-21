@@ -2739,10 +2739,17 @@ class Villager:
                         self.job_tool_purchase_items = purchase_items
                         self.task = "BUYING_JOB_TOOLS_RETRIEVE_COINS"
                         return
-                    self.task = "MISSING_TOOL"
-                    if not getattr(self, "speech_text", None):
-                        self.say("My job tools are missing, and no market can supply an affordable required item.", duration=2.5)
-                    return
+                    if self.job == "Carpenter":
+                        # Carpenter commission errands (claiming orders, payment
+                        # requests, material hauling) do not need the saw/adze.
+                        # CarpenterSystem gates only the actual build phase, so
+                        # fall through to update_worker instead of dead-ending.
+                        pass
+                    else:
+                        self.task = "MISSING_TOOL"
+                        if not getattr(self, "speech_text", None):
+                            self.say("My job tools are missing, and no market can supply an affordable required item.", duration=2.5)
+                        return
 
         # -------------------------------------------------------------
         # Rutinitas 2: Jam Kerja (WORK / ANY)

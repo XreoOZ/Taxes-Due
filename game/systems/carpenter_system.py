@@ -1082,6 +1082,21 @@ class CarpenterSystem:
         return False
 
     @classmethod
+    def _block_until_tools_ready(cls, carpenter):
+        """Returns True when the carpenter lacks required job tools and must wait.
+
+        Commission errands (claiming orders, payment requests, material hauling)
+        don't need tools; only the actual build/repair phase does.
+        """
+        getter = getattr(carpenter, "get_missing_job_tools", None)
+        if not callable(getter) or not getter():
+            return False
+        if not getattr(carpenter, "speech_text", None):
+            carpenter.say("I need my job tools before I can build.", duration=3.0)
+        carpenter.task = "IDLE"
+        return True
+
+    @classmethod
     def update_worker(cls, carpenter, dt, schedule_activity, building_manager, furniture_manager,
                       villager_manager, all_entities, player, day_cycle,
                       stockpile_manager=None, permit_manager=None):
@@ -1214,6 +1229,8 @@ class CarpenterSystem:
                             carpenter.say("I am carrying the building materials from storage.", duration=2.0)
                         return True
                     order["materials_committed"] = True
+                if cls._block_until_tools_ready(carpenter):
+                    return True
                 carpenter.task = "CARPENTER_CONSTRUCTING"
                 target_x, target_y = cls._asset_approach_point(
                     carpenter, public_site, order, all_entities, building_manager,
@@ -1278,6 +1295,8 @@ class CarpenterSystem:
                     elif not delivered and carpenter.task == "CARPENTER_COLLECTING_MATERIALS":
                         carpenter.say("I am carrying repair materials from storage.", duration=2.0)
                     return True
+            if cls._block_until_tools_ready(carpenter):
+                return True
             carpenter.task = "CARPENTER_REPAIRING"
             arrived = cls._within_asset_work_range(carpenter, public_repair)
             if not arrived:
@@ -1398,6 +1417,8 @@ class CarpenterSystem:
                 return True
             order["status"] = "BUILDING"
 
+        if cls._block_until_tools_ready(carpenter):
+            return True
         carpenter.task = "CARPENTER_REPAIRING" if is_repair else "CARPENTER_CONSTRUCTING"
         carpenter.active_tool = None if is_repair else (cfg.get("required_tools") or ["Saw"])[0]
         target = cls._asset_approach_point(
