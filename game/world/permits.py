@@ -896,8 +896,10 @@ class PermitManager:
                 if existing_sites:
                     return None, f"Cannot build: Lot '{p.name}' already has an active construction site!"
 
-        # C. Validasi khusus Well & Toilet: Tidak memerlukan permit, dapat dibangun di tanah terbuka atau dalam permit kosong
-        if req_type in ("well", "toilet"):
+        # C. Public structures configured without a required permit may be placed
+        # on open ground or inside one empty lot, but cannot straddle a lot edge.
+        type_cfg = BUILDING_TYPES.get(req_type, {}) if req_type in BUILDING_TYPES else {}
+        if req_type in ("well", "toilet") or (type_cfg and type_cfg.get("required_permit") is None):
             for p in self.permits:
                 if p.overlaps_tiles(building_tiles):
                     if p.contains_all_tiles(building_tiles):

@@ -629,30 +629,17 @@ def main():
                                         planned_door_side = edges[0]
                                     building_drag_start = None
                                     continue
-                            elif planning_building_type == "well":
-                                # Place the configured footprint, transposed when rotated.
-                                w_w = int(b_cfg.get("width_tiles", 2))
-                                w_h = int(b_cfg.get("height_tiles", 2))
+                            elif (b_cfg.get("fixed_tiles_count") and b_cfg.get("width_tiles")
+                                  and b_cfg.get("height_tiles")):
+                                # Place a configured fixed-footprint structure, rotated as needed.
+                                w_w = int(b_cfg["width_tiles"])
+                                w_h = int(b_cfg["height_tiles"])
                                 if planning_building_rotation % 180:
                                     w_w, w_h = w_h, w_w
-                                planning_building_tiles = {(m_gx + dx, m_gy + dy) for dx in range(w_w) for dy in range(w_h)}
-                                planned_door_tile = None
-                                planned_door_side = None
-                                building_drag_start = None
-                                continue
-                            elif planning_building_type == "market":
-                                w_w = int(b_cfg.get("width_tiles", 3))
-                                w_h = int(b_cfg.get("height_tiles", 2))
-                                if planning_building_rotation % 180:
-                                    w_w, w_h = w_h, w_w
-                                planning_building_tiles = {(m_gx + dx, m_gy + dy) for dx in range(w_w) for dy in range(w_h)}
-                                planned_door_tile = None
-                                planned_door_side = None
-                                building_drag_start = None
-                                continue
-                            elif planning_building_type == "toilet":
-                                # Footprint 1x1 instan untuk toilet/latrine
-                                planning_building_tiles = {(m_gx, m_gy)}
+                                planning_building_tiles = {
+                                    (m_gx + dx, m_gy + dy)
+                                    for dx in range(w_w) for dy in range(w_h)
+                                }
                                 planned_door_tile = None
                                 planned_door_side = None
                                 building_drag_start = None
@@ -1435,6 +1422,13 @@ def main():
                     if (gx + 1, gy) not in planning_building_tiles:
                         pygame.draw.line(screen, (96, 165, 250), (sx + scaled_t, sy), (sx + scaled_t, sy + scaled_t), 2)
 
+                if (planning_building_type == "tax_house"
+                        and len(planning_building_tiles) == int(b_cfg.get("fixed_tiles_count", 0))):
+                    building_manager.draw_public_structure_preview(
+                        screen, camera, TILE_SIZE, planning_building_type,
+                        planning_building_tiles, planning_building_rotation,
+                    )
+
                 # B. Render Door Marker
                 if planned_door_tile and planned_door_tile in planning_building_tiles:
                     dsx, dsy = camera.world_to_screen(planned_door_tile[0] * TILE_SIZE, planned_door_tile[1] * TILE_SIZE)
@@ -1443,10 +1437,11 @@ def main():
                     d_lbl = font_badge.render(f"DOOR ({planned_door_side.upper()})", True, (0, 0, 0))
                     screen.blit(d_lbl, (door_box.centerx - d_lbl.get_width() // 2, door_box.centery - d_lbl.get_height() // 2))
 
-                # C. Fixed Size (Well, Market, Toilet) Hover Preview (when 0 tiles selected)
-                if planning_building_type in ("well", "market", "toilet") and not planning_building_tiles and not building_drag_start:
-                    w_w = b_cfg.get("width_tiles", 1 if planning_building_type == "toilet" else 2)
-                    w_h = b_cfg.get("height_tiles", 1 if planning_building_type == "toilet" else 2)
+                # C. Configured fixed-footprint structure hover preview.
+                if (b_cfg.get("fixed_tiles_count") and b_cfg.get("width_tiles")
+                        and b_cfg.get("height_tiles") and not planning_building_tiles and not building_drag_start):
+                    w_w = int(b_cfg["width_tiles"])
+                    w_h = int(b_cfg["height_tiles"])
                     if planning_building_rotation % 180:
                         w_w, w_h = w_h, w_w
                     preview_box = {(m_gx + c, m_gy + r) for c in range(w_w) for r in range(w_h)}
@@ -1458,6 +1453,11 @@ def main():
                         t_surf.fill(fit_tint)
                         screen.blit(t_surf, (sx, sy))
                         pygame.draw.rect(screen, (34, 197, 94) if can_fit else (239, 68, 68), (sx, sy, scaled_t, scaled_t), width=1)
+                    if planning_building_type == "tax_house":
+                        building_manager.draw_public_structure_preview(
+                            screen, camera, TILE_SIZE, planning_building_type,
+                            preview_box, planning_building_rotation,
+                        )
                     if w_w == 1 and w_h == 1 and b_cfg.get("rotatable", True):
                         draw_placement_orientation(
                             screen, pygame.Rect(sx, sy, scaled_t, scaled_t),

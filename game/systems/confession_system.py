@@ -11,7 +11,7 @@ from game.config import (
     AI_NEED_FAITH_CONFESSION_RESTORE_MAX,
     AI_NEED_FAITH_PRAYER_RESTORE_MIN,
     AI_NEED_FAITH_PRAYER_RESTORE_MAX,
-    CONFESSION_DURATION_INGAME_HOURS,
+    CONFESSION_DURATION_SECONDS,
     CONFESSION_BUBBLE_DURATION_SECONDS,
     CONFESSION_MAX_WAIT_HOURS,
 )
@@ -22,6 +22,7 @@ from game.systems.currency import (
     to_copper,
 )
 from game.config import INTERACTION_CONTACT_RADIUS
+from game.world.navigation import distance_to_object
 from game.systems.market_service import MarketService
 
 
@@ -65,9 +66,8 @@ class ConfessionSystem:
         return day_seconds * float(CONFESSION_MAX_WAIT_HOURS) / float(HOURS_PER_DAY)
 
     @staticmethod
-    def _confession_duration(day_cycle):
-        day_seconds = max(1.0, float(getattr(day_cycle, "day_length_seconds", DEFAULT_DAY_LENGTH_SECONDS)))
-        return day_seconds * float(CONFESSION_DURATION_INGAME_HOURS) / float(HOURS_PER_DAY)
+    def _confession_duration():
+        return max(0.0, float(CONFESSION_DURATION_SECONDS))
 
     @classmethod
     def _prepare_payment(cls, villager, request, dt, building_manager,
@@ -93,8 +93,10 @@ class ConfessionSystem:
             return True
 
         source = getattr(chest, "inventory", {})
+        source_name = "inventory"
         if to_copper(normalize_wallet(source)) <= 0:
             source = getattr(chest, "currency", {})
+            source_name = "currency"
         chest_value = to_copper(normalize_wallet(source))
         if chest_value <= 0:
             request["fee_offer"] = min(due, personal_value)
@@ -111,6 +113,7 @@ class ConfessionSystem:
                 pos[0], pos[1], dt, arrival_dist=INTERACTION_CONTACT_RADIUS,
                 all_entities=all_entities, player=player,
                 building_manager=building_manager, furniture_manager=furniture_manager,
+                interaction_target=chest,
             )
             villager.task = "CONFESSION_RETRIEVE_COINS"
             villager.confession_task = "RETRIEVING_PAYMENT"
@@ -120,7 +123,16 @@ class ConfessionSystem:
         request["at_payment_storage"] = True
         withdraw = min(remaining, chest_value)
         if withdraw > 0:
-            CarpenterSystem._move_exact_value(source, villager.inventory, withdraw)
+            if not CarpenterSystem._move_exact_value(source, villager.inventory, withdraw):
+                return False
+            request["payment_chest_id"] = getattr(chest, "id", None)
+            request["payment_family_id"] = getattr(villager, "family_id", None)
+            request["payment_source"] = source_name
+            request["withdrawn_amount"] = (
+                max(0, int(request.get("withdrawn_amount", 0))) + withdraw
+            )
+            from game.systems.wealth_system import VillageWealthSystem
+            VillageWealthSystem.mark_dirty()
         request["fee_offer"] = min(due, to_copper(normalize_wallet(villager.inventory)))
         request["payment_ready"] = True
         request["state"] = "READY"
@@ -188,6 +200,23 @@ class ConfessionSystem:
         villager.say("I should seek confession.", duration=2.5)
 
     @classmethod
+    def _activate_next_request(cls, church_key, queue):
+        inst = cls.get_instance()
+        if inst.active.get(church_key) or not queue:
+            return inst.active.get(church_key)
+        request = queue[0]
+        if not request.get("self_confession") and not request.get("payment_ready"):
+            return None
+        queue.pop(0)
+        request["state"] = (
+            "PRIEST_TO_VISITOR" if request.get("self_confession")
+            else "VISITOR_TO_PRIEST"
+        )
+        request["wait_seconds"] = 0.0
+        inst.active[church_key] = request
+        return request
+
+    @classmethod
     def update_villager(cls, villager, dt, sched_activity, day_cycle, permit_manager,
                         villager_manager, building_manager, furniture_manager,
                         all_entities, player, schedule_manager=None):
@@ -221,39 +250,47 @@ class ConfessionSystem:
                        if str(p.id) == church_key), None)
         box = furniture_manager.get_furniture_by_id(request["box_id"]) if furniture_manager else None
         if not church or not box or not box.is_available_for_use:
-            cls._cancel_request(request, villager_manager, "Confession unavailable; I will return later.")
+            cls._cancel_request(
+                request, villager_manager,
+                "Confession unavailable; I will return later.",
+                furniture_manager,
+            )
             return False
         if not request.get("self_confession"):
             priest = cls._find_priest(request, villager_manager)
             if (not priest or not getattr(priest, "is_alive", True)
                     or getattr(priest, "job", "") != "Priest"):
                 cls._cancel_request(request, villager_manager,
-                                    "The Priest is unavailable; I will return later.")
+                                    "The Priest is unavailable; I will return later.",
+                                    furniture_manager)
                 return False
 
         queue = inst.queues.get(church_key, [])
         active = inst.active.get(church_key)
-        if not request.get("self_confession") and not request.get("payment_ready"):
+        is_active_visitor = (
+            active and str(active.get("villager_id")) == str(villager.id)
+        )
+        is_queue_head = bool(queue) and queue[0] is request
+        can_prepare_payment = is_active_visitor or (not active and is_queue_head)
+        if (not request.get("self_confession") and not request.get("payment_ready")
+                and can_prepare_payment):
             cls._prepare_payment(
                 villager, request, dt, building_manager, furniture_manager,
                 all_entities, player,
             )
             if not request.get("payment_ready"):
                 return True
-        if request in queue and request.get("self_confession") and not active and queue[0] is request:
-            queue.pop(0)
-            request["state"] = "PRIEST_TO_VISITOR"
-            request["wait_seconds"] = 0.0
-            inst.active[church_key] = request
-            active = request
+        if not active:
+            active = cls._activate_next_request(church_key, queue)
         if active and str(active.get("villager_id")) == str(villager.id):
+            if not request.get("self_confession"):
+                return True
             if active.get("state") == "IN_PROGRESS":
                 active["elapsed"] += max(0.0, dt)
                 villager.task = "CONFESSING"
                 villager.confession_task = "IN_PROGRESS"
                 villager.is_moving = False
-                if (request.get("self_confession")
-                        and active["elapsed"] >= cls._confession_duration(day_cycle)):
+                if active["elapsed"] >= cls._confession_duration():
                     villager.faith = random.uniform(AI_NEED_FAITH_CONFESSION_RESTORE_MIN,
                                                     AI_NEED_FAITH_CONFESSION_RESTORE_MAX)
                     villager.last_confession_day = getattr(day_cycle, "day_number", 1)
@@ -270,58 +307,17 @@ class ConfessionSystem:
             if (active["wait_seconds"] >= elapsed_limit
                     or cls._is_sleep_time(active, villager_manager, day_cycle, schedule_manager)):
                 cls._cancel_request(active, villager_manager,
-                                    "The confession queue took too long; I will return later.")
+                                    "The confession queue took too long; I will return later.",
+                                    furniture_manager)
                 return False
-            if request.get("self_confession"):
-                cls._move_to_box(villager, box, dt, all_entities, player,
-                                 building_manager, furniture_manager, side=0)
-                if cls._at_approach(villager, box, building_manager, furniture_manager, side=0):
-                    active["state"] = "IN_PROGRESS"
-                    active["elapsed"] = 0.0
-                    villager.task = "CONFESSING"
-                    villager.confession_task = "IN_PROGRESS"
-                    villager.say("I seek quiet reflection and confession.", duration=CONFESSION_BUBBLE_DURATION_SECONDS)
-                return True
-
-            priest = cls._find_priest(request, villager_manager)
-            if not priest:
-                cls._cancel_request(request, villager_manager, "The Priest is unavailable; I will return later.")
-                return False
-            if active.get("state") == "VISITOR_TO_PRIEST":
-                px, py = priest.x, priest.y
-                arrived = villager._move_towards(
-                    px, py, dt, arrival_dist=INTERACTION_CONTACT_RADIUS,
-                    all_entities=all_entities, player=player,
-                    building_manager=building_manager, furniture_manager=furniture_manager,
-                    exclusive_target=False,
-                )
-                villager.task = "CONFESSION_TRAVEL_TO_PRIEST"
-                villager.confession_task = "APPROACHING_PRIEST"
-                if arrived or math_distance(villager.x, villager.y, px, py) <= INTERACTION_CONTACT_RADIUS:
-                    fee_due = max(0, int(request.get("fee_due", 0)))
-                    fee_offer = min(fee_due, to_copper(normalize_wallet(villager.inventory)))
-                    cls._transfer_offering(villager, priest, fee_offer)
-                    if (fee_offer > 0 and str(getattr(priest, "family_id", ""))
-                            != str(getattr(villager, "family_id", ""))):
-                        from game.systems.market_sales_report import MarketSalesReportSystem
-                        MarketSalesReportSystem.record_household_income(
-                            villager_manager, getattr(priest, "family_id", None),
-                            "Confession Offerings", fee_offer,
-                            getattr(day_cycle, "day_number", 1),
-                        )
-                    request["paid"] = True
-                    request["fee_paid"] = fee_offer
-                    request["state"] = "BOTH_TO_BOX"
-                return True
-
-            if active.get("state") == "BOTH_TO_BOX":
-                cls._move_to_box(villager, box, dt, all_entities, player,
-                                 building_manager, furniture_manager, side=0)
-                if cls._at_approach(villager, box, building_manager, furniture_manager, side=0):
-                    active["visitor_at_box"] = True
-                    villager.task = "CONFESSING"
-                    villager.confession_task = "WAITING_FOR_PRIEST"
-                return True
+            cls._move_to_box(villager, box, dt, all_entities, player,
+                             building_manager, furniture_manager, side=0)
+            if cls._at_approach(villager, box, building_manager, furniture_manager, side=0):
+                active["state"] = "IN_PROGRESS"
+                active["elapsed"] = 0.0
+                villager.task = "CONFESSING"
+                villager.confession_task = "IN_PROGRESS"
+                villager.say("I seek quiet reflection and confession.", duration=CONFESSION_BUBBLE_DURATION_SECONDS)
             return True
 
         if request in queue:
@@ -331,7 +327,8 @@ class ConfessionSystem:
             if (request["wait_seconds"] >= elapsed_limit
                     or cls._is_sleep_time(request, villager_manager, day_cycle, schedule_manager)):
                 cls._cancel_request(request, villager_manager,
-                                    "The confession queue took too long; I will return later.")
+                                    "The confession queue took too long; I will return later.",
+                                    furniture_manager)
                 return False
             tiles = ChurchSystem.get_church_walkable_tiles(church, building_manager)
             position = cls._queue_position(index, tiles, furniture_manager, box)
@@ -357,16 +354,12 @@ class ConfessionSystem:
         church_key = str(church.id)
         queue = inst.queues.setdefault(church_key, [])
         request = inst.active.get(church_key)
-        if request is None and queue:
-            request = queue[0]
-            if not request.get("payment_ready") and not request.get("self_confession"):
+        if request is None:
+            request = cls._activate_next_request(church_key, queue)
+            if request is None and queue:
                 priest.task = "PREACHING"
                 priest.confession_task = None
                 return False
-            request = queue.pop(0)
-            inst.active[church_key] = request
-            request["state"] = "VISITOR_TO_PRIEST"
-            request["wait_seconds"] = 0.0
         if request is None:
             priest.confession_task = None
             return False
@@ -375,40 +368,107 @@ class ConfessionSystem:
         visitor = cls._find_priest(request, villager_manager, priest_role=False)
         box = furniture_manager.get_furniture_by_id(request.get("box_id")) if furniture_manager else None
         if not visitor or not getattr(visitor, "is_alive", True) or not box or not box.is_available_for_use:
-            cls._finish_request(church_key, visitor, priest, success=False)
+            cls._cancel_request(
+                request, villager_manager,
+                "Confession could not be completed; I will return later.",
+                furniture_manager,
+            )
             return False
-        if request.get("state") == "VISITOR_TO_PRIEST":
+        interrupted_state = getattr(visitor, "interrupted_task_state", None)
+        if (interrupted_state
+                and interrupted_state.get("task") in (
+                    "CONFESSION_QUEUED", "CONFESSION_RETRIEVE_COINS",
+                    "CONFESSION_TRAVEL_TO_PRIEST", "GOING_TO_CONFESSION_BOX",
+                    "CONFESSING",
+                )):
             priest.task = "PREACHING"
             priest.confession_task = "WAITING_FOR_VISITOR"
-            if math_distance(priest.x, priest.y, visitor.x, visitor.y) <= INTERACTION_CONTACT_RADIUS:
+            return True
+        if request.get("state") != "IN_PROGRESS":
+            request["wait_seconds"] = request.get("wait_seconds", 0.0) + max(0.0, dt)
+            if (request["wait_seconds"] >= cls._wait_limit(day_cycle)
+                    or cls._is_sleep_time(request, villager_manager, day_cycle, schedule_manager)):
+                cls._cancel_request(
+                    request, villager_manager,
+                    "The confession queue took too long; I will return later.",
+                    furniture_manager,
+                )
+                return False
+        if request.get("state") == "VISITOR_TO_PRIEST":
+            priest.task = "GOING_TO_CONFESSOR"
+            priest.confession_task = "APPROACHING_VISITOR"
+            visitor.task = "CONFESSION_TRAVEL_TO_PRIEST"
+            visitor.confession_task = "APPROACHING_PRIEST"
+            visitor._move_towards(
+                priest.x, priest.y, dt, arrival_dist=INTERACTION_CONTACT_RADIUS,
+                all_entities=all_entities, player=player,
+                building_manager=building_manager, furniture_manager=furniture_manager,
+                exclusive_target=False, interaction_target=priest,
+            )
+            priest._move_towards(
+                visitor.x, visitor.y, dt, arrival_dist=INTERACTION_CONTACT_RADIUS,
+                all_entities=all_entities, player=player,
+                building_manager=building_manager, furniture_manager=furniture_manager,
+                exclusive_target=False, interaction_target=visitor,
+            )
+            if distance_to_object(priest, visitor.x, visitor.y, TILE_SIZE) <= TILE_SIZE:
+                fee_due = max(0, int(request.get("fee_due", 0)))
+                fee_offer = min(fee_due, to_copper(normalize_wallet(visitor.inventory)))
+                cls._transfer_offering(visitor, priest, fee_offer)
+                if (fee_offer > 0 and str(getattr(priest, "family_id", ""))
+                        != str(getattr(visitor, "family_id", ""))):
+                    from game.systems.market_sales_report import MarketSalesReportSystem
+                    MarketSalesReportSystem.record_household_income(
+                        villager_manager, getattr(priest, "family_id", None),
+                        "Confession Offerings", fee_offer,
+                        getattr(day_cycle, "day_number", 1),
+                    )
+                request["paid"] = True
+                request["fee_paid"] = fee_offer
                 request["state"] = "BOTH_TO_BOX"
-                cls._move_to_box(priest, box, dt, all_entities, player,
-                                 building_manager, furniture_manager, side=1)
+                visitor.task = "GOING_TO_CONFESSION_BOX"
+                visitor.confession_task = "GOING_TO_BOX"
+                priest.task = "GOING_TO_CONFESSION_BOX"
+                priest.confession_task = "GOING_TO_BOX"
             return True
         if request.get("state") == "BOTH_TO_BOX":
-            cls._move_to_box(priest, box, dt, all_entities, player,
-                             building_manager, furniture_manager, side=1)
+            visitor.task = "GOING_TO_CONFESSION_BOX"
+            visitor.confession_task = "GOING_TO_BOX"
             priest.task = "GOING_TO_CONFESSION_BOX"
             priest.confession_task = "GOING_TO_BOX"
-            if (request.get("visitor_at_box")
-                    and cls._at_approach(priest, box, building_manager,
-                                         furniture_manager, side=1)):
+            cls._move_to_box(visitor, box, dt, all_entities, player,
+                             building_manager, furniture_manager, side=0)
+            cls._move_to_box(priest, box, dt, all_entities, player,
+                             building_manager, furniture_manager, side=1)
+            visitor_at_box = cls._at_approach(
+                visitor, box, building_manager, furniture_manager, side=0,
+            )
+            request["visitor_at_box"] = visitor_at_box
+            priest_at_box = cls._at_approach(
+                priest, box, building_manager, furniture_manager, side=1,
+            )
+            if visitor_at_box:
+                visitor.task = "CONFESSING"
+                visitor.confession_task = "WAITING_FOR_PRIEST"
+            if visitor_at_box and priest_at_box:
                 request["state"] = "IN_PROGRESS"
                 request["elapsed"] = 0.0
                 priest.task = "HEARING_CONFESSION"
                 priest.confession_task = "IN_PROGRESS"
-                visitor = cls._find_priest(request, villager_manager, priest_role=False)
-                if visitor:
-                    visitor.task = "CONFESSING"
-                    visitor.confession_task = "IN_PROGRESS"
-                    visitor.say("Forgive me, Father...", duration=CONFESSION_BUBBLE_DURATION_SECONDS)
+                visitor.task = "CONFESSING"
+                visitor.confession_task = "IN_PROGRESS"
+                visitor.say("Forgive me, Father...", duration=CONFESSION_BUBBLE_DURATION_SECONDS)
                 priest.say("Speak freely. I am listening.", duration=CONFESSION_BUBBLE_DURATION_SECONDS)
             return True
         if request.get("state") == "IN_PROGRESS":
+            request["elapsed"] = request.get("elapsed", 0.0) + max(0.0, dt)
             priest.task = "HEARING_CONFESSION"
             priest.confession_task = "IN_PROGRESS"
             priest.is_moving = False
-            if request.get("elapsed", 0.0) >= cls._confession_duration(day_cycle):
+            visitor.task = "CONFESSING"
+            visitor.confession_task = "IN_PROGRESS"
+            visitor.is_moving = False
+            if request.get("elapsed", 0.0) >= cls._confession_duration():
                 visitor.faith = random.uniform(AI_NEED_FAITH_CONFESSION_RESTORE_MIN,
                                                AI_NEED_FAITH_CONFESSION_RESTORE_MAX)
                 visitor.last_confession_day = getattr(day_cycle, "day_number", 1)
@@ -450,6 +510,22 @@ class ConfessionSystem:
         return None
 
     @classmethod
+    def has_pending_requests_for_priest(cls, priest, permit_manager):
+        if not priest:
+            return False
+        church = next((
+            permit for permit in ChurchSystem.get_all_church_permits(permit_manager)
+            if str(priest.id) in {
+                str(worker_id) for worker_id in getattr(permit, "assigned_workers", [])
+            }
+        ), None)
+        if not church:
+            return False
+        church_key = str(church.id)
+        inst = cls.get_instance()
+        return bool(inst.active.get(church_key) or inst.queues.get(church_key))
+
+    @classmethod
     def _find_priest(cls, request, villager_manager, priest_role=True):
         if not villager_manager:
             return None
@@ -488,25 +564,24 @@ class ConfessionSystem:
         if points:
             point = points[min(side, len(points) - 1)]
             cls._move_to_point(villager, ((point[0] + 0.5) * TILE_SIZE, (point[1] + 0.5) * TILE_SIZE),
-                               dt, all_entities, player, building_manager, furniture_manager)
+                               dt, all_entities, player, building_manager, furniture_manager,
+                               interaction_target=box)
 
     @classmethod
-    def _move_to_point(cls, villager, point, dt, all_entities, player, building_manager, furniture_manager):
+    def _move_to_point(cls, villager, point, dt, all_entities, player, building_manager,
+                       furniture_manager, interaction_target=None):
         from game.config import INTERACTION_CONTACT_RADIUS
         villager._move_towards(point[0], point[1], dt, arrival_dist=INTERACTION_CONTACT_RADIUS,
                                all_entities=all_entities, player=player,
                                building_manager=building_manager,
-                               furniture_manager=furniture_manager, exclusive_target=False)
+                               furniture_manager=furniture_manager, exclusive_target=False,
+                               interaction_target=interaction_target)
 
     @classmethod
     def _at_approach(cls, villager, box, building_manager, furniture_manager, side=0):
-        points = cls._approach_points(box, building_manager, furniture_manager)
-        if not points:
+        if not cls._approach_points(box, building_manager, furniture_manager):
             return False
-        point = points[min(side, len(points) - 1)]
-        target = ((point[0] + 0.5) * TILE_SIZE, (point[1] + 0.5) * TILE_SIZE)
-        from game.config import INTERACTION_CONTACT_RADIUS
-        return math_distance(villager.x, villager.y, *target) <= INTERACTION_CONTACT_RADIUS
+        return distance_to_object(box, villager.x, villager.y, TILE_SIZE) <= TILE_SIZE
 
     @classmethod
     def _is_sleep_time(cls, request, villager_manager, day_cycle, schedule_manager=None):
@@ -552,7 +627,43 @@ class ConfessionSystem:
         return amount
 
     @classmethod
-    def _cancel_request(cls, request, villager_manager, message):
+    def _refund_prepared_payment(cls, request, villager, furniture_manager):
+        amount = max(0, int(request.get("withdrawn_amount", 0)))
+        if amount <= 0:
+            return True
+        if not villager or not furniture_manager:
+            return False
+
+        family_id = request.get("payment_family_id", getattr(villager, "family_id", None))
+        chest_id = request.get("payment_chest_id")
+        chest = furniture_manager.get_furniture_by_id(chest_id) if chest_id is not None else None
+        if (chest and str(getattr(chest, "family_id", "")) != str(family_id)):
+            chest = None
+        if not chest and family_id is not None:
+            chest = furniture_manager.get_storage_for_family(family_id)
+        if not chest:
+            return False
+
+        source_name = request.get("payment_source", "inventory")
+        if source_name not in ("inventory", "currency"):
+            source_name = "inventory"
+        destination = getattr(chest, source_name, None)
+        if not isinstance(destination, dict):
+            destination = getattr(chest, "inventory", None)
+        if not isinstance(destination, dict):
+            return False
+
+        from game.systems.carpenter_system import CarpenterSystem
+        if not CarpenterSystem._move_exact_value(
+                getattr(villager, "inventory", {}), destination, amount):
+            return False
+        request["withdrawn_amount"] = 0
+        from game.systems.wealth_system import VillageWealthSystem
+        VillageWealthSystem.mark_dirty()
+        return True
+
+    @classmethod
+    def _cancel_request(cls, request, villager_manager, message, furniture_manager=None):
         church_key = str(request.get("church_id"))
         inst = cls.get_instance()
         inst.queues[church_key] = [item for item in inst.queues.get(church_key, []) if item is not request]
@@ -567,7 +678,8 @@ class ConfessionSystem:
                 actor.confession_task = None
                 if actor.task in ("CONFESSION_QUEUED", "WAITING_FOR_CONFESSION", "HEARING_CONFESSION",
                                   "CONFESSING", "CONFESSION_RETRIEVE_COINS",
-                                  "CONFESSION_TRAVEL_TO_PRIEST", "GOING_TO_CONFESSION_BOX"):
+                                  "CONFESSION_TRAVEL_TO_PRIEST", "GOING_TO_CONFESSOR",
+                                  "GOING_TO_CONFESSION_BOX"):
                     actor.task = "IDLE"
         if was_active and request.get("fee_paid", 0) > 0:
             payer = villager
@@ -579,7 +691,13 @@ class ConfessionSystem:
                     request["fee_paid"],
                 )
                 payer.say("The confession was canceled; my offering has been returned.", duration=2.5)
+        refunded = cls._refund_prepared_payment(request, villager, furniture_manager)
         if villager:
+            if not refunded and int(request.get("withdrawn_amount", 0)) > 0:
+                message = (
+                    f"{message} The withdrawn offering could not be returned "
+                    "to household storage."
+                )
             villager.say(message, duration=2.5)
 
     @classmethod
@@ -591,7 +709,8 @@ class ConfessionSystem:
                 actor.confession_task = None
                 if actor.task in ("WAITING_FOR_CONFESSION", "HEARING_CONFESSION", "CONFESSING",
                                   "CONFESSION_QUEUED", "CONFESSION_RETRIEVE_COINS",
-                                  "CONFESSION_TRAVEL_TO_PRIEST", "GOING_TO_CONFESSION_BOX"):
+                                  "CONFESSION_TRAVEL_TO_PRIEST", "GOING_TO_CONFESSOR",
+                                  "GOING_TO_CONFESSION_BOX"):
                     actor.task = "IDLE"
         if success and priest:
             priest.say("May you walk in peace.", duration=2.5)

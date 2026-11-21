@@ -24,6 +24,8 @@ class SleepSystem:
             villager.sleep_forced = False
         if not hasattr(villager, "sleeping_recharge_active"):
             villager.sleeping_recharge_active = False
+        if not hasattr(villager, "sleep_any_rest_active"):
+            villager.sleep_any_rest_active = False
 
     @staticmethod
     def status_for(value):

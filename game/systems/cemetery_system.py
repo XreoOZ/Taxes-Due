@@ -576,6 +576,7 @@ class CemeterySystem:
                 pos[0], pos[1], dt, arrival_dist=CHEST_INTERACTION_RADIUS,
                 all_entities=all_entities, player=player,
                 building_manager=building_manager, furniture_manager=furniture_manager,
+                interaction_target=chest,
             )
             if arrived:
                 fee = cls._collect_household_fee(villager, commission, furniture_manager)
@@ -612,6 +613,7 @@ class CemeterySystem:
                 gravedigger.x, gravedigger.y, dt, arrival_dist=INTERACTION_CONTACT_RADIUS,
                 all_entities=all_entities, player=player,
                 building_manager=building_manager, furniture_manager=furniture_manager,
+                interaction_target=gravedigger,
             )
             if arrived:
                 for denom, amount in from_copper(commission.get("fee_paid", 0)).items():
@@ -656,6 +658,7 @@ class CemeterySystem:
                 pos[0], pos[1], dt, arrival_dist=CHEST_INTERACTION_RADIUS,
                 all_entities=all_entities, player=player,
                 building_manager=building_manager, furniture_manager=furniture_manager,
+                interaction_target=treasury,
             )
             if arrived:
                 fee = cls._collect_landlord_fee(villager, commission, stockpile_manager, furniture_manager)
@@ -683,6 +686,7 @@ class CemeterySystem:
             target_x, target_y, dt, arrival_dist=LOOSE_ITEM_ARRIVAL_DIST,
             all_entities=all_entities, player=player,
             building_manager=building_manager, furniture_manager=furniture_manager,
+            interaction_target=target,
         )
         if arrived:
             fee = cls._collect_landlord_fee(villager, commission, stockpile_manager, furniture_manager)

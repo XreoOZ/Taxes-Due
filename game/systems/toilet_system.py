@@ -210,7 +210,7 @@ class ToiletSystem:
                 player=player,
                 building_manager=building_manager,
                 furniture_manager=furniture_manager,
-                exclusive_target=False
+                exclusive_target=False,
             )
             if arrived_queue:
                 villager.is_moving = False
@@ -227,7 +227,8 @@ class ToiletSystem:
             player=player,
             building_manager=building_manager,
             furniture_manager=furniture_manager,
-            exclusive_target=False
+            exclusive_target=False,
+            interaction_target=toilet,
         )
 
         if arrived:

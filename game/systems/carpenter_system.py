@@ -6,6 +6,7 @@ import random
 from game.data.config import (
     CARPENTER_BUILD_DURATION_INGAME_HOURS,
     CARPENTER_DEFAULT_LIVING_HOUSEHOLD_SIZE,
+    CARPENTER_REPAIR_MATERIALS,
     CARPENTER_REPAIR_FOOD_DAYS,
     DAILY_FOOD_REQUIREMENT,
     DAY_LENGTH_OPTIONS,
@@ -29,6 +30,7 @@ from game.systems.currency import (
 )
 from game.systems.market_service import MarketService
 from game.config import TILE_SIZE, CHEST_INTERACTION_RADIUS, INTERACTION_CONTACT_RADIUS, LOOSE_ITEM_ARRIVAL_DIST
+from game.world.navigation import distance_to_object
 
 
 class CarpenterSystem:
@@ -247,6 +249,23 @@ class CarpenterSystem:
 
     @classmethod
     def _quote_from_materials(cls, materials, building_manager=None, villager_manager=None):
+        material_cost = cls._material_cost(materials, building_manager)
+        carpenters = [v for v in villager_manager.get_all_villagers()
+                      if getattr(v, "job", None) == "Carpenter" and getattr(v, "is_alive", True)] if villager_manager else []
+        family = villager_manager.get_family_by_id(carpenters[0].family_id) if carpenters else None
+        household_size = max(
+            CARPENTER_DEFAULT_LIVING_HOUSEHOLD_SIZE,
+            len([m for m in getattr(family, "members", []) if getattr(m, "is_alive", True)]) if family else 1,
+        )
+        markets = MarketService.get_all_markets(building_manager)
+        food_unit_price = cls._food_unit_price(markets, minimum_stock=DAILY_FOOD_REQUIREMENT * household_size)
+        wage = food_unit_price * DAILY_FOOD_REQUIREMENT * household_size
+        return {"material_cost_copper": material_cost, "living_wage_copper": wage,
+                "price_copper": material_cost + wage, "materials": dict(materials),
+                "food_unit_price_at_order": food_unit_price}
+
+    @classmethod
+    def _material_cost(cls, materials, building_manager=None):
         markets = MarketService.get_all_markets(building_manager)
         material_cost = 0
         for material, amount in materials.items():
@@ -258,28 +277,38 @@ class CarpenterSystem:
             )
             unit_price = price if price is not None else MarketService.get_item_price(material)
             material_cost += amount * unit_price
-        carpenters = [v for v in villager_manager.get_all_villagers()
-                      if getattr(v, "job", None) == "Carpenter" and getattr(v, "is_alive", True)] if villager_manager else []
-        family = villager_manager.get_family_by_id(carpenters[0].family_id) if carpenters else None
-        household_size = max(
-            CARPENTER_DEFAULT_LIVING_HOUSEHOLD_SIZE,
-            len([m for m in getattr(family, "members", []) if getattr(m, "is_alive", True)]) if family else 1,
-        )
-        food_unit_price = cls._food_unit_price(markets, minimum_stock=DAILY_FOOD_REQUIREMENT * household_size)
-        wage = food_unit_price * DAILY_FOOD_REQUIREMENT * household_size
-        return {"material_cost_copper": material_cost, "living_wage_copper": wage,
-                "price_copper": material_cost + wage, "materials": dict(materials),
-                "food_unit_price_at_order": food_unit_price}
+        return material_cost
 
     @staticmethod
-    def _within_furniture_work_range(carpenter, furniture):
-        width = max(1, int(furniture.type_cfg.get("width_tiles", 1))) * TILE_SIZE
-        height = max(1, int(furniture.type_cfg.get("height_tiles", 1))) * TILE_SIZE
-        left = furniture.grid_x * TILE_SIZE
-        top = furniture.grid_y * TILE_SIZE
-        closest_x = max(left, min(carpenter.x, left + width))
-        closest_y = max(top, min(carpenter.y, top + height))
-        return math.hypot(carpenter.x - closest_x, carpenter.y - closest_y) <= INTERACTION_CONTACT_RADIUS
+    def _distance_to_asset(asset, x, y):
+        return distance_to_object(asset, x, y, TILE_SIZE)
+
+    @classmethod
+    def _within_asset_work_range(cls, carpenter, asset):
+        return cls._distance_to_asset(asset, carpenter.x, carpenter.y) <= INTERACTION_CONTACT_RADIUS
+
+    @classmethod
+    def _asset_approach_arrival_distance(cls, asset, target_x, target_y):
+        target_distance = cls._distance_to_asset(asset, target_x, target_y)
+        return max(0.0, INTERACTION_CONTACT_RADIUS - target_distance)
+
+    @staticmethod
+    def _asset_approach_point(carpenter, asset, order, all_entities, building_manager):
+        order_id = str(
+            order.get("id")
+            or getattr(asset, "id", None)
+            or f"{getattr(asset, 'building_type', getattr(asset, 'furniture_type', 'asset'))}:"
+               f"{getattr(asset, 'grid_x', 0)}:{getattr(asset, 'grid_y', 0)}"
+        )
+        if (str(getattr(carpenter, "carpenter_target_order_id", None)) != order_id
+                or not getattr(carpenter, "carpenter_target_position", None)):
+            carpenter.carpenter_target_order_id = order_id
+            carpenter.carpenter_failed_approach_points = set()
+            carpenter.carpenter_target_position = asset.get_approach_point(
+                carpenter.x, carpenter.y, worker_id=carpenter.id,
+                all_entities=all_entities, tile_size=TILE_SIZE, bm=building_manager,
+            )
+        return carpenter.carpenter_target_position
 
     @staticmethod
     def _market_for_furniture(furniture, building_manager):
@@ -334,7 +363,10 @@ class CarpenterSystem:
     def create_repair_order(cls, asset, building_manager=None, villager_manager=None):
         markets = MarketService.get_all_markets(building_manager)
         food_unit_price = cls._food_unit_price(markets, minimum_stock=DAILY_FOOD_REQUIREMENT)
-        repair_price = food_unit_price * DAILY_FOOD_REQUIREMENT * CARPENTER_REPAIR_FOOD_DAYS
+        materials = dict(CARPENTER_REPAIR_MATERIALS)
+        material_cost = cls._material_cost(materials, building_manager)
+        living_wage = food_unit_price * DAILY_FOOD_REQUIREMENT * CARPENTER_REPAIR_FOOD_DAYS
+        repair_price = material_cost + living_wage
         order_id = getattr(asset, "id", None)
         asset_type_cfg = getattr(asset, "type_cfg", {}) or {}
         is_public = bool(asset_type_cfg.get("public_structure"))
@@ -349,8 +381,9 @@ class CarpenterSystem:
             "payer_id": "landlord" if is_public else None,
             "carpenter_id": None,
             "commission_paid": False,
-            "material_cost_copper": 0,
-            "living_wage_copper": repair_price,
+            "materials": materials,
+            "material_cost_copper": material_cost,
+            "living_wage_copper": living_wage,
             "price_copper": repair_price,
             "food_unit_price_at_order": food_unit_price,
             "progress_ratio": 0.0,
@@ -459,7 +492,8 @@ class CarpenterSystem:
                                            all_entities=all_entities, tile_size=TILE_SIZE, bm=building_manager)
             arrived = villager._move_towards(pos[0], pos[1], dt, arrival_dist=CHEST_INTERACTION_RADIUS,
                                              all_entities=all_entities, player=player,
-                                             building_manager=building_manager, furniture_manager=furniture_manager)
+                                             building_manager=building_manager, furniture_manager=furniture_manager,
+                                             interaction_target=chest)
             if arrived:
                 if cls._move_exact_value(chest.inventory, villager.inventory, fee):
                     if str(order.get("carpenter_id")) == str(villager.id):
@@ -493,7 +527,8 @@ class CarpenterSystem:
                 return True
             arrived = villager._move_towards(carpenter.x, carpenter.y, dt, arrival_dist=INTERACTION_CONTACT_RADIUS,
                                              all_entities=all_entities, player=player,
-                                             building_manager=building_manager, furniture_manager=furniture_manager)
+                                             building_manager=building_manager, furniture_manager=furniture_manager,
+                                             interaction_target=carpenter)
             if arrived:
                 if cls._move_exact_value(villager.inventory, carpenter.inventory, fee):
                     order["status"] = "PAID"
@@ -531,6 +566,7 @@ class CarpenterSystem:
                 pos[0], pos[1], dt, arrival_dist=CHEST_INTERACTION_RADIUS,
                 all_entities=all_entities, player=player,
                 building_manager=building_manager, furniture_manager=furniture_manager,
+                interaction_target=treasury,
             )
             if arrived:
                 if LordTreasurySystem.withdraw_covering(furniture_manager, villager.inventory, fee)[0]:
@@ -554,7 +590,8 @@ class CarpenterSystem:
         arrived = villager._move_towards((target.grid_x + .5) * TILE_SIZE, (target.grid_y + .5) * TILE_SIZE,
                                          dt, arrival_dist=LOOSE_ITEM_ARRIVAL_DIST,
                                          all_entities=all_entities, player=player,
-                                         building_manager=building_manager, furniture_manager=furniture_manager)
+                                         building_manager=building_manager, furniture_manager=furniture_manager,
+                                         interaction_target=target)
         if arrived:
             drop_tile = (target.grid_x, target.grid_y)
             for stack in list(stacks):
@@ -587,31 +624,94 @@ class CarpenterSystem:
                 totals[item] = totals.get(item, 0) + chest.inventory.get(item, 0)
         return chest, totals
 
-    @staticmethod
-    def _commit_materials_from_storage(carpenter, chest, materials):
-        """Consume a checked recipe from the Carpenter's pocket and household chest."""
-        inventory = getattr(carpenter, "inventory", {})
-        for item, amount in materials.items():
-            amount = max(0, int(amount))
-            available = int(inventory.get(item, 0))
-            if chest:
-                available += int(chest.inventory.get(item, 0))
-            if available < amount:
-                return False
+    @classmethod
+    def _deliver_build_materials(cls, carpenter, target, order, required, chest, dt,
+                                 all_entities, player, building_manager, furniture_manager,
+                                 furniture_target=False):
+        """Physically haul recipe materials from a household chest to a build site."""
+        delivered = (order.setdefault("materials_delivered", {}) if furniture_target
+                     else target.delivered_cost)
+        remaining = {
+            material: max(0, int(amount) - int(delivered.get(material, 0)))
+            for material, amount in required.items()
+        }
+        remaining = {material: amount for material, amount in remaining.items() if amount > 0}
+        if not remaining:
+            order["materials_committed"] = True
+            return True
 
-        for item, amount in materials.items():
-            remaining = max(0, int(amount))
-            from_inventory = min(int(inventory.get(item, 0)), remaining)
-            if from_inventory:
-                inventory[item] -= from_inventory
-                remaining -= from_inventory
-                if inventory[item] <= 0:
-                    inventory.pop(item, None)
-            if remaining and chest:
-                chest.inventory[item] = max(0, int(chest.inventory.get(item, 0)) - remaining)
-                if not chest.inventory[item]:
-                    chest.inventory.pop(item, None)
-        return True
+        cargo = {
+            material: min(amount, max(0, int(carpenter.inventory.get(material, 0))))
+            for material, amount in remaining.items()
+        }
+        cargo = {material: amount for material, amount in cargo.items() if amount > 0}
+        if cargo:
+            target_x, target_y = cls._asset_approach_point(
+                carpenter, target, order, all_entities, building_manager,
+            )
+            at_site = cls._within_asset_work_range(carpenter, target)
+            carpenter.task = "CARPENTER_DELIVERING_MATERIALS"
+            if not at_site:
+                carpenter._move_towards(
+                    target_x, target_y, dt,
+                    arrival_dist=cls._asset_approach_arrival_distance(target, target_x, target_y),
+                    all_entities=all_entities, player=player,
+                    building_manager=building_manager, furniture_manager=furniture_manager,
+                    recover_blocked_routes=True,
+                    interaction_target=target,
+                )
+                return False
+            for material, amount in cargo.items():
+                left = max(0, int(carpenter.inventory.get(material, 0)) - amount)
+                if left:
+                    carpenter.inventory[material] = left
+                else:
+                    carpenter.inventory.pop(material, None)
+                if furniture_target:
+                    delivered[material] = int(delivered.get(material, 0)) + amount
+                else:
+                    target.deposit_resource(material, amount)
+            if all(int(delivered.get(material, 0)) >= int(amount)
+                   for material, amount in required.items()):
+                order["materials_committed"] = True
+            return False
+
+        if not chest:
+            return False
+        chest_x, chest_y = chest.get_approach_point(
+            carpenter.x, carpenter.y, worker_id=carpenter.id,
+            all_entities=all_entities, tile_size=TILE_SIZE, bm=building_manager,
+        )
+        at_chest = math.hypot(carpenter.x - chest_x, carpenter.y - chest_y) <= CHEST_INTERACTION_RADIUS
+        carpenter.task = "CARPENTER_COLLECTING_MATERIALS"
+        if not at_chest:
+            carpenter._move_towards(
+                chest_x, chest_y, dt, arrival_dist=CHEST_INTERACTION_RADIUS,
+                all_entities=all_entities, player=player,
+                building_manager=building_manager, furniture_manager=furniture_manager,
+                interaction_target=chest,
+            )
+            return False
+
+        room = carpenter.get_inventory_room()
+        loaded_any = False
+        for material, amount in remaining.items():
+            if room <= 0:
+                break
+            take = min(amount, max(0, int(chest.inventory.get(material, 0))), room)
+            if take <= 0:
+                continue
+            chest.inventory[material] -= take
+            if chest.inventory[material] <= 0:
+                chest.inventory.pop(material, None)
+            carpenter.inventory[material] = int(carpenter.inventory.get(material, 0)) + take
+            room -= take
+            loaded_any = True
+        if loaded_any:
+            furniture_manager.invalidate_cache()
+        elif room <= 0 and carpenter._get_unneeded_inventory():
+            carpenter.task = "DEPOSITING_UNUSED_ITEMS"
+        return False
 
     @classmethod
     def _begin_restock(cls, carpenter, missing, building_manager, furniture_manager, villager_manager):
@@ -650,7 +750,8 @@ class CarpenterSystem:
                 x, y = chest.get_world_pos(TILE_SIZE)
                 arrived = carpenter._move_towards(x, y, dt, arrival_dist=CHEST_INTERACTION_RADIUS,
                                                   all_entities=all_entities, player=player,
-                                                  building_manager=building_manager, furniture_manager=furniture_manager)
+                                                  building_manager=building_manager, furniture_manager=furniture_manager,
+                                                  interaction_target=chest)
             else:
                 arrived = True
             if arrived:
@@ -666,7 +767,8 @@ class CarpenterSystem:
             x, y = market.get_center_world(TILE_SIZE)
             if carpenter._move_towards(x, y, dt, arrival_dist=CHEST_INTERACTION_RADIUS,
                                        all_entities=all_entities, player=player,
-                                       building_manager=building_manager, furniture_manager=furniture_manager):
+                                       building_manager=building_manager, furniture_manager=furniture_manager,
+                                       interaction_target=market):
                 ok, message = AIMarketPurchasingSystem.execute_material_transaction(carpenter, market, material, quantity)
                 if ok:
                     carpenter.task = "CARPENTER_RESTOCK_HAULING_HOME"
@@ -679,7 +781,8 @@ class CarpenterSystem:
                 x, y = chest.get_world_pos(TILE_SIZE)
                 if carpenter._move_towards(x, y, dt, arrival_dist=CHEST_INTERACTION_RADIUS,
                                            all_entities=all_entities, player=player,
-                                           building_manager=building_manager, furniture_manager=furniture_manager):
+                                           building_manager=building_manager, furniture_manager=furniture_manager,
+                                           interaction_target=chest):
                     AIMarketPurchasingSystem.deposit_materials_and_change_to_chest(carpenter, furniture_manager)
                     carpenter.say("Restocked Carpenter materials.", duration=2.0)
                     carpenter.task = "IDLE"
@@ -705,6 +808,7 @@ class CarpenterSystem:
                     home_x, home_y, dt, arrival_dist=CHEST_INTERACTION_RADIUS,
                     all_entities=all_entities, player=player,
                     building_manager=building_manager, furniture_manager=furniture_manager,
+                    interaction_target=home_building,
                 ):
                     return True
                 active_order = next((f for f in furniture_manager.furnitures
@@ -852,46 +956,49 @@ class CarpenterSystem:
                 carpenter.task = "IDLE"
                 return False
             if order.get("status") in ("PAID", "AWAITING_MATERIAL", "BUILDING"):
-                carpenter.task = "CARPENTER_CONSTRUCTING"
                 if not public_site.is_materials_complete():
                     chest, totals = cls._materials_in_storage(carpenter, furniture_manager)
                     remaining = {
                         material: max(0, int(required) - int(public_site.delivered_cost.get(material, 0)))
                         for material, required in public_site.required_cost.items()
                     }
-                    available = {
-                        material: min(amount, max(0, int(totals.get(material, 0))))
-                        for material, amount in remaining.items()
-                        if amount > 0 and int(totals.get(material, 0)) > 0
+                    missing = {
+                        material: max(0, amount - max(0, int(totals.get(material, 0))))
+                        for material, amount in remaining.items() if amount > 0
                     }
-                    if available:
-                        if not cls._commit_materials_from_storage(carpenter, chest, available):
-                            carpenter.say("I am still gathering the building materials.", duration=2.5)
-                            return True
-                        for material, amount in available.items():
-                            public_site.deposit_resource(material, amount)
-                        remaining = {
-                            material: max(0, int(required) - int(public_site.delivered_cost.get(material, 0)))
-                            for material, required in public_site.required_cost.items()
-                        }
-                    if any(remaining.values()):
+                    if missing and cls._begin_restock(carpenter, missing, building_manager,
+                                                      furniture_manager, villager_manager):
                         order["status"] = "AWAITING_MATERIAL"
-                        missing = {material: amount for material, amount in remaining.items() if amount > 0}
-                        if cls._begin_restock(carpenter, missing, building_manager,
-                                              furniture_manager, villager_manager):
-                            return True
-                        carpenter.say("I need building materials, but none are available to buy right now.", duration=2.5)
+                        return True
+                    ready = cls._deliver_build_materials(
+                        carpenter, public_site, order, public_site.required_cost, chest, dt,
+                        all_entities, player, building_manager, furniture_manager,
+                    )
+                    if not public_site.is_materials_complete():
+                        order["status"] = "AWAITING_MATERIAL"
+                        if missing and not getattr(carpenter, "target_restock_market", None):
+                            carpenter.say("I need building materials, but none are available to buy right now.", duration=2.5)
+                        elif not ready and carpenter.task == "CARPENTER_COLLECTING_MATERIALS":
+                            carpenter.say("I am carrying the building materials from storage.", duration=2.0)
                         return True
                     order["materials_committed"] = True
-                wx, wy = public_site.get_center_world(TILE_SIZE)
-                if cls._within_furniture_work_range(carpenter, public_site):
-                    arrived = True
-                else:
-                    arrived = carpenter._move_towards(
-                        wx, wy, dt, arrival_dist=CHEST_INTERACTION_RADIUS,
+                carpenter.task = "CARPENTER_CONSTRUCTING"
+                target_x, target_y = cls._asset_approach_point(
+                    carpenter, public_site, order, all_entities, building_manager,
+                )
+                arrived = cls._within_asset_work_range(carpenter, public_site)
+                if not arrived:
+                    carpenter._move_towards(
+                        target_x, target_y, dt,
+                        arrival_dist=cls._asset_approach_arrival_distance(
+                            public_site, target_x, target_y
+                        ),
                         all_entities=all_entities, player=player,
                         building_manager=building_manager, furniture_manager=furniture_manager,
+                        recover_blocked_routes=True,
+                        interaction_target=public_site,
                     )
+                    arrived = cls._within_asset_work_range(carpenter, public_site)
                 if arrived:
                     order["status"] = "BUILDING"
                     public_site.build_progress += dt
@@ -909,21 +1016,51 @@ class CarpenterSystem:
                               and building.construction_order.get("order_type") == "REPAIR"
                               and building.construction_order.get("commission_paid") is True
                               and str(building.construction_order.get("carpenter_id")) == str(carpenter.id)
-                              and building.construction_order.get("status") in ("PAID", "BUILDING")), None)
+                              and building.construction_order.get("status") in ("PAID", "BUILDING", "AWAITING_MATERIAL")), None)
         if public_repair:
             order = public_repair.construction_order
             if order.get("status") in ("LANDLORD_RETRIEVING", "PAYMENT_TRAVELING"):
                 carpenter.task = "IDLE"
                 return False
+            chest, totals = cls._materials_in_storage(carpenter, furniture_manager)
+            required = {item: max(0, int(amount))
+                        for item, amount in CARPENTER_REPAIR_MATERIALS.items() if int(amount) > 0}
+            missing = {item: max(0, amount - int(totals.get(item, 0)))
+                       for item, amount in required.items() if int(totals.get(item, 0)) < amount}
+            if missing and cls._begin_restock(carpenter, missing, building_manager,
+                                              furniture_manager, villager_manager):
+                order["status"] = "AWAITING_MATERIAL"
+                return True
+            if not order.get("materials_committed"):
+                delivered = cls._deliver_build_materials(
+                    carpenter, public_repair, order, required, chest, dt,
+                    all_entities, player, building_manager, furniture_manager,
+                    furniture_target=True,
+                )
+                if not order.get("materials_committed"):
+                    order["status"] = "AWAITING_MATERIAL"
+                    if missing and not getattr(carpenter, "target_restock_market", None):
+                        carpenter.say("I need repair materials, but none are available to buy right now.", duration=2.5)
+                    elif not delivered and carpenter.task == "CARPENTER_COLLECTING_MATERIALS":
+                        carpenter.say("I am carrying repair materials from storage.", duration=2.0)
+                    return True
             carpenter.task = "CARPENTER_REPAIRING"
-            wx, wy = public_repair.get_center_world(TILE_SIZE)
-            arrived = math.hypot(carpenter.x - wx, carpenter.y - wy) <= INTERACTION_CONTACT_RADIUS
+            arrived = cls._within_asset_work_range(carpenter, public_repair)
             if not arrived:
-                arrived = carpenter._move_towards(
-                    wx, wy, dt, arrival_dist=CHEST_INTERACTION_RADIUS,
+                target_x, target_y = cls._asset_approach_point(
+                    carpenter, public_repair, order, all_entities, building_manager,
+                )
+                carpenter._move_towards(
+                    target_x, target_y, dt,
+                    arrival_dist=cls._asset_approach_arrival_distance(
+                        public_repair, target_x, target_y
+                    ),
                     all_entities=all_entities, player=player,
                     building_manager=building_manager, furniture_manager=furniture_manager,
+                    recover_blocked_routes=True,
+                    interaction_target=public_repair,
                 )
+                arrived = cls._within_asset_work_range(carpenter, public_repair)
             if arrived:
                 order["status"] = "BUILDING"
                 public_repair.construction_progress = getattr(public_repair, "construction_progress", 0.0) + dt
@@ -940,7 +1077,7 @@ class CarpenterSystem:
         active = next((f for f in furniture_manager.furnitures
                        if f.construction_order
                        and f.construction_order.get("commission_paid") is True
-                       and f.construction_order.get("status") in ("PAID", "BUILDING")
+                       and f.construction_order.get("status") in ("PAID", "BUILDING", "AWAITING_MATERIAL")
                        and str(f.construction_order.get("carpenter_id")) == str(carpenter.id)), None)
         if not active:
             # Commission requests are errands for the household, not Carpenter
@@ -988,16 +1125,17 @@ class CarpenterSystem:
 
         order = active.construction_order
         order["carpenter_id"] = str(carpenter.id)
-        if order.get("status") not in ("PAID", "BUILDING"):
+        if order.get("status") not in ("PAID", "BUILDING", "AWAITING_MATERIAL"):
             return True
 
         cfg = DEDICATED_JOBS.get("Carpenter", {})
         chest, totals = cls._materials_in_storage(carpenter, furniture_manager)
         target_stock = cfg.get("material_stock_target", {}) if chest else {}
         is_repair = order.get("order_type") == "REPAIR"
-        recipe = {} if is_repair else FURNITURE_TYPES.get(active.furniture_type, {})
+        recipe = FURNITURE_TYPES.get(active.furniture_type, {})
+        material_recipe = CARPENTER_REPAIR_MATERIALS if is_repair else recipe.get("materials", {})
         required = {item: max(0, int(amount))
-                    for item, amount in recipe.get("materials", {}).items() if int(amount) > 0}
+                    for item, amount in material_recipe.items() if int(amount) > 0}
         missing = {} if is_repair else {item: max(0, int(target) - int(totals.get(item, 0)))
                    for item, target in target_stock.items()
                    if totals.get(item, 0) < target}
@@ -1012,32 +1150,39 @@ class CarpenterSystem:
             return True
 
         if not order.get("materials_committed"):
-            if not cls._commit_materials_from_storage(carpenter, chest, required):
-                carpenter.say("I am still gathering this furniture's materials.", duration=2.5)
+            delivered = cls._deliver_build_materials(
+                carpenter, active, order, required, chest, dt,
+                all_entities, player, building_manager, furniture_manager,
+                furniture_target=True,
+            )
+            if not order.get("materials_committed"):
+                order["status"] = "AWAITING_MATERIAL"
+                if not delivered and carpenter.task == "CARPENTER_COLLECTING_MATERIALS":
+                    carpenter.say("I am carrying the furniture materials from storage.", duration=2.0)
                 return True
-            order["materials_committed"] = True
             order["status"] = "BUILDING"
 
         carpenter.task = "CARPENTER_REPAIRING" if is_repair else "CARPENTER_CONSTRUCTING"
         carpenter.active_tool = None if is_repair else "Saw"
-        if str(getattr(carpenter, "carpenter_target_order_id", None)) != str(active.id):
-            carpenter.carpenter_target_order_id = str(active.id)
-            carpenter.carpenter_failed_approach_points = set()
-            carpenter.carpenter_target_position = active.get_approach_point(
-                carpenter.x, carpenter.y, worker_id=carpenter.id,
-                all_entities=all_entities, tile_size=TILE_SIZE, bm=building_manager,
-            )
-        target = carpenter.carpenter_target_position
-        arrived = cls._within_furniture_work_range(carpenter, active)
+        target = cls._asset_approach_point(
+            carpenter, active, order, all_entities, building_manager,
+        )
+        arrived = cls._within_asset_work_range(carpenter, active)
         if arrived:
             carpenter.is_moving = False
             carpenter.current_path = []
             carpenter.path_index = 0
             carpenter.path_target = None
         else:
-            arrived = carpenter._move_towards(target[0], target[1], dt, arrival_dist=CHEST_INTERACTION_RADIUS,
-                                              all_entities=all_entities, player=player,
-                                              building_manager=building_manager, furniture_manager=furniture_manager)
+            carpenter._move_towards(
+                target[0], target[1], dt,
+                arrival_dist=cls._asset_approach_arrival_distance(active, target[0], target[1]),
+                all_entities=all_entities, player=player,
+                building_manager=building_manager, furniture_manager=furniture_manager,
+                recover_blocked_routes=True,
+                interaction_target=active,
+            )
+            arrived = cls._within_asset_work_range(carpenter, active)
         if not arrived and getattr(carpenter, "route_state", None) == ROUTE_STATE_FAILED:
             previous_target = tuple(target)
             failed_points = getattr(carpenter, "carpenter_failed_approach_points", set())

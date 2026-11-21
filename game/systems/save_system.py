@@ -106,6 +106,7 @@ def serialize_game_state(day_cycle, resources, player, permit_manager, building_
                 "condition": float(getattr(b, "condition", 1.0)),
                 "construction_order": dict(getattr(b, "construction_order", {}) or {}),
                 "construction_progress": float(getattr(b, "construction_progress", 0.0)),
+            "assigned_workers": list(getattr(b, "assigned_workers", [])),
             "owner": getattr(b, "owner", "landlord"),
             "inventory": dict(getattr(b, "inventory", {})),
             "currency": dict(getattr(b, "currency", {})),
@@ -248,6 +249,12 @@ def serialize_game_state(day_cycle, resources, player, permit_manager, building_
                     "sleep_need": getattr(m, "sleep_need", SLEEP_INITIAL_VALUE),
                     "sleep_forced": getattr(m, "sleep_forced", False),
                     "sleeping_recharge_active": getattr(m, "sleeping_recharge_active", False),
+                    "sleep_any_rest_active": getattr(m, "sleep_any_rest_active", False),
+                    "sleep_schedule_task_state": getattr(m, "sleep_schedule_task_state", None),
+                    "socage_tax_round": dict(getattr(m, "socage_tax_round", {}) or {}) or None,
+                    "socage_tax_last_cycle": getattr(m, "socage_tax_last_cycle", None),
+                    "socage_tax_prepared_cycle": getattr(m, "socage_tax_prepared_cycle", None),
+                    "socage_tax_prepared_amount": getattr(m, "socage_tax_prepared_amount", 0),
                     "happiness": getattr(m, "happiness", HAPPINESS_INITIAL_VALUE),
                     "happiness_effects": dict(getattr(m, "happiness_effects", {}) or {}),
                     "happiness_trigger_days": dict(getattr(m, "happiness_trigger_days", {}) or {}),
@@ -255,6 +262,8 @@ def serialize_game_state(day_cycle, resources, player, permit_manager, building_
                     "happiness_food_types": list(getattr(m, "happiness_food_types", []) or []),
                     "last_faith_decay_day": getattr(m, "last_faith_decay_day", 1),
                     "prayer_attendance_day": getattr(m, "prayer_attendance_day", None),
+                    "church_tax_prepared_day": getattr(m, "church_tax_prepared_day", None),
+                    "church_tax_prepared_amount": getattr(m, "church_tax_prepared_amount", 0),
                     "last_faith_prayer_day": getattr(m, "last_faith_prayer_day", None),
                     "last_confession_day": getattr(m, "last_confession_day", None),
                     "pending_commission_task": getattr(m, "pending_commission_task", None),
@@ -328,6 +337,8 @@ def serialize_game_state(day_cycle, resources, player, permit_manager, building_
     ]
     from game.systems.confession_system import ConfessionSystem
     confession_state = ConfessionSystem.get_instance().to_dict()
+    from game.systems.taxation_system import TaxationSystem
+    taxation_state = TaxationSystem.to_dict()
 
     return {
         "timestamp": time.strftime("%Y-%m-%d %H:%M"),
@@ -349,6 +360,7 @@ def serialize_game_state(day_cycle, resources, player, permit_manager, building_
         "production_records": serialized_prod,
         "burial_commissions": burial_commissions,
         "confession_state": confession_state,
+        "taxation_state": taxation_state,
     }
 
 def save_to_slot(slot_id, day_cycle, resources, player, permit_manager, building_manager, stockpile_manager, furniture_manager, villager_manager, servant_manager, schedule_manager):
@@ -463,6 +475,7 @@ def deserialize_game_state(data, day_cycle, resources, player, permit_manager, b
         b.condition = float(b_d.get("condition", 1.0))
         b.construction_order = dict(b_d.get("construction_order", {}) or {}) or None
         b.construction_progress = float(b_d.get("construction_progress", 0.0))
+        b.assigned_workers = list(b_d.get("assigned_workers", []))
         if "owner" in b_d:
             b.owner = b_d["owner"]
         if "inventory" in b_d:
@@ -608,6 +621,12 @@ def deserialize_game_state(data, day_cycle, resources, player, permit_manager, b
             v.sleep_need = float(m_d.get("sleep_need", SLEEP_INITIAL_VALUE))
             v.sleep_forced = bool(m_d.get("sleep_forced", False))
             v.sleeping_recharge_active = bool(m_d.get("sleeping_recharge_active", False))
+            v.sleep_any_rest_active = bool(m_d.get("sleep_any_rest_active", False))
+            v.sleep_schedule_task_state = m_d.get("sleep_schedule_task_state")
+            v.socage_tax_round = dict(m_d.get("socage_tax_round", {}) or {}) or None
+            v.socage_tax_last_cycle = m_d.get("socage_tax_last_cycle")
+            v.socage_tax_prepared_cycle = m_d.get("socage_tax_prepared_cycle")
+            v.socage_tax_prepared_amount = int(m_d.get("socage_tax_prepared_amount", 0))
             v.happiness = float(m_d.get("happiness", HAPPINESS_INITIAL_VALUE))
             v.happiness_effects = dict(m_d.get("happiness_effects", {}) or {})
             v.happiness_trigger_days = dict(m_d.get("happiness_trigger_days", {}) or {})
@@ -615,6 +634,8 @@ def deserialize_game_state(data, day_cycle, resources, player, permit_manager, b
             v.happiness_food_types = list(m_d.get("happiness_food_types", []) or [])
             v.last_faith_decay_day = int(m_d.get("last_faith_decay_day", data.get("day_number", 1)))
             v.prayer_attendance_day = m_d.get("prayer_attendance_day", None)
+            v.church_tax_prepared_day = m_d.get("church_tax_prepared_day", None)
+            v.church_tax_prepared_amount = int(m_d.get("church_tax_prepared_amount", 0))
             v.last_faith_prayer_day = m_d.get("last_faith_prayer_day", None)
             v.last_confession_day = m_d.get("last_confession_day", None)
             v.pending_commission_task = m_d.get("pending_commission_task", None)
@@ -661,6 +682,8 @@ def deserialize_game_state(data, day_cycle, resources, player, permit_manager, b
 
     from game.systems.confession_system import ConfessionSystem
     ConfessionSystem.get_instance().load_dict(data.get("confession_state", {}))
+    from game.systems.taxation_system import TaxationSystem
+    TaxationSystem.load_dict(data.get("taxation_state", {}), permit_manager)
 
     from game.systems.cemetery_system import CemeterySystem
     cemetery_system = CemeterySystem.get_instance()

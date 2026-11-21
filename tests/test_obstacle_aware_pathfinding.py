@@ -153,5 +153,64 @@ class TestObstacleAwarePathfinding(unittest.TestCase):
             wp_gy = int(math.floor(p[1] / TILE_SIZE))
             self.assertNotEqual((wp_gx, wp_gy), blocked_tile, "Path must actively avoid the blocked tile!")
 
+    def test_villager_replans_around_stalled_waypoint(self):
+        villager = Villager(
+            villager_id="villager_stuck", first_name="A", last_name="B",
+            gender="Male", age=30, generation=1, role="Father", family_id="fam_1",
+        )
+        villager.x, villager.y = 2.5 * TILE_SIZE, 2.5 * TILE_SIZE
+        target = (8.5 * TILE_SIZE, 2.5 * TILE_SIZE)
+        villager.path_target = target
+        villager.current_path = [target]
+
+        def slide_without_progress(px, py, radius, tile_size, old_x=None, old_y=None):
+            return old_x, old_y + abs(px - old_x)
+
+        self.bm.resolve_collision = slide_without_progress
+        for _ in range(12):
+            villager._move_towards(
+                *target, dt=0.05, building_manager=self.bm,
+                recover_blocked_routes=True,
+            )
+
+        self.assertTrue(villager.stuck_blocked_tiles)
+        blocked_tile = next(iter(villager.stuck_blocked_tiles))
+
+        self.bm.resolve_collision = BuildingManager.resolve_collision.__get__(self.bm)
+        self.assertTrue(villager.current_path)
+        self.assertNotIn(
+            blocked_tile,
+            {(int(x // TILE_SIZE), int(y // TILE_SIZE)) for x, y in villager.current_path},
+        )
+
+    def test_villager_keeps_route_stable_when_waiting_at_door(self):
+        villager = Villager(
+            villager_id="villager_door", first_name="A", last_name="B",
+            gender="Male", age=30, generation=1, role="Father", family_id="fam_1",
+        )
+        door_house = Building(
+            "wooden_structure", {(5, 5), (5, 6), (6, 5), (6, 6)},
+            door_pos=(5, 5), door_side="top",
+        )
+        self.bm.buildings.append(door_house)
+        self.bm.rebuild_tile_cache()
+        outside = door_house.get_door_world_outside(TILE_SIZE)
+        target = door_house.get_door_world_inside(TILE_SIZE)
+        villager.x, villager.y = outside
+
+        def block_door(px, py, radius, tile_size, old_x=None, old_y=None):
+            return old_x, old_y
+
+        self.bm.resolve_collision = block_door
+        for _ in range(12):
+            villager._move_towards(
+                *target, dt=0.05, building_manager=self.bm,
+                recover_blocked_routes=True,
+            )
+
+        self.assertTrue(villager.current_path)
+        self.assertEqual(villager.path_target, target)
+        self.assertFalse(villager.stuck_blocked_tiles)
+
 if __name__ == "__main__":
     unittest.main()

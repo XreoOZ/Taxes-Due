@@ -158,6 +158,24 @@ def from_copper(copper_val):
     c = rem % COPPER_PER_SILVER
     return {"Copper": c, "Silver": s, "Gold": g}
 
+def transfer_exact_value(source_wallet, destination_wallet, amount_in_copper):
+    """Transfer an exact value between wallets, making denomination change without losing value."""
+    if not isinstance(source_wallet, dict) or not isinstance(destination_wallet, dict):
+        return False, "Currency wallet is unavailable."
+    amount = max(0, int(amount_in_copper))
+    source_value = to_copper(source_wallet)
+    if source_value < amount:
+        return False, "Insufficient funds."
+    destination_value = to_copper(destination_wallet)
+    source_after = from_copper(source_value - amount)
+    destination_after = from_copper(destination_value + amount)
+    for wallet, converted in ((source_wallet, source_after), (destination_wallet, destination_after)):
+        for key in list(wallet):
+            if canonical_denomination(key):
+                del wallet[key]
+        wallet.update({denom: count for denom, count in converted.items() if count > 0})
+    return True, "Currency transferred."
+
 def can_afford(wallet, price_in_copper):
     """Mengecek apakah total nilai moneter dalam dompet mencukupi harga"""
     return to_copper(wallet) >= price_in_copper

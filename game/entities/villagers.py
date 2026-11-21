@@ -45,6 +45,8 @@ from game.config import (
     PATH_WAYPOINT_TOLERANCE,
     STUCK_THRESHOLD_SECONDS,
     STUCK_AVOIDANCE_DURATION,
+    STUCK_MIN_PROGRESS_DISTANCE,
+    NAVIGATION_BLOCKED_PROBE_DISTANCE,
     NAVIGATION_RETRY_INTERVAL,
     EMERGENCY_STUCK_TIMEOUT,
     EMERGENCY_COLLISION_BYPASS_DURATION,
@@ -101,7 +103,7 @@ from game.config import (
 )
 from game.render_cache import ellipse_surface
 from game.world.pathfinding import GlobalPathRegistry, calculate_collision_slide, is_narrow_passage_tile
-from game.world.navigation import find_navigation_path, find_nearest_target
+from game.world.navigation import find_navigation_path, interaction_arrival_distance, find_nearest_target
 from game.systems.market_interface import request_market_food_purchase
 from game.systems.market_purchasing import AIFoodPurchasingSystem, AIMarketPurchasingSystem
 from game.systems.market_service import MarketService
@@ -174,6 +176,7 @@ class Villager:
         self.wait_timer = 0.0
         self.is_waiting_for_path = False
         self.stuck_timer = 0.0
+        self.stuck_blocked_tiles = {}
         self.hard_stuck_timer = 0.0
         self.collision_bypass_timer = 0.0
         self.route_state = ROUTE_STATE_NONE
@@ -206,6 +209,8 @@ class Villager:
         self.sleep_need = float(SLEEP_INITIAL_VALUE)
         self.sleep_forced = False
         self.sleeping_recharge_active = False
+        self.sleep_any_rest_active = False
+        self.sleep_schedule_task_state = None
         from game.config import HAPPINESS_INITIAL_VALUE
         self.happiness = float(HAPPINESS_INITIAL_VALUE)
         from game.systems.happiness_system import HappinessSystem
@@ -216,6 +221,14 @@ class Villager:
         self.happiness_food_types = []
         self.last_faith_decay_day = 1
         self.prayer_attendance_day = None
+        self.church_tax_prepared_day = None
+        self.church_tax_prepared_amount = 0
+        self.socage_tax_prepared_cycle = None
+        self.socage_tax_prepared_amount = 0
+        self.socage_tax_round = None
+        self.socage_tax_last_cycle = None
+        self.tax_office_station_key = None
+        self.tax_office_station_target = None
         self.last_faith_prayer_day = None
         self.last_confession_day = None
         self.pending_commission_task = None
@@ -354,6 +367,10 @@ class Villager:
             return "Drawing household water from Well"
         elif task == "HAULING_HOUSEHOLD_WATER":
             return "Carrying water to household storage"
+        elif task == "GOING_TO_TAX_OFFICE":
+            return "Walking to Tax Office"
+        elif task == "STATIONED_AT_TAX_OFFICE":
+            return "On duty at Tax Office"
         elif task == "EQUIPPING_JOB_TOOLS":
             return f"Equipping tools for {self.job}"
         elif task in ("BUYING_JOB_TOOLS_RETRIEVE_COINS", "BUYING_JOB_TOOLS_TRAVEL_TO_MARKET", "BUYING_JOB_TOOLS_RETURN_HOME"):
@@ -400,6 +417,10 @@ class Villager:
             return "Waiting for furniture commission"
         elif task == "CARPENTER_CONSTRUCTING":
             return "Building furniture"
+        elif task == "CARPENTER_COLLECTING_MATERIALS":
+            return "Collecting building materials from household storage"
+        elif task == "CARPENTER_DELIVERING_MATERIALS":
+            return "Carrying building materials to the work site"
         elif task == "CARPENTER_REPAIRING":
             return "Repairing furniture"
         elif task.startswith("CARPENTER_RESTOCK_"):
@@ -488,6 +509,74 @@ class Villager:
         self.carrying_amount = state.get("carrying_amount", 0)
         self.carrying_furniture = state.get("carrying_furniture")
         return True
+
+    def _capture_sleep_schedule_task(self):
+        return {
+            "task": self.task,
+            "target_work_tile": self.current_work_tile,
+            "active_tool": self.active_tool,
+            "tilling_timer": self.tilling_timer,
+            "watering_timer": self.watering_timer,
+            "well_draw_timer": self.well_draw_timer,
+            "carrying_crop": self.carrying_crop,
+            "carrying_res": self.carrying_res,
+            "carrying_amount": self.carrying_amount,
+        }
+
+    def _restore_sleep_schedule_task(self, permit_manager=None):
+        state = self.sleep_schedule_task_state
+        self.sleep_schedule_task_state = None
+        if not state:
+            self.task = "IDLE"
+            return
+
+        tile = state.get("target_work_tile")
+        if isinstance(tile, list):
+            tile = tuple(tile)
+        if tile and permit_manager and getattr(self, "job", None) == "Farmer":
+            farm = permit_manager.get_farm_permit_for_villager(self)
+            if not farm or not farm.contains_tile(tile[0], tile[1]):
+                tile = None
+
+        self.task = state.get("task") or "IDLE"
+        self.current_work_tile = tile
+        self.active_tool = state.get("active_tool")
+        self.tilling_timer = state.get("tilling_timer", 0.0)
+        self.watering_timer = state.get("watering_timer", 0.0)
+        self.well_draw_timer = state.get("well_draw_timer", 0.0)
+        self.carrying_crop = state.get("carrying_crop", 0)
+        self.carrying_res = state.get("carrying_res")
+        self.carrying_amount = state.get("carrying_amount", 0)
+        self.current_path = []
+        self.path_index = 0
+        self.path_target = None
+        self.is_moving = False
+        self.is_waiting_for_path = False
+
+    def _move_to_assigned_bed(
+        self, dt, all_entities, player, building_manager, furniture_manager,
+    ):
+        bed = (
+            furniture_manager.get_bed_for_villager(self.id, self.family_id)
+            if furniture_manager else None
+        )
+        if not bed:
+            self.assigned_bed_id = None
+            return None
+
+        from game.data.config import SLEEP_BED_ARRIVAL_DISTANCE
+
+        self.assigned_bed_id = bed.id
+        bx, by = bed.get_world_pos(TILE_SIZE)
+        arrived = self._move_towards(
+            bx, by, dt, arrival_dist=SLEEP_BED_ARRIVAL_DISTANCE,
+            all_entities=all_entities, player=player,
+            building_manager=building_manager, furniture_manager=furniture_manager,
+            exclusive_target=True, interaction_target=bed,
+        )
+        if arrived:
+            self.x, self.y = bx, by
+        return bed
 
     def die(self, reason="Starvation", day=1, stockpile_manager=None, family=None, permit_manager=None):
         """Transition this villager to the DECEASED state (corpse) and drop 100% of personal inventory."""
@@ -1043,6 +1132,7 @@ class Villager:
             target[0], target[1], dt, arrival_dist=CHEST_INTERACTION_RADIUS,
             all_entities=all_entities, player=player,
             building_manager=building_manager, furniture_manager=furniture_manager,
+            interaction_target=chest,
         )
         if arrived:
             deposited = []
@@ -1156,7 +1246,7 @@ class Villager:
                 return True
 
             pos = chest.get_world_pos(TILE_SIZE) if hasattr(chest, "get_world_pos") else ((chest.grid_x + 0.5) * TILE_SIZE, (chest.grid_y + 0.5) * TILE_SIZE)
-            arrived = self._move_towards(pos[0], pos[1], dt, arrival_dist=CHEST_INTERACTION_RADIUS, all_entities=all_entities, player=player, building_manager=building_manager, furniture_manager=furniture_manager, exclusive_target=False)
+            arrived = self._move_towards(pos[0], pos[1], dt, arrival_dist=CHEST_INTERACTION_RADIUS, all_entities=all_entities, player=player, building_manager=building_manager, furniture_manager=furniture_manager, exclusive_target=False, interaction_target=chest)
             if arrived:
                 job_required = DEDICATED_JOBS.get(self.job, {}).get("required_tools", [])
                 for it_name, count in list(self.inventory.items()):
@@ -1277,16 +1367,70 @@ class Villager:
             else:
                 sched_activity = "LEISURE"
 
-        # Finish active work (including carried cargo) before honoring sleep.
-        has_pending_work = (
-            self.task not in SCHEDULE_NON_WORK_TASKS
-            or bool(getattr(self, "carrying_crop", 0))
+        from game.data.config import SLEEP_ANY_REST_THRESHOLD, SLEEP_ANY_WAKE_THRESHOLD
+        if sched_activity == "ANY":
+            if self.sleep_any_rest_active:
+                if self.sleep_need >= float(SLEEP_ANY_WAKE_THRESHOLD):
+                    self.sleep_any_rest_active = False
+            elif self.sleep_need <= float(SLEEP_ANY_REST_THRESHOLD):
+                self.sleep_any_rest_active = True
+            if self.sleep_any_rest_active:
+                sched_activity = "SLEEP"
+        else:
+            self.sleep_any_rest_active = False
+
+        urgent_need_tasks = (
+            "SEEKING_FOOD", "SEEKING_WATER", "SEEKING_TOILET",
+            "BUYING_FOOD_RETRIEVE_COINS", "BUYING_FOOD_TRAVEL_TO_MARKET",
+            "BUYING_FOOD_HAULING_HOME", "RECOVER_DEATH_ITEMS",
+        )
+        has_carried_work = (
+            bool(getattr(self, "carrying_crop", 0))
             or bool(getattr(self, "carrying_res", None))
             or bool(getattr(self, "carrying_furniture", None))
             or bool(getattr(self, "carrying_corpse_id", None))
         )
-        if has_pending_work:
+        has_pending_work = (
+            self.task not in SCHEDULE_NON_WORK_TASKS
+            or has_carried_work
+        )
+
+        if (sched_activity != "SLEEP" and not self.sleep_forced
+                and self.sleep_schedule_task_state
+                and self.task in ("SLEEPING", "ZONKED_SLEEP", "IDLE")):
+            self._restore_sleep_schedule_task(permit_manager)
+        elif (sched_activity != "SLEEP" and not self.sleep_forced
+              and self.task == "SLEEPING"):
+            self.task = "IDLE"
+
+        if (sched_activity == "SLEEP" and has_pending_work and not has_carried_work
+                and self.task not in urgent_need_tasks):
+            if not self.sleep_schedule_task_state:
+                self.sleep_schedule_task_state = self._capture_sleep_schedule_task()
+            self.task = "SLEEPING"
+            self.current_path = []
+            self.path_index = 0
+            self.path_target = None
+            self.target_x = None
+            self.target_y = None
+            self.is_moving = False
+            self.is_waiting_for_path = False
+            GlobalPathRegistry.get_instance().release_reservation(self.id)
+            self.sleeping_recharge_active = True
+
+        has_pending_work = (
+            self.task not in SCHEDULE_NON_WORK_TASKS or has_carried_work
+        )
+        if has_pending_work and (sched_activity != "SLEEP" or has_carried_work):
             sched_activity = "WORK"
+
+        is_crit_hunger = self.hunger <= AI_CRITICAL_NEED_THRESHOLD
+        is_crit_thirst = self.thirst <= AI_CRITICAL_NEED_THRESHOLD
+        is_crit_toilet = self.need_toilet <= AI_NEED_TOILET_URGENT_THRESHOLD
+        if self.task in urgent_need_tasks:
+            self.sleeping_recharge_active = False
+        elif self.task == "SLEEPING":
+            self.sleeping_recharge_active = True
 
         from game.systems.sleep_system import SleepSystem
         SleepSystem.initialize(self)
@@ -1310,13 +1454,23 @@ class Villager:
             self.active_tool = None
             self.sleeping_recharge_active = True
             GlobalPathRegistry.get_instance().release_reservation(self.id)
+            self._move_to_assigned_bed(
+                dt, all_entities, player, building_manager, furniture_manager,
+            )
             HappinessSystem.refresh(
                 self, getattr(day_cycle, "day_number", 1), permit_manager,
                 building_manager, furniture_manager, villager_manager,
             )
             return
         if self.task == "ZONKED_SLEEP":
-            self.task = "IDLE"
+            if sched_activity == "SLEEP":
+                self.task = "SLEEPING"
+                self.sleeping_recharge_active = True
+                self._move_to_assigned_bed(
+                    dt, all_entities, player, building_manager, furniture_manager,
+                )
+            else:
+                self.task = "IDLE"
         HappinessSystem.refresh(
             self, getattr(day_cycle, "day_number", 1), permit_manager,
             building_manager, furniture_manager, villager_manager,
@@ -1354,17 +1508,15 @@ class Villager:
         # -------------------------------------------------------------
         # Rutinitas Kebutuhan Pokok: Critical Needs (<= 20%) & Evening Dinner
         # -------------------------------------------------------------
-        is_crit_hunger = (self.hunger <= AI_CRITICAL_NEED_THRESHOLD)
-        is_crit_thirst = (self.thirst <= AI_CRITICAL_NEED_THRESHOLD)
-        is_crit_toilet = (self.need_toilet <= AI_NEED_TOILET_URGENT_THRESHOLD)
         is_dinner = (sched_activity == "LEISURE" and cur_hour >= 18.0)
         wants_food = (self.daily_food_consumed < DAILY_FOOD_REQUIREMENT and (is_crit_hunger or is_dinner))
         wants_water = (self.daily_water_consumed < DAILY_WATER_REQUIREMENT and (is_crit_thirst or is_dinner))
 
         # Critical interruption: Interupsi pekerjaan apa pun jika lapar, haus, atau toilet mencapai <= 20%
         if (is_crit_hunger or is_crit_thirst or is_crit_toilet):
-            if self.task not in ("SEEKING_FOOD", "SEEKING_WATER", "SEEKING_TOILET", "BUYING_FOOD_RETRIEVE_COINS", "BUYING_FOOD_TRAVEL_TO_MARKET", "BUYING_FOOD_HAULING_HOME", "RECOVER_DEATH_ITEMS") and self.need_seek_cooldown <= 0.0:
+            if self.task not in urgent_need_tasks and self.need_seek_cooldown <= 0.0:
                 if is_crit_hunger or is_crit_thirst or is_crit_toilet or (sched_activity in ("LEISURE", "ANY") and self.task in ("IDLE", "LEISURE", "STROLLING")):
+                    self.sleeping_recharge_active = False
                     self.interrupt_task("CRITICAL_NEED")
                     if self.current_work_tile and permit_manager:
                         assigned_farm = next((p for p in permit_manager.permits if p.permit_type == "farm" and hasattr(p, "assigned_workers") and self.id in p.assigned_workers), None)
@@ -1464,6 +1616,7 @@ class Villager:
                     food_pos[0], food_pos[1], dt, arrival_dist=arrival_dist,
                     all_entities=all_entities, player=player, building_manager=building_manager,
                     furniture_manager=furniture_manager, exclusive_target=False,
+                    interaction_target=source_obj,
                 )
                 if arrived:
                     if source_type == "chest":
@@ -1604,7 +1757,7 @@ class Villager:
                 )
                 return
             cx, cy = chest.get_world_pos(TILE_SIZE)
-            arrived = self._move_towards(cx, cy, dt, arrival_dist=CHEST_INTERACTION_RADIUS, all_entities=all_entities, player=player, building_manager=building_manager, furniture_manager=furniture_manager, exclusive_target=False)
+            arrived = self._move_towards(cx, cy, dt, arrival_dist=CHEST_INTERACTION_RADIUS, all_entities=all_entities, player=player, building_manager=building_manager, furniture_manager=furniture_manager, exclusive_target=False, interaction_target=chest)
             if arrived:
                 price = getattr(self, "purchase_target_price", 3)
                 ok, msg = AIFoodPurchasingSystem.retrieve_coins_from_storage(self, price, furniture_manager=furniture_manager)
@@ -1642,7 +1795,8 @@ class Villager:
             ty = (stack.grid_y + 0.5) * TILE_SIZE
             arrived = self._move_towards(tx, ty, dt, arrival_dist=LOOSE_ITEM_ARRIVAL_DIST,
                 all_entities=all_entities, player=player, building_manager=building_manager,
-                furniture_manager=furniture_manager, exclusive_target=False)
+                furniture_manager=furniture_manager, exclusive_target=False,
+                interaction_target=stack)
             if arrived:
                 denomination = canonical_denomination(stack.resource_type)
                 pocket_copper = to_copper(normalize_wallet(self.inventory))
@@ -1726,7 +1880,7 @@ class Villager:
                 return
 
             approach_pt = market.get_approach_point((self.x, self.y), TILE_SIZE, building_manager)
-            arrived = self._move_towards(approach_pt[0], approach_pt[1], dt, arrival_dist=32, all_entities=all_entities, player=player, building_manager=building_manager, furniture_manager=furniture_manager, exclusive_target=False)
+            arrived = self._move_towards(approach_pt[0], approach_pt[1], dt, arrival_dist=32, all_entities=all_entities, player=player, building_manager=building_manager, furniture_manager=furniture_manager, exclusive_target=False, interaction_target=market)
             if arrived:
                 food_item = getattr(self, "purchase_food_item", "Potato")
                 ok, msg = AIFoodPurchasingSystem.execute_market_transaction(
@@ -1757,7 +1911,7 @@ class Villager:
             else:
                 cx, cy = (self.x, self.y)
 
-            arrived = self._move_towards(cx, cy, dt, arrival_dist=CHEST_INTERACTION_RADIUS, all_entities=all_entities, player=player, building_manager=building_manager, furniture_manager=furniture_manager, exclusive_target=False)
+            arrived = self._move_towards(cx, cy, dt, arrival_dist=CHEST_INTERACTION_RADIUS, all_entities=all_entities, player=player, building_manager=building_manager, furniture_manager=furniture_manager, exclusive_target=False, interaction_target=chest)
             if arrived:
                 AIFoodPurchasingSystem.deliver_and_consume_food(
                     self, furniture_manager=furniture_manager,
@@ -1792,6 +1946,7 @@ class Villager:
                     water_pos[0], water_pos[1], dt, arrival_dist=arrival_dist,
                     all_entities=all_entities, player=player, building_manager=building_manager,
                     furniture_manager=furniture_manager, exclusive_target=False,
+                    interaction_target=source_obj,
                 )
                 if arrived:
                     if source_type == "chest":
@@ -1810,7 +1965,7 @@ class Villager:
             well = self._find_nearest_well(building_manager)
             if well:
                 approach_pt = self._get_well_approach_point(well, all_entities, building_manager)
-                arrived = self._move_towards(approach_pt[0], approach_pt[1], dt, arrival_dist=24, all_entities=all_entities, player=player, building_manager=building_manager, furniture_manager=furniture_manager, exclusive_target=False)
+                arrived = self._move_towards(approach_pt[0], approach_pt[1], dt, arrival_dist=24, all_entities=all_entities, player=player, building_manager=building_manager, furniture_manager=furniture_manager, exclusive_target=False, interaction_target=well)
                 if arrived:
                     self.well_draw_timer += dt
                     if self.well_draw_timer >= 0.5:
@@ -1851,13 +2006,33 @@ class Villager:
             )
             return
 
+        from game.systems.taxation_system import TaxationSystem
+        if TaxationSystem.update_collector(
+            self, dt, sched_activity, day_cycle, permit_manager, villager_manager,
+            building_manager, furniture_manager, all_entities, player,
+        ):
+            return
+        from game.data.config import DEFAULT_JOB_SCHEDULE
+        collector_activity = (
+            schedule_manager.get_current_activity("Tax Collector", cur_hour)
+            if schedule_manager
+            else DEFAULT_JOB_SCHEDULE[int(cur_hour) % len(DEFAULT_JOB_SCHEDULE)]
+        )
+        if TaxationSystem.update_household_representative(
+            self, dt, villager_manager, permit_manager, building_manager,
+            furniture_manager, all_entities, player,
+            getattr(day_cycle, "day_number", 1),
+            collector_activity=collector_activity,
+        ):
+            return
+
         # -------------------------------------------------------------
         # Rutinitas Sholat / Doa (Church & Prayer Time) - AGENT 3
         # -------------------------------------------------------------
         from game.systems.church_system import ChurchSystem
         church_p = ChurchSystem.get_church_permit(permit_manager)
         priest_worker = ChurchSystem.get_assigned_priest(permit_manager, villager_manager)
-        is_prayer = ChurchSystem.is_prayer_time(cur_hour, schedule_manager) and not has_pending_work
+        is_prayer = ChurchSystem.is_prayer_time(cur_hour, schedule_manager)
 
         if is_prayer:
             if self == priest_worker:
@@ -1870,21 +2045,31 @@ class Villager:
                     twx = (altar_tile[0] + 0.5) * TILE_SIZE
                     twy = (altar_tile[1] + 0.5) * TILE_SIZE
                     self.task = "LEADING_PRAYER"
-                    self._move_towards(twx, twy, dt, arrival_dist=12, all_entities=all_entities, player=player, building_manager=building_manager, furniture_manager=furniture_manager, exclusive_target=True)
+                    self._move_towards(twx, twy, dt, arrival_dist=12, all_entities=all_entities, player=player, building_manager=building_manager, furniture_manager=furniture_manager, exclusive_target=True, interaction_target=church_p)
                     if math.hypot(self.x - twx, self.y - twy) <= 48.0:
                         self.prayer_attendance_day = getattr(day_cycle, "day_number", 1)
                     return
             else:
+                family = (villager_manager.get_family_by_id(self.family_id)
+                          if villager_manager and getattr(self, "family_id", None) else None)
+                representative = ChurchSystem.select_household_representative(
+                    family, villager_manager
+                )
+                if priest_worker and representative is self:
+                    ChurchSystem.prepare_church_tax_payment(
+                        self, church_p, furniture_manager,
+                        day_number=getattr(day_cycle, "day_number", 1),
+                    )
                 church_tile = ChurchSystem.find_free_church_tile(self, church_p, building_manager)
                 if church_tile and church_p:
                     twx = (church_tile[0] + 0.5) * TILE_SIZE
                     twy = (church_tile[1] + 0.5) * TILE_SIZE
                     self.task = "ATTENDING_PRAYER"
-                    arrived = self._move_towards(twx, twy, dt, arrival_dist=12, all_entities=all_entities, player=player, building_manager=building_manager, furniture_manager=furniture_manager)
+                    arrived = self._move_towards(twx, twy, dt, arrival_dist=12, all_entities=all_entities, player=player, building_manager=building_manager, furniture_manager=furniture_manager, interaction_target=church_p)
                     dist_to_church = math.hypot(self.x - twx, self.y - twy)
                     if dist_to_church <= 48.0 or arrived:
                         self.prayer_attendance_day = getattr(day_cycle, "day_number", 1)
-                        if priest_worker:
+                        if priest_worker and representative is self:
                             ChurchSystem.process_church_tax_payment(
                                 self, priest_worker, church_p, furniture_manager,
                                 villager_manager=villager_manager,
@@ -1898,23 +2083,23 @@ class Villager:
             ChurchSystem.release_church_tile(self)
         else:
             ChurchSystem.release_church_tile(self)
+            ChurchSystem.refund_unpaid_church_tax(self, furniture_manager)
             from game.systems.confession_system import ConfessionSystem
             ConfessionSystem.on_prayer_completed(self, getattr(day_cycle, "day_number", 1))
-            if self == priest_worker and sched_activity not in ("WORK", "ANY"):
-                # 4. After Prayer Time ends, return to the Household Chest of assigned household
-                # 5. Deposit all collected coins into that Household Chest
-                fam_id = getattr(self, "family_id", None)
-                chest = furniture_manager.get_storage_for_family(fam_id) if (furniture_manager and fam_id) else None
-                priest_copper = to_copper(getattr(self, "currency", {}))
-                if chest and priest_copper > 0:
-                    cx, cy = chest.get_world_pos(TILE_SIZE)
-                    dist_to_chest = math.hypot(self.x - cx, self.y - cy)
-                    if dist_to_chest > 20.0:
-                        self.task = "RETURNING_TITHES_HOME"
-                        self._move_towards(cx, cy, dt, arrival_dist=16, all_entities=all_entities, player=player, building_manager=building_manager, furniture_manager=furniture_manager)
-                        return
-                    else:
-                        ChurchSystem.priest_deposit_tithes_home(self, furniture_manager)
+            if self == priest_worker:
+                if not ConfessionSystem.has_pending_requests_for_priest(self, permit_manager):
+                    fam_id = getattr(self, "family_id", None)
+                    chest = furniture_manager.get_storage_for_family(fam_id) if (furniture_manager and fam_id) else None
+                    priest_copper = to_copper(getattr(self, "inventory", {}))
+                    if chest and priest_copper > 0:
+                        cx, cy = chest.get_world_pos(TILE_SIZE)
+                        dist_to_chest = math.hypot(self.x - cx, self.y - cy)
+                        if dist_to_chest > 20.0:
+                            self.task = "RETURNING_TITHES_HOME"
+                            self._move_towards(cx, cy, dt, arrival_dist=16, all_entities=all_entities, player=player, building_manager=building_manager, furniture_manager=furniture_manager, interaction_target=chest)
+                            return
+                        else:
+                            ChurchSystem.priest_deposit_tithes_home(self, furniture_manager)
 
 
         from game.systems.confession_system import ConfessionSystem
@@ -2001,15 +2186,12 @@ class Villager:
             self.sleeping_recharge_active = True
 
             # 1. Cari Bed milik individu / keluarga
-            bed = furniture_manager.get_bed_for_villager(self.id, self.family_id) if furniture_manager else None
+            bed = self._move_to_assigned_bed(
+                dt, all_entities, player, building_manager, furniture_manager,
+            )
             if bed:
-                self.assigned_bed_id = bed.id
-                bx, by = bed.get_world_pos(TILE_SIZE)
-                arrived = self._move_towards(bx, by, dt, arrival_dist=12, all_entities=all_entities, player=player, building_manager=building_manager, furniture_manager=furniture_manager, exclusive_target=True)
-                if arrived:
-                    self.x, self.y = bx, by
-                    if not self.speech_text and random.random() < 0.015:
-                        self.say("Zzz...", duration=2.0)
+                if not self.speech_text and random.random() < 0.015:
+                    self.say("Zzz...", duration=2.0)
             else:
                 self.assigned_bed_id = None
                 # Perilaku alternatif: Tidur di lantai rumah secara tersebar pada petak berbeda (64px separation)
@@ -2134,7 +2316,7 @@ class Villager:
                     if assigned_farm:
                         assigned_farm.release_worker_reservations(self.id)
                     self.current_work_tile = None
-                arrived = self._move_towards(fx, fy, dt, arrival_dist=20, all_entities=all_entities, player=player, building_manager=building_manager, furniture_manager=furniture_manager)
+                arrived = self._move_towards(fx, fy, dt, arrival_dist=20, all_entities=all_entities, player=player, building_manager=building_manager, furniture_manager=furniture_manager, interaction_target=target_f)
                 if arrived:
                     self.carrying_furniture = target_f
                     self.say(f"Hauling our {target_f.name}...", duration=2.5)
@@ -2168,7 +2350,7 @@ class Villager:
                 cur_vgx = int(math.floor(self.x / TILE_SIZE))
                 cur_vgy = int(math.floor(self.y / TILE_SIZE))
                 is_near_chest = chest and abs(cur_vgx - chest.grid_x) <= 1 and abs(cur_vgy - chest.grid_y) <= 1
-                arrived = self._move_towards(dest_x, dest_y, dt, arrival_dist=CHEST_INTERACTION_RADIUS, all_entities=all_entities, player=player, building_manager=building_manager, furniture_manager=furniture_manager, exclusive_target=False)
+                arrived = self._move_towards(dest_x, dest_y, dt, arrival_dist=CHEST_INTERACTION_RADIUS, all_entities=all_entities, player=player, building_manager=building_manager, furniture_manager=furniture_manager, exclusive_target=False, interaction_target=chest)
                 if arrived or is_near_chest:
                     self.is_moving = False
                     self.current_path = []
@@ -2250,7 +2432,7 @@ class Villager:
                 chest = furniture_manager.get_storage_for_family(self.family_id) if furniture_manager else None
                 if chest:
                     cx, cy = chest.get_world_pos(TILE_SIZE)
-                    arrived = self._move_towards(cx, cy, dt, arrival_dist=CHEST_INTERACTION_RADIUS, all_entities=all_entities, player=player, building_manager=building_manager, furniture_manager=furniture_manager, exclusive_target=False)
+                    arrived = self._move_towards(cx, cy, dt, arrival_dist=CHEST_INTERACTION_RADIUS, all_entities=all_entities, player=player, building_manager=building_manager, furniture_manager=furniture_manager, exclusive_target=False, interaction_target=chest)
                     if arrived:
                         amt = self.inventory.get("Water", 0)
                         if amt > 0:
@@ -2276,7 +2458,7 @@ class Villager:
                 well = self._find_nearest_well(building_manager)
                 if well:
                     approach_pt = self._get_well_approach_point(well, all_entities, building_manager)
-                    arrived = self._move_towards(approach_pt[0], approach_pt[1], dt, arrival_dist=24, all_entities=all_entities, player=player, building_manager=building_manager, furniture_manager=furniture_manager, exclusive_target=False)
+                    arrived = self._move_towards(approach_pt[0], approach_pt[1], dt, arrival_dist=24, all_entities=all_entities, player=player, building_manager=building_manager, furniture_manager=furniture_manager, exclusive_target=False, interaction_target=well)
                     if arrived:
                         self.well_draw_timer += dt
                         if self.well_draw_timer >= 1.0:
@@ -2322,6 +2504,7 @@ class Villager:
                         chest_x, chest_y, dt, arrival_dist=CHEST_INTERACTION_RADIUS,
                         all_entities=all_entities, player=player,
                         building_manager=building_manager, furniture_manager=furniture_manager,
+                        interaction_target=chest,
                     )
                     if arrived:
                         success, message = AIMarketPurchasingSystem.withdraw_household_coins(
@@ -2349,6 +2532,7 @@ class Villager:
                     market_x, market_y, dt, arrival_dist=CHEST_INTERACTION_RADIUS,
                     all_entities=all_entities, player=player,
                     building_manager=building_manager, furniture_manager=furniture_manager,
+                    interaction_target=market,
                 )
                 if arrived:
                     success, message = AIMarketPurchasingSystem.execute_items_transaction(
@@ -2369,6 +2553,7 @@ class Villager:
                         chest_x, chest_y, dt, arrival_dist=CHEST_INTERACTION_RADIUS,
                         all_entities=all_entities, player=player,
                         building_manager=building_manager, furniture_manager=furniture_manager,
+                        interaction_target=chest,
                     )
                     if arrived:
                         AIMarketPurchasingSystem.deposit_materials_and_change_to_chest(self, furniture_manager)
@@ -2401,7 +2586,7 @@ class Villager:
                 else:
                     self.task = "RETURNING_TOOLS"
                     self.active_tool = None
-                    self._move_towards(storage_pos[0], storage_pos[1], dt, arrival_dist=TOOL_STOW_ARRIVAL_DIST, all_entities=all_entities, player=player, building_manager=building_manager, furniture_manager=furniture_manager)
+                    self._move_towards(storage_pos[0], storage_pos[1], dt, arrival_dist=TOOL_STOW_ARRIVAL_DIST, all_entities=all_entities, player=player, building_manager=building_manager, furniture_manager=furniture_manager, interaction_target=storage_obj)
                     return
 
         # B. Kumpulkan SEMUA alat kerja yang dibutuhkan untuk pekerjaan saat ini dalam satu kali kunjungan
@@ -2435,7 +2620,7 @@ class Villager:
                         else:
                             self.task = "EQUIPPING_JOB_TOOLS"
                             self.active_tool = None
-                            self._move_towards(storage_pos[0], storage_pos[1], dt, arrival_dist=TOOL_STOW_ARRIVAL_DIST, all_entities=all_entities, player=player, building_manager=building_manager, furniture_manager=furniture_manager)
+                            self._move_towards(storage_pos[0], storage_pos[1], dt, arrival_dist=TOOL_STOW_ARRIVAL_DIST, all_entities=all_entities, player=player, building_manager=building_manager, furniture_manager=furniture_manager, interaction_target=storage_obj)
                             return
                 else:
                     requested_items = dict(missing_tools)
@@ -2508,7 +2693,7 @@ class Villager:
                     target_stack = loose_crops[0]
                     tx = (target_stack.grid_x + 0.5) * TILE_SIZE
                     ty = (target_stack.grid_y + 0.5) * TILE_SIZE
-                    arrived = self._move_towards(tx, ty, dt, arrival_dist=20, all_entities=all_entities, player=player, building_manager=building_manager, furniture_manager=furniture_manager)
+                    arrived = self._move_towards(tx, ty, dt, arrival_dist=20, all_entities=all_entities, player=player, building_manager=building_manager, furniture_manager=furniture_manager, interaction_target=target_stack)
                     if arrived:
                         amt = stockpile_manager.take_from_stack(
                             target_stack, self.get_inventory_room()
@@ -2741,7 +2926,7 @@ class Villager:
                                     is_adjacent_tile = any(abs(cur_vgx - gx) <= 1 and abs(cur_vgy - gy) <= 1 for (gx, gy) in well.tiles)
                                     arrived_well = (min_dist <= (self.radius + 28.0)) or is_adjacent_tile
                                     if not arrived_well and approach_pt:
-                                        self._move_towards(approach_pt[0], approach_pt[1], dt, arrival_dist=self.radius + 8.0, all_entities=all_entities, player=player, building_manager=building_manager, furniture_manager=furniture_manager, exclusive_target=False)
+                                        self._move_towards(approach_pt[0], approach_pt[1], dt, arrival_dist=self.radius + 8.0, all_entities=all_entities, player=player, building_manager=building_manager, furniture_manager=furniture_manager, exclusive_target=False, interaction_target=well)
                                         new_d = math.hypot(self.x - approach_pt[0], self.y - approach_pt[1])
                                         cur_vgx = int(math.floor(self.x / TILE_SIZE))
                                         cur_vgy = int(math.floor(self.y / TILE_SIZE))
@@ -3039,7 +3224,7 @@ class Villager:
                         arrived = True
                     elif chest:
                         cx, cy = chest.get_world_pos(TILE_SIZE)
-                        arrived = self._move_towards(cx, cy, dt, arrival_dist=CHEST_INTERACTION_RADIUS, all_entities=all_entities, player=player, building_manager=building_manager, furniture_manager=furniture_manager)
+                        arrived = self._move_towards(cx, cy, dt, arrival_dist=CHEST_INTERACTION_RADIUS, all_entities=all_entities, player=player, building_manager=building_manager, furniture_manager=furniture_manager, interaction_target=chest)
                     else:
                         arrived = True
                     if arrived:
@@ -3058,7 +3243,7 @@ class Villager:
                     mkt = getattr(self, "target_restock_market", None)
                     if mkt:
                         mx, my = mkt.get_center_world(TILE_SIZE)
-                        arrived = self._move_towards(mx, my, dt, arrival_dist=36, all_entities=all_entities, player=player, building_manager=building_manager, furniture_manager=furniture_manager)
+                        arrived = self._move_towards(mx, my, dt, arrival_dist=36, all_entities=all_entities, player=player, building_manager=building_manager, furniture_manager=furniture_manager, interaction_target=mkt)
                         if arrived:
                             mat = getattr(self, "target_restock_mat", "Wood")
                             qty = getattr(self, "target_restock_qty", 1)
@@ -3074,7 +3259,7 @@ class Villager:
                     chest = furniture_manager.get_storage_for_family(self.family_id) if furniture_manager else None
                     if chest:
                         cx, cy = chest.get_world_pos(TILE_SIZE)
-                        arrived = self._move_towards(cx, cy, dt, arrival_dist=CHEST_INTERACTION_RADIUS, all_entities=all_entities, player=player, building_manager=building_manager, furniture_manager=furniture_manager)
+                        arrived = self._move_towards(cx, cy, dt, arrival_dist=CHEST_INTERACTION_RADIUS, all_entities=all_entities, player=player, building_manager=building_manager, furniture_manager=furniture_manager, interaction_target=chest)
                         if arrived:
                             AIMarketPurchasingSystem.deposit_materials_and_change_to_chest(self, furniture_manager)
                             self.say("Stored materials in chest.", duration=2.0)
@@ -3236,10 +3421,20 @@ class Villager:
         self.is_waiting_for_path = False
         self._move_towards(self.idle_target[0], self.idle_target[1], dt, arrival_dist=16, all_entities=all_entities, player=player, building_manager=building_manager, furniture_manager=furniture_manager, exclusive_target=False)
 
-    def _move_towards(self, tx, ty, dt, arrival_dist=10, all_entities=None, player=None, building_manager=None, furniture_manager=None, exclusive_target=False):
+    def _move_towards(self, tx, ty, dt, arrival_dist=10, all_entities=None, player=None, building_manager=None, furniture_manager=None, exclusive_target=False, recover_blocked_routes=False, interaction_target=None):
         if getattr(self, "player_avoid_speech_cooldown", 0.0) > 0.0:
             self.player_avoid_speech_cooldown = max(0.0, self.player_avoid_speech_cooldown - dt)
         self.path_retry_timer = max(0.0, getattr(self, "path_retry_timer", 0.0) - dt)
+        if interaction_target is not None:
+            arrival_dist = interaction_arrival_distance(
+                interaction_target, tx, ty, arrival_dist, TILE_SIZE,
+            )
+        if recover_blocked_routes:
+            self.stuck_blocked_tiles = {
+                tile: remaining - dt
+                for tile, remaining in getattr(self, "stuck_blocked_tiles", {}).items()
+                if remaining > dt
+            }
 
         # Direct arrival check
         direct_dist = math.hypot(tx - self.x, ty - self.y)
@@ -3268,6 +3463,7 @@ class Villager:
             cand_path = find_navigation_path(
                 (self.x, self.y), (tx, ty), building_manager,
                 furniture_manager=furniture_manager, tile_size=TILE_SIZE,
+                avoid_tiles=self.stuck_blocked_tiles if recover_blocked_routes else None,
             )
 
             if cand_path:
@@ -3295,6 +3491,10 @@ class Villager:
         dist_to_wp = math.hypot(wp_dx, wp_dy)
         is_last_wp = (self.path_index == len(self.current_path) - 1)
         tol = arrival_dist if is_last_wp else PATH_WAYPOINT_TOLERANCE
+        if is_last_wp and interaction_target is not None:
+            tol = interaction_arrival_distance(
+                interaction_target, target_wp[0], target_wp[1], tol, TILE_SIZE,
+            )
 
         if dist_to_wp <= tol:
             if is_last_wp:
@@ -3386,13 +3586,34 @@ class Villager:
 
         # 5. Stuck Recovery
         actual_dist = math.hypot(self.x - old_x, self.y - old_y)
-        if actual_dist < (move_dist * 0.15) and dist_to_wp > tol:
+        made_insufficient_progress = actual_dist < (move_dist * 0.15)
+        if recover_blocked_routes:
+            progress = dist_to_wp - math.hypot(target_wp[0] - self.x, target_wp[1] - self.y)
+            minimum_progress = min(STUCK_MIN_PROGRESS_DISTANCE, move_dist * 0.15)
+            made_insufficient_progress = progress < minimum_progress
+        if made_insufficient_progress and dist_to_wp > tol:
             self.stuck_timer += dt
-            if self.stuck_timer >= 2.0:
+            stuck_threshold = STUCK_THRESHOLD_SECONDS if recover_blocked_routes else 2.0
+            if self.stuck_timer >= stuck_threshold:
+                blocked_tile = (
+                    int(math.floor((self.x + dir_x * NAVIGATION_BLOCKED_PROBE_DISTANCE) / TILE_SIZE)),
+                    int(math.floor((self.y + dir_y * NAVIGATION_BLOCKED_PROBE_DISTANCE) / TILE_SIZE)),
+                )
+                door_tiles = {
+                    getattr(building, "door_pos", None)
+                    for building in getattr(building_manager, "buildings", [])
+                    if getattr(building, "door_pos", None)
+                }
                 self.stuck_timer = 0.0
-                self.current_path = []
-                self.path_index = 0
-                self.path_target = None
+                if recover_blocked_routes and blocked_tile not in door_tiles:
+                    self.stuck_blocked_tiles[blocked_tile] = STUCK_AVOIDANCE_DURATION
+                    self.current_path = []
+                    self.path_index = 0
+                    self.path_target = None
+                elif not recover_blocked_routes:
+                    self.current_path = []
+                    self.path_index = 0
+                    self.path_target = None
         else:
             self.stuck_timer = max(0.0, self.stuck_timer - dt * 2.0)
 

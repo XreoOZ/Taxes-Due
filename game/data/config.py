@@ -164,6 +164,7 @@ CARPENTER_BUILD_DURATION_INGAME_HOURS = 1.0
 CARPENTER_DEFAULT_LIVING_HOUSEHOLD_SIZE = 1
 FURNITURE_DAILY_BREAK_CHANCE = 0.05
 CARPENTER_REPAIR_FOOD_DAYS = 3
+CARPENTER_REPAIR_MATERIALS = {"Wood": 2}
 CARPENTER_TOOL_SWING_SPEED = 7.0
 CARPENTER_TOOL_SWING_ANGLE = 0.55
 FURNITURE_CLAIM_BED_SEARCH_RADIUS = 8.5        # Max tile distance to infer chest household ownership from beds
@@ -234,6 +235,16 @@ DEDICATED_JOBS = {
         "desc": "Crafts furniture, structural beams, and wooden barrels.",
         "required_tools": ["Saw", "Adze"],
         "material_stock_target": {"Wood": 10, "Stone": 10}
+    },
+    "Tax Collector": {
+        "id": "Tax Collector",
+        "name": "Tax Collector",
+        "title": "Tax Collector",
+        "color": (180, 83, 9),
+        "wip": False,
+        "workplace_building_type": "tax_house",
+        "desc": "Collects the scheduled household socage tax and returns it to the Crown Treasury.",
+        "required_tools": []
     },
     "Baker": {
         "id": "Baker",
@@ -315,7 +326,7 @@ SCHEDULE_TYPES = {
         "id": "ANY",
         "name": "Anything",
         "color": (100, 116, 139),      # Slate gray
-        "desc": "Work if unfinished tasks remain; otherwise relax and rest."
+        "desc": "Finish active work, meet needs (including sleep), then choose leisure or available work."
     },
     "PRAYER": {
         "id": "PRAYER",
@@ -334,8 +345,15 @@ SCHEDULE_NON_WORK_TASKS = frozenset({
     "RETURNING_TITHES_HOME",
     "WAITING_FOR_CARPENTER_COMMISSION",
     "CONFESSION_QUEUED", "WAITING_FOR_CONFESSION", "CONFESSION_RETRIEVE_COINS",
-    "CONFESSION_TRAVEL_TO_PRIEST", "GOING_TO_CONFESSION_BOX", "CONFESSING",
+    "CONFESSION_TRAVEL_TO_PRIEST", "GOING_TO_CONFESSOR",
+    "GOING_TO_CONFESSION_BOX", "CONFESSING",
     "HEARING_CONFESSION",
+}) | frozenset({
+    "GOING_TO_TAX_OFFICE",
+    "STATIONED_AT_TAX_OFFICE",
+    "VISITING_HOUSEHOLD_FOR_TAX",
+    "WAITING_FOR_HOUSEHOLD_TAX",
+    "RETURNING_TAX_TO_TREASURY",
 })
 FREE_TIME_SCHEDULE_ACTIVITIES = frozenset({"LEISURE", "ANY"})
 MARKET_SALES_REPORT_PERIOD_DAYS = 10
@@ -666,6 +684,47 @@ SPEED_LEVELS = [
     {"id": "very_fast", "name": "Very Fast", "short_label": "4×", "speed": 4.0, "key_label": "5"},
 ]
 DEFAULT_SPEED_INDEX = 2  # Normal (1.0x)
+SPEED_CONTROL_UI = {
+    "font_button": 12,
+    "font_sub": 9,
+    "font_paused": 14,
+    "panel_min_width": 320,
+    "panel_height": 46,
+    "panel_margin_x": 16,
+    "panel_margin_y": 14,
+    "panel_padding_x": 8,
+    "panel_padding_y": 7,
+    "panel_border_radius": 8,
+    "button_height": 32,
+    "button_border_radius": 6,
+    "pause_button_width": 58,
+    "pause_speed_gap": 6,
+    "speed_button_width": 46,
+    "speed_button_gap": 4,
+    "right_padding": 2,
+    "button_text_y": 7,
+    "pause_tag_width": 140,
+    "pause_tag_height": 28,
+    "pause_tag_x_padding": 10,
+    "pause_tag_y": 16,
+    "pause_tag_text_y": 4,
+    "colors": {
+        "paused_bg": (220, 38, 38),
+        "paused_border": (239, 68, 68),
+        "paused_tag": (220, 38, 38, 220),
+        "active_bg": (16, 185, 129),
+        "active_border": (52, 211, 153),
+        "pause_hover_bg": (40, 56, 80),
+        "hover_bg": (51, 65, 85),
+        "hover_border": (96, 165, 250),
+        "idle_bg": (30, 41, 59),
+        "idle_border": (71, 85, 105),
+        "paused_text": (255, 255, 255),
+        "hover_text": (255, 255, 255),
+        "idle_text": (148, 163, 184),
+        "pause_text": (203, 213, 225),
+    },
+}
 
 # Day Length Settings (Configurable In-Game Day Duration)
 DAY_LENGTH_OPTIONS = [
@@ -676,9 +735,21 @@ DAY_LENGTH_OPTIONS = [
 DEFAULT_DAY_LENGTH_INDEX = 1  # 20 minutes default (1200.0 seconds)
 DEFAULT_DAY_LENGTH_SECONDS = DAY_LENGTH_OPTIONS[DEFAULT_DAY_LENGTH_INDEX]["seconds"]
 HOURS_PER_DAY = 24.0
+MINUTES_PER_HOUR = 60
 STARTING_HOUR = 8.0
 NIGHT_START_HOUR = 20
 NIGHT_END_HOUR = 5
+DAY_CYCLE_LIGHTING = {
+    "daylight_start_hour": 6.0,
+    "sunset_start_hour": 18.0,
+    "sunrise_start_hour": 4.5,
+    "sunset_start_color": (245, 140, 60),
+    "sunset_end_color": (45, 40, 110),
+    "sunset_alpha": (30, 100),
+    "night_color": (15, 23, 42, 110),
+    "sunrise_color": (251, 191, 36),
+    "sunrise_alpha": 110,
+}
 
 # RimWorld-Style Work Priorities Configuration
 WORK_TYPES = [
@@ -808,6 +879,42 @@ BUILDING_TYPES = {
         "required_permit": None,
         "allowed_permits": None,
         "carpenter_commissionable": True,
+    },
+    "tax_house": {
+        "id": "tax_house",
+        "name": "Tax Office",
+        "category": "Tax Office",
+        "category_id": "public_structure",
+        "public_structure": True,
+        "maintainable": True,
+        "desc": "An open medieval tax-collection work station with a clerk's counter, ledgers, and royal banner.",
+        "cost_wood": 20,
+        "cost_stone": 15,
+        "fixed_cost": True,
+        "fixed_tiles_count": 4,
+        "width_tiles": 2,
+        "height_tiles": 2,
+        "max_workers": 1,
+        "is_solid": False,
+        "has_door": False,
+        "color": (177, 132, 82),
+        "border_color": (217, 119, 6),
+        "required_permit": None,
+        "allowed_permits": None,
+        "carpenter_commissionable": True,
+        "visual_style": {
+            "platform": (95, 75, 53),
+            "platform_light": (105, 83, 59),
+            "platform_dark": (88, 69, 49),
+            "tile_seam": (72, 56, 40),
+            "wood": (121, 78, 42),
+            "wood_light": (166, 112, 61),
+            "wood_dark": (62, 39, 26),
+            "royal_cloth": (126, 32, 35),
+            "gold": (226, 174, 73),
+            "parchment": (221, 202, 158),
+            "metal": (105, 112, 119),
+        },
     }
 }
 # Placeable structures and furniture share quarter-turn rotation behavior.
@@ -1115,7 +1222,7 @@ AI_NEED_FAITH_CONFESSION_RESTORE_MIN = 85.0
 AI_NEED_FAITH_CONFESSION_RESTORE_MAX = 100.0
 AI_NEED_FAITH_PRAYER_RESTORE_MIN = 10.0
 AI_NEED_FAITH_PRAYER_RESTORE_MAX = 20.0
-CONFESSION_DURATION_INGAME_HOURS = 20.0 / 60.0
+CONFESSION_DURATION_SECONDS = 5.0
 CONFESSION_BUBBLE_DURATION_SECONDS = 5.0
 CONFESSION_MAX_WAIT_HOURS = 2.0
 
@@ -1144,23 +1251,24 @@ HAPPINESS_ACTIVITY_MULTIPLIERS = {
     "very_happy": 1.0,
 }
 HAPPINESS_MODIFIERS = {
-    "ate_varied_food": {"amount": 5.0, "duration_days": 1, "food_variety_required": 2},
-    "needs_comfortable": {"amount": 5.0, "duration_days": 1, "threshold": 50.0},
-    "usable_bed": {"amount": 5.0, "persistent": True},
-    "leisure_per_hour": {"amount": 3.0, "duration_days": 1},
-    "prayer_completed": {"amount": 5.0, "duration_days": 1},
-    "confession_completed": {"amount": 5.0, "duration_days": 1},
-    "gold_coin": {"amount_per_coin": 1.0},
-    "small_home": {"amount": -10.0, "max_tiles": 10},
-    "need_low": {"amount": -10.0, "threshold": 20.0, "duration_days": 1},
-    "need_empty": {"amount": -20.0, "threshold": 0.0, "duration_days": 1},
-    "no_home": {"amount": -20.0, "persistent": True},
-    "no_bed": {"amount": -5.0, "persistent": True},
-    "purchase_unaffordable": {"amount": -10.0, "duration_days": 1},
-    "unemployed": {"amount": -20.0, "persistent": True},
-    "bereavement": {"amount": -50.0, "duration_days": 5},
-    "sleep_fatigue": {"duration_days": 1},
+    "ate_varied_food": {"label": "Ate varied food", "amount": 5.0, "duration_days": 1, "food_variety_required": 2},
+    "needs_comfortable": {"label": "Hunger, thirst and toilet satisfied", "amount": 5.0, "duration_days": 1, "threshold": 50.0},
+    "usable_bed": {"label": "Usable bed", "amount": 5.0, "persistent": True},
+    "leisure_per_hour": {"label": "Leisure time", "amount": 3.0, "duration_days": 1},
+    "prayer_completed": {"label": "Prayer completed", "amount": 5.0, "duration_days": 1},
+    "confession_completed": {"label": "Confession completed", "amount": 5.0, "duration_days": 1},
+    "gold_coin": {"label": "Personal gold coins", "amount_per_coin": 1.0},
+    "small_home": {"label": "Small home", "amount": -10.0, "max_tiles": 10},
+    "need_low": {"label": "Need below 20%", "amount": -10.0, "threshold": 20.0, "duration_days": 1},
+    "need_empty": {"label": "Need reached 0%", "amount": -20.0, "threshold": 0.0, "duration_days": 1},
+    "no_home": {"label": "No usable home", "amount": -20.0, "persistent": True},
+    "no_bed": {"label": "No usable bed", "amount": -5.0, "persistent": True},
+    "purchase_unaffordable": {"label": "Could not afford a needed purchase", "amount": -10.0, "duration_days": 1},
+    "unemployed": {"label": "Unassigned / unemployed", "amount": -20.0, "persistent": True},
+    "bereavement": {"label": "Family member died", "amount": -50.0, "duration_days": 5},
+    "sleep_fatigue": {"label": "Sleep deprivation", "duration_days": 1},
 }
+HAPPINESS_NEED_LABELS = {"hunger": "Hunger", "thirst": "Thirst", "toilet": "Toilet"}
 
 # Individual sleep need and pacing. A full awake cycle drains the meter over
 # the configured waking hours; sleep restores it over the configured duration.
@@ -1169,8 +1277,11 @@ SLEEP_MIN_VALUE = 0.0
 SLEEP_MAX_VALUE = 100.0
 SLEEP_FULL_RECOVERY_INGAME_HOURS = 8.0
 SLEEP_WAKE_DRAIN_INGAME_HOURS = 16.0
-SLEEP_NO_BED_RECOVERY_DURATION_MULTIPLIER = 1.3
+SLEEP_NO_BED_RECOVERY_DURATION_MULTIPLIER = 1.5
+SLEEP_BED_ARRIVAL_DISTANCE = 12.0
 SLEEP_FORCED_WAKE_THRESHOLD = 30.0
+SLEEP_ANY_REST_THRESHOLD = 30.0
+SLEEP_ANY_WAKE_THRESHOLD = 70.0
 SLEEP_STATUS_BANDS = (
     {"id": "rested", "label": "Rested", "min": 50.0},
     {"id": "sluggish", "label": "Sluggish", "min": 31.0},
@@ -1208,6 +1319,25 @@ COLOR_CORPSE_OUTLINE = (51, 65, 85)
 # Church, Priest, Cemetery, Gravedigger & Toilet Systems (Agent 3)
 # =====================================================================
 DEFAULT_CHURCH_TAX = {"Gold": 0, "Silver": 0, "Copper": 1}  # 1 Copper per household per day default
+DEFAULT_SOCAGE_TAX_ENABLED = True
+DEFAULT_SOCAGE_TAX_PERCENT = 10
+SOCAGE_TAX_QUICK_STEP = 10
+SOCAGE_TAX_INTERVAL_DAYS = 10
+SOCAGE_TAX_HAPPINESS_TIERS = ((1, 10, -5), (11, 20, -20), (21, 30, -30),
+                               (31, 60, -50), (61, 100, -100))
+CHURCH_TAX_HAPPINESS_TIERS_COPPER = ((1, 1, -5), (2, 19, -10),
+                                     (20, 99, -20), (100, None, -50))
+NO_CHURCH_TAX_HAPPINESS_BONUS = 10
+SOCAGE_TAX_MAX_WAIT_HOURS = 2.0
+TAX_COLLECTOR_STATION_ARRIVAL_DISTANCE = 20.0
+SOCAGE_TAX_GREETING_LINES = ("Pay your taxes, please.", "The Crown's due is collected today.",
+                             "I am here for the household socage.")
+SOCAGE_TAX_HAPPINESS_REPLIES = {
+    "miserable": ("This levy leaves us with too little.", "Must we pay even now?"),
+    "unhappy": ("We will pay, though it is a burden.", "Here is the household's due."),
+    "happy": ("Here is the household tax. Thank you.", "Our due is ready."),
+    "very_happy": ("Gladly; may the village prosper.", "The Crown's due, collected in good faith."),
+}
 
 GRAVEDIGGER_TARGET_WOOD = 5
 GRAVEDIGGER_TARGET_STONE = 5

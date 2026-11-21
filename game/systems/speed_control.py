@@ -4,7 +4,13 @@ Shortcut keys: Space (Pause), 1 (Very Slow), 2 (Slow), 3 (Normal), 4 (Fast), 5 (
 """
 
 import pygame
-from game.config import SPEED_LEVELS, DEFAULT_SPEED_INDEX, COLOR_HUD_BG, COLOR_HUD_BORDER
+from game.config import (
+    SPEED_LEVELS,
+    DEFAULT_SPEED_INDEX,
+    COLOR_HUD_BG,
+    COLOR_HUD_BORDER,
+    SPEED_CONTROL_UI,
+)
 
 class SpeedController:
     def __init__(self):
@@ -22,9 +28,9 @@ class SpeedController:
 
     def _init_fonts(self):
         if self.font_btn is None:
-            self.font_btn = pygame.font.SysFont("Segoe UI", 12, bold=True)
-            self.font_sub = pygame.font.SysFont("Segoe UI", 9, bold=True)
-            self.font_paused = pygame.font.SysFont("Segoe UI", 14, bold=True)
+            self.font_btn = pygame.font.SysFont("Segoe UI", SPEED_CONTROL_UI["font_button"], bold=True)
+            self.font_sub = pygame.font.SysFont("Segoe UI", SPEED_CONTROL_UI["font_sub"], bold=True)
+            self.font_paused = pygame.font.SysFont("Segoe UI", SPEED_CONTROL_UI["font_paused"], bold=True)
 
     def get_multiplier(self):
         """Mengembalikan pengali kecepatan game aktual (0.0 jika pause)"""
@@ -50,21 +56,10 @@ class SpeedController:
             if event.key == pygame.K_SPACE:
                 self.toggle_pause()
                 return "toggle_pause"
-            elif event.key == pygame.K_1:
-                self.set_speed_by_index(0)  # Very Slow
-                return "speed_very_slow"
-            elif event.key == pygame.K_2:
-                self.set_speed_by_index(1)  # Slow
-                return "speed_slow"
-            elif event.key == pygame.K_3:
-                self.set_speed_by_index(2)  # Normal
-                return "speed_normal"
-            elif event.key == pygame.K_4:
-                self.set_speed_by_index(3)  # Fast
-                return "speed_fast"
-            elif event.key == pygame.K_5:
-                self.set_speed_by_index(4)  # Very Fast
-                return "speed_very_fast"
+            for index, level in enumerate(self.levels):
+                if event.key == pygame.key.key_code(level["key_label"]):
+                    self.set_speed_by_index(index)
+                    return f"speed_{level['id']}"
 
         elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             m_pos = event.pos
@@ -85,45 +80,57 @@ class SpeedController:
         screen_w, screen_h = surface.get_size()
 
         # Ukuran dan posisi panel speed (Dihitung dinamis relatif terhadap resolusi layar)
-        panel_w = 320
-        panel_h = 46
-        panel_x = screen_w - panel_w - 16
-        panel_y = screen_h - panel_h - 14
+        ui = SPEED_CONTROL_UI
+        colors = ui["colors"]
+        speed_count = len(self.levels)
+        required_width = (
+            ui["panel_padding_x"] + ui["pause_button_width"] + ui["pause_speed_gap"]
+            + speed_count * ui["speed_button_width"]
+            + max(0, speed_count - 1) * ui["speed_button_gap"]
+            + ui["right_padding"]
+        )
+        panel_w = max(ui["panel_min_width"], required_width)
+        panel_h = ui["panel_height"]
+        panel_x = max(0, screen_w - panel_w - ui["panel_margin_x"])
+        panel_y = max(0, screen_h - panel_h - ui["panel_margin_y"])
 
         # Background panel
         bg_surf = pygame.Surface((panel_w, panel_h), pygame.SRCALPHA)
-        pygame.draw.rect(bg_surf, COLOR_HUD_BG, (0, 0, panel_w, panel_h), border_radius=8)
-        pygame.draw.rect(bg_surf, COLOR_HUD_BORDER, (0, 0, panel_w, panel_h), width=1, border_radius=8)
+        pygame.draw.rect(bg_surf, COLOR_HUD_BG, (0, 0, panel_w, panel_h), border_radius=ui["panel_border_radius"])
+        pygame.draw.rect(bg_surf, COLOR_HUD_BORDER, (0, 0, panel_w, panel_h), width=1,
+                         border_radius=ui["panel_border_radius"])
         surface.blit(bg_surf, (panel_x, panel_y))
 
         mouse_pos = pygame.mouse.get_pos()
-        btn_y = panel_y + 7
-        btn_h = 32
+        btn_y = panel_y + ui["panel_padding_y"]
+        btn_h = ui["button_height"]
 
         # 1. Tombol Pause (Space)
-        pause_w = 58
-        self.pause_btn_rect = pygame.Rect(panel_x + 8, btn_y, pause_w, btn_h)
+        pause_w = ui["pause_button_width"]
+        self.pause_btn_rect = pygame.Rect(panel_x + ui["panel_padding_x"], btn_y, pause_w, btn_h)
 
         if self.is_paused:
-            p_bg = (220, 38, 38)
-            p_border = (239, 68, 68)
-            p_txt_col = (255, 255, 255)
+            p_bg = colors["paused_bg"]
+            p_border = colors["paused_border"]
+            p_txt_col = colors["paused_text"]
         else:
             is_hover = self.pause_btn_rect.collidepoint(mouse_pos)
-            p_bg = (40, 56, 80) if is_hover else (30, 41, 59)
-            p_border = (71, 85, 105)
-            p_txt_col = (203, 213, 225)
+            p_bg = colors["pause_hover_bg"] if is_hover else colors["idle_bg"]
+            p_border = colors["idle_border"]
+            p_txt_col = colors["pause_text"]
 
-        pygame.draw.rect(surface, p_bg, self.pause_btn_rect, border_radius=6)
-        pygame.draw.rect(surface, p_border, self.pause_btn_rect, width=1, border_radius=6)
+        pygame.draw.rect(surface, p_bg, self.pause_btn_rect, border_radius=ui["button_border_radius"])
+        pygame.draw.rect(surface, p_border, self.pause_btn_rect, width=1,
+                         border_radius=ui["button_border_radius"])
 
         p_lbl = self.font_btn.render("⏸ Spc", True, p_txt_col)
-        surface.blit(p_lbl, (self.pause_btn_rect.x + (pause_w - p_lbl.get_width()) // 2, self.pause_btn_rect.y + 7))
+        surface.blit(p_lbl, (self.pause_btn_rect.x + (pause_w - p_lbl.get_width()) // 2,
+                             self.pause_btn_rect.y + ui["button_text_y"]))
 
         # 2. Tombol-tombol Kecepatan (1 s/d 5)
         self.speed_btn_rects = []
-        cur_x = self.pause_btn_rect.right + 6
-        speed_btn_w = 46
+        cur_x = self.pause_btn_rect.right + ui["pause_speed_gap"]
+        speed_btn_w = ui["speed_button_width"]
 
         for i, lvl in enumerate(self.levels):
             rect = pygame.Rect(cur_x, btn_y, speed_btn_w, btn_h)
@@ -133,31 +140,36 @@ class SpeedController:
             is_hover = rect.collidepoint(mouse_pos)
 
             if is_active:
-                btn_bg = (16, 185, 129)
-                btn_border = (52, 211, 153)
-                txt_col = (255, 255, 255)
+                btn_bg = colors["active_bg"]
+                btn_border = colors["active_border"]
+                txt_col = colors["paused_text"]
             elif is_hover:
-                btn_bg = (51, 65, 85)
-                btn_border = (96, 165, 250)
-                txt_col = (255, 255, 255)
+                btn_bg = colors["hover_bg"]
+                btn_border = colors["hover_border"]
+                txt_col = colors["hover_text"]
             else:
-                btn_bg = (30, 41, 59)
-                btn_border = (71, 85, 105)
-                txt_col = (148, 163, 184)
+                btn_bg = colors["idle_bg"]
+                btn_border = colors["idle_border"]
+                txt_col = colors["idle_text"]
 
-            pygame.draw.rect(surface, btn_bg, rect, border_radius=6)
-            pygame.draw.rect(surface, btn_border, rect, width=1, border_radius=6)
+            pygame.draw.rect(surface, btn_bg, rect, border_radius=ui["button_border_radius"])
+            pygame.draw.rect(surface, btn_border, rect, width=1,
+                             border_radius=ui["button_border_radius"])
 
             # Key label & Speed multiplier
             main_txt = self.font_btn.render(f"{lvl['key_label']}:{lvl['short_label']}", True, txt_col)
-            surface.blit(main_txt, (rect.x + (speed_btn_w - main_txt.get_width()) // 2, rect.y + 7))
+            surface.blit(main_txt, (rect.x + (speed_btn_w - main_txt.get_width()) // 2,
+                                    rect.y + ui["button_text_y"]))
 
-            cur_x += speed_btn_w + 4
+            cur_x += speed_btn_w + ui["speed_button_gap"]
 
         # 3. Indikator Visual Jika Sedang Pause
         if self.is_paused:
-            pause_tag_surf = pygame.Surface((140, 28), pygame.SRCALPHA)
-            pygame.draw.rect(pause_tag_surf, (220, 38, 38, 220), (0, 0, 140, 28), border_radius=6)
-            pause_txt = self.font_paused.render("PAUSED (Space)", True, (255, 255, 255))
-            pause_tag_surf.blit(pause_txt, (10, 4))
-            surface.blit(pause_tag_surf, (screen_w // 2 - 70, 16))
+            tag_w = ui["pause_tag_width"]
+            tag_h = ui["pause_tag_height"]
+            pause_tag_surf = pygame.Surface((tag_w, tag_h), pygame.SRCALPHA)
+            pygame.draw.rect(pause_tag_surf, colors["paused_tag"], (0, 0, tag_w, tag_h),
+                             border_radius=ui["button_border_radius"])
+            pause_txt = self.font_paused.render("PAUSED (Space)", True, colors["paused_text"])
+            pause_tag_surf.blit(pause_txt, (ui["pause_tag_x_padding"], ui["pause_tag_text_y"]))
+            surface.blit(pause_tag_surf, (screen_w // 2 - tag_w // 2, ui["pause_tag_y"]))

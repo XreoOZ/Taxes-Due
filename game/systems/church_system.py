@@ -21,9 +21,9 @@ from game.systems.currency import (
     to_copper,
     from_copper,
     normalize_wallet,
-    calculate_payment_and_change,
-    execute_currency_transfer
+    transfer_exact_value,
 )
+from game.systems.wealth_system import VillageWealthSystem
 
 
 class ChurchSystem:
@@ -38,6 +38,7 @@ class ChurchSystem:
         self.church_permit_by_manager = {}      # manager id -> (permit list signature, church permit)
         self.priest_by_villager_manager = {}    # manager id -> (priest object or None, cache valid)
         self.configured_tax = {"Gold": 0, "Silver": 0, "Copper": 1}
+        self.tax_enabled = True
 
     @classmethod
     def get_instance(cls):
@@ -220,6 +221,15 @@ class ChurchSystem:
                 p.tax_copper = inst.configured_tax["Copper"]
 
     @classmethod
+    def set_tax_enabled(cls, enabled):
+        cls.get_instance().tax_enabled = bool(enabled)
+        VillageWealthSystem.mark_dirty()
+
+    @classmethod
+    def is_tax_enabled(cls):
+        return bool(getattr(cls.get_instance(), "tax_enabled", True))
+
+    @classmethod
     def get_tax_settings(cls, church_permit=None):
         """Returns configured church tax dictionary: {'Gold': g, 'Silver': s, 'Copper': c}."""
         if church_permit:
@@ -239,8 +249,6 @@ class ChurchSystem:
     def has_household_paid_tax(cls, family_id, church_permit=None):
         fam_str = str(family_id)
         inst = cls.get_instance()
-        if church_permit and hasattr(church_permit, "tax_paid_households_today"):
-            return fam_str in church_permit.tax_paid_households_today
         return fam_str in inst.tax_paid_households_today
 
     @classmethod
@@ -248,10 +256,39 @@ class ChurchSystem:
         fam_str = str(family_id)
         inst = cls.get_instance()
         inst.tax_paid_households_today.add(fam_str)
-        if church_permit:
-            if not hasattr(church_permit, "tax_paid_households_today"):
-                church_permit.tax_paid_households_today = set()
-            church_permit.tax_paid_households_today.add(fam_str)
+
+    @classmethod
+    def prepare_church_tax_payment(cls, representative, church_permit, furniture_manager,
+                                   day_number=1):
+        """Have the household representative take today's tithe from their chest before prayer."""
+        if not representative or not cls.is_tax_enabled():
+            return 0
+        fam_id = getattr(representative, "family_id", None)
+        day = max(1, int(day_number or 1))
+        if not fam_id or cls.has_household_paid_tax(fam_id, church_permit):
+            return 0
+        if getattr(representative, "church_tax_prepared_day", None) == day:
+            return int(getattr(representative, "church_tax_prepared_amount", 0))
+        due = cls.get_configured_tax_amount(church_permit)
+        if due <= 0:
+            representative.church_tax_prepared_day = day
+            representative.church_tax_prepared_amount = 0
+            return 0
+        chest = furniture_manager.get_storage_for_family(fam_id) if furniture_manager else None
+        source = getattr(chest, "inventory", None) if chest else None
+        available = to_copper(normalize_wallet(source))
+        amount = min(due, available)
+        if amount > 0:
+            if not isinstance(getattr(representative, "inventory", None), dict):
+                representative.inventory = {}
+            success, _ = transfer_exact_value(source, representative.inventory, amount)
+            if not success:
+                amount = 0
+        representative.church_tax_prepared_day = day
+        representative.church_tax_prepared_amount = amount
+        if amount > 0:
+            VillageWealthSystem.mark_dirty()
+        return amount
 
     @classmethod
     def reset_daily_taxes(cls, current_day, permit_manager=None):
@@ -291,7 +328,7 @@ class ChurchSystem:
         - Collected coins transferred directly into Priest's personal inventory.
         - Marked paid once per household per day.
         """
-        if not representative or not priest:
+        if not representative or not priest or not cls.is_tax_enabled():
             return 0
 
         fam_id = getattr(representative, "family_id", None)
@@ -303,42 +340,24 @@ class ChurchSystem:
             cls.mark_tax_paid(fam_id, church_permit)
             return 0
 
-        # Retrieve funds from household chest or representative pocket
-        chest = furniture_manager.get_storage_for_family(fam_id) if furniture_manager else None
-        source = None
-        wallet = {"Copper": 0, "Silver": 0, "Gold": 0}
+        day = max(1, int(day_number or 1))
+        if getattr(representative, "church_tax_prepared_day", None) != day:
+            cls.prepare_church_tax_payment(representative, church_permit, furniture_manager, day)
+        prepared = max(0, int(getattr(representative, "church_tax_prepared_amount", 0)))
+        paid_copper = min(target_copper, prepared)
 
-        if chest and hasattr(chest, "currency"):
-            wallet = normalize_wallet(chest.currency)
-            source = chest.currency
-        else:
-            wallet = normalize_wallet(getattr(representative, "currency", {}))
-            source = getattr(representative, "currency", None)
-
-        available_copper = to_copper(wallet)
-
-        if available_copper <= 0:
+        if paid_copper <= 0:
             cls.mark_tax_paid(fam_id, church_permit)
-            representative.say("We have no coins for Church Tax today, Father.", duration=2.2)
+            representative.say("Our household has no coins for today's church tithe, Father.", duration=2.2)
             return 0
 
-        if available_copper < target_copper:
-            payment = wallet
-            change = {"Copper": 0, "Silver": 0, "Gold": 0}
-            paid_copper = available_copper
-        else:
-            can_pay, payment, change, _ = calculate_payment_and_change(wallet, target_copper)
-            if not can_pay:
-                cls.mark_tax_paid(fam_id, church_permit)
-                return 0
-            paid_copper = target_copper
-
-        if not hasattr(priest, "currency") or not isinstance(priest.currency, dict):
-            priest.currency = {"Copper": 0, "Silver": 0, "Gold": 0}
-
-        transfer_success, _, _, _ = execute_currency_transfer(source, priest.currency, payment, change)
+        if not isinstance(getattr(priest, "inventory", None), dict):
+            priest.inventory = {}
+        transfer_success, _ = transfer_exact_value(representative.inventory, priest.inventory, paid_copper)
 
         if transfer_success:
+            VillageWealthSystem.mark_dirty()
+            representative.church_tax_prepared_amount = 0
             cls.mark_tax_paid(fam_id, church_permit)
             from game.systems.market_sales_report import MarketSalesReportSystem
             if str(getattr(priest, "family_id", "")) != str(fam_id):
@@ -351,6 +370,22 @@ class ChurchSystem:
             return paid_copper
 
         return 0
+
+    @classmethod
+    def refund_unpaid_church_tax(cls, representative, furniture_manager):
+        amount = max(0, int(getattr(representative, "church_tax_prepared_amount", 0)))
+        if amount <= 0:
+            return 0
+        fam_id = getattr(representative, "family_id", None)
+        chest = furniture_manager.get_storage_for_family(fam_id) if (furniture_manager and fam_id) else None
+        if not chest:
+            return 0
+        success, _ = transfer_exact_value(representative.inventory, chest.inventory, amount)
+        if not success:
+            return 0
+        representative.church_tax_prepared_amount = 0
+        VillageWealthSystem.mark_dirty()
+        return amount
 
     @classmethod
     def get_church_walkable_tiles(cls, church_permit, building_manager):
@@ -428,7 +463,7 @@ class ChurchSystem:
         Deposits all collected tithes from priest's personal currency
         into their assigned household chest.
         """
-        if not priest or not hasattr(priest, "currency"):
+        if not priest or not isinstance(getattr(priest, "inventory", None), dict):
             return 0
 
         fam_id = getattr(priest, "family_id", None)
@@ -436,21 +471,23 @@ class ChurchSystem:
         if not chest:
             return 0
 
-        total_deposited_copper = to_copper(priest.currency)
+        from game.systems.currency import canonical_denomination
+        inventory_wallet = normalize_wallet(priest.inventory)
+        legacy_wallet = normalize_wallet(getattr(priest, "currency", {}))
+        combined_wallet = {
+            denomination: inventory_wallet[denomination] + legacy_wallet[denomination]
+            for denomination in ("Copper", "Silver", "Gold")
+        }
+        total_deposited_copper = to_copper(combined_wallet)
         if total_deposited_copper <= 0:
             return 0
 
-        if not hasattr(chest, "currency"):
-            chest.currency = {"Copper": 0, "Silver": 0, "Gold": 0}
-
-        for den in ("Copper", "Silver", "Gold"):
-            amt = priest.currency.get(den, 0)
-            if amt > 0:
-                chest.currency[den] = chest.currency.get(den, 0) + amt
-                priest.currency[den] = 0
-        from game.systems.currency import compact_currency_wallet
-        compact_currency_wallet(chest.currency)
-        compact_currency_wallet(priest.currency)
+        for wallet in (priest.inventory, getattr(priest, "currency", {})):
+            for key in list(wallet):
+                if canonical_denomination(key):
+                    del wallet[key]
+        priest.inventory.update({den: count for den, count in combined_wallet.items() if count > 0})
+        transfer_exact_value(priest.inventory, chest.inventory, total_deposited_copper)
 
         priest.say(f"Deposited {total_deposited_copper}c tithes into household chest.", duration=2.5)
         return total_deposited_copper

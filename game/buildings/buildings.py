@@ -408,6 +408,7 @@ class Building:
         self.condition = 1.0
         self.construction_order = None
         self.construction_progress = 0.0
+        self.assigned_workers = []
         self.type_cfg = BUILDING_TYPES.get(building_type, BUILDING_TYPES["wooden_structure"])
         self.tiles = set(tiles)
         self._recalculate_bounds()
@@ -1481,6 +1482,13 @@ class BuildingManager:
             self._draw_building(surface, camera, tile_size, b)
             self._draw_public_repair_order(surface, camera, tile_size, b)
 
+    def draw_public_structure_preview(self, surface, camera, tile_size, building_type, tiles, rotation=0):
+        """Draw the configured visual for a public structure while the player places it."""
+        if building_type not in BUILDING_TYPES or not tiles:
+            return
+        preview = Building(building_type, tiles, rotation=rotation)
+        self._draw_building(surface, camera, tile_size, preview)
+
     def _draw_public_repair_order(self, surface, camera, tile_size, building):
         """Show public structure repairs with the same visible repair state as furniture orders."""
         order = getattr(building, "construction_order", None) or {}
@@ -1555,6 +1563,9 @@ class BuildingManager:
             return
         if b.building_type == "toilet":
             self._draw_toilet(surface, camera, tile_size, b)
+            return
+        if b.building_type == "tax_house":
+            self._draw_tax_office(surface, camera, tile_size, b)
             return
 
         world_bounds = (
@@ -1985,3 +1996,97 @@ class BuildingManager:
             # 7. Subtle Label
             lbl = self.font.render("WC", True, (245, 245, 240))
             surface.blit(lbl, (bx + 3, by + 3))
+
+    def _draw_tax_office(self, surface, camera, tile_size, b):
+        """Render the Tax Office as an open medieval clerk's station, not a residence."""
+        self._ensure_font()
+        style = (getattr(b, "type_cfg", {}) or {}).get("visual_style", {})
+        platform = style.get("platform", (95, 75, 53))
+        platform_light = style.get("platform_light", platform)
+        platform_dark = style.get("platform_dark", platform)
+        wood = style.get("wood", (121, 78, 42))
+        wood_light = style.get("wood_light", (166, 112, 61))
+        wood_dark = style.get("wood_dark", (62, 39, 26))
+        royal_cloth = style.get("royal_cloth", (126, 32, 35))
+        gold = style.get("gold", (226, 174, 73))
+        parchment = style.get("parchment", (221, 202, 158))
+        metal = style.get("metal", (105, 112, 119))
+
+        sx, sy = camera.world_to_screen(b.grid_x * tile_size, b.grid_y * tile_size)
+        width = max(1, int(b.tiles_w * tile_size * camera.zoom))
+        height = max(1, int(b.tiles_h * tile_size * camera.zoom))
+        border = max(1, int(3 * camera.zoom))
+        x_pad = max(2, int(width * 0.07))
+        y_pad = max(2, int(height * 0.07))
+
+        # Draw the platform as individually readable floor tiles so its 4x4
+        # footprint remains clear beneath the counter and clerk's station.
+        pygame.draw.rect(surface, (0, 0, 0, 75), (sx + 3, sy + 4, width, height), border_radius=5)
+        cell_w = width / max(1, int(b.tiles_w))
+        cell_h = height / max(1, int(b.tiles_h))
+        for row in range(max(1, int(b.tiles_h))):
+            for col in range(max(1, int(b.tiles_w))):
+                tile_rect = pygame.Rect(
+                    sx + round(col * cell_w), sy + round(row * cell_h),
+                    max(1, round((col + 1) * cell_w) - round(col * cell_w)),
+                    max(1, round((row + 1) * cell_h) - round(row * cell_h)),
+                )
+                tile_color = platform_light if (row + col) % 2 == 0 else platform_dark
+                pygame.draw.rect(surface, tile_color, tile_rect)
+        # Restore subtle tile seams after the base fill; these expose the true
+        # tile count even where the station does not cover the platform.
+        seam_color = style.get("tile_seam", platform)
+        for col in range(1, max(1, int(b.tiles_w))):
+            px = sx + round(col * cell_w)
+            pygame.draw.line(surface, seam_color, (px, sy + y_pad), (px, sy + height - y_pad), border)
+        for row in range(1, max(1, int(b.tiles_h))):
+            py = sy + round(row * cell_h)
+            pygame.draw.line(surface, seam_color, (sx + x_pad, py), (sx + width - x_pad, py), border)
+        pygame.draw.rect(surface, platform, (sx, sy, width, height), width=border, border_radius=5)
+        pygame.draw.rect(surface, wood_dark, (sx, sy, width, height), width=border, border_radius=5)
+
+        # Clerk's backboard and royal cloth identify it as a civic workplace.
+        board = pygame.Rect(sx + x_pad, sy + y_pad, width - x_pad * 2, max(1, int(height * 0.27)))
+        pygame.draw.rect(surface, wood, board, border_radius=4)
+        pygame.draw.rect(surface, wood_dark, board, width=border, border_radius=4)
+        banner_w = max(1, int(board.width * 0.40))
+        banner_h = max(1, int(board.height * 0.78))
+        banner = pygame.Rect(board.centerx - banner_w // 2, board.y + max(1, int(board.height * 0.12)), banner_w, banner_h)
+        pygame.draw.rect(surface, royal_cloth, banner, border_radius=2)
+        pygame.draw.line(surface, gold, (banner.centerx, banner.y + int(banner.height * 0.12)),
+                         (banner.centerx, banner.y + int(banner.height * 0.75)), max(1, int(2 * camera.zoom)))
+        pygame.draw.circle(surface, gold, (banner.centerx, banner.centery), max(1, int(min(banner.width, banner.height) * 0.12)))
+
+        # Broad clerk's counter, book, quill and coin scale.
+        counter = pygame.Rect(sx + x_pad, sy + int(height * 0.50), width - x_pad * 2, max(1, int(height * 0.30)))
+        pygame.draw.rect(surface, wood_dark, (counter.x + 2, counter.y + 3, counter.width, counter.height), border_radius=3)
+        pygame.draw.rect(surface, wood, counter, border_radius=3)
+        pygame.draw.rect(surface, wood_light, (counter.x, counter.y, counter.width, max(1, int(counter.height * 0.22))), border_radius=3)
+        pygame.draw.rect(surface, wood_dark, counter, width=border, border_radius=3)
+        pygame.draw.line(surface, wood_dark, (counter.x, counter.centery), (counter.right, counter.centery), max(1, int(camera.zoom)))
+
+        book = pygame.Rect(counter.x + int(counter.width * 0.18), counter.y + int(counter.height * 0.24),
+                           max(1, int(counter.width * 0.22)), max(1, int(counter.height * 0.48)))
+        pygame.draw.rect(surface, parchment, book, border_radius=2)
+        pygame.draw.line(surface, wood_dark, book.midtop, book.midbottom, max(1, int(camera.zoom)))
+        for line in (0.35, 0.53, 0.71):
+            yy = book.y + int(book.height * line)
+            pygame.draw.line(surface, wood, (book.x + 2, yy), (book.right - 2, yy), max(1, int(camera.zoom)))
+        quill_start = (book.right + max(2, int(counter.width * 0.035)), book.bottom - 1)
+        quill_end = (quill_start[0] + max(3, int(counter.width * 0.08)), book.y)
+        pygame.draw.line(surface, parchment, quill_start, quill_end, max(1, int(2 * camera.zoom)))
+
+        scale_x = counter.x + int(counter.width * 0.72)
+        scale_y = counter.y + int(counter.height * 0.48)
+        beam = max(3, int(counter.width * 0.09))
+        pygame.draw.line(surface, metal, (scale_x, scale_y - beam), (scale_x, scale_y + beam), max(1, int(2 * camera.zoom)))
+        pygame.draw.line(surface, gold, (scale_x - beam, scale_y - beam), (scale_x + beam, scale_y - beam), max(1, int(2 * camera.zoom)))
+        pan = max(2, int(beam * 0.35))
+        pygame.draw.circle(surface, gold, (scale_x - beam, scale_y + max(1, int(beam * 0.4))), pan)
+        pygame.draw.circle(surface, gold, (scale_x + beam, scale_y + max(1, int(beam * 0.4))), pan)
+
+        # Small readable sign remains visible at normal zoom.
+        if camera.zoom >= 0.55:
+            sign = self.font.render("TAX OFFICE", True, parchment)
+            surface.blit(sign, (board.centerx - sign.get_width() // 2,
+                                board.y + board.height - sign.get_height() - max(1, int(camera.zoom * 2))))

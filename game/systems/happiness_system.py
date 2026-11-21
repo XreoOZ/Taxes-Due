@@ -6,6 +6,7 @@ from game.config import (
     HAPPINESS_MAX_VALUE,
     HAPPINESS_MIN_VALUE,
     HAPPINESS_MODIFIERS,
+    HAPPINESS_NEED_LABELS,
     HAPPINESS_STATUS_BANDS,
     HAPPINESS_WEALTH_DENOMINATION,
 )
@@ -148,6 +149,12 @@ class HappinessSystem:
         }
 
         active = []
+        breakdown = [{"label": "Starting happiness", "amount": float(HAPPINESS_INITIAL_VALUE), "duration": "Base"}]
+        def add_factor(label, amount, duration="While active"):
+            amount = float(amount)
+            if amount:
+                active.append(amount)
+                breakdown.append({"label": label, "amount": amount, "duration": duration})
         need_values = {
             "hunger": float(getattr(villager, "hunger", 100.0)),
             "thirst": float(getattr(villager, "thirst", 100.0)),
@@ -180,27 +187,54 @@ class HappinessSystem:
 
         home = cls._home_building(villager, permit_manager, building_manager, villager_manager)
         if home is None:
-            active.append(float(HAPPINESS_MODIFIERS["no_home"]["amount"]))
+            add_factor("No usable home", HAPPINESS_MODIFIERS["no_home"]["amount"])
         elif len(getattr(home, "tiles", ())) <= int(HAPPINESS_MODIFIERS["small_home"]["max_tiles"]):
-            active.append(float(HAPPINESS_MODIFIERS["small_home"]["amount"]))
+            add_factor("Small home", HAPPINESS_MODIFIERS["small_home"]["amount"])
 
         bed = (furniture_manager.get_bed_for_villager(villager.id, villager.family_id)
                if furniture_manager else None)
         bed_modifier = HAPPINESS_MODIFIERS["usable_bed"]
         if bed and getattr(bed, "is_available_for_use", False):
-            active.append(float(bed_modifier["amount"]))
+            add_factor("Usable bed", bed_modifier["amount"])
         else:
-            active.append(float(HAPPINESS_MODIFIERS["no_bed"]["amount"]))
+            add_factor("No usable bed", HAPPINESS_MODIFIERS["no_bed"]["amount"])
 
         job = getattr(villager, "job", "Unassigned")
         if not job or job in ("Unassigned", "Unemployed"):
-            active.append(float(HAPPINESS_MODIFIERS["unemployed"]["amount"]))
+            add_factor("Unassigned / unemployed", HAPPINESS_MODIFIERS["unemployed"]["amount"])
+
+        from game.systems.taxation_system import TaxationSystem
+        church_effect = TaxationSystem.church_happiness_effect()
+        socage_effect = TaxationSystem.socage_happiness_effect()
+        if church_effect:
+            add_factor("Church tax" if church_effect < 0 else "No church tax", church_effect)
+        if socage_effect:
+            add_factor(f"Socage tax ({TaxationSystem.get_socage_percent()}%)", socage_effect)
 
         gold_rule = HAPPINESS_MODIFIERS["gold_coin"]
-        active.append(float(gold_rule["amount_per_coin"]) * cls._owned_gold_coins(villager))
-        active.extend(float(effect.get("amount", 0.0))
-                      for effect in villager.happiness_effects.values())
+        gold_bonus = float(gold_rule["amount_per_coin"]) * cls._owned_gold_coins(villager)
+        add_factor(gold_rule.get("label", "Gold coins"), gold_bonus)
+        for effect_id, effect in villager.happiness_effects.items():
+            amount = float(effect.get("amount", 0.0))
+            remaining = max(0, int(effect.get("expires_day", day_number)) - day_number + 1)
+            label = HAPPINESS_MODIFIERS.get(effect_id, {}).get("label")
+            if effect_id.startswith("need_low:"):
+                need_label = HAPPINESS_NEED_LABELS.get(effect_id.split(":", 1)[1], "Need")
+                label = f"{need_label} below 20%"
+            elif effect_id.startswith("need_empty:"):
+                need_label = HAPPINESS_NEED_LABELS.get(effect_id.split(":", 1)[1], "Need")
+                label = f"{need_label} reached 0%"
+            if label:
+                add_factor(label, amount, f"{remaining} day(s) remaining")
         score = float(HAPPINESS_INITIAL_VALUE) + sum(active)
         villager.happiness = max(float(HAPPINESS_MIN_VALUE), min(float(HAPPINESS_MAX_VALUE), score))
         villager.happiness_status = cls.status_for(villager.happiness)
+        breakdown[1:] = sorted(breakdown[1:], key=lambda row: (row["amount"] >= 0, abs(row["amount"])), reverse=False)
+        villager.happiness_breakdown = breakdown
         return villager.happiness
+
+    @classmethod
+    def get_breakdown(cls, villager):
+        """Return the factors used in the latest happiness score calculation."""
+        cls._initialize(villager)
+        return list(getattr(villager, "happiness_breakdown", []) or [])

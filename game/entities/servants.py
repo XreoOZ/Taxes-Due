@@ -58,7 +58,7 @@ from game.data.config import MARKET_TRADEABLE_ITEMS, MARKET_CURRENCY_DENOMINATIO
 from game.systems.ai_simulation_scheduler import AISimulationScheduler
 from game.systems.spatial_entities import SpatialEntityIndex
 from game.world.pathfinding import GlobalPathRegistry, calculate_collision_slide, is_narrow_passage_tile
-from game.world.navigation import find_navigation_path
+from game.world.navigation import find_navigation_path, interaction_arrival_distance
 from game.systems.job_tool_system import (
     get_job_required_tools,
     get_missing_tools_for_worker,
@@ -268,6 +268,7 @@ class Servant:
                         all_servants=all_servants, player=player,
                         building_manager=building_manager, all_entities=all_entities,
                         furniture_manager=furniture_manager,
+                        interaction_target=treasury,
                     )
                     if arrived:
                         fee = max(0, int(self.carpenter_commission_remaining_copper))
@@ -307,6 +308,7 @@ class Servant:
                     all_servants=all_servants, player=player,
                     building_manager=building_manager, all_entities=all_entities,
                     furniture_manager=furniture_manager,
+                    interaction_target=target_stack,
                 )
                 if arrived:
                     denomination = CemeterySystem._landlord_coin_stacks(stockpile_manager)
@@ -351,6 +353,7 @@ class Servant:
                 carpenter.x, carpenter.y, dt, arrival_dist=INTERACTION_CONTACT_RADIUS,
                 all_servants=all_servants, player=player, building_manager=building_manager,
                 all_entities=all_entities, furniture_manager=furniture_manager,
+                interaction_target=carpenter,
             )
             if arrived:
                 fee = max(0, int(order.get("price_copper", 0)))
@@ -603,7 +606,7 @@ class Servant:
                 tx = (self.target_storage_tile[0] + 0.5) * TILE_SIZE
                 ty = (self.target_storage_tile[1] + 0.5) * TILE_SIZE
 
-            if self._move_towards(tx, ty, dt, arrival_dist=24, all_servants=all_servants, player=player, building_manager=building_manager, all_entities=all_entities, furniture_manager=furniture_manager):
+            if self._move_towards(tx, ty, dt, arrival_dist=24, all_servants=all_servants, player=player, building_manager=building_manager, all_entities=all_entities, furniture_manager=furniture_manager, interaction_target=treasury_chest):
                 if treasury_chest:
                     stored = treasury_chest.store_item(self.carried_res, self.carried_amount)
                     if stored < self.carried_amount:
@@ -1176,10 +1179,14 @@ class Servant:
         self.is_waiting_for_path = False
         self._move_towards(self.idle_target[0], self.idle_target[1], dt, arrival_dist=20, all_servants=all_servants, player=player, building_manager=building_manager, all_entities=all_entities, furniture_manager=furniture_manager, exclusive_target=False)
 
-    def _move_towards(self, tx, ty, dt, arrival_dist=10, all_servants=None, player=None, building_manager=None, all_entities=None, furniture_manager=None, exclusive_target=False):
+    def _move_towards(self, tx, ty, dt, arrival_dist=10, all_servants=None, player=None, building_manager=None, all_entities=None, furniture_manager=None, exclusive_target=False, interaction_target=None):
         if getattr(self, "player_avoid_speech_cooldown", 0.0) > 0.0:
             self.player_avoid_speech_cooldown = max(0.0, self.player_avoid_speech_cooldown - dt)
         self.path_retry_timer = max(0.0, getattr(self, "path_retry_timer", 0.0) - dt)
+        if interaction_target is not None:
+            arrival_dist = interaction_arrival_distance(
+                interaction_target, tx, ty, arrival_dist, TILE_SIZE,
+            )
 
         direct_dist = math.hypot(tx - self.x, ty - self.y)
         if direct_dist <= arrival_dist:

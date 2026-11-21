@@ -3,7 +3,7 @@
 from game.data.config import DEDICATED_JOBS, TILE_SIZE
 
 
-def get_job_workplaces(job_id, permit_manager, furniture_manager):
+def get_job_workplaces(job_id, permit_manager, furniture_manager, building_manager=None):
     cfg = DEDICATED_JOBS.get(job_id, {})
     workplaces = []
     permit_type = cfg.get("workplace_permit")
@@ -24,15 +24,22 @@ def get_job_workplaces(job_id, permit_manager, furniture_manager):
                 and not getattr(furniture, "is_broken", False)
                 and (furniture.status == "INSTALLED" or unfinished_workplace)):
             workplaces.append(("furniture", furniture))
+    building_type = cfg.get("workplace_building_type")
+    for building in getattr(building_manager, "buildings", []):
+        if (building_type and getattr(building, "building_type", None) == building_type
+                and getattr(building, "is_available_for_use", True)):
+            workplaces.append(("building", building))
     return workplaces
 
 
-def assigned_ids(permit_manager, furniture_manager):
+def assigned_ids(permit_manager, furniture_manager, building_manager=None):
     ids = set()
     for permit in getattr(permit_manager, "permits", []):
         ids.update(str(worker_id) for worker_id in getattr(permit, "assigned_workers", []))
     for furniture in getattr(furniture_manager, "furnitures", []):
         ids.update(str(worker_id) for worker_id in getattr(furniture, "assigned_workers", []))
+    for building in getattr(building_manager, "buildings", []):
+        ids.update(str(worker_id) for worker_id in getattr(building, "assigned_workers", []))
     return ids
 
 
@@ -54,10 +61,10 @@ def workplace_capacity(workplace):
     kind, obj = workplace
     if kind == "permit":
         return max(0, int(getattr(obj, "max_workers", 1)))
-    return max(0, int(obj.type_cfg.get("max_workers", 1)))
+    return max(0, int(getattr(obj, "type_cfg", {}).get("max_workers", 1)))
 
 
-def change_workplace_workers(job_id, workplace, delta, permit_manager, furniture_manager, villager_manager):
+def change_workplace_workers(job_id, workplace, delta, permit_manager, furniture_manager, villager_manager, building_manager=None):
     from game.world.permits import find_closest_unassigned_household_worker, get_villager_home_position
 
     kind, obj = workplace
@@ -87,7 +94,7 @@ def change_workplace_workers(job_id, workplace, delta, permit_manager, furniture
     chosen = find_closest_unassigned_household_worker(
         x, y, permit_manager=permit_manager, villager_manager=villager_manager,
         target_job=job_id, furniture_manager=furniture_manager,
-        exclude_worker_ids=assigned_ids(permit_manager, furniture_manager),
+        exclude_worker_ids=assigned_ids(permit_manager, furniture_manager, building_manager),
     )
     if not chosen:
         return False

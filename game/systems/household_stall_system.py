@@ -406,7 +406,8 @@ class HouseholdStallSystem:
             arrived = villager._move_towards(app_x, app_y, dt, arrival_dist=24,
                                              all_entities=all_entities, player=player,
                                              building_manager=building_manager,
-                                             furniture_manager=furniture_manager)
+                                             furniture_manager=furniture_manager,
+                                             interaction_target=market)
             if arrived:
                 # Withdraw coins from market into villager personal pocket
                 mkt_curr = getattr(market, "currency", {})
@@ -445,7 +446,8 @@ class HouseholdStallSystem:
             arrived = villager._move_towards(cx, cy, dt, arrival_dist=24,
                                              all_entities=all_entities, player=player,
                                              building_manager=building_manager,
-                                             furniture_manager=furniture_manager)
+                                             furniture_manager=furniture_manager,
+                                             interaction_target=chest)
             if arrived:
                 # Deposit carried coins from pocket into chest
                 deposited = {}
@@ -491,7 +493,8 @@ class HouseholdStallSystem:
             arrived = villager._move_towards(cx, cy, dt, arrival_dist=24,
                                              all_entities=all_entities, player=player,
                                              building_manager=building_manager,
-                                             furniture_manager=furniture_manager)
+                                             furniture_manager=furniture_manager,
+                                             interaction_target=chest)
             if arrived:
                 item_name = getattr(villager, "stall_target_item", None)
                 target_qty = getattr(villager, "stall_target_qty", HOUSEHOLD_STALL_HAUL_CAPACITY)
@@ -577,7 +580,8 @@ class HouseholdStallSystem:
             arrived = villager._move_towards(app_x, app_y, dt, arrival_dist=24,
                                              all_entities=all_entities, player=player,
                                              building_manager=building_manager,
-                                             furniture_manager=furniture_manager)
+                                             furniture_manager=furniture_manager,
+                                             interaction_target=market)
             if arrived:
                 # Deposit goods into market inventory
                 if not hasattr(market, "inventory") or not isinstance(market.inventory, dict):

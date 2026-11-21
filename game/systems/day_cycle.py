@@ -16,6 +16,9 @@ from game.config import (
     NIGHT_END_HOUR,
     WEEKDAY_NAMES,
     VILLAGER_HUD_COUNT_REFRESH_SECONDS,
+    HOURS_PER_DAY,
+    MINUTES_PER_HOUR,
+    DAY_CYCLE_LIGHTING,
 )
 
 class DayCycleSystem:
@@ -26,7 +29,7 @@ class DayCycleSystem:
 
         self.day_number = 1
         # Mulai permainan pada jam awal konfigurasi
-        self.time_seconds = (STARTING_HOUR / 24.0) * self.day_length_seconds
+        self.time_seconds = (STARTING_HOUR / HOURS_PER_DAY) * self.day_length_seconds
 
         self.font_clock = None
         self.font_sub = None
@@ -78,14 +81,14 @@ class DayCycleSystem:
     @property
     def current_hour(self):
         """Current fractional hour of the day (0.0 to 24.0)"""
-        return self.get_time_ratio() * 24.0
+        return self.get_time_ratio() * HOURS_PER_DAY
 
     def get_clock_time(self):
         """Mengembalikan tuple (hour, minute, formatted_str, is_night)"""
         ratio = self.get_time_ratio()
-        total_hours = ratio * 24.0
-        hour = int(total_hours) % 24
-        minute = int((total_hours * 60) % 60)
+        total_hours = ratio * HOURS_PER_DAY
+        hour = int(total_hours) % int(HOURS_PER_DAY)
+        minute = int((total_hours * MINUTES_PER_HOUR) % MINUTES_PER_HOUR)
         is_night = (hour < NIGHT_END_HOUR or hour >= NIGHT_START_HOUR)
         time_str = f"{hour:02d}:{minute:02d}"
         return hour, minute, time_str, is_night
@@ -97,31 +100,40 @@ class DayCycleSystem:
     def get_ambient_overlay(self, screen_w, screen_h):
         """Menghitung overlay pencahayaan siang/malam yang halus (natural lighting)"""
         hour, minute, _, _ = self.get_clock_time()
-        time_float = hour + (minute / 60.0)
+        time_float = hour + (minute / MINUTES_PER_HOUR)
+        lighting = DAY_CYCLE_LIGHTING
+        daylight_start = lighting["daylight_start_hour"]
+        sunset_start = lighting["sunset_start_hour"]
+        night_start = NIGHT_START_HOUR
+        sunrise_start = lighting["sunrise_start_hour"]
 
         # 06:00 - 18:00 : Siang cerah (Clear daylight, alpha = 0)
         # 18:00 - 20:00 : Senja / Sunset (Transisi orange ke dusk)
         # 20:00 - 04:30 : Malam (Deep blue moonlight, alpha ~110 agar tetap terlihat jelas)
         # 04:30 - 06:00 : Fajar / Sunrise (Transisi pagi)
-        if 6.0 <= time_float < 18.0:
+        if daylight_start <= time_float < sunset_start:
             # Siang terang
             return None
-        elif 18.0 <= time_float < 20.0:
+        elif sunset_start <= time_float < night_start:
             # Senja (Sunset)
-            prog = (time_float - 18.0) / 2.0  # 0.0 -> 1.0
-            r = int(245 - 200 * prog)
-            g = int(140 - 100 * prog)
-            b = int(60 + 50 * prog)
-            alpha = int(30 + 70 * prog)
+            prog = (time_float - sunset_start) / (night_start - sunset_start)
+            start_color = lighting["sunset_start_color"]
+            end_color = lighting["sunset_end_color"]
+            r, g, b = (int(start + (end - start) * prog)
+                       for start, end in zip(start_color, end_color))
+            alpha_start, alpha_end = lighting["sunset_alpha"]
+            alpha = int(alpha_start + (alpha_end - alpha_start) * prog)
             return self._ambient_surface(screen_w, screen_h, (r, g, b, alpha))
-        elif time_float >= 20.0 or time_float < 4.5:
+        elif time_float >= night_start or time_float < sunrise_start:
             # Malam hari (Moonlight)
-            return self._ambient_surface(screen_w, screen_h, (15, 23, 42, 110))
-        elif 4.5 <= time_float < 6.0:
+            return self._ambient_surface(screen_w, screen_h, lighting["night_color"])
+        elif sunrise_start <= time_float < daylight_start:
             # Fajar (Sunrise)
-            prog = (time_float - 4.5) / 1.5  # 0.0 -> 1.0
-            alpha = int(110 * (1.0 - prog))
-            return self._ambient_surface(screen_w, screen_h, (251, 191, 36, alpha))
+            prog = (time_float - sunrise_start) / (daylight_start - sunrise_start)
+            alpha = int(lighting["sunrise_alpha"] * (1.0 - prog))
+            return self._ambient_surface(
+                screen_w, screen_h, (*lighting["sunrise_color"], alpha)
+            )
 
         return None
 
