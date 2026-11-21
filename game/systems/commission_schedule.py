@@ -49,7 +49,11 @@ class CommissionScheduleSystem:
                 "data": dict(getattr(villager, "pending_commission_data", {}) or {}),
             }]
             villager.pending_commission_tasks = queue
-        if not queue or schedule_activity not in FREE_TIME_SCHEDULE_ACTIVITIES:
+        if not queue:
+            return False
+        head_task = str(queue[0].get("task", ""))
+        work_errand = schedule_activity == "WORK" and head_task.startswith("CARPENTER_FEE_")
+        if schedule_activity not in FREE_TIME_SCHEDULE_ACTIVITIES and not work_errand:
             return False
         entry = queue.pop(0)
         task = entry.get("task")

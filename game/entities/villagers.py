@@ -1581,7 +1581,7 @@ class Villager:
                 ):
             return
         from game.systems.carpenter_system import CarpenterSystem
-        if (sched_activity in FREE_TIME_SCHEDULE_ACTIVITIES
+        if ((sched_activity in FREE_TIME_SCHEDULE_ACTIVITIES or sched_activity == "WORK")
                 and CarpenterSystem.update_payment_task(
                     self, dt, building_manager, furniture_manager, stockpile_manager,
                     all_entities, player, villager_manager,
