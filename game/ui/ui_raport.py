@@ -487,7 +487,7 @@ class RaportUI:
         if not bases:
             self.workplace_popup_item = None
             return
-        self._ensure_fonts()
+        self._init_fonts()
 
         screen_h = surface.get_size()[1]
         my = (screen_h - self.modal_h) // 2
