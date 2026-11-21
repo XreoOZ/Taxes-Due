@@ -18,7 +18,7 @@ from game.world.permits import AreaPermit, FarmingBatch, PermitManager
 from game.systems.save_system import serialize_game_state, deserialize_game_state
 from game.systems.day_cycle import DayCycleSystem
 from game.entities.player import Player
-from game.buildings.buildings import BuildingManager
+from game.buildings.building_manager import BuildingManager
 from game.world.stockpile import StockpileManager
 from game.buildings.furniture import FurnitureManager
 from game.entities.villagers import VillagerManager, Family, Villager

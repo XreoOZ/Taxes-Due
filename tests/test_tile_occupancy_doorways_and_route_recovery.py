@@ -25,7 +25,8 @@ from game.world.pathfinding import (
     is_narrow_passage_tile,
     calculate_collision_slide
 )
-from game.buildings.buildings import Building, BuildingManager
+from game.buildings.building import Building
+from game.buildings.building_manager import BuildingManager
 from game.buildings.furniture import FurnitureManager, Furniture
 from game.entities.villagers import Villager
 from game.entities.servants import Servant

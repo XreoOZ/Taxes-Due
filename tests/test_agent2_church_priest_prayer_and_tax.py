@@ -25,7 +25,8 @@ from game.data.config import (
     DEDICATED_JOBS,
     DEFAULT_CHURCH_TAX
 )
-from game.buildings.buildings import Building, BuildingManager
+from game.buildings.building import Building
+from game.buildings.building_manager import BuildingManager
 from game.world.permits import AreaPermit, PermitManager
 from game.entities.villagers import Villager, Family, VillagerManager
 from game.buildings.furniture import FurnitureManager, Furniture

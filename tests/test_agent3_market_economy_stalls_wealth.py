@@ -3,7 +3,9 @@ Unit tests for AGENT 3 — MARKET ECONOMY, HOUSEHOLD STALLS, VILLAGE WEALTH & RE
 """
 import unittest
 import math
-from game.buildings.buildings import Building, BuildingManager, DemolitionSite
+from game.buildings.building import Building
+from game.buildings.building_manager import BuildingManager
+from game.buildings.demolition_site import DemolitionSite
 from game.buildings.furniture import Furniture, FurnitureManager
 from game.entities.villagers import Villager, VillagerManager, Family
 from game.world.stockpile import StockpileManager, ResourceStack

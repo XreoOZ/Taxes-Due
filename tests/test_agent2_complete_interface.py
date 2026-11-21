@@ -21,7 +21,7 @@ from game.data.config import (
 )
 from game.systems.schedule import ScheduleManager
 from game.world.permits import PermitManager, AreaPermit
-from game.buildings.buildings import BuildingManager
+from game.buildings.building_manager import BuildingManager
 from game.ui.ui_raport import RaportUI
 from game.ui.market_modal import MarketProfileModal
 

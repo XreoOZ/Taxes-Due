@@ -16,7 +16,8 @@ from game.data.config import (
     is_food_item,
     register_item_category
 )
-from game.buildings.buildings import Building, BuildingManager
+from game.buildings.building import Building
+from game.buildings.building_manager import BuildingManager
 from game.world.permits import PermitManager, AreaPermit
 from game.world.stockpile import StockpileManager, ResourceStack
 from game.buildings.furniture import FurnitureManager, Furniture

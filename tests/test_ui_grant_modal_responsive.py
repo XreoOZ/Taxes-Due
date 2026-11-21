@@ -150,7 +150,7 @@ class TestUIGrantModalResponsive(unittest.TestCase):
     def test_07_issue_market_permit_button_exists_and_clickable(self):
         """7. Area Permits tab includes '+ Market Permit' button and starts placing market permit."""
         from game.world.permits import PermitManager
-        from game.buildings.buildings import BuildingManager
+        from game.buildings.building_manager import BuildingManager
 
         pm = PermitManager()
         bm = BuildingManager()

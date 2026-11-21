@@ -16,7 +16,7 @@ pygame.init()
 
 from game.config import DEFAULT_RESOURCES, DEFAULT_STARTER_TOOLS, TILE_SIZE
 from game.entities.player import Player
-from game.buildings.buildings import BuildingManager
+from game.buildings.building_manager import BuildingManager
 from game.world.permits import AreaPermit, PermitManager
 from game.world.stockpile import StockpileManager
 from game.entities.servants import ServantManager

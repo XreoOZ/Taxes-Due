@@ -16,7 +16,8 @@ from game.config import (
 )
 from game.entities.villagers import Villager, Family, VillagerManager
 from game.buildings.furniture import Furniture, FurnitureManager
-from game.buildings.buildings import Building, BuildingManager
+from game.buildings.building import Building
+from game.buildings.building_manager import BuildingManager
 from game.world.stockpile import StockpileManager
 from game.world.permits import AreaPermit, PermitManager
 from game.systems.day_cycle import DayCycleSystem

@@ -126,7 +126,7 @@ class TestHouseholdPossessionUI(unittest.TestCase):
     def test_04_producing_or_purchasing_automatically_adds_item(self):
         """4. Producing or purchasing an item automatically adds it."""
         from game.systems.market_service import MarketService
-        from game.buildings.buildings import Building
+        from game.buildings.building import Building
 
         market = Building("market", [(20, 20), (21, 20), (22, 20), (20, 21), (21, 21), (22, 21)])
         market.inventory = {"Potato": 50}
@@ -254,7 +254,7 @@ class TestHouseholdPossessionUI(unittest.TestCase):
         from game.systems.schedule import ScheduleManager
 
         from game.world.permits import PermitManager
-        from game.buildings.buildings import BuildingManager
+        from game.buildings.building_manager import BuildingManager
 
         day_cycle = DayCycleSystem()
         player = Player(100.0, 100.0)

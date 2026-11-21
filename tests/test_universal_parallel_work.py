@@ -13,7 +13,9 @@ import pygame
 from game.config import TILE_SIZE, WATERING_DURATION_INGAME_HOURS
 from game.entities.villagers import Villager
 from game.entities.servants import Servant
-from game.buildings.buildings import Building, BuildingManager, ConstructionSite
+from game.buildings.building import Building
+from game.buildings.building_manager import BuildingManager
+from game.buildings.construction_site import ConstructionSite
 from game.buildings.furniture import Furniture, FurnitureManager
 from game.world.permits import AreaPermit, PermitManager
 from game.world.stockpile import StockpileManager, ResourceStack

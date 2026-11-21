@@ -1,7 +1,8 @@
 import unittest
 
 from game.config import TILE_SIZE
-from game.buildings.buildings import Building, BuildingManager
+from game.buildings.building import Building
+from game.buildings.building_manager import BuildingManager
 from game.buildings.furniture import Furniture
 from game.entities.villagers import Villager
 from game.world.navigation import distance_to_object, interaction_arrival_distance

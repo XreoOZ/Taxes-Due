@@ -18,7 +18,8 @@ from game.config import (
     STUCK_AVOIDANCE_DURATION,
     PATH_SEGMENT_COLLISION_RADIUS
 )
-from game.buildings.buildings import Building, BuildingManager
+from game.buildings.building import Building
+from game.buildings.building_manager import BuildingManager
 from game.entities.villagers import Villager, VillagerManager, Family
 from game.entities.servants import Servant
 from game.world.permits import PermitManager

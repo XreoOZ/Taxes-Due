@@ -12,7 +12,7 @@ from game.ui.ui_raport import RaportUI
 from game.buildings.furniture import FurnitureManager
 from game.world.permits import PermitManager
 from game.entities.villagers import VillagerManager, Family
-from game.buildings.buildings import BuildingManager
+from game.buildings.building_manager import BuildingManager
 from game.world.stockpile import StockpileManager
 from game.systems.save_system import save_to_slot, load_from_slot
 from game.systems.day_cycle import DayCycleSystem

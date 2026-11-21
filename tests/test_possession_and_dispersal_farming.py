@@ -2,7 +2,8 @@ import unittest
 import pygame
 from game.config import TILE_SIZE, WATERING_DURATION_INGAME_HOURS, TILLING_DURATION_INGAME_HOURS
 from game.data.config import VILLAGER_INVENTORY_CAPACITY
-from game.buildings.buildings import BuildingManager, Building
+from game.buildings.building_manager import BuildingManager
+from game.buildings.building import Building
 from game.buildings.furniture import Furniture, FurnitureManager
 from game.world.permits import PermitManager
 from game.world.stockpile import StockpileManager

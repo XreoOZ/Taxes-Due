@@ -9,7 +9,9 @@ os.environ["SDL_VIDEODRIVER"] = "dummy"
 pygame.init()
 
 from game.config import TILE_SIZE, DEFAULT_RESOURCES
-from game.buildings.buildings import Building, BuildingManager, ConstructionSite
+from game.buildings.building import Building
+from game.buildings.building_manager import BuildingManager
+from game.buildings.construction_site import ConstructionSite
 from game.world.permits import PermitManager, AreaPermit
 from game.entities.villagers import VillagerManager, Villager, Family
 from game.entities.servants import ServantManager, Servant
@@ -24,7 +26,10 @@ from game.ui.settings import SettingsModal
 def test_no_unicode_emoji_in_ui():
     """Verify that key UI components contain zero emoji glyphs that would render as tofu boxes [□]."""
     test_files = [
-        "game/buildings/buildings.py",
+        "game/buildings/building.py",
+        "game/buildings/building_manager.py",
+        "game/buildings/construction_site.py",
+        "game/buildings/demolition_site.py",
         "game/buildings/furniture.py",
         "game/systems/day_cycle.py",
         "game/ui/settings.py",

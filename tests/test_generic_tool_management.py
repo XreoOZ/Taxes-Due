@@ -11,7 +11,8 @@ Validates all requirements from user prompt:
 import unittest
 import pygame
 from game.config import TILE_SIZE, DEDICATED_JOBS, TOOL_TYPES
-from game.buildings.buildings import Building, BuildingManager
+from game.buildings.building import Building
+from game.buildings.building_manager import BuildingManager
 from game.buildings.furniture import FurnitureManager
 from game.world.permits import PermitManager
 from game.world.stockpile import StockpileManager

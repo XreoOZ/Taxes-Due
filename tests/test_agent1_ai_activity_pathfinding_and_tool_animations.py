@@ -22,7 +22,8 @@ from game.config import (
     ROUTE_STATE_ACTIVE,
     ROUTE_STATE_COMPLETED
 )
-from game.buildings.buildings import Building, BuildingManager
+from game.buildings.building import Building
+from game.buildings.building_manager import BuildingManager
 from game.buildings.furniture import FurnitureManager, Furniture
 from game.entities.villagers import Villager, VillagerManager, Family
 from game.entities.servants import Servant, ServantManager

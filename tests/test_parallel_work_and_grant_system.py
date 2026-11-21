@@ -9,7 +9,9 @@ from game.config import (
     DEFAULT_RESOURCES,
     SERVANT_CARRY_CAPACITY
 )
-from game.buildings.buildings import Building, BuildingManager, ConstructionSite
+from game.buildings.building import Building
+from game.buildings.building_manager import BuildingManager
+from game.buildings.construction_site import ConstructionSite
 from game.world.permits import PermitManager, AreaPermit
 from game.world.stockpile import StockpileManager, ResourceStack
 from game.world.pathfinding import GlobalPathRegistry, Pathfinder

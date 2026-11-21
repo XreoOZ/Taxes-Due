@@ -4,7 +4,8 @@ import math
 import pygame
 
 from game.config import TILE_SIZE
-from game.buildings.buildings import Building, BuildingManager
+from game.buildings.building import Building
+from game.buildings.building_manager import BuildingManager
 from game.buildings.furniture import Furniture, FurnitureManager
 from game.entities.villagers import Villager, VillagerManager, Family
 from game.world.pathfinding import GlobalPathRegistry

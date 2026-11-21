@@ -20,7 +20,7 @@ from game.data.config import (
 )
 from game.entities.player import Player
 from game.world.permits import PermitManager, AreaPermit
-from game.buildings.buildings import BuildingManager
+from game.buildings.building_manager import BuildingManager
 from game.world.stockpile import StockpileManager
 from game.entities.servants import ServantManager
 from game.entities.villagers import VillagerManager, Villager, Family

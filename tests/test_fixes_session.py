@@ -17,7 +17,8 @@ os.environ["SDL_VIDEODRIVER"] = "dummy"
 pygame.init()
 
 from game.config import TILE_SIZE, DEFAULT_RESOURCES, DEFAULT_STARTER_TOOLS
-from game.buildings.buildings import Building, BuildingManager
+from game.buildings.building import Building
+from game.buildings.building_manager import BuildingManager
 from game.world.permits import PermitManager, AreaPermit
 from game.world.stockpile import StockpileManager, ResourceStack
 from game.entities.villagers import VillagerManager, Villager, Family

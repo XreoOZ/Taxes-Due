@@ -17,7 +17,8 @@ from game.data.config import (
     SCHEDULE_WORK,
     get_building_categories,
 )
-from game.buildings.buildings import BuildingManager, Building
+from game.buildings.building_manager import BuildingManager
+from game.buildings.building import Building
 from game.buildings.furniture import FurnitureManager
 from game.world.permits import PermitManager, AreaPermit
 from game.entities.villagers import VillagerManager, Villager, Family

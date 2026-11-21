@@ -8,7 +8,8 @@ pygame.init()
 from game.config import TILE_SIZE, AI_NEED_MAX, AI_NEED_FOOD_RESTORE
 from game.data.config import is_food_item
 from game.entities.villagers import VillagerManager, Family, Villager
-from game.buildings.buildings import BuildingManager, Building
+from game.buildings.building_manager import BuildingManager
+from game.buildings.building import Building
 from game.buildings.furniture import FurnitureManager, Furniture
 from game.world.permits import PermitManager
 from game.world.stockpile import StockpileManager

@@ -1,7 +1,7 @@
 import json
 import unittest
 
-from game.buildings.buildings import BuildingManager
+from game.buildings.building_manager import BuildingManager
 from game.buildings.furniture import FurnitureManager
 from game.data.config import SLEEP_ANY_REST_THRESHOLD
 from game.entities.player import Player

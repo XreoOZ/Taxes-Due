@@ -384,7 +384,7 @@ class TestProductionDistributionAndWIP(unittest.TestCase):
         from game.systems.schedule import ScheduleManager
         from game.entities.servants import ServantManager
         from game.entities.player import Player
-        from game.buildings.buildings import BuildingManager
+        from game.buildings.building_manager import BuildingManager
 
         dc = DayCycleSystem()
         sched = ScheduleManager()

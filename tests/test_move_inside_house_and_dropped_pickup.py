@@ -2,7 +2,8 @@ import unittest
 import math
 import pygame
 from game.config import TILE_SIZE
-from game.buildings.buildings import BuildingManager, Building
+from game.buildings.building_manager import BuildingManager
+from game.buildings.building import Building
 from game.buildings.furniture import FurnitureManager, Furniture
 from game.world.permits import PermitManager
 from game.entities.villagers import VillagerManager, Villager, Family

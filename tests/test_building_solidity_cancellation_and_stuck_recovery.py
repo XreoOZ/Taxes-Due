@@ -11,7 +11,10 @@ from game.data.config import (
     EMERGENCY_STUCK_TIMEOUT,
     EMERGENCY_COLLISION_BYPASS_DURATION,
 )
-from game.buildings.buildings import Building, ConstructionSite, DemolitionSite, BuildingManager
+from game.buildings.building import Building
+from game.buildings.construction_site import ConstructionSite
+from game.buildings.demolition_site import DemolitionSite
+from game.buildings.building_manager import BuildingManager
 from game.entities.villagers import Villager, VillagerManager, Family
 from game.entities.servants import Servant, ServantManager
 from game.world.pathfinding import GlobalPathRegistry, Pathfinder, is_narrow_passage_tile

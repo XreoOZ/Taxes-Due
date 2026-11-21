@@ -416,7 +416,8 @@ def save_to_slot(slot_id, day_cycle, resources, player, permit_manager, building
 
 def deserialize_game_state(data, day_cycle, resources, player, permit_manager, building_manager, stockpile_manager, furniture_manager, villager_manager, servant_manager, schedule_manager):
     from game.world.permits import AreaPermit
-    from game.buildings.buildings import Building, ConstructionSite
+    from game.buildings.building import Building
+    from game.buildings.construction_site import ConstructionSite
     from game.world.stockpile import ResourceStack
     from game.buildings.furniture import Furniture
     from game.entities.villagers import Family, Villager
@@ -537,7 +538,7 @@ def deserialize_game_state(data, day_cycle, resources, player, permit_manager, b
         b.household_sale_limits = dict(b_d.get("household_sale_limits", {}))
         b._stall_requested_qty = dict(b_d.get("stall_requested_qty", {}))
         b.auto_pricing = bool(b.assigned_family_id)
-        from game.buildings.buildings import DemolitionSite
+        from game.buildings.demolition_site import DemolitionSite
         site = DemolitionSite(b)
         site.progress = d_d.get("progress", 0.0)
         site.refund_wood = d_d.get("refund_wood", site.refund_wood)

@@ -4,7 +4,8 @@ import math
 import time
 
 from game.data.config import TILE_SIZE, PATH_RESERVATION_CLEARANCE
-from game.buildings.buildings import Building, BuildingManager
+from game.buildings.building import Building
+from game.buildings.building_manager import BuildingManager
 from game.buildings.furniture import Furniture, FurnitureManager
 from game.entities.villagers import Villager, VillagerManager
 from game.entities.servants import Servant, ServantManager
