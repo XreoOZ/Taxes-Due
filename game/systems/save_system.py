@@ -347,9 +347,11 @@ def serialize_game_state(day_cycle, resources, player, permit_manager, building_
     confession_state = ConfessionSystem.get_instance().to_dict()
     from game.systems.taxation_system import TaxationSystem
     taxation_state = TaxationSystem.to_dict()
+    from game.world.island import world_type, get_seed
 
     return {
         "timestamp": time.strftime("%Y-%m-%d %H:%M"),
+        "world": {"type": world_type(), "seed": get_seed()},
         "day_number": day_cycle.day_number,
         "time_str": day_data["time_str"],
         "population": total_pop,
@@ -421,6 +423,11 @@ def deserialize_game_state(data, day_cycle, resources, player, permit_manager, b
     from game.world.stockpile import ResourceStack
     from game.buildings.furniture import Furniture
     from game.entities.villagers import Family, Villager
+    from game.world.island import set_world
+
+    # 0. World terrain (island seed / infinite) — must be active before entities load
+    world_data = data.get("world") or {}
+    set_world(world_data.get("type", "infinite"), seed=world_data.get("seed"))
 
     # 1. Day Cycle - set day length index FIRST so time_seconds is not re-scaled incorrectly
     dc_data = data.get("day_cycle", {})

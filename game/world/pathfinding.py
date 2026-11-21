@@ -38,6 +38,7 @@ from game.config import (
     TILE_STEP_RESERVATION_TIMEOUT,
     NARROW_PASSAGE_WAIT_DISTANCE
 )
+from game.world.island import is_land_tile
 
 def get_tiles_along_segment(p1, p2, tile_size=TILE_SIZE):
     """
@@ -189,6 +190,10 @@ class Pathfinder:
         serta menghindari rintangan dan node yang dihindari (avoid_tiles).
         """
         if avoid_tiles and (x2, y2) in avoid_tiles:
+            return False
+
+        # Island worlds: water tiles are never traversable.
+        if not is_land_tile(x1, y1) or not is_land_tile(x2, y2):
             return False
 
         bm = building_manager or self.building_manager
@@ -530,6 +535,8 @@ def calculate_collision_slide(entity, dir_x, dir_y, all_entities, building_manag
         cur_gy = int(math.floor(entity.y / tile_size))
         tar_gx = int(math.floor(cx / tile_size))
         tar_gy = int(math.floor(cy / tile_size))
+        if not is_land_tile(tar_gx, tar_gy):
+            return False
         if building_manager:
             b_cur = building_manager.get_building_at(cur_gx, cur_gy)
             b_tar = building_manager.get_building_at(tar_gx, tar_gy)

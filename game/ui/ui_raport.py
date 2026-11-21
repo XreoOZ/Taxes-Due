@@ -36,6 +36,7 @@ from game.config import (
     DEMOLITION_REFUND_RATIO,
     SCHEDULE_TYPES,
     DEFAULT_JOB_SCHEDULE,
+    UNLIMITED_WORKER_PERMIT_TYPES,
     is_food_item
 )
 from game.data.config import CHURCH_TAX_HAPPINESS_TIERS_COPPER
@@ -212,6 +213,7 @@ class RaportUI:
         self.grant_max_scroll = 0
         self.grant_is_dragging_scrollbar = False
         self.cached_stockpile_manager = None
+        self.cached_furniture_manager = None
 
         # Contextual View Navigation Rects (Agent 2)
         self.permit_household_btn_rects = {}
@@ -221,6 +223,9 @@ class RaportUI:
         self.public_commission_btn_rects = {}
         self.selected_public_commission = None
         self.cancel_demolition_btn_rects = {}
+        self.workplace_popup_item = None      # (kind, item_id) awaiting base choice
+        self.workplace_popup_btn_rects = {}   # {"permit": Rect, "structure": Rect}
+        self.workplace_popup_bg_rect = None
 
         self.modal_w = RAPORT_MODAL_WIDTH
         self.modal_h = RAPORT_MODAL_HEIGHT
@@ -284,6 +289,9 @@ class RaportUI:
         self.job_schedule_btn_rects = {}
         self.worker_assign_btn_rects = {}
         self.worker_unassign_btn_rects = {}
+        self.job_search_text = ""
+        self.job_search_active = False
+        self.job_search_rect = None
 
         self.fonts_loaded = False
 
@@ -325,6 +333,12 @@ class RaportUI:
         self.crop_picker_permit_id = None
         self.selected_job_id = None
         self.selected_schedule_job_id = None
+        self.job_search_text = ""
+        self.job_search_active = False
+        self.job_search_rect = None
+        self.workplace_popup_item = None
+        self.workplace_popup_btn_rects = {}
+        self.workplace_popup_bg_rect = None
 
     def open_household_directly(self, family_id):
         """Contextual View: Opens Town Ledger directly to the specified family's View Family screen"""
@@ -406,13 +420,118 @@ class RaportUI:
                 target_k = "Potato" if k == "Food" else k
                 if resources.get(k, 0) > stock.get(target_k, 0):
                     stock[target_k] = resources[k]
+        # Coins held in the Lord Treasury Chest are grantable too
+        fm = getattr(self, "cached_furniture_manager", None)
+        if fm is not None:
+            try:
+                from game.systems.lord_treasury import LordTreasurySystem
+                for denom, amount in LordTreasurySystem.wallet(fm).items():
+                    if amount > 0:
+                        stock[denom] = stock.get(denom, 0) + amount
+            except Exception:
+                pass
         return stock
+
+    def _workplace_bases_for_item(self, kind, item_id):
+        """Workplace base kinds ('permit'/'structure') a placeable item provides."""
+        bases = set()
+        for job_cfg in DEDICATED_JOBS.values():
+            if kind == "permit" and job_cfg.get("workplace_permit") == item_id:
+                bases.add("permit")
+            elif kind == "building" and job_cfg.get("workplace_building_type") == item_id:
+                bases.add("structure")
+            elif kind == "furniture" and job_cfg.get("workplace_furniture_type") == item_id:
+                bases.add("structure")
+        return bases
+
+    def _workplace_item_name(self, kind, item_id):
+        if kind == "permit":
+            return PERMIT_TYPES.get(item_id, {}).get("name", str(item_id).replace("_", " ").title())
+        if kind == "building":
+            return BUILDING_TYPES.get(item_id, {}).get("name", str(item_id).replace("_", " ").title())
+        return FURNITURE_TYPES.get(item_id, {}).get("name", str(item_id).replace("_", " ").title())
+
+    def _workplace_item_start_action(self, kind, item_id, permit_manager):
+        """Runs the same placement state transition as a direct item click."""
+        if kind == "permit":
+            self.placing_permit_type = item_id
+            self.selected_building_type = None
+            self.is_open = False
+            return f"start_placing_permit_{item_id}"
+        if kind == "building":
+            b_cfg = BUILDING_TYPES.get(item_id, {})
+            has_permit = (not b_cfg.get("allowed_permits")
+                          or any(permit_manager.has_permit_type(p_type)
+                                 for p_type in b_cfg.get("allowed_permits", ())))
+            if has_permit:
+                self.selected_building_type = item_id
+                self.selected_furniture_type = None
+                self.placing_permit_type = None
+                self.show_structures_menu = False
+                self.is_open = False
+                return f"start_drag_building_{item_id}"
+            return f"need_permit_{item_id}"
+        self.selected_furniture_type = item_id
+        self.selected_building_type = None
+        self.placing_permit_type = None
+        self.show_furniture_menu = False
+        self.is_open = False
+        return f"start_place_furniture_{item_id}"
+
+    def _draw_workplace_base_popup(self, surface, mx, mouse_pos):
+        """Small 2-option chooser: Permit vs Structure workplace base."""
+        if self.workplace_popup_item is None:
+            return
+        kind, item_id = self.workplace_popup_item
+        bases = self._workplace_bases_for_item(kind, item_id)
+        if not bases:
+            self.workplace_popup_item = None
+            return
+        self._ensure_fonts()
+
+        screen_h = surface.get_size()[1]
+        my = (screen_h - self.modal_h) // 2
+        pop_w, pop_h = 380, 168
+        pop_x = mx + (self.modal_w - pop_w) // 2
+        pop_y = my + (self.modal_h - pop_h) // 2
+        self.workplace_popup_bg_rect = pygame.Rect(pop_x, pop_y, pop_w, pop_h)
+        pygame.draw.rect(surface, (15, 23, 42, 250), self.workplace_popup_bg_rect, border_radius=10)
+        pygame.draw.rect(surface, (59, 130, 246), self.workplace_popup_bg_rect, width=2, border_radius=10)
+
+        name = self._workplace_item_name(kind, item_id)
+        title = self.font_sub.render(f"{name} — Workplace", True, (241, 245, 249))
+        surface.blit(title, (pop_x + 16, pop_y + 14))
+        sub = self.font_body.render("Choose the workplace base type:", True, (148, 163, 184))
+        surface.blit(sub, (pop_x + 16, pop_y + 38))
+
+        self.workplace_popup_btn_rects = {}
+        btn_w, btn_h, gap = 160, 44, 16
+        start_x = pop_x + (pop_w - (btn_w * 2 + gap)) // 2
+        btn_y = pop_y + pop_h - btn_h - 16
+        options = [
+            ("permit", "PERMIT", "Zoned permit workplace", (74, 222, 128)),
+            ("structure", "STRUCTURE", "Building / furniture", (96, 165, 250)),
+        ]
+        for idx, (base, label, desc, col) in enumerate(options):
+            rect = pygame.Rect(start_x + idx * (btn_w + gap), btn_y, btn_w, btn_h)
+            self.workplace_popup_btn_rects[base] = rect
+            enabled = base in bases
+            hov = enabled and rect.collidepoint(mouse_pos)
+            bg = col if hov else ((30, 41, 59) if not enabled else tuple(min(255, c + 30) for c in col))
+            pygame.draw.rect(surface, bg, rect, border_radius=6)
+            pygame.draw.rect(surface, col if enabled else (71, 85, 105), rect, width=1, border_radius=6)
+            lbl_col = (255, 255, 255) if enabled else (100, 116, 139)
+            t1 = self.font_btn.render(label, True, lbl_col)
+            surface.blit(t1, (rect.centerx - t1.get_width() // 2, rect.y + 8))
+            t2 = self.font_badge.render(desc if enabled else "Not supported", True, lbl_col)
+            surface.blit(t2, (rect.centerx - t2.get_width() // 2, rect.y + 26))
 
     def is_text_input_active(self):
         """Mengembalikan True jika player sedang mengetik di input/text field dalam UI Raport"""
         return bool(self.is_open and (
             (self.show_grant_dialog and self.active_grant_input_item is not None)
             or (self.active_tab == 7 and self.socage_tax_input_active)
+            or (self.active_tab == 5 and self.job_search_active)
         ))
 
     @staticmethod
@@ -430,6 +549,8 @@ class RaportUI:
     def handle_event(self, event, building_manager, permit_manager, resources, servant_manager=None, villager_manager=None, schedule_manager=None, day_cycle=None, stockpile_manager=None, furniture_manager=None, production_system=None):
         if stockpile_manager is not None:
             self.cached_stockpile_manager = stockpile_manager
+        if furniture_manager is not None:
+            self.cached_furniture_manager = furniture_manager
         sm = stockpile_manager or self.cached_stockpile_manager
 
         if event.type == pygame.KEYDOWN:
@@ -452,6 +573,19 @@ class RaportUI:
                         self.socage_tax_input_text = draft
                         self.socage_tax_input_replace = False
                     return "socage_tax_input_edit"
+                return None
+            if self.is_open and self.active_tab == 5 and self.job_search_active:
+                if event.key == pygame.K_BACKSPACE:
+                    self.job_search_text = self.job_search_text[:-1]
+                    self.jobs_scroll_y = 0
+                    return "job_search_edit"
+                if event.key in (pygame.K_RETURN, pygame.K_KP_ENTER, pygame.K_ESCAPE):
+                    self.job_search_active = False
+                    return "job_search_done"
+                if event.unicode and len(self.job_search_text) < 32:
+                    self.job_search_text += event.unicode
+                    self.jobs_scroll_y = 0
+                    return "job_search_edit"
                 return None
             if self.is_text_input_active():
                 if event.key == pygame.K_BACKSPACE:
@@ -651,7 +785,22 @@ class RaportUI:
                 self.selected_schedule_job_id = None
                 self.selected_building_owner = None
                 self.building_scroll_y = 0
+                self.workplace_popup_item = None
                 return f"switch_tab_{i}"
+
+        # Workplace base chooser popup (Permit vs Structure) — topmost capture
+        if self.workplace_popup_item is not None:
+            kind, item_id = self.workplace_popup_item
+            for base, rect in list(self.workplace_popup_btn_rects.items()):
+                if rect and rect.collidepoint(mouse_pos):
+                    if base in self._workplace_bases_for_item(kind, item_id):
+                        self.workplace_popup_item = None
+                        return self._workplace_item_start_action(kind, item_id, permit_manager)
+                    return None
+            if self.workplace_popup_bg_rect and self.workplace_popup_bg_rect.collidepoint(mouse_pos):
+                return None
+            self.workplace_popup_item = None
+            return None
 
         # 4. Tab 0: Building Management
         if self.active_tab == 0:
@@ -718,6 +867,9 @@ class RaportUI:
             # Check Building Construction buttons (from category view or quick build)
             for b_type, rect in list(self.building_select_rects.items()):
                 if rect.collidepoint(mouse_pos):
+                    if self._workplace_bases_for_item("building", b_type):
+                        self.workplace_popup_item = ("building", b_type)
+                        return None
                     b_cfg = BUILDING_TYPES.get(b_type, {})
                     has_permit = permit_manager.has_permit_type(b_type)
                     if has_permit:
@@ -733,6 +885,9 @@ class RaportUI:
             # Check Furniture Placement buttons
             for f_type, rect in list(self.furniture_select_rects.items()):
                 if rect.collidepoint(mouse_pos):
+                    if self._workplace_bases_for_item("furniture", f_type):
+                        self.workplace_popup_item = ("furniture", f_type)
+                        return None
                     self.selected_furniture_type = f_type
                     self.selected_building_type = None
                     self.placing_permit_type = None
@@ -839,6 +994,9 @@ class RaportUI:
 
             for p_type, btn_rect in self.permit_btn_rects.items():
                 if btn_rect.collidepoint(mouse_pos):
+                    if self._workplace_bases_for_item("permit", p_type):
+                        self.workplace_popup_item = ("permit", p_type)
+                        return None
                     self.placing_permit_type = p_type
                     self.selected_building_type = None
                     self.is_open = False
@@ -1061,6 +1219,13 @@ class RaportUI:
 
         # 8. Tab 5: Dedicated Jobs & Schedule Management
         elif self.active_tab == 5:
+            # Job search box: click to focus, click elsewhere to unfocus
+            if self.job_search_rect and self.job_search_rect.collidepoint(mouse_pos):
+                self.job_search_active = True
+                return "job_search_focus"
+            if self.job_search_active:
+                self.job_search_active = False
+
             # Sub-view A: 24-Hour Schedule Matrix for Selected Job
             if self.selected_schedule_job_id is not None:
                 if self.schedule_back_btn_rect and self.schedule_back_btn_rect.collidepoint(mouse_pos):
@@ -1157,7 +1322,8 @@ class RaportUI:
                                 options = []
                                 for kind, station in get_job_workplaces(self.selected_job_id, permit_manager, furniture_manager, building_manager):
                                     workers = workplace_workers((kind, station))
-                                    if len(workers) >= workplace_capacity((kind, station)):
+                                    station_cap = workplace_capacity((kind, station))
+                                    if station_cap is not None and len(workers) >= station_cap:
                                         continue
                                     sx = (station.grid_x + getattr(station, "tiles_w", getattr(station, "type_cfg", {}).get("width_tiles", 1)) / 2) * TILE_SIZE
                                     sy = (station.grid_y + getattr(station, "tiles_h", getattr(station, "type_cfg", {}).get("height_tiles", 1)) / 2) * TILE_SIZE
@@ -1771,44 +1937,46 @@ class RaportUI:
             inst_txt = self.font_sub.render(f"Construct / Place {cat_name} (Select to Place on Map):", True, (56, 189, 248))
             surface.blit(inst_txt, (mx + 24, btn_y))
 
+            # Furniture and building buttons share one grid — drawing them in
+            # separate loops at the same row offsets made them overlap exactly
+            # (e.g. Tax Office covered the Carpenter Workbench button).
+            grid_items = []
             if current_cat.get("kind") in ("furniture", "public"):
-                avail_w = self.modal_w - 48
                 f_keys = (list(current_cat.get("furniture_types", ()))
                           if current_cat.get("kind") == "public"
                           else list(cat_types))
-                columns = max(1, min(len(f_keys), avail_w // 180))
-                f_btn_w = (avail_w - ((columns - 1) * 8)) // columns
-                for idx, f_id in enumerate(f_keys):
-                    f_cfg = FURNITURE_TYPES[f_id]
-                    row, col = divmod(idx, columns)
-                    f_btn = pygame.Rect(mx + 24 + col * (f_btn_w + 8), btn_y + 26 + row * 42, f_btn_w, 36)
-                    self.furniture_select_rects[f_id] = f_btn
-                    hov = f_btn.collidepoint(m_pos)
-                    b_col = (16, 185, 129) if hov else (5, 150, 105)
-                    pygame.draw.rect(surface, b_col, f_btn, border_radius=6)
-                    lbl_txt = (f"+ Place {f_cfg['name']}" if f_cfg.get("instant_place")
-                               else f"+ Order {f_cfg['name']}")
-                    lbl = self.font_btn.render(lbl_txt, True, (255, 255, 255))
-                    surface.blit(lbl, (f_btn.centerx - lbl.get_width() // 2, f_btn.centery - lbl.get_height() // 2))
+                grid_items.extend(("furniture", f_id) for f_id in f_keys)
             if current_cat.get("kind") != "furniture":
+                grid_items.extend(("building", b_id) for b_id in cat_types)
+
+            if grid_items:
                 avail_w = self.modal_w - 48
-                b_keys = list(cat_types)
-                columns = max(1, min(len(b_keys), avail_w // 180))
-                b_btn_w = (avail_w - ((columns - 1) * 8)) // columns
-                for idx, b_id in enumerate(b_keys):
-                    b_cfg = BUILDING_TYPES.get(b_id, {})
-                    has_permit = (not b_cfg.get("allowed_permits")
-                                  or any(permit_manager.has_permit_type(p_type)
-                                         for p_type in b_cfg.get("allowed_permits", ())))
+                columns = max(1, min(len(grid_items), avail_w // 180))
+                item_btn_w = (avail_w - ((columns - 1) * 8)) // columns
+                for idx, (item_kind, item_id) in enumerate(grid_items):
                     row, col = divmod(idx, columns)
-                    b_btn = pygame.Rect(mx + 24 + col * (b_btn_w + 8), btn_y + 26 + row * 42, b_btn_w, 36)
-                    self.building_select_rects[b_id] = b_btn
-                    hov = b_btn.collidepoint(m_pos)
-                    b_col = (16, 185, 129) if has_permit else (71, 85, 105)
-                    pygame.draw.rect(surface, (34, 197, 94) if (hov and has_permit) else b_col, b_btn, border_radius=6)
-                    lbl_txt = f"+ {b_cfg.get('name', b_id.replace('_', ' ').title())}"
+                    item_btn = pygame.Rect(mx + 24 + col * (item_btn_w + 8), btn_y + 26 + row * 42, item_btn_w, 36)
+                    hov = item_btn.collidepoint(m_pos)
+                    if item_kind == "furniture":
+                        f_cfg = FURNITURE_TYPES[item_id]
+                        self.furniture_select_rects[item_id] = item_btn
+                        b_col = (16, 185, 129) if hov else (5, 150, 105)
+                        pygame.draw.rect(surface, b_col, item_btn, border_radius=6)
+                        lbl_txt = (f"+ Place {f_cfg['name']}" if f_cfg.get("instant_place")
+                                   else f"+ Order {f_cfg['name']}")
+                    else:
+                        b_cfg = BUILDING_TYPES.get(item_id, {})
+                        has_permit = (not b_cfg.get("allowed_permits")
+                                      or any(permit_manager.has_permit_type(p_type)
+                                             for p_type in b_cfg.get("allowed_permits", ())))
+                        self.building_select_rects[item_id] = item_btn
+                        b_col = (16, 185, 129) if has_permit else (71, 85, 105)
+                        pygame.draw.rect(surface, (34, 197, 94) if (hov and has_permit) else b_col, item_btn, border_radius=6)
+                        lbl_txt = f"+ {b_cfg.get('name', item_id.replace('_', ' ').title())}"
                     lbl = self.font_btn.render(lbl_txt, True, (255, 255, 255))
-                    surface.blit(lbl, (b_btn.centerx - lbl.get_width() // 2, b_btn.centery - lbl.get_height() // 2))
+                    surface.blit(lbl, (item_btn.centerx - lbl.get_width() // 2, item_btn.centery - lbl.get_height() // 2))
+
+            self._draw_workplace_base_popup(surface, mx, m_pos)
 
     def _draw_permit_row(self, surface, p, mx, y_cur, empty_areas):
         """Helper to render a single permit row with all interactive controls (Agent 2)"""
@@ -1880,7 +2048,7 @@ class RaportUI:
             surface.blit(p_surf, (plant_btn.x + (plant_btn.w - p_surf.get_width()) // 2, plant_btn.y + 4))
             right_cursor -= 86
 
-            # Worker Controls: [⚡ Auto] [+] {count/max} [-]
+            # Worker Controls: [⚡ Auto] [+] {count/max} [-]  (Farm lots are unlimited)
             auto_btn = pygame.Rect(right_cursor - 28, y_cur - 1, 26, 22)
             self.worker_auto_btn_rects[p.id] = auto_btn
             a_hov = auto_btn.collidepoint(pygame.mouse.get_pos())
@@ -1889,25 +2057,30 @@ class RaportUI:
             surface.blit(a_txt, (auto_btn.x + 6, auto_btn.y + 4))
             right_cursor -= 32
 
-            inc_btn = pygame.Rect(right_cursor - 20, y_cur - 1, 18, 22)
-            self.worker_inc_btn_rects[p.id] = inc_btn
-            inc_hov = inc_btn.collidepoint(pygame.mouse.get_pos())
-            pygame.draw.rect(surface, (37, 99, 235) if inc_hov else (30, 58, 138), inc_btn, border_radius=3)
-            surface.blit(self.font_badge.render("+", True, (255, 255, 255)), (inc_btn.x + 5, inc_btn.y + 3))
-            right_cursor -= 24
-
             w_count = len(getattr(p, 'assigned_workers', set()))
-            w_max = getattr(p, 'max_workers', 2)
-            cnt_str = f"{w_count}/{w_max} Workers"
+            farm_unlimited = p.permit_type in UNLIMITED_WORKER_PERMIT_TYPES
+            if farm_unlimited:
+                cnt_str = f"{w_count} Workers"
+            else:
+                w_max = getattr(p, 'max_workers', 2)
+                cnt_str = f"{w_count}/{w_max} Workers"
             cnt_surf = self.font_badge.render(cnt_str, True, (241, 245, 249))
             surface.blit(cnt_surf, (right_cursor - cnt_surf.get_width() - 4, y_cur + 3))
             right_cursor -= (cnt_surf.get_width() + 8)
 
-            dec_btn = pygame.Rect(right_cursor - 20, y_cur - 1, 18, 22)
-            self.worker_dec_btn_rects[p.id] = dec_btn
-            dec_hov = dec_btn.collidepoint(pygame.mouse.get_pos())
-            pygame.draw.rect(surface, (71, 85, 105) if dec_hov else (51, 65, 85), dec_btn, border_radius=3)
-            surface.blit(self.font_badge.render("-", True, (255, 255, 255)), (dec_btn.x + 6, dec_btn.y + 3))
+            if not farm_unlimited:
+                inc_btn = pygame.Rect(right_cursor - 20, y_cur - 1, 18, 22)
+                self.worker_inc_btn_rects[p.id] = inc_btn
+                inc_hov = inc_btn.collidepoint(pygame.mouse.get_pos())
+                pygame.draw.rect(surface, (37, 99, 235) if inc_hov else (30, 58, 138), inc_btn, border_radius=3)
+                surface.blit(self.font_badge.render("+", True, (255, 255, 255)), (inc_btn.x + 5, inc_btn.y + 3))
+                right_cursor -= 24
+
+                dec_btn = pygame.Rect(right_cursor - 20, y_cur - 1, 18, 22)
+                self.worker_dec_btn_rects[p.id] = dec_btn
+                dec_hov = dec_btn.collidepoint(pygame.mouse.get_pos())
+                pygame.draw.rect(surface, (71, 85, 105) if dec_hov else (51, 65, 85), dec_btn, border_radius=3)
+                surface.blit(self.font_badge.render("-", True, (255, 255, 255)), (dec_btn.x + 6, dec_btn.y + 3))
 
         elif p.permit_type in ("church", "cemetery"):
             p_workers = getattr(p, "assigned_workers", [])
@@ -2281,6 +2454,8 @@ class RaportUI:
 
                 crop_y += 46
 
+        self._draw_workplace_base_popup(surface, mx, pygame.mouse.get_pos())
+
     def _draw_priority_tab(self, surface, mx, cy, servant_manager):
         """RimWorld-Style Work Priorities Grid (1=High, 4=Low, -=Off)"""
         title = self.font_sub.render(" Servant Work Priorities (RimWorld Priority Matrix)", True, COLOR_TEXT_TITLE)
@@ -2373,73 +2548,25 @@ class RaportUI:
         cur_hour = getattr(day_cycle, "current_hour", 8.0) if day_cycle else 8.0
 
         # =============================================================
-        # VIEW 1: Job Selection Directory
+        # Universal 24-Hour Schedule (per-job schedules removed —
+        # every job, including Unassigned, follows this one schedule)
         # =============================================================
-        if self.selected_schedule_job_id is None:
-            title = self.font_title.render("VILLAGE LABOR & SHIFT SCHEDULE", True, COLOR_TEXT_TITLE)
-            surface.blit(title, (mx + 24, cy - 4))
+        self.selected_schedule_job_id = UNIVERSAL_SCHEDULE_ID
+        self.schedule_job_select_btn_rects = {}
+        self.schedule_back_btn_rect = None
+        self.job_search_rect = None
+        self.job_search_active = False
+        if schedule_manager and not getattr(schedule_manager, "universal_schedule_enabled", False):
+            # One-time migration: per-job schedules are gone, so seed the
+            # universal schedule and sync every job to it.
+            schedule_manager.activate_universal_schedule()
 
-            sub = self.font_body.render("Set daily 24-hour work shifts, recreation, and sleep hours for each guild profession:", True, COLOR_TEXT_MUTED)
-            surface.blit(sub, (mx + 24, cy + 22))
+        job_name = "Universal Schedule (All Jobs)"
 
-            y_cur = cy + 46
-            self.schedule_job_select_btn_rects = {}
-
-            for job_id, job_cfg in DEDICATED_JOBS.items():
-                card_h = 58
-                card_rect = pygame.Rect(mx + 24, y_cur, self.modal_w - 48, card_h)
-
-                pygame.draw.rect(surface, (24, 34, 52), card_rect, border_radius=8)
-                pygame.draw.rect(surface, (51, 65, 85), card_rect, width=1, border_radius=8)
-
-                # Icon
-                icon_col = job_cfg.get("color", (34, 197, 94))
-                pygame.draw.circle(surface, icon_col, (card_rect.x + 24, card_rect.y + card_h // 2), 12)
-                pygame.draw.circle(surface, (15, 23, 42), (card_rect.x + 24, card_rect.y + card_h // 2), 12, 2)
-
-                # Title
-                j_title = self.font_sub.render(job_cfg["name"], True, (241, 245, 249))
-                surface.blit(j_title, (card_rect.x + 46, card_rect.y + 8))
-
-                # Mini schedule preview bar
-                if schedule_manager:
-                    sched = schedule_manager.get_schedule_view(job_id)
-                    bar_x = card_rect.x + 46
-                    bar_y = card_rect.y + 32
-                    bar_w = 260
-                    seg_w = bar_w / 24.0
-                    for h_idx in range(24):
-                        act = sched[h_idx]
-                        col = SCHEDULE_TYPES.get(act, {}).get("color", (100, 116, 139))
-                        pygame.draw.rect(surface, col, (bar_x + int(h_idx * seg_w), bar_y, int(seg_w) + 1, 14))
-
-                    # Count work hours
-                    work_hours = sum(1 for a in sched if a == "WORK")
-                    sleep_hours = sum(1 for a in sched if a == "SLEEP")
-                    summary_txt = f"{work_hours}h Work, {sleep_hours}h Sleep"
-                    surface.blit(self.font_badge.render(summary_txt, True, COLOR_TEXT_MUTED), (bar_x + bar_w + 14, bar_y + 1))
-
-                # Action Button: [Edit Schedule ➔]
-                btn_rect = pygame.Rect(card_rect.right - 140, card_rect.y + 13, 126, 32)
-                self.schedule_job_select_btn_rects[job_id] = btn_rect
-                b_hover = btn_rect.collidepoint(mouse_pos)
-                pygame.draw.rect(surface, (37, 99, 235) if b_hover else (30, 58, 138), btn_rect, border_radius=6)
-                pygame.draw.rect(surface, (96, 165, 250), btn_rect, width=1, border_radius=6)
-                btn_lbl = self.font_badge.render("Edit Schedule ->", True, (255, 255, 255))
-                surface.blit(btn_lbl, (btn_rect.centerx - btn_lbl.get_width() // 2, btn_rect.centery - btn_lbl.get_height() // 2))
-
-                y_cur += card_h + 8
-
-        # =============================================================
-        # VIEW 2: Detailed 24-Hour Matrix for Selected Job
-        # =============================================================
-        else:
-            job_cfg = DEDICATED_JOBS.get(self.selected_schedule_job_id, {})
-            job_name = ("Universal" if self.selected_schedule_job_id == UNIVERSAL_SCHEDULE_ID
-                        else job_cfg.get("name", self.selected_schedule_job_id))
-
-            # Header & Back Button
-            back_w = 140
+        # Header & Back Button (Back only exists when embedded in the Workers tab)
+        back_w = 140 if self.active_tab == 5 else 0
+        title_x = mx + 24 + (back_w + 14 if back_w else 0)
+        if back_w:
             self.schedule_back_btn_rect = pygame.Rect(mx + 24, cy - 4, back_w, 28)
             b_hover = self.schedule_back_btn_rect.collidepoint(mouse_pos)
             pygame.draw.rect(surface, (51, 65, 85) if b_hover else (30, 41, 59), self.schedule_back_btn_rect, border_radius=6)
@@ -2447,155 +2574,155 @@ class RaportUI:
             b_lbl = self.font_badge.render("< Back to Jobs", True, (255, 255, 255))
             surface.blit(b_lbl, (self.schedule_back_btn_rect.centerx - b_lbl.get_width() // 2, self.schedule_back_btn_rect.centery - b_lbl.get_height() // 2))
 
-            surface.blit(self.font_title.render(f"{job_name} 24-Hour Schedule", True, (241, 245, 249)), (mx + 24 + back_w + 14, cy - 4))
+        surface.blit(self.font_title.render(f"{job_name} 24-Hour Schedule", True, (241, 245, 249)), (title_x, cy - 4))
 
-            # Current Hour indicator
-            curr_str = f"Time: {int(cur_hour):02d}:00"
-            surface.blit(self.font_sub.render(curr_str, True, (250, 204, 21)), (mx + self.modal_w - 180, cy - 2))
+        # Current Hour indicator
+        curr_str = f"Time: {int(cur_hour):02d}:00"
+        surface.blit(self.font_sub.render(curr_str, True, (250, 204, 21)), (mx + self.modal_w - 180, cy - 2))
 
-            # 1. Paintbrush tools banner
-            tool_y = cy + 28
-            tool_rect = pygame.Rect(mx + 24, tool_y, self.modal_w - 48, 38)
-            pygame.draw.rect(surface, (24, 34, 52), tool_rect, border_radius=6)
-            pygame.draw.rect(surface, (71, 85, 105), tool_rect, width=1, border_radius=6)
+        # 1. Paintbrush tools banner
+        tool_y = cy + 28
+        tool_rect = pygame.Rect(mx + 24, tool_y, self.modal_w - 48, 38)
+        pygame.draw.rect(surface, (24, 34, 52), tool_rect, border_radius=6)
+        pygame.draw.rect(surface, (71, 85, 105), tool_rect, width=1, border_radius=6)
 
-            surface.blit(self.font_badge.render("PAINT TOOL:", True, COLOR_TEXT_MUTED), (tool_rect.x + 12, tool_rect.y + 11))
+        surface.blit(self.font_badge.render("PAINT TOOL:", True, COLOR_TEXT_MUTED), (tool_rect.x + 12, tool_rect.y + 11))
 
-            self.schedule_brush_btn_rects = {}
-            bx = tool_rect.x + 100
-            for b_id, b_info in SCHEDULE_TYPES.items():
-                if b_id == "PRAYER":
-                    continue
-                b_btn = pygame.Rect(bx, tool_rect.y + 5, 96, 28)
-                self.schedule_brush_btn_rects[b_id] = b_btn
-                is_sel = (self.selected_schedule_brush == b_id)
-                col = b_info["color"]
-                if is_sel:
-                    pygame.draw.rect(surface, col, b_btn, border_radius=5)
-                    pygame.draw.rect(surface, (255, 255, 255), b_btn, width=2, border_radius=5)
-                    lbl_col = (255, 255, 255)
-                else:
-                    pygame.draw.rect(surface, (30, 41, 59), b_btn, border_radius=5)
-                    pygame.draw.rect(surface, col, b_btn, width=1, border_radius=5)
-                    lbl_col = col
-
-                t_lbl = self.font_badge.render(f"{b_info['name']}", True, lbl_col)
-                surface.blit(t_lbl, (b_btn.centerx - t_lbl.get_width() // 2, b_btn.centery - t_lbl.get_height() // 2))
-                bx += 104
-
-            # 3. Priest Prayer Time Contiguous Block Adjustment Banner (If Priest selected)
-            self.prayer_start_dec_rect = None
-            self.prayer_start_inc_rect = None
-            self.prayer_end_dec_rect = None
-            self.prayer_end_inc_rect = None
-            if self.selected_schedule_job_id == "Priest" and schedule_manager:
-                p_s, p_e = schedule_manager.get_prayer_hours()
-                pr_banner = pygame.Rect(mx + 24, tool_y + 44, self.modal_w - 48, 36)
-                pygame.draw.rect(surface, (30, 27, 46), pr_banner, border_radius=6)
-                pygame.draw.rect(surface, (168, 85, 247), pr_banner, width=1, border_radius=6)
-
-                pr_head = self.font_badge.render("⛪ DECREED PRAYER TIME BLOCK (ALL GUILDS ATTEND):", True, (216, 180, 254))
-                surface.blit(pr_head, (pr_banner.x + 12, pr_banner.y + 10))
-
-                # Start Hour [-] {p_s}:00 [+]
-                ctrl_x = pr_banner.right - 280
-                surface.blit(self.font_badge.render("Start:", True, COLOR_TEXT_MUTED), (ctrl_x, pr_banner.y + 10))
-                self.prayer_start_dec_rect = pygame.Rect(ctrl_x + 40, pr_banner.y + 6, 22, 24)
-                pygame.draw.rect(surface, (51, 65, 85), self.prayer_start_dec_rect, border_radius=3)
-                surface.blit(self.font_badge.render("-", True, (255, 255, 255)), (self.prayer_start_dec_rect.x + 7, self.prayer_start_dec_rect.y + 4))
-
-                surface.blit(self.font_sub.render(f"{p_s:02d}:00", True, (250, 204, 21)), (ctrl_x + 68, pr_banner.y + 8))
-
-                self.prayer_start_inc_rect = pygame.Rect(ctrl_x + 115, pr_banner.y + 6, 22, 24)
-                pygame.draw.rect(surface, (51, 65, 85), self.prayer_start_inc_rect, border_radius=3)
-                surface.blit(self.font_badge.render("+", True, (255, 255, 255)), (self.prayer_start_inc_rect.x + 6, self.prayer_start_inc_rect.y + 4))
-
-                # End Hour [-] {p_e}:00 [+]
-                end_ctrl_x = ctrl_x + 150
-                surface.blit(self.font_badge.render("End:", True, COLOR_TEXT_MUTED), (end_ctrl_x, pr_banner.y + 10))
-                self.prayer_end_dec_rect = pygame.Rect(end_ctrl_x + 35, pr_banner.y + 6, 22, 24)
-                pygame.draw.rect(surface, (51, 65, 85), self.prayer_end_dec_rect, border_radius=3)
-                surface.blit(self.font_badge.render("-", True, (255, 255, 255)), (self.prayer_end_dec_rect.x + 7, self.prayer_end_dec_rect.y + 4))
-
-                surface.blit(self.font_sub.render(f"{p_e:02d}:00", True, (250, 204, 21)), (end_ctrl_x + 63, pr_banner.y + 8))
-
-                self.prayer_end_inc_rect = pygame.Rect(end_ctrl_x + 110, pr_banner.y + 6, 22, 24)
-                pygame.draw.rect(surface, (51, 65, 85), self.prayer_end_inc_rect, border_radius=3)
-                surface.blit(self.font_badge.render("+", True, (255, 255, 255)), (self.prayer_end_inc_rect.x + 6, self.prayer_end_inc_rect.y + 4))
-
-                grid_y = pr_banner.bottom + 12
+        self.schedule_brush_btn_rects = {}
+        bx = tool_rect.x + 100
+        for b_id, b_info in SCHEDULE_TYPES.items():
+            if b_id == "PRAYER":
+                continue
+            b_btn = pygame.Rect(bx, tool_rect.y + 5, 96, 28)
+            self.schedule_brush_btn_rects[b_id] = b_btn
+            is_sel = (self.selected_schedule_brush == b_id)
+            col = b_info["color"]
+            if is_sel:
+                pygame.draw.rect(surface, col, b_btn, border_radius=5)
+                pygame.draw.rect(surface, (255, 255, 255), b_btn, width=2, border_radius=5)
+                lbl_col = (255, 255, 255)
             else:
-                grid_y = tool_y + 46
+                pygame.draw.rect(surface, (30, 41, 59), b_btn, border_radius=5)
+                pygame.draw.rect(surface, col, b_btn, width=1, border_radius=5)
+                lbl_col = col
 
-            # 3. Timetable Grid (24 boxes)
-            day_sched_title = f"{job_name} 24-Hour Timeline (Click hour slot to apply paint tool):"
-            surface.blit(self.font_sub.render(day_sched_title, True, (241, 245, 249)), (mx + 24, grid_y))
+            t_lbl = self.font_badge.render(f"{b_info['name']}", True, lbl_col)
+            surface.blit(t_lbl, (b_btn.centerx - t_lbl.get_width() // 2, b_btn.centery - t_lbl.get_height() // 2))
+            bx += 104
 
-            sched = schedule_manager.get_schedule_view(self.selected_schedule_job_id) if schedule_manager else list(DEFAULT_JOB_SCHEDULE)
-            grid_bar_y = grid_y + 24
-            avail_grid_w = self.modal_w - 48
-            cell_w = avail_grid_w // 24
-            cell_h = 54
+        # 3. Prayer Time Contiguous Block Adjustment Banner (universal schedule)
+        self.prayer_start_dec_rect = None
+        self.prayer_start_inc_rect = None
+        self.prayer_end_dec_rect = None
+        self.prayer_end_inc_rect = None
+        if schedule_manager:
+            p_s, p_e = schedule_manager.get_prayer_hours()
+            pr_banner = pygame.Rect(mx + 24, tool_y + 44, self.modal_w - 48, 36)
+            pygame.draw.rect(surface, (30, 27, 46), pr_banner, border_radius=6)
+            pygame.draw.rect(surface, (168, 85, 247), pr_banner, width=1, border_radius=6)
 
-            self.schedule_hour_cell_rects = {}
-            for h in range(24):
-                cx = mx + 24 + h * cell_w
-                cell_rect = pygame.Rect(cx, grid_bar_y, cell_w - 2, cell_h)
-                self.schedule_hour_cell_rects[h] = cell_rect
+            pr_head = self.font_badge.render("⛪ DECREED PRAYER TIME BLOCK (ALL GUILDS ATTEND):", True, (216, 180, 254))
+            surface.blit(pr_head, (pr_banner.x + 12, pr_banner.y + 10))
 
-                act = sched[h]
-                act_col = SCHEDULE_TYPES.get(act, {}).get("color", (100, 116, 139))
-                is_current = (int(cur_hour) == h)
+            # Start Hour [-] {p_s}:00 [+]
+            ctrl_x = pr_banner.right - 280
+            surface.blit(self.font_badge.render("Start:", True, COLOR_TEXT_MUTED), (ctrl_x, pr_banner.y + 10))
+            self.prayer_start_dec_rect = pygame.Rect(ctrl_x + 40, pr_banner.y + 6, 22, 24)
+            pygame.draw.rect(surface, (51, 65, 85), self.prayer_start_dec_rect, border_radius=3)
+            surface.blit(self.font_badge.render("-", True, (255, 255, 255)), (self.prayer_start_dec_rect.x + 7, self.prayer_start_dec_rect.y + 4))
 
-                pygame.draw.rect(surface, act_col, cell_rect, border_radius=4)
-                if is_current:
-                    pygame.draw.rect(surface, (250, 204, 21), cell_rect, width=2, border_radius=4)
-                else:
-                    pygame.draw.rect(surface, (15, 23, 42), cell_rect, width=1, border_radius=4)
+            surface.blit(self.font_sub.render(f"{p_s:02d}:00", True, (250, 204, 21)), (ctrl_x + 68, pr_banner.y + 8))
 
-                # Hour text
-                h_txt = self.font_badge.render(f"{h:02d}", True, (255, 255, 255))
-                surface.blit(h_txt, (cell_rect.centerx - h_txt.get_width() // 2, cell_rect.y + 5))
+            self.prayer_start_inc_rect = pygame.Rect(ctrl_x + 115, pr_banner.y + 6, 22, 24)
+            pygame.draw.rect(surface, (51, 65, 85), self.prayer_start_inc_rect, border_radius=3)
+            surface.blit(self.font_badge.render("+", True, (255, 255, 255)), (self.prayer_start_inc_rect.x + 6, self.prayer_start_inc_rect.y + 4))
 
-                # Activity abbreviation
-                abbrev = act[:1]  # 'W', 'L', 'S', 'A', 'P'
-                a_txt = self.font_sub.render(abbrev, True, (255, 255, 255))
-                surface.blit(a_txt, (cell_rect.centerx - a_txt.get_width() // 2, cell_rect.y + 22))
+            # End Hour [-] {p_e}:00 [+]
+            end_ctrl_x = ctrl_x + 150
+            surface.blit(self.font_badge.render("End:", True, COLOR_TEXT_MUTED), (end_ctrl_x, pr_banner.y + 10))
+            self.prayer_end_dec_rect = pygame.Rect(end_ctrl_x + 35, pr_banner.y + 6, 22, 24)
+            pygame.draw.rect(surface, (51, 65, 85), self.prayer_end_dec_rect, border_radius=3)
+            surface.blit(self.font_badge.render("-", True, (255, 255, 255)), (self.prayer_end_dec_rect.x + 7, self.prayer_end_dec_rect.y + 4))
 
-                if is_current:
-                    pygame.draw.polygon(surface, (250, 204, 21), [
-                        (cell_rect.centerx, grid_bar_y - 2),
-                        (cell_rect.centerx - 4, grid_bar_y - 7),
-                        (cell_rect.centerx + 4, grid_bar_y - 7)
-                    ])
+            surface.blit(self.font_sub.render(f"{p_e:02d}:00", True, (250, 204, 21)), (end_ctrl_x + 63, pr_banner.y + 8))
 
-            # Presets & Quick Fill Section
-            preset_y = grid_bar_y + cell_h + 14
-            surface.blit(self.font_sub.render("Quick Schedule Presets:", True, COLOR_TEXT_MUTED), (mx + 24, preset_y + 4))
+            self.prayer_end_inc_rect = pygame.Rect(end_ctrl_x + 110, pr_banner.y + 6, 22, 24)
+            pygame.draw.rect(surface, (51, 65, 85), self.prayer_end_inc_rect, border_radius=3)
+            surface.blit(self.font_badge.render("+", True, (255, 255, 255)), (self.prayer_end_inc_rect.x + 6, self.prayer_end_inc_rect.y + 4))
 
-            self.schedule_preset_btn_rects = {}
-            presets = [
-                ("standard", "Standard (10h Work, 8h Sleep)", (59, 130, 246)),
-                ("hardwork", "Hardworking (15h Work, 6h Sleep)", (245, 158, 11)),
-                ("relaxed", "Relaxed (7h Work, 9h Sleep)", (34, 197, 94))
-            ]
-            px = mx + 200
-            for p_id, p_title, p_col in presets:
-                p_rect = pygame.Rect(px, preset_y, 160, 28)
-                self.schedule_preset_btn_rects[p_id] = p_rect
-                p_hover = p_rect.collidepoint(mouse_pos)
-                pygame.draw.rect(surface, p_col if p_hover else (30, 41, 59), p_rect, border_radius=5)
-                pygame.draw.rect(surface, p_col, p_rect, width=1, border_radius=5)
-                p_lbl = self.font_badge.render(p_title.split(' ')[0], True, (255, 255, 255))
-                surface.blit(p_lbl, (p_rect.centerx - p_lbl.get_width() // 2, p_rect.centery - p_lbl.get_height() // 2))
-                px += 170
+            grid_y = pr_banner.bottom + 12
+        else:
+            grid_y = tool_y + 46
 
-            # Explanation notes
-            note_y = preset_y + 38
-            note = self.font_body.render("• Workers follow their active hourly schedule. During WORK, farmers water unwatered tiles and harvest ripe crops.", True, COLOR_TEXT_MUTED)
-            surface.blit(note, (mx + 24, note_y))
-            note2 = self.font_body.render("• During SLEEP, villagers return to their family household. During LEISURE, they relax near Town Center.", True, COLOR_TEXT_MUTED)
-            surface.blit(note2, (mx + 24, note_y + 18))
+        # 3. Timetable Grid (24 boxes)
+        day_sched_title = f"{job_name} 24-Hour Timeline (Click hour slot to apply paint tool):"
+        surface.blit(self.font_sub.render(day_sched_title, True, (241, 245, 249)), (mx + 24, grid_y))
+
+        sched = schedule_manager.get_schedule_view(self.selected_schedule_job_id) if schedule_manager else list(DEFAULT_JOB_SCHEDULE)
+        grid_bar_y = grid_y + 24
+        avail_grid_w = self.modal_w - 48
+        cell_w = avail_grid_w // 24
+        cell_h = 54
+
+        self.schedule_hour_cell_rects = {}
+        for h in range(24):
+            cx = mx + 24 + h * cell_w
+            cell_rect = pygame.Rect(cx, grid_bar_y, cell_w - 2, cell_h)
+            self.schedule_hour_cell_rects[h] = cell_rect
+
+            act = sched[h]
+            act_col = SCHEDULE_TYPES.get(act, {}).get("color", (100, 116, 139))
+            is_current = (int(cur_hour) == h)
+
+            pygame.draw.rect(surface, act_col, cell_rect, border_radius=4)
+            if is_current:
+                pygame.draw.rect(surface, (250, 204, 21), cell_rect, width=2, border_radius=4)
+            else:
+                pygame.draw.rect(surface, (15, 23, 42), cell_rect, width=1, border_radius=4)
+
+            # Hour text
+            h_txt = self.font_badge.render(f"{h:02d}", True, (255, 255, 255))
+            surface.blit(h_txt, (cell_rect.centerx - h_txt.get_width() // 2, cell_rect.y + 5))
+
+            # Activity abbreviation
+            abbrev = act[:1]  # 'W', 'L', 'S', 'A', 'P'
+            a_txt = self.font_sub.render(abbrev, True, (255, 255, 255))
+            surface.blit(a_txt, (cell_rect.centerx - a_txt.get_width() // 2, cell_rect.y + 22))
+
+            if is_current:
+                pygame.draw.polygon(surface, (250, 204, 21), [
+                    (cell_rect.centerx, grid_bar_y - 2),
+                    (cell_rect.centerx - 4, grid_bar_y - 7),
+                    (cell_rect.centerx + 4, grid_bar_y - 7)
+                ])
+
+        # Presets & Quick Fill Section
+        preset_y = grid_bar_y + cell_h + 14
+        surface.blit(self.font_sub.render("Quick Schedule Presets:", True, COLOR_TEXT_MUTED), (mx + 24, preset_y + 4))
+
+        self.schedule_preset_btn_rects = {}
+        presets = [
+            ("standard", "Standard (10h Work, 8h Sleep)", (59, 130, 246)),
+            ("hardwork", "Hardworking (15h Work, 6h Sleep)", (245, 158, 11)),
+            ("relaxed", "Relaxed (7h Work, 9h Sleep)", (34, 197, 94))
+        ]
+        px = mx + 200
+        for p_id, p_title, p_col in presets:
+            p_rect = pygame.Rect(px, preset_y, 160, 28)
+            self.schedule_preset_btn_rects[p_id] = p_rect
+            p_hover = p_rect.collidepoint(mouse_pos)
+            pygame.draw.rect(surface, p_col if p_hover else (30, 41, 59), p_rect, border_radius=5)
+            pygame.draw.rect(surface, p_col, p_rect, width=1, border_radius=5)
+            p_lbl = self.font_badge.render(p_title.split(' ')[0], True, (255, 255, 255))
+            surface.blit(p_lbl, (p_rect.centerx - p_lbl.get_width() // 2, p_rect.centery - p_lbl.get_height() // 2))
+            px += 170
+
+        # Explanation notes
+        note_y = preset_y + 38
+        note = self.font_body.render("• Workers follow their active hourly schedule. During WORK, farmers water unwatered tiles and harvest ripe crops.", True, COLOR_TEXT_MUTED)
+        surface.blit(note, (mx + 24, note_y))
+        note2 = self.font_body.render("• During SLEEP, villagers return to their family household. During LEISURE, they relax near Town Center.", True, COLOR_TEXT_MUTED)
+        surface.blit(note2, (mx + 24, note_y + 18))
 
     def _draw_villagers_tab(self, surface, mx, cy, villager_manager, permit_manager, building_manager, furniture_manager=None, stockpile_manager=None, resources=None, servant_manager=None, production_system=None, day_cycle=None):
         if villager_manager:
@@ -3290,7 +3417,9 @@ class RaportUI:
             station_workers = workplace_job_workers((kind, obj), job_id, villager_manager)
             label = self.font_sub.render(station_name, True, (241, 245, 249))
             surface.blit(label, (card.x + 14, card.y + 8))
-            detail = self.font_body.render(f"{len(station_workers)} / {workplace_capacity((kind, obj))} workers", True, COLOR_TEXT_MUTED)
+            station_cap = workplace_capacity((kind, obj))
+            detail_txt = f"{len(station_workers)} workers" if station_cap is None else f"{len(station_workers)} / {station_cap} workers"
+            detail = self.font_body.render(detail_txt, True, COLOR_TEXT_MUTED)
             surface.blit(detail, (card.x + 14, card.y + 29))
             control_x = card.right - 134
             for delta, x in ((-1, control_x), (1, control_x + 100)):
@@ -3309,6 +3438,7 @@ class RaportUI:
     def _draw_workers_tab(self, surface, mx, cy, villager_manager, permit_manager, furniture_manager=None, schedule_manager=None, building_manager=None):
         mouse_pos = pygame.mouse.get_pos()
         self.universal_schedule_btn_rect = None
+        self.job_search_rect = None
 
         # =============================================================
         # VIEW 1: Dedicated Jobs Directory
@@ -3351,11 +3481,34 @@ class RaportUI:
                     surface.blit(summary, (self.universal_schedule_btn_rect.right - summary.get_width() - 12,
                                            self.universal_schedule_btn_rect.centery - summary.get_height() // 2))
 
-            y_cur = cy + 86
+            # Job search box — type to filter the directory instead of scrolling
+            search_y = cy + 84
+            self.job_search_rect = pygame.Rect(mx + 24, search_y, 320, 30)
+            s_hover = self.job_search_rect.collidepoint(mouse_pos)
+            pygame.draw.rect(surface, (24, 34, 52) if not self.job_search_active else (15, 23, 42), self.job_search_rect, border_radius=6)
+            pygame.draw.rect(surface, (56, 189, 248) if (self.job_search_active or s_hover) else (71, 85, 105), self.job_search_rect, width=1, border_radius=6)
+            search_label = self.job_search_text if self.job_search_text else "Search jobs..."
+            label_col = (241, 245, 249) if self.job_search_text else COLOR_TEXT_MUTED
+            search_surface = self.font_body.render(search_label + ("_" if self.job_search_active else ""), True, label_col)
+            surface.blit(search_surface, (self.job_search_rect.x + 10, self.job_search_rect.centery - search_surface.get_height() // 2))
+            if self.job_search_text:
+                clear_lbl = self.font_badge.render("ESC clear", True, COLOR_TEXT_MUTED)
+                surface.blit(clear_lbl, (self.job_search_rect.right - clear_lbl.get_width() - 10, self.job_search_rect.centery - clear_lbl.get_height() // 2))
+
+            query = self.job_search_text.strip().lower()
+            visible_jobs = [
+                (job_id, job_cfg) for job_id, job_cfg in DEDICATED_JOBS.items()
+                if not query or query in (job_cfg.get("name", "") + " " + job_cfg.get("desc", "") + " " + job_id).lower()
+            ]
+            if query:
+                match_lbl = self.font_badge.render(f"{len(visible_jobs)} match(es)", True, COLOR_TEXT_MUTED)
+                surface.blit(match_lbl, (self.job_search_rect.right + 12, self.job_search_rect.centery - match_lbl.get_height() // 2))
+
+            y_cur = cy + 124
             screen_h = surface.get_height()
             content_bottom = (screen_h + self.modal_h) // 2 - 14
             self.jobs_viewport_rect = pygame.Rect(mx + 16, y_cur, self.modal_w - 32, max(0, content_bottom - y_cur))
-            jobs_content_h = len(DEDICATED_JOBS) * (58 + 8)
+            jobs_content_h = len(visible_jobs) * (58 + 8)
             self.jobs_max_scroll = max(0, jobs_content_h - self.jobs_viewport_rect.height)
             self.jobs_scroll_y = max(0, min(self.jobs_scroll_y, self.jobs_max_scroll))
             y_cur -= self.jobs_scroll_y
@@ -3371,7 +3524,7 @@ class RaportUI:
 
             old_clip = surface.get_clip()
             surface.set_clip(self.jobs_viewport_rect)
-            for job_id, job_cfg in DEDICATED_JOBS.items():
+            for job_id, job_cfg in visible_jobs:
                 card_h = 58
                 card_rect = pygame.Rect(mx + 24, y_cur, self.modal_w - 48, card_h)
                 is_wip = job_cfg.get("wip", False)
@@ -3410,14 +3563,14 @@ class RaportUI:
                         stat_str = stat_str[:72] + "..."
                     surface.blit(self.font_body.render(stat_str, True, (34, 197, 94) if unassigned_count == 0 else (245, 158, 11)), (card_rect.x + 46, card_rect.y + 30))
 
-                    # Action Buttons: Workstations, roster and schedule.
+                    # Action Buttons: Workstations & roster (per-job schedules removed —
+                    # the Universal Schedule button above edits every job at once)
                     btn_w = 104
                     btn_h = 30
                     btn_y = card_rect.y + 14
                     action_gap = 6
-                    es_rect = pygame.Rect(card_rect.right - 14 - btn_w, btn_y, btn_w, btn_h)
-                    vw_rect = pygame.Rect(es_rect.x - action_gap - btn_w, btn_y, btn_w, btn_h)
-                    ws_rect = pygame.Rect(vw_rect.x - action_gap - btn_w, btn_y, btn_w, btn_h)
+                    ws_rect = pygame.Rect(card_rect.right - 14 - btn_w, btn_y, btn_w, btn_h)
+                    vw_rect = pygame.Rect(ws_rect.x - action_gap - btn_w, btn_y, btn_w, btn_h)
                     self.job_workstation_btn_rects[job_id] = ws_rect
                     ws_hover = ws_rect.collidepoint(mouse_pos)
                     pygame.draw.rect(surface, (14, 116, 144) if ws_hover else (15, 23, 42), ws_rect, border_radius=6)
@@ -3433,15 +3586,10 @@ class RaportUI:
                     vw_lbl = self.font_badge.render("View Workers", True, (255, 255, 255))
                     surface.blit(vw_lbl, (vw_rect.centerx - vw_lbl.get_width() // 2, vw_rect.centery - vw_lbl.get_height() // 2))
 
-                    # 2. Edit Schedule Button
-                    self.job_schedule_btn_rects[job_id] = es_rect
-                    es_hover = es_rect.collidepoint(mouse_pos)
-                    pygame.draw.rect(surface, (14, 116, 144) if es_hover else (15, 23, 42), es_rect, border_radius=6)
-                    pygame.draw.rect(surface, (56, 189, 248), es_rect, width=1, border_radius=6)
-                    es_lbl = self.font_badge.render("Edit Schedule", True, (255, 255, 255))
-                    surface.blit(es_lbl, (es_rect.centerx - es_lbl.get_width() // 2, es_rect.centery - es_lbl.get_height() // 2))
-
                 y_cur += card_h + 8
+            if not visible_jobs:
+                none_lbl = self.font_body.render("No jobs match your search.", True, COLOR_TEXT_MUTED)
+                surface.blit(none_lbl, (mx + 40, y_cur + 8))
             surface.set_clip(old_clip)
             if self.jobs_max_scroll > 0:
                 track = pygame.Rect(self.jobs_viewport_rect.right - 5, self.jobs_viewport_rect.y, 3, self.jobs_viewport_rect.height)

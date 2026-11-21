@@ -108,6 +108,7 @@ class Servant:
         self.target_grant_fam_id = None
         self.target_grant_res = None
         self.target_grant_amount = 0
+        self.target_grant_treasury = None
 
         # Market Restock hauling targets (Agent 2)
         self.target_restock_order = None
@@ -564,7 +565,8 @@ class Servant:
                 # Arrived at loose item! Pick it up
                 res_type = self.target_loose_stack.resource_type
                 treasury_chest = None
-                if res_type in MARKET_CURRENCY_DENOMINATIONS:
+                from game.systems.currency import canonical_denomination, CURRENCY_DENOMINATIONS
+                if canonical_denomination(res_type) in CURRENCY_DENOMINATIONS:
                     from game.systems.lord_treasury import LordTreasurySystem
                     treasury_chest = LordTreasurySystem.get_chest(furniture_manager)
                 avail_dest = (
@@ -577,7 +579,10 @@ class Servant:
                     self._reset_task()
                     return
 
-                pick_amt = min(SERVANT_CARRY_CAPACITY, self.target_loose_stack.amount)
+                pick_amt = min(
+                    SERVANT_CARRY_CAPACITY,
+                    int(getattr(self.target_loose_stack, "available_amount", self.target_loose_stack.amount)),
+                )
                 actual = stockpile_manager.take_from_stack(self.target_loose_stack, pick_amt)
                 if actual > 0:
                     self.carried_res = res_type
@@ -643,16 +648,31 @@ class Servant:
                     self._reset_task()
 
         elif self.state == "GRANT_FETCH":
-            if not self.target_grant_stack or self.target_grant_stack not in stockpile_manager.stacks or self.target_grant_stack.amount <= 0:
+            treasury_chest = getattr(self, "target_grant_treasury", None)
+            grant_stack = self.target_grant_stack
+            if treasury_chest is not None:
+                if not getattr(treasury_chest, "inventory", None):
+                    self._reset_task()
+                    return
+            elif not grant_stack or grant_stack not in stockpile_manager.stacks or grant_stack.amount <= 0:
                 self._reset_task()
                 return
 
             all_vils = villager_manager.get_all_villagers() if villager_manager else []
             all_ents = list(all_servants or []) + all_vils
             if self._move_towards(self.target_grant_pos[0], self.target_grant_pos[1], dt, arrival_dist=24, all_servants=all_servants, player=player, building_manager=building_manager, all_entities=all_ents, furniture_manager=furniture_manager, exclusive_target=False):
-                actual = stockpile_manager.take_from_stack(self.target_grant_stack, self.target_grant_amount)
+                if treasury_chest is not None:
+                    from game.systems.currency import canonical_denomination
+                    from game.systems.wealth_system import VillageWealthSystem
+                    denom = canonical_denomination(self.target_grant_res) or self.target_grant_res
+                    actual = treasury_chest.take_item(denom, self.target_grant_amount)
+                    if actual > 0:
+                        VillageWealthSystem.mark_dirty()
+                else:
+                    actual = stockpile_manager.take_from_stack(grant_stack, self.target_grant_amount)
+                    if actual > 0:
+                        stockpile_manager.refresh_stacks(resources, permit_manager)
                 if actual > 0:
-                    stockpile_manager.refresh_stacks(resources, permit_manager)
                     self.carried_res = self.target_grant_res
                     self.carried_amount = actual
                     reg = GlobalPathRegistry.get_instance()
@@ -821,7 +841,67 @@ class Servant:
                 remaining = order["amount"] - order.get("in_transit", 0) - order.get("delivered", 0)
                 if remaining > 0:
                     item_type = order["item_type"]
-                    # Find stack in Landlord's stockpile with available capacity
+                    fam_id = order["family_id"]
+
+                    # Determine family destination (shared by all sources)
+                    dest_pos = None
+                    if furniture_manager:
+                        chest = furniture_manager.get_storage_for_family(fam_id, building_manager=building_manager, villager_manager=villager_manager, permit_manager=permit_manager)
+                        if chest:
+                            dest_pos = chest.get_world_pos(TILE_SIZE)
+                    if not dest_pos and villager_manager:
+                        fam = villager_manager.get_family_by_id(fam_id)
+                        if fam and fam.assigned_permit_id:
+                            hp = next((p for p in permit_manager.permits if p.id == fam.assigned_permit_id), None)
+                            if hp:
+                                dest_pos = ((hp.grid_x + hp.tiles_w / 2.0) * TILE_SIZE, (hp.grid_y + hp.tiles_h / 2.0) * TILE_SIZE)
+                    if not dest_pos:
+                        dest_pos = (player.x + 40, player.y + 40)
+
+                    worker_idx = all_servants.index(self) if (all_servants and self in all_servants) else 0
+                    offsets = [(0, -10), (0, 10), (-10, 0), (10, 0)]
+                    ox, oy = offsets[worker_idx % len(offsets)]
+
+                    # Clear old path & reservation before switching task
+                    reg = GlobalPathRegistry.get_instance()
+                    reg.release_reservation(self.id)
+                    self.current_path = []
+                    self.path_index = 0
+                    self.path_target = None
+                    self.path_target_tile = None
+                    self.is_waiting_for_path = False
+                    self.wait_timer = 0.0
+                    self.repath_cooldown = 0.0
+
+                    # Source A: coin grants are fetched from the Lord Treasury Chest
+                    from game.systems.currency import canonical_denomination
+                    from game.systems.lord_treasury import LordTreasurySystem
+                    denom = canonical_denomination(item_type)
+                    if denom and furniture_manager is not None:
+                        treasury_chest = LordTreasurySystem.get_chest(furniture_manager)
+                        treasury_avail = LordTreasurySystem.wallet(furniture_manager).get(denom, 0) if treasury_chest else 0
+                        amt_to_take = min(SERVANT_CARRY_CAPACITY, remaining, treasury_avail)
+                        if amt_to_take > 0:
+                            order["in_transit"] = order.get("in_transit", 0) + amt_to_take
+                            self.target_grant_order = order
+                            self.target_grant_stack = None
+                            self.target_grant_treasury = treasury_chest
+                            tx, ty = treasury_chest.get_world_pos(TILE_SIZE)
+                            self.target_grant_pos = (tx + ox, ty + oy)
+                            self.target_grant_dest = dest_pos
+                            self.target_grant_fam_id = fam_id
+                            self.target_grant_res = item_type
+                            self.target_grant_amount = amt_to_take
+                            self.state = "GRANT_FETCH"
+                            fam_name = fam_id
+                            if villager_manager:
+                                fam_obj = villager_manager.get_family_by_id(fam_id)
+                                if fam_obj is not None:
+                                    fam_name = f"The {fam_obj.surname} Family"
+                            self.say(f"Fetching {amt_to_take} {denom} from the treasury for {fam_name}, Lord!")
+                            return True
+
+                    # Source B: find stack in Landlord's stockpile with available capacity
                     storage_stack = None
                     # Pass 1: exact match
                     for s in stockpile_manager.stacks:
@@ -837,22 +917,6 @@ class Servant:
                                     storage_stack = s
                                     break
                     if storage_stack:
-                        # Determine family destination
-                        fam_id = order["family_id"]
-                        dest_pos = None
-                        if furniture_manager:
-                            chest = furniture_manager.get_storage_for_family(fam_id, building_manager=building_manager, villager_manager=villager_manager, permit_manager=permit_manager)
-                            if chest:
-                                dest_pos = chest.get_world_pos(TILE_SIZE)
-                        if not dest_pos and villager_manager:
-                            fam = villager_manager.get_family_by_id(fam_id)
-                            if fam and fam.assigned_permit_id:
-                                hp = next((p for p in permit_manager.permits if p.id == fam.assigned_permit_id), None)
-                                if hp:
-                                    dest_pos = ((hp.grid_x + hp.tiles_w / 2.0) * TILE_SIZE, (hp.grid_y + hp.tiles_h / 2.0) * TILE_SIZE)
-                        if not dest_pos:
-                            dest_pos = (player.x + 40, player.y + 40)
-
                         amt_to_take = min(SERVANT_CARRY_CAPACITY, remaining, getattr(storage_stack, "available_amount", storage_stack.amount))
                         if amt_to_take <= 0:
                             continue
@@ -860,23 +924,9 @@ class Servant:
                         if hasattr(storage_stack, "reserve"):
                             storage_stack.reserve(amt_to_take)
 
-                        # Clear old path & reservation before switching task
-                        reg = GlobalPathRegistry.get_instance()
-                        reg.release_reservation(self.id)
-                        self.current_path = []
-                        self.path_index = 0
-                        self.path_target = None
-                        self.path_target_tile = None
-                        self.is_waiting_for_path = False
-                        self.wait_timer = 0.0
-                        self.repath_cooldown = 0.0
-
-                        worker_idx = all_servants.index(self) if (all_servants and self in all_servants) else 0
-                        offsets = [(0, -10), (0, 10), (-10, 0), (10, 0)]
-                        ox, oy = offsets[worker_idx % len(offsets)]
-
                         self.target_grant_order = order
                         self.target_grant_stack = storage_stack
+                        self.target_grant_treasury = None
                         self.target_grant_pos = ((storage_stack.grid_x + 0.5) * TILE_SIZE + ox, (storage_stack.grid_y + 0.5) * TILE_SIZE + oy)
                         self.target_grant_dest = dest_pos
                         self.target_grant_fam_id = fam_id
@@ -994,6 +1044,27 @@ class Servant:
             # 2. Hauling tasks at this priority: Haul loose ground items into storage (Primary)
             #    or assist supplying construction sites ONLY if no loose items exist
             if self.work_priorities.get("Hauling", 0) == p_level:
+                # A0. Coin stacks stored inside storage permits are not "loose", so they
+                # never reach the Lord's Treasury Chest unless we haul them explicitly.
+                from game.systems.currency import CURRENCY_DENOMINATIONS, canonical_denomination
+                from game.systems.lord_treasury import LordTreasurySystem
+                treasury_chest = LordTreasurySystem.get_chest(furniture_manager)
+                if treasury_chest:
+                    for stack in stockpile_manager.stacks:
+                        if (
+                            getattr(stack, "owner_type", "landlord") != "landlord"
+                            or canonical_denomination(getattr(stack, "resource_type", "")) not in CURRENCY_DENOMINATIONS
+                            or int(getattr(stack, "available_amount", stack.amount)) <= 0
+                            or not stockpile_manager.is_tile_in_storage(stack.grid_x, stack.grid_y, permit_manager)
+                            or stack in claimed_loose_stacks
+                        ):
+                            continue
+                        self.target_loose_stack = stack
+                        self.target_treasury_chest = treasury_chest
+                        self.state = "HAULING_LOOSE_FETCH"
+                        self.say(f"Hauling {stack.resource_type} to the Lord's Treasury Chest!")
+                        return True
+
                 # A. Hauling loose items on ground into active storage
                 if loose_stacks:
                     for stack in loose_stacks:
@@ -1002,7 +1073,7 @@ class Servant:
                             continue
 
                         treasury_chest = None
-                        if stack.resource_type in MARKET_CURRENCY_DENOMINATIONS:
+                        if canonical_denomination(stack.resource_type) in CURRENCY_DENOMINATIONS:
                             from game.systems.lord_treasury import LordTreasurySystem
                             treasury_chest = LordTreasurySystem.get_chest(furniture_manager)
                         dest_tile = (
@@ -1150,6 +1221,7 @@ class Servant:
         self.target_grant_fam_id = None
         self.target_grant_res = None
         self.target_grant_amount = 0
+        self.target_grant_treasury = None
         self.nav_target = None
         self.door_waypoints = []
 
@@ -1314,10 +1386,14 @@ class Servant:
         sub_vx = vx / steps
         sub_vy = vy / steps
 
+        from game.world.island import is_land_world
         for _ in range(steps):
             step_ox, step_oy = self.x, self.y
             self.x += sub_vx
             self.y += sub_vy
+            if not is_land_world(self.x, self.y, TILE_SIZE):
+                self.x, self.y = step_ox, step_oy
+                break
             if building_manager:
                 self.x, self.y = building_manager.resolve_collision(self.x, self.y, self.radius, TILE_SIZE, old_x=step_ox, old_y=step_oy)
 

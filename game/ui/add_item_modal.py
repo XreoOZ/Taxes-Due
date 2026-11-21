@@ -1,10 +1,9 @@
 """
 Add Item Interactive Modal Dialog (AGENT 2)
-Allows the developer/player to:
-1. Select an item to add from all registered items (with procedural vector icons).
-2. Configure the exact quantity to add with stepper controls and presets.
-3. Physically deposit the items into storage (Chest or Storage Permit Stockpile).
-4. Automatically drops items physically on the ground near storage when full.
+Bulk grant utility: every item row has its own quantity field — type the
+amounts you want, then press ADD ALL once. Items with qty > 0 are physically
+deposited into storage (Chest or Storage Permit Stockpile) and overflow drops
+on the ground near storage when full.
 Zero hardcoding, config-driven.
 """
 
@@ -23,12 +22,16 @@ from game.systems.cheat_system import (
     spawn_item_physically
 )
 
+MAX_QTY_PER_ITEM = 5000
+MAX_QTY_DIGITS = 4
+
+
 class AddItemModal:
     def __init__(self):
         self.is_open = False
         self.target_storage = None
-        self.modal_w = 640
-        self.modal_h = 520
+        self.modal_w = 720
+        self.modal_h = 600
 
         self.font_title = None
         self.font_sub = None
@@ -38,16 +41,23 @@ class AddItemModal:
         self.font_qty = None
 
         self.items = []
-        self.selected_item = "Potato"
-        self.quantity = 50
         self.category_filter = "ALL"
+
+        # Bulk-entry state: item_name -> int quantity
+        self.qty_inputs = {}
+        self.editing_item = None      # item_name currently being typed into
+        self.editing_text = ""        # raw text buffer while editing
+
+        # Search filter
+        self.search_text = ""
+        self.search_active = False
 
         self.close_btn_rect = None
         self.add_btn_rect = None
         self.cancel_btn_rect = None
+        self.search_rect = None
         self.category_btn_rects = {}
-        self.item_btn_rects = {}
-        self.qty_btn_rects = {}
+        self.row_rects = {}           # item_name -> (row_rect, qty_rect)
 
         self.scroll_offset = 0
         self.status_message = None
@@ -60,16 +70,18 @@ class AddItemModal:
             self.font_body = pygame.font.SysFont("Segoe UI", 11)
             self.font_badge = pygame.font.SysFont("Segoe UI", 10, bold=True)
             self.font_btn = pygame.font.SysFont("Segoe UI", 13, bold=True)
-            self.font_qty = pygame.font.SysFont("Segoe UI", 22, bold=True)
+            self.font_qty = pygame.font.SysFont("Segoe UI", 16, bold=True)
 
     def open(self, target_storage=None):
-        """Opens the modal and initializes items and selected state"""
+        """Opens the modal and initializes items and entry state"""
         self.is_open = True
         self.target_storage = target_storage
         self.items = get_registered_item_types()
-        if not self.selected_item or self.selected_item not in self.items:
-            self.selected_item = self.items[0] if self.items else "Potato"
-        self.quantity = 50
+        self.qty_inputs = {}
+        self.editing_item = None
+        self.editing_text = ""
+        self.search_text = ""
+        self.search_active = False
         self.category_filter = "ALL"
         self.scroll_offset = 0
         self.status_message = None
@@ -78,6 +90,9 @@ class AddItemModal:
     def close(self):
         self.is_open = False
         self.target_storage = None
+        self.editing_item = None
+        self.editing_text = ""
+        self.search_active = False
 
     def _get_item_category(self, item_name):
         cat = ITEM_CATEGORIES.get(item_name)
@@ -92,23 +107,80 @@ class AddItemModal:
                 return v
         return "RESOURCE"
 
-    def handle_event(self, event, resources=None, stockpile_manager=None, permit_manager=None, building_manager=None):
+    def _filtered_items(self):
+        query = self.search_text.strip().lower()
+        result = []
+        for it in self.items:
+            cat = self._get_item_category(it)
+            if self.category_filter != "ALL" and cat.upper() != self.category_filter:
+                continue
+            if query and query not in it.lower().replace("_", " "):
+                continue
+            result.append(it)
+        return result
+
+    def _pending_entries(self):
+        return [(name, qty) for name, qty in self.qty_inputs.items() if qty > 0]
+
+    def handle_event(self, event, resources=None, stockpile_manager=None, permit_manager=None, building_manager=None, furniture_manager=None):
         """
-        Processes modal interactions: item selection, quantity adjustment, and physical addition.
+        Processes modal interactions: qty typing, search, filters, bulk add.
         Returns (success: bool, message: str) on action, or None.
         """
         if not self.is_open:
             return None
 
         if event.type == pygame.KEYDOWN:
+            if self.editing_item is not None:
+                if event.key == pygame.K_BACKSPACE:
+                    self.editing_text = self.editing_text[:-1]
+                    return None
+                if event.key in (pygame.K_RETURN, pygame.K_KP_ENTER):
+                    self._commit_editing()
+                    self._focus_next_item(1)
+                    return None
+                if event.key == pygame.K_TAB:
+                    self._commit_editing()
+                    self._focus_next_item(1 if not pygame.key.get_pressed()[pygame.K_LSHIFT] else -1)
+                    return None
+                if event.key == pygame.K_ESCAPE:
+                    self.editing_item = None
+                    self.editing_text = ""
+                    return None
+                if event.unicode.isdigit() and len(self.editing_text) < MAX_QTY_DIGITS:
+                    self.editing_text += event.unicode
+                return None
+
+            if self.search_active:
+                if event.key == pygame.K_BACKSPACE:
+                    self.search_text = self.search_text[:-1]
+                    self.scroll_offset = 0
+                    return None
+                if event.key in (pygame.K_RETURN, pygame.K_KP_ENTER, pygame.K_ESCAPE):
+                    self.search_active = False
+                    return None
+                if event.unicode and len(self.search_text) < 32:
+                    self.search_text += event.unicode
+                    self.scroll_offset = 0
+                return None
+
             if event.key == pygame.K_ESCAPE:
                 self.close()
                 return (False, "Cancelled item addition.")
             elif event.key == pygame.K_RETURN:
-                return self._trigger_add(resources, stockpile_manager, permit_manager, building_manager)
+                return self._trigger_add_all(resources, stockpile_manager, permit_manager, building_manager, furniture_manager)
 
         elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             m_pos = event.pos
+
+            # Clicking outside the focused qty box commits it
+            clicked_qty = False
+            for item_name, (_, qty_rect) in self.row_rects.items():
+                if qty_rect.collidepoint(m_pos):
+                    clicked_qty = True
+                    break
+            if self.editing_item is not None and not clicked_qty:
+                self._commit_editing()
 
             # 1. Close Button [X] or Cancel Button
             if (self.close_btn_rect and self.close_btn_rect.collidepoint(m_pos)) or \
@@ -116,68 +188,106 @@ class AddItemModal:
                 self.close()
                 return (False, "Cancelled item addition.")
 
-            # 2. Category Filter Tabs
+            # 2. Search box focus
+            if self.search_rect and self.search_rect.collidepoint(m_pos):
+                self.search_active = True
+                self.editing_item = None
+                self.editing_text = ""
+                return None
+            if self.search_active:
+                self.search_active = False
+
+            # 3. Category Filter Tabs
             for cat_id, rect in self.category_btn_rects.items():
                 if rect.collidepoint(m_pos):
                     self.category_filter = cat_id
                     self.scroll_offset = 0
                     return None
 
-            # 3. Item Selection Cards
-            for item_name, rect in self.item_btn_rects.items():
-                if rect.collidepoint(m_pos):
-                    self.selected_item = item_name
+            # 4. Row quantity fields — click to type an amount
+            for item_name, (row_rect, qty_rect) in self.row_rects.items():
+                if qty_rect.collidepoint(m_pos):
+                    self.editing_item = item_name
+                    self.editing_text = str(self.qty_inputs.get(item_name, 0)) if self.qty_inputs.get(item_name, 0) > 0 else ""
+                    self.search_active = False
+                    return None
+                if row_rect.collidepoint(m_pos):
+                    # Clicking the row body focuses its qty field too
+                    self.editing_item = item_name
+                    self.editing_text = str(self.qty_inputs.get(item_name, 0)) if self.qty_inputs.get(item_name, 0) > 0 else ""
+                    self.search_active = False
                     return None
 
-            # 4. Quantity Adjustments
-            for action_key, rect in self.qty_btn_rects.items():
-                if rect.collidepoint(m_pos):
-                    if action_key == "dec_10":
-                        self.quantity = max(1, self.quantity - 10)
-                    elif action_key == "dec_1":
-                        self.quantity = max(1, self.quantity - 1)
-                    elif action_key == "inc_1":
-                        self.quantity = min(5000, self.quantity + 1)
-                    elif action_key == "inc_10":
-                        self.quantity = min(5000, self.quantity + 10)
-                    elif action_key == "inc_50":
-                        self.quantity = min(5000, self.quantity + 50)
-                    elif action_key == "inc_100":
-                        self.quantity = min(5000, self.quantity + 100)
-                    elif action_key.startswith("set_"):
-                        val = int(action_key.split("_")[1])
-                        self.quantity = val
-                    return None
-
-            # 5. Add Button
+            # 5. Add All Button
             if self.add_btn_rect and self.add_btn_rect.collidepoint(m_pos):
-                return self._trigger_add(resources, stockpile_manager, permit_manager, building_manager)
+                return self._trigger_add_all(resources, stockpile_manager, permit_manager, building_manager, furniture_manager)
 
         elif event.type == pygame.MOUSEWHEEL:
-            if event.y > 0:
-                self.scroll_offset = max(0, self.scroll_offset - 1)
-            elif event.y < 0:
-                self.scroll_offset += 1
+            if self.modal_w:
+                self.scroll_offset = max(0, self.scroll_offset - event.y)
 
         return None
 
-    def _trigger_add(self, resources, stockpile_manager, permit_manager, building_manager):
-        if not self.selected_item:
-            return (False, "Please select an item first.")
-        if self.quantity <= 0:
-            return (False, "Quantity must be greater than zero.")
+    def _commit_editing(self):
+        if self.editing_item is None:
+            return
+        text = self.editing_text.strip()
+        qty = int(text) if text.isdigit() else 0
+        qty = min(MAX_QTY_PER_ITEM, max(0, qty))
+        if qty > 0:
+            self.qty_inputs[self.editing_item] = qty
+        else:
+            self.qty_inputs.pop(self.editing_item, None)
 
-        success, msg = spawn_item_physically(
-            item_name=self.selected_item,
-            amount=self.quantity,
-            target_storage=self.target_storage,
-            stockpile_manager=stockpile_manager,
-            permit_manager=permit_manager,
-            resources=resources,
-            building_manager=building_manager
-        )
+    def _focus_next_item(self, direction):
+        visible = self._filtered_items()
+        if not visible:
+            self.editing_item = None
+            self.editing_text = ""
+            return
+        try:
+            idx = visible.index(self.editing_item)
+        except ValueError:
+            idx = 0 if direction > 0 else len(visible) - 1
+        nxt = visible[(idx + direction) % len(visible)]
+        self.editing_item = nxt
+        qty = self.qty_inputs.get(nxt, 0)
+        self.editing_text = str(qty) if qty > 0 else ""
+
+    def _trigger_add_all(self, resources, stockpile_manager, permit_manager, building_manager, furniture_manager=None):
+        pending = self._pending_entries()
+        if not pending:
+            return (False, "Type quantities next to the items you want first.")
+
+        added = 0
+        failed = 0
+        messages = []
+        for item_name, qty in pending:
+            success, msg = spawn_item_physically(
+                item_name=item_name,
+                amount=qty,
+                target_storage=self.target_storage,
+                stockpile_manager=stockpile_manager,
+                permit_manager=permit_manager,
+                resources=resources,
+                building_manager=building_manager,
+                furniture_manager=furniture_manager
+            )
+            if success:
+                added += 1
+            else:
+                failed += 1
+                if len(messages) < 3:
+                    messages.append(msg)
+
+        self.qty_inputs = {}
         self.close()
-        return (success, msg)
+
+        total_qty = sum(qty for _, qty in pending)
+        if failed == 0:
+            return (True, f"Added {total_qty} items across {added} types to storage.")
+        detail = f" ({'; '.join(messages)})" if messages else ""
+        return (added > 0, f"Added {total_qty} items across {added} types; {failed} failed{detail}.")
 
     def draw(self, surface, permit_manager=None, stockpile_manager=None):
         if not self.is_open:
@@ -205,7 +315,7 @@ class AddItemModal:
         pygame.draw.rect(surface, (30, 41, 59), header_rect, border_top_left_radius=10, border_top_right_radius=10)
         pygame.draw.line(surface, (51, 65, 85), (mx, my + 48), (mx + self.modal_w, my + 48), 1)
 
-        title_surf = self.font_title.render("ADD ITEM CHEAT (DEVELOPER UTILITY)", True, (251, 191, 36))
+        title_surf = self.font_title.render("ADD ITEMS (BULK GRANT)", True, (251, 191, 36))
         surface.blit(title_surf, (mx + 20, my + 13))
 
         # Close [X] Button
@@ -239,21 +349,26 @@ class AddItemModal:
         d_surf = self.font_sub.render(dest_text, True, dest_col)
         surface.blit(d_surf, (dest_rect.x + 12, dest_rect.centery - d_surf.get_height() // 2))
 
-        # 5. Category Filter Row
-        cat_y = dest_y + 40
+        # 5. Search + Category Filter Row
+        filter_y = dest_y + 40
+        self.search_rect = pygame.Rect(mx + 20, filter_y, 220, 26)
+        s_hov = self.search_rect.collidepoint(m_pos)
+        pygame.draw.rect(surface, (15, 23, 42) if not self.search_active else (10, 15, 29), self.search_rect, border_radius=5)
+        pygame.draw.rect(surface, (56, 189, 248) if (self.search_active or s_hov) else (71, 85, 105), self.search_rect, width=1, border_radius=5)
+        search_label = self.search_text if self.search_text else "Search items..."
+        search_col = (241, 245, 249) if self.search_text else COLOR_TEXT_MUTED
+        search_surf = self.font_body.render(search_label + ("_" if self.search_active else ""), True, search_col)
+        surface.blit(search_surf, (self.search_rect.x + 10, self.search_rect.centery - search_surf.get_height() // 2))
+
+        cat_x = self.search_rect.right + 12
         categories = ["ALL"] + list(dict.fromkeys(
             self._get_item_category(item).upper() for item in self.items
         ))
-        cat_x = mx + 20
         self.category_btn_rects.clear()
 
-        cat_lbl = self.font_body.render("Filter:", True, (148, 163, 184))
-        surface.blit(cat_lbl, (cat_x, cat_y + 4))
-        cat_x += 42
-
         for cat in categories:
-            btn_w = 68
-            cat_rect = pygame.Rect(cat_x, cat_y, btn_w, 24)
+            btn_w = 64
+            cat_rect = pygame.Rect(cat_x, filter_y, btn_w, 26)
             self.category_btn_rects[cat] = cat_rect
             is_active = (self.category_filter == cat)
             is_hov = cat_rect.collidepoint(m_pos)
@@ -265,168 +380,109 @@ class AddItemModal:
 
             lbl = self.font_badge.render(cat.capitalize(), True, (255, 255, 255) if is_active else (203, 213, 225))
             surface.blit(lbl, (cat_rect.centerx - lbl.get_width() // 2, cat_rect.centery - lbl.get_height() // 2))
-            cat_x += btn_w + 6
+            cat_x += btn_w + 5
 
-        # 6. Item Grid (Select Item)
-        grid_y = cat_y + 32
-        grid_h = 190
-        grid_rect = pygame.Rect(mx + 20, grid_y, self.modal_w - 40, grid_h)
-        pygame.draw.rect(surface, (10, 15, 29), grid_rect, border_radius=6)
-        pygame.draw.rect(surface, (51, 65, 85), grid_rect, width=1, border_radius=6)
+        # 6. Item List (bulk quantity rows)
+        list_y = filter_y + 36
+        list_h = self.modal_h - (list_y - my) - 96
+        list_rect = pygame.Rect(mx + 20, list_y, self.modal_w - 40, list_h)
+        pygame.draw.rect(surface, (10, 15, 29), list_rect, border_radius=6)
+        pygame.draw.rect(surface, (51, 65, 85), list_rect, width=1, border_radius=6)
 
-        # Filter items
-        filtered_items = []
-        for it in self.items:
-            cat = self._get_item_category(it)
-            if self.category_filter == "ALL" or cat.upper() == self.category_filter:
-                filtered_items.append(it)
-
-        # Render items in 4 columns
-        cols = 4
-        card_w = (grid_rect.width - 20) // cols
-        card_h = 36
-        self.item_btn_rects.clear()
-
-        # Handle max visible
-        visible_rows = 4
-        max_scroll = max(0, ((len(filtered_items) + cols - 1) // cols) - visible_rows)
+        filtered_items = self._filtered_items()
+        row_h = 30
+        rows_visible = max(1, list_rect.height // row_h)
+        max_scroll = max(0, len(filtered_items) - rows_visible)
         self.scroll_offset = min(self.scroll_offset, max_scroll)
 
-        start_idx = self.scroll_offset * cols
-        end_idx = min(len(filtered_items), start_idx + (visible_rows * cols))
+        self.row_rects.clear()
+        clip = surface.get_clip()
+        surface.set_clip(list_rect)
+        for row_idx in range(self.scroll_offset, min(len(filtered_items), self.scroll_offset + rows_visible + 1)):
+            item_name = filtered_items[row_idx]
+            ry = list_rect.y + 6 + (row_idx - self.scroll_offset) * row_h
+            row_rect = pygame.Rect(list_rect.x + 6, ry, list_rect.width - 90, row_h - 4)
+            qty_rect = pygame.Rect(list_rect.right - 76, ry, 70, row_h - 4)
+            self.row_rects[item_name] = (row_rect, qty_rect)
 
-        for idx in range(start_idx, end_idx):
-            item_name = filtered_items[idx]
-            rel_idx = idx - start_idx
-            row = rel_idx // cols
-            col = rel_idx % cols
+            is_editing = (self.editing_item == item_name)
+            has_qty = self.qty_inputs.get(item_name, 0) > 0
+            row_hov = row_rect.collidepoint(m_pos) or qty_rect.collidepoint(m_pos)
 
-            ix = grid_rect.x + 8 + (col * (card_w + 3))
-            iy = grid_rect.y + 8 + (row * (card_h + 8))
-            card_r = pygame.Rect(ix, iy, card_w, card_h)
-            self.item_btn_rects[item_name] = card_r
+            row_bg = (30, 58, 138) if is_editing else ((30, 41, 59) if row_hov else (15, 23, 42))
+            row_border = (250, 204, 21) if is_editing else ((56, 189, 248) if row_hov else (51, 65, 85))
+            pygame.draw.rect(surface, row_bg, row_rect, border_radius=5)
+            pygame.draw.rect(surface, row_border, row_rect, width=2 if is_editing else 1, border_radius=5)
 
-            is_sel = (self.selected_item == item_name)
-            is_hov = card_r.collidepoint(m_pos)
-
-            bg = (30, 58, 138) if is_sel else ((30, 41, 59) if is_hov else (15, 23, 42))
-            border = (250, 204, 21) if is_sel else ((56, 189, 248) if is_hov else (51, 65, 85))
-            bw = 2 if is_sel else 1
-
-            pygame.draw.rect(surface, bg, card_r, border_radius=6)
-            pygame.draw.rect(surface, border, card_r, width=bw, border_radius=6)
-
-            # Draw procedural vector item icon
-            icon_cx = card_r.x + 18
-            icon_cy = card_r.centery
-            draw_item_icon(surface, item_name, icon_cx, icon_cy, size=11)
-
-            # Draw Item Name
+            draw_item_icon(surface, item_name, row_rect.x + 16, row_rect.centery, size=11)
             display_name = item_name.replace("_", " ")
-            if len(display_name) > 13:
-                display_name = display_name[:11] + ".."
-            name_col = (254, 240, 138) if is_sel else ((255, 255, 255) if is_hov else (226, 232, 240))
+            if len(display_name) > 30:
+                display_name = display_name[:28] + ".."
+            name_col = (254, 240, 138) if has_qty else ((255, 255, 255) if row_hov else (226, 232, 240))
             name_surf = self.font_body.render(display_name, True, name_col)
-            surface.blit(name_surf, (icon_cx + 14, card_r.centery - name_surf.get_height() // 2))
+            surface.blit(name_surf, (row_rect.x + 30, row_rect.centery - name_surf.get_height() // 2))
 
-        # 7. Quantity Selector Section (JUMLAHNYA)
-        qty_y = grid_y + grid_h + 12
-        qty_box = pygame.Rect(mx + 20, qty_y, self.modal_w - 40, 80)
-        pygame.draw.rect(surface, (20, 29, 47), qty_box, border_radius=8)
-        pygame.draw.rect(surface, (51, 65, 85), qty_box, width=1, border_radius=8)
+            cat_tag = self._get_item_category(item_name)
+            if cat_tag and cat_tag != "RESOURCE":
+                cat_surf = self.font_badge.render(cat_tag[:12], True, COLOR_TEXT_MUTED)
+                surface.blit(cat_surf, (row_rect.right - cat_surf.get_width() - 8, row_rect.centery - cat_surf.get_height() // 2))
 
-        # Quantity Label
-        qlbl = self.font_sub.render("Quantity to Add:", True, (241, 245, 249))
-        surface.blit(qlbl, (qty_box.x + 16, qty_box.y + 12))
+            # Quantity box
+            q_bg = (15, 23, 42) if not is_editing else (30, 41, 59)
+            q_border = (250, 204, 21) if is_editing else ((56, 189, 248) if has_qty else (71, 85, 105))
+            pygame.draw.rect(surface, q_bg, qty_rect, border_radius=4)
+            pygame.draw.rect(surface, q_border, qty_rect, width=1, border_radius=4)
 
-        # Stepper Buttons: [-10] [-1] [  QTY  ] [+1] [+10]
-        step_x = qty_box.x + 16
-        step_y = qty_box.y + 36
-        self.qty_btn_rects.clear()
+            if is_editing:
+                q_text = self.editing_text + "_"
+                q_col = (251, 191, 36)
+            elif has_qty:
+                q_text = str(self.qty_inputs[item_name])
+                q_col = (254, 240, 138)
+            else:
+                q_text = "0"
+                q_col = COLOR_TEXT_MUTED
+            q_surf = self.font_qty.render(q_text, True, q_col)
+            surface.blit(q_surf, (qty_rect.centerx - q_surf.get_width() // 2, qty_rect.centery - q_surf.get_height() // 2))
 
-        # Dec 10
-        d10 = pygame.Rect(step_x, step_y, 42, 32)
-        self.qty_btn_rects["dec_10"] = d10
-        pygame.draw.rect(surface, (71, 85, 105) if d10.collidepoint(m_pos) else (51, 65, 85), d10, border_radius=4)
-        t_d10 = self.font_btn.render("-10", True, (255, 255, 255))
-        surface.blit(t_d10, (d10.centerx - t_d10.get_width() // 2, d10.centery - t_d10.get_height() // 2))
-        step_x += 46
+        if not filtered_items:
+            none_surf = self.font_body.render("No items match the current filter.", True, COLOR_TEXT_MUTED)
+            surface.blit(none_surf, (list_rect.centerx - none_surf.get_width() // 2, list_rect.centery))
+        surface.set_clip(clip)
 
-        # Dec 1
-        d1 = pygame.Rect(step_x, step_y, 36, 32)
-        self.qty_btn_rects["dec_1"] = d1
-        pygame.draw.rect(surface, (71, 85, 105) if d1.collidepoint(m_pos) else (51, 65, 85), d1, border_radius=4)
-        t_d1 = self.font_btn.render("-1", True, (255, 255, 255))
-        surface.blit(t_d1, (d1.centerx - t_d1.get_width() // 2, d1.centery - t_d1.get_height() // 2))
-        step_x += 40
+        # Scrollbar
+        if max_scroll > 0:
+            track = pygame.Rect(list_rect.right - 5, list_rect.y, 3, list_rect.height)
+            pygame.draw.rect(surface, (51, 65, 85), track, border_radius=2)
+            thumb_h = max(20, int(track.height * rows_visible / max(len(filtered_items), rows_visible)))
+            thumb_y = track.y + int((track.height - thumb_h) * self.scroll_offset / max_scroll)
+            pygame.draw.rect(surface, (96, 165, 250), (track.x, thumb_y, track.width, thumb_h), border_radius=2)
 
-        # Number Display Box
-        num_box = pygame.Rect(step_x, step_y, 90, 32)
-        pygame.draw.rect(surface, (15, 23, 42), num_box, border_radius=4)
-        pygame.draw.rect(surface, (245, 158, 11), num_box, width=1, border_radius=4)
-        q_val_surf = self.font_qty.render(str(self.quantity), True, (251, 191, 36))
-        surface.blit(q_val_surf, (num_box.centerx - q_val_surf.get_width() // 2, num_box.centery - q_val_surf.get_height() // 2))
-        step_x += 94
+        # 7. Bottom Action Row
+        pending = self._pending_entries()
+        total_pending_qty = sum(q for _, q in pending)
+        act_y = list_rect.bottom + 10
 
-        # Inc 1
-        i1 = pygame.Rect(step_x, step_y, 36, 32)
-        self.qty_btn_rects["inc_1"] = i1
-        pygame.draw.rect(surface, (71, 85, 105) if i1.collidepoint(m_pos) else (51, 65, 85), i1, border_radius=4)
-        t_i1 = self.font_btn.render("+1", True, (255, 255, 255))
-        surface.blit(t_i1, (i1.centerx - t_i1.get_width() // 2, i1.centery - t_i1.get_height() // 2))
-        step_x += 40
-
-        # Inc 10
-        i10 = pygame.Rect(step_x, step_y, 42, 32)
-        self.qty_btn_rects["inc_10"] = i10
-        pygame.draw.rect(surface, (71, 85, 105) if i10.collidepoint(m_pos) else (51, 65, 85), i10, border_radius=4)
-        t_i10 = self.font_btn.render("+10", True, (255, 255, 255))
-        surface.blit(t_i10, (i10.centerx - t_i10.get_width() // 2, i10.centery - t_i10.get_height() // 2))
-        step_x += 52
-
-        # Separator line
-        pygame.draw.line(surface, (51, 65, 85), (step_x, qty_box.y + 10), (step_x, qty_box.bottom - 10), 1)
-        step_x += 14
-
-        # Quick Preset Chips: [10] [50] [100] [500]
-        p_lbl = self.font_badge.render("Presets:", True, (148, 163, 184))
-        surface.blit(p_lbl, (step_x, qty_box.y + 12))
-
-        preset_x = step_x
-        preset_y = qty_box.y + 36
-        for p_val in [10, 50, 100, 500]:
-            p_rect = pygame.Rect(preset_x, preset_y, 50, 32)
-            self.qty_btn_rects[f"set_{p_val}"] = p_rect
-            p_hov = p_rect.collidepoint(m_pos)
-            p_active = (self.quantity == p_val)
-
-            p_bg = (59, 130, 246) if p_active else ((51, 65, 85) if p_hov else (30, 41, 59))
-            pygame.draw.rect(surface, p_bg, p_rect, border_radius=4)
-            pygame.draw.rect(surface, (147, 197, 253) if p_active else (71, 85, 105), p_rect, width=1, border_radius=4)
-
-            p_surf = self.font_btn.render(str(p_val), True, (255, 255, 255))
-            surface.blit(p_surf, (p_rect.centerx - p_surf.get_width() // 2, p_rect.centery - p_surf.get_height() // 2))
-            preset_x += 54
-
-        # 8. Bottom Action Row: [Cancel] and [+ ADD {qty}x {item} TO STORAGE]
-        act_y = qty_y + 92
+        summary_surf = self.font_badge.render(
+            f"{len(pending)} item type(s), {total_pending_qty} total — Enter/Tab to move between rows",
+            True, (56, 189, 248) if pending else COLOR_TEXT_MUTED,
+        )
+        surface.blit(summary_surf, (mx + 24, act_y + 8))
 
         # Cancel Button
-        self.cancel_btn_rect = pygame.Rect(mx + 20, act_y, 110, 40)
+        self.cancel_btn_rect = pygame.Rect(mx + self.modal_w - 240, act_y, 110, 38)
         c_hov = self.cancel_btn_rect.collidepoint(m_pos)
         pygame.draw.rect(surface, (71, 85, 105) if c_hov else (51, 65, 85), self.cancel_btn_rect, border_radius=6)
         canc_txt = self.font_btn.render("Cancel", True, (241, 245, 249))
         surface.blit(canc_txt, (self.cancel_btn_rect.centerx - canc_txt.get_width() // 2, self.cancel_btn_rect.centery - canc_txt.get_height() // 2))
 
-        # Add Button
-        add_w = self.modal_w - 40 - 120
-        self.add_btn_rect = pygame.Rect(mx + 140, act_y, add_w, 40)
+        # Add All Button
+        self.add_btn_rect = pygame.Rect(mx + self.modal_w - 120, act_y, 100, 38)
         a_hov = self.add_btn_rect.collidepoint(m_pos)
-        a_bg = (16, 185, 129) if a_hov else (5, 150, 105)
+        a_bg = (16, 185, 129) if (a_hov and pending) else (5, 150, 105)
         pygame.draw.rect(surface, a_bg, self.add_btn_rect, border_radius=6)
         pygame.draw.rect(surface, (110, 231, 183) if a_hov else (52, 211, 153), self.add_btn_rect, width=2, border_radius=6)
 
-        item_display = self.selected_item.replace("_", " ") if self.selected_item else "Item"
-        add_btn_label = f"+ ADD {self.quantity}x {item_display.upper()} TO STORAGE"
-        add_txt = self.font_btn.render(add_btn_label, True, (255, 255, 255))
+        add_label = f"ADD {len(pending)}" if pending else "ADD"
+        add_txt = self.font_btn.render(add_label, True, (255, 255, 255))
         surface.blit(add_txt, (self.add_btn_rect.centerx - add_txt.get_width() // 2, self.add_btn_rect.centery - add_txt.get_height() // 2))

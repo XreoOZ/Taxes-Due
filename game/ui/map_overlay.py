@@ -47,7 +47,9 @@ from game.data.config import (
     MAP_OVERLAY_ZOOM_MIN,
     MAP_OVERLAY_ZOOM_MAX,
     MAP_OVERLAY_ZOOM_STEP,
+    COLOR_WATER_DEEP,
 )
+from game.world.island import get_terrain
 
 
 class MapOverlay:
@@ -316,8 +318,16 @@ class MapOverlay:
         old_clip = surface.get_clip()
         surface.set_clip(cr)
 
-        # Grid
+        # Compute scale/origin first so terrain can use the same transform.
         scale, ox, oy = self._compute_transform(player, cr)
+
+        # Terrain layer: island landmass over water, or plain land for infinite.
+        terrain = get_terrain()
+        if terrain is not None:
+            pygame.draw.rect(surface, COLOR_WATER_DEEP, cr)
+            self._draw_island_mask(surface, terrain, player, cr, scale, ox, oy)
+
+        # Grid
         self._draw_grid(surface, cr, player, scale, ox, oy)
 
         # Layers
@@ -336,6 +346,58 @@ class MapOverlay:
         self._draw_player(surface, player, cr, scale, ox, oy)
 
         surface.set_clip(old_clip)
+
+    def _draw_island_mask(self, surface, terrain, player, cr, scale, ox, oy):
+        """Blit the island land/water mask using the map transform.
+
+        Only the visible slice is scaled per frame. Scaling the whole island
+        bbox (which grows to tens of thousands of px when zoomed in) caused
+        severe zoom-stutter; a screen-sized slice keeps the cost bounded.
+        """
+        mask = terrain.get_mask_surface()
+        sample = terrain.mask_sample
+        tiles_w = mask.get_width() * sample
+        tiles_h = mask.get_height() * sample
+        world_w = tiles_w * TILE_SIZE
+        world_h = tiles_h * TILE_SIZE
+        min_gx, min_gy = terrain.mask_origin_tiles
+        wx0 = min_gx * TILE_SIZE
+        wy0 = min_gy * TILE_SIZE
+
+        x1, y1 = self._world_to_map(wx0, wy0, player, cr, scale, ox, oy)
+        x2, y2 = self._world_to_map(wx0 + world_w, wy0 + world_h, player, cr, scale, ox, oy)
+        dest = pygame.Rect(
+            min(x1, x2), min(y1, y2),
+            max(1, abs(x2 - x1)), max(1, abs(y2 - y1)),
+        )
+
+        clip = surface.get_clip()
+        visible = dest.clip(clip)
+        if visible.width <= 0 or visible.height <= 0:
+            return
+
+        # Mask-pixel coords covering the visible screen area, snapped outward
+        # to whole mask pixels so the subsurface is valid.
+        mask_w, mask_h = mask.get_size()
+        fx = mask_w / dest.width
+        fy = mask_h / dest.height
+        sx0 = max(0, int((visible.x - dest.x) * fx))
+        sy0 = max(0, int((visible.y - dest.y) * fy))
+        sx1 = min(mask_w, int((visible.right - dest.x) * fx) + 1)
+        sy1 = min(mask_h, int((visible.bottom - dest.y) * fy) + 1)
+        if sx1 <= sx0 or sy1 <= sy0:
+            return
+
+        # Screen rect that the snapped mask slice maps to (linear transform,
+        # so alignment stays exact; overshoot is removed by the surface clip).
+        dx = dest.x + sx0 / fx
+        dy = dest.y + sy0 / fy
+        dw = max(1, int((sx1 - sx0) / fx))
+        dh = max(1, int((sy1 - sy0) / fy))
+
+        sub = mask.subsurface(pygame.Rect(sx0, sy0, sx1 - sx0, sy1 - sy0))
+        scaled = pygame.transform.scale(sub, (dw, dh))
+        surface.blit(scaled, (int(dx), int(dy)))
 
     def _draw_grid(self, surface, cr, player, scale, ox, oy):
         """Draw subtle grid lines at tile boundaries."""

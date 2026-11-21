@@ -115,7 +115,7 @@ def find_drop_tile_near_chest(furniture, building_manager=None, stockpile_manage
 
     return (cx + 1, cy)
 
-def spawn_item_physically(item_name, amount, target_storage=None, stockpile_manager=None, permit_manager=None, resources=None, building_manager=None):
+def spawn_item_physically(item_name, amount, target_storage=None, stockpile_manager=None, permit_manager=None, resources=None, building_manager=None, furniture_manager=None):
     """
     Physically spawns a specific item and quantity into Storage:
     1. If target_storage is a Furniture (Chest):
@@ -170,6 +170,26 @@ def spawn_item_physically(item_name, amount, target_storage=None, stockpile_mana
     # -------------------------------------------------------------------------
     # CASE 2: TARGET IS LANDLORD STORAGE / STOCKPILE PERMIT
     # -------------------------------------------------------------------------
+    # Currency granted to the landlord goes straight into the Lord Treasury
+    # Chest (auto-created if missing) instead of loose ground stacks.
+    if furniture_manager is not None:
+        from game.systems.currency import canonical_denomination, is_currency_item
+        from game.systems.lord_treasury import LordTreasurySystem
+        if is_currency_item(item_name):
+            chest = None
+            if hasattr(furniture_manager, "ensure_lord_treasury_chest"):
+                chest = furniture_manager.ensure_lord_treasury_chest(
+                    permit_manager=permit_manager,
+                    building_manager=building_manager,
+                    stockpile_manager=stockpile_manager,
+                )
+            if chest is None:
+                chest = LordTreasurySystem.get_chest(furniture_manager)
+            if chest is not None:
+                LordTreasurySystem.deposit_all(furniture_manager, {item_name: amount})
+                denom = canonical_denomination(item_name)
+                return True, f"Deposited {amount}x {denom} into the Lord Treasury Chest."
+
     if stockpile_manager is not None:
         remaining_to_place = amount
         placed_in_storage = 0

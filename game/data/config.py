@@ -31,6 +31,26 @@ CAMERA_ZOOM_MIN = 0.5
 CAMERA_ZOOM_MAX = 2.0
 CAMERA_ZOOM_STEP = 0.1
 
+# World Type Selection (New Game)
+WORLD_TYPE_INFINITE = "infinite"
+WORLD_TYPE_ISLAND = "island"
+WORLD_TYPE_OPTIONS = [
+    {"id": WORLD_TYPE_INFINITE, "label": "Infinite", "desc": "Endless procedural grassland. No edges, no borders."},
+    {"id": WORLD_TYPE_ISLAND, "label": "Island", "desc": "A single landmass surrounded by water. Build within the shores."},
+]
+DEFAULT_WORLD_TYPE_INDEX = 0
+
+# Island Terrain Settings
+ISLAND_SEED_MIN = 1
+ISLAND_SEED_MAX = 999999
+ISLAND_RADIUS_X_TILES = 600
+ISLAND_RADIUS_Y_TILES = 244
+ISLAND_EDGE_NOISE_AMP = 0.16
+ISLAND_BEACH_WIDTH = 0.07
+COLOR_WATER_DEEP = (37, 99, 235)
+COLOR_WATER_SHALLOW = (56, 130, 246)
+COLOR_SAND = (221, 184, 112)
+
 # Colors (RGB)
 COLOR_BG = (30, 41, 59)
 COLOR_GRASS_A = (76, 138, 66)
@@ -66,7 +86,7 @@ SIMULATION_PROFILE_REPORT_SECONDS = 5.0
 SERVANT_COUNT = 2
 SERVANT_RADIUS = 20
 SERVANT_SPEED = 220.0
-SERVANT_CARRY_CAPACITY = 5
+SERVANT_CARRY_CAPACITY = 50
 BUILD_DURATION_SECONDS = 5.0
 DEMOLISH_DURATION_SECONDS = 5.0
 DEMOLITION_REFUND_RATIO = 0.5  # 50% resource refund when demolishing buildings
@@ -154,6 +174,9 @@ VILLAGER_SPEED = 180.0
 WATERING_DURATION_SECONDS = 2.0
 DOORWAY_WAYPOINT_DISTANCE = 24.0
 DEFAULT_PLOT_MAX_WORKERS = 2
+# Permit types whose worker slots are unlimited (e.g. one farm lot takes any
+# number of farmers). Matched against Area.permit_type.
+UNLIMITED_WORKER_PERMIT_TYPES = {"farm"}
 
 # Farming Task Durations & Dispersion Settings (Config-Driven, Zero Hardcode)
 WATERING_DURATION_INGAME_HOURS = 20.0 / 60.0  # 20 in-game minutes per tile
@@ -188,6 +211,8 @@ VILLAGER_FEMALE_NAMES = [
     "Mary", "Alice", "Agnes", "Joan", "Margaret",
     "Emma", "Matilda", "Eleanor", "Beatrice", "Cecily"
 ]
+# Fresh-game starter household size (randomized composition each new game).
+STARTER_FAMILY_SIZE = 5
 DEDICATED_JOBS = {
     "Unassigned": {
         "id": "Unassigned",
@@ -1013,7 +1038,7 @@ BUILDING_TYPES = {
         "id": "tax_house",
         "name": "Tax Office",
         "category": "Tax Office",
-        "category_id": "public_structure",
+        "category_id": "workplace",
         "public_structure": True,
         "maintainable": True,
         "desc": "An open medieval tax-collection work station with a clerk's counter, ledgers, and royal banner.",
@@ -1076,6 +1101,14 @@ def get_building_categories():
         furniture_id for furniture_id, config in FURNITURE_TYPES.items()
         if config.get("category_id", "furniture") == "furniture"
     ]
+    workplace_building_types = [
+        building_id for building_id, config in BUILDING_TYPES.items()
+        if config.get("category_id") == "workplace"
+    ]
+    workplace_furniture_types = [
+        furniture_id for furniture_id, config in FURNITURE_TYPES.items()
+        if config.get("category_id") == "workplace"
+    ]
     categories = {
         "structure": {
             "id": "structure",
@@ -1102,6 +1135,15 @@ def get_building_categories():
         "color": (250, 204, 21),
         "kind": "furniture",
         "building_types": household_furniture_types
+    }
+    categories["workplace"] = {
+        "id": "workplace",
+        "name": "Workplace",
+        "desc": "Work stations and tools where villagers perform their jobs.",
+        "color": (249, 115, 22),
+        "kind": "public",
+        "building_types": workplace_building_types,
+        "furniture_types": workplace_furniture_types,
     }
     return list(categories.values())
 
@@ -1268,6 +1310,7 @@ FURNITURE_TYPES = {
     "carpenter_workbench": {
         "id": "carpenter_workbench",
         "name": "Carpenter Workbench",
+        "category_id": "workplace",
         "desc": "A sturdy medieval workbench for shaping and assembling furniture. Place inside a household or house.",
         "capacity": 0,
         "materials": {"Wood": 5, "Stone": 0},

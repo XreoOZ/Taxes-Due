@@ -53,10 +53,20 @@ class Player:
             num_steps = max(1, math.ceil(total_dist / max_step_dist))
             sub_dt = dt / num_steps
 
+            from game.world.island import is_land_world
             for _ in range(num_steps):
                 old_step_x, old_step_y = self.x, self.y
                 self.x += dx * self.speed * sub_dt
                 self.y += dy * self.speed * sub_dt
+
+                # Island worlds: don't let the player walk onto water.
+                if not is_land_world(self.x, self.y, tile_size):
+                    if is_land_world(self.x, old_step_y, tile_size):
+                        self.y = old_step_y
+                    elif is_land_world(old_step_x, self.y, tile_size):
+                        self.x = old_step_x
+                    else:
+                        self.x, self.y = old_step_x, old_step_y
 
                 # Selesaikan tabrakan fisik dengan dinding bangunan (Wall Collision)
                 if building_manager:

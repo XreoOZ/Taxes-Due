@@ -18,6 +18,7 @@ if sys.platform == "win32":
         pass
 
 import math
+import random
 from time import perf_counter
 import pygame
 from game.config import (
@@ -61,7 +62,11 @@ from game.config import (
     AI_PROFILE_FACTOR_SECTION_GAP,
     AI_PROFILE_FACTOR_PANEL_HEADER_HEIGHT,
     AI_PROFILE_PANEL_BOTTOM_PADDING,
+    WORLD_TYPE_OPTIONS,
+    ISLAND_SEED_MIN,
+    ISLAND_SEED_MAX,
 )
+from game.world.island import set_world
 from game.camera import Camera
 from game.player import Player
 from game.world import World
@@ -208,13 +213,18 @@ def main():
     cheat_notice = ""
     cheat_notice_timer = 0.0
 
-    def start_fresh_game(day_length_index=None):
+    def start_fresh_game(day_length_index=None, world_map_index=None):
         nonlocal player, resources, building_manager, permit_manager, stockpile_manager
         nonlocal servant_manager, villager_manager, furniture_manager, day_cycle, schedule_manager
         nonlocal planning_mode, planning_permit_type, planning_building_type, planning_furniture_type
         nonlocal planning_building_rotation, planning_furniture_rotation
         nonlocal session_planned_furniture, selected_planned_furniture
         nonlocal editing_permit_id, original_permit_tiles, selected_furniture, moving_furniture, selected_entity
+
+        # Activate the chosen world terrain before any entity/manager setup.
+        map_option = WORLD_TYPE_OPTIONS[world_map_index] if world_map_index is not None else WORLD_TYPE_OPTIONS[0]
+        world_seed = random.randint(ISLAND_SEED_MIN, ISLAND_SEED_MAX) if map_option["id"] == "island" else None
+        set_world(map_option["id"], seed=world_seed)
 
         from game.systems.cemetery_system import CemeterySystem
         cemetery_system = CemeterySystem.get_instance()
@@ -238,6 +248,7 @@ def main():
         stockpile_manager = StockpileManager()
         servant_manager = ServantManager()
         villager_manager = VillagerManager()
+        villager_manager.generate_starter_family()
         furniture_manager = FurnitureManager()
         furniture_manager.set_managers(
             building_manager=building_manager, permit_manager=permit_manager,
@@ -339,8 +350,10 @@ def main():
 
                 action = menu.handle_event(event)
                 if action and action.startswith("start_game_"):
-                    day_idx = int(action.split("_")[-1])
-                    start_fresh_game(day_length_index=day_idx)
+                    parts = action.split("_")
+                    day_idx = int(parts[2])
+                    map_idx = int(parts[3]) if len(parts) > 3 else 0
+                    start_fresh_game(day_length_index=day_idx, world_map_index=map_idx)
                     current_state = STATE_PLAYING
                 elif action == "play":
                     start_fresh_game()
@@ -437,15 +450,19 @@ def main():
                     map_overlay.open()
                     continue
 
-                if not raport_ui.is_open:
+                any_modal_open = (
+                    raport_ui.is_open or settings_modal.is_open or save_modal.is_open
+                    or market_modal.is_open or add_item_modal.is_open
+                )
+                if not any_modal_open:
                     speed_action = speed_controller.handle_event(event)
                     if speed_action is not None:
                         continue
 
                 if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-                    if not raport_ui.is_open and path_debug_overlay.handle_event(event):
+                    if not any_modal_open and path_debug_overlay.handle_event(event):
                         continue
-                    if not raport_ui.is_open and btn_add_item_cheat_rect.collidepoint(event.pos):
+                    if not any_modal_open and btn_add_item_cheat_rect.collidepoint(event.pos):
                         tgt = selected_furniture if (selected_furniture and getattr(selected_furniture, "furniture_type", "") == "household_storage") else None
                         add_item_modal.open(target_storage=tgt)
                         continue
@@ -937,7 +954,7 @@ def main():
                 # 4.6. ADD ITEM CHEAT MODAL OPEN (AGENT 2)
                 # -------------------------------------------------------------
                 elif add_item_modal.is_open:
-                    res = add_item_modal.handle_event(event, resources=resources, stockpile_manager=stockpile_manager, permit_manager=permit_manager, building_manager=building_manager)
+                    res = add_item_modal.handle_event(event, resources=resources, stockpile_manager=stockpile_manager, permit_manager=permit_manager, building_manager=building_manager, furniture_manager=furniture_manager)
                     if res is not None:
                         success, msg = res
                         cheat_notice = msg

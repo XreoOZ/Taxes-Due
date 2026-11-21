@@ -22,6 +22,7 @@ from game.config import (
     VILLAGER_SURNAMES,
     VILLAGER_MALE_NAMES,
     VILLAGER_FEMALE_NAMES,
+    STARTER_FAMILY_SIZE,
     DEDICATED_JOBS,
     ENTITY_AVOIDANCE_RADIUS,
     MIN_ENTITY_SEPARATION,
@@ -1453,7 +1454,7 @@ class Villager:
                     and str(s.construction_order.get("carpenter_id") or "") in ("", str(self.id))
                     for s in order_subjects
                 )
-                _, totals = CarpenterSystem._materials_in_storage(self, furniture_manager)
+                _, totals = CarpenterSystem._materials_in_storage(self, furniture_manager, stockpile_manager)
                 targets = job_cfg.get("material_stock_target", {})
                 needs_stock = any(
                     int(totals.get(mat, 0)) < int(target)
@@ -3725,10 +3726,14 @@ class Villager:
         sub_vx = vx / steps
         sub_vy = vy / steps
 
+        from game.world.island import is_land_world
         for _ in range(steps):
             step_ox, step_oy = self.x, self.y
             self.x += sub_vx
             self.y += sub_vy
+            if not is_land_world(self.x, self.y, TILE_SIZE):
+                self.x, self.y = step_ox, step_oy
+                break
             if building_manager:
                 self.x, self.y = building_manager.resolve_collision(self.x, self.y, self.radius, TILE_SIZE, old_x=step_ox, old_y=step_oy)
 
@@ -4405,6 +4410,60 @@ class VillagerManager:
                 )
                 self.villager_counter += 1
                 members.append(child)
+
+        new_family = Family(fam_id, surname, members, assigned_permit_id=None)
+        self.families.append(new_family)
+        self.invalidate_villager_cache()
+        return new_family
+
+    def generate_starter_family(self, size=None):
+        """Fresh-game starter household: exactly `size` randomized members."""
+        target = int(size or STARTER_FAMILY_SIZE)
+        used_ids = {str(f.id) for f in self.families}
+        while f"fam_{self.family_counter}" in used_ids:
+            self.family_counter += 1
+        fam_id = f"fam_{self.family_counter}"
+        self.family_counter += 1
+
+        used_surnames = {f.surname for f in self.families}
+        avail_surnames = [s for s in VILLAGER_SURNAMES if s not in used_surnames] or VILLAGER_SURNAMES
+        surname = random.choice(avail_surnames)
+
+        # Composition templates (has_grandparents, adult_child_count) that sum
+        # to the target size; parents always contribute 2 members.
+        templates = [
+            (has_gp, children)
+            for has_gp in (True, False)
+            for children in range(0, max(0, target - 1))
+            if 2 + (2 if has_gp else 0) + children == target
+        ]
+        has_gp, child_count = random.choice(templates) if templates else (False, max(0, target - 2))
+
+        used_names = set()
+        members = []
+
+        def _add_member(gender, generation, role, age_lo, age_hi):
+            pool = VILLAGER_MALE_NAMES if gender == "Male" else VILLAGER_FEMALE_NAMES
+            name = random.choice([n for n in pool if n not in used_names] or pool)
+            used_names.add(name)
+            vil = Villager(
+                f"vil_{self.villager_counter}", name, surname, gender,
+                random.randint(age_lo, age_hi), generation, role, fam_id,
+                x=random.uniform(-40, 40), y=random.uniform(-40, 40),
+            )
+            self.villager_counter += 1
+            members.append(vil)
+
+        if has_gp:
+            _add_member("Male", 1, "Grandfather", 64, 76)
+            _add_member("Female", 1, "Grandmother", 62, 74)
+        _add_member("Male", 2, "Father", 40, 52)
+        _add_member("Female", 2, "Mother", 38, 50)
+        for _ in range(child_count):
+            gender = random.choice(["Male", "Female"])
+            _add_member(gender, 3,
+                        "Adult Son" if gender == "Male" else "Adult Daughter",
+                        18, 30)
 
         new_family = Family(fam_id, surname, members, assigned_permit_id=None)
         self.families.append(new_family)

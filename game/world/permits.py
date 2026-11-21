@@ -12,6 +12,7 @@ from game.config import (
     CROP_TYPES,
     TILE_SIZE,
     DEFAULT_PLOT_MAX_WORKERS,
+    UNLIMITED_WORKER_PERMIT_TYPES,
     COLOR_SOIL_DRY,
     COLOR_SOIL_WET,
     COLOR_WATER_SHEEN,
@@ -38,6 +39,12 @@ def is_connected_tiles(tiles):
                 visited.add(neighbor)
                 queue.append(neighbor)
     return len(visited) == len(tiles)
+
+def permit_worker_cap(permit):
+    """Worker slot cap for a permit; None means unlimited (e.g. farm lots)."""
+    if getattr(permit, "permit_type", "") in UNLIMITED_WORKER_PERMIT_TYPES:
+        return None
+    return getattr(permit, "max_workers", 2)
 
 def get_exterior_edges_for_tile(tile, tiles):
     """Mendapatkan daftar sisi luar (top, bottom, left, right) untuk tile tertentu"""
@@ -845,6 +852,9 @@ class PermitManager:
             return False, "No tiles selected"
         if not is_connected_tiles(new_tiles):
             return False, "Tiles must be connected together"
+        from game.world.island import is_land_tile
+        if any(not is_land_tile(gx, gy) for gx, gy in new_tiles):
+            return False, "Cannot claim water tiles"
         for p in self.permits:
             if p.overlaps_tiles(new_tiles):
                 return False, f"Overlaps existing permit: {p.name}"
@@ -861,6 +871,9 @@ class PermitManager:
             return None, "No tiles selected"
         if not is_connected_tiles(building_tiles):
             return None, "Building tiles must be connected together"
+        from game.world.island import is_land_tile
+        if any(not is_land_tile(gx, gy) for gx, gy in building_tiles):
+            return None, "Cannot build on water"
 
         # 1. Pastikan tidak menabrak bangunan yang sudah jadi
         for b in building_manager.buildings:
@@ -986,7 +999,8 @@ class PermitManager:
             return False, "Worker already assigned"
         if getattr(p, "permit_type", "") == "church" and len(p.assigned_workers) >= 1:
             return False, "Church can have exactly one Priest assigned"
-        if len(p.assigned_workers) >= getattr(p, "max_workers", 2):
+        worker_cap = permit_worker_cap(p)
+        if worker_cap is not None and len(p.assigned_workers) >= worker_cap:
             if getattr(p, "permit_type", "") == "church":
                 return False, "Church can have exactly one Priest assigned"
             p.max_workers = len(p.assigned_workers) + 1
@@ -1034,6 +1048,8 @@ class PermitManager:
 
     def change_max_workers(self, permit_id, delta, villager_manager=None, furniture_manager=None):
         p = next((p for p in self.permits if p.id == permit_id), None)
+        if p and permit_worker_cap(p) is None:
+            return
         if p:
             current_max = getattr(p, "max_workers", 2 if p.permit_type == "farm" else 1)
             new_max = max(0, current_max + delta)
@@ -1139,7 +1155,8 @@ class PermitManager:
             for dist, w, p in candidates:
                 if w.id in assigned_workers_set:
                     continue
-                if len(p.assigned_workers) < getattr(p, "max_workers", 2):
+                worker_cap = permit_worker_cap(p)
+                if worker_cap is None or len(p.assigned_workers) < worker_cap:
                     p.assigned_workers.append(w.id)
                     assigned_workers_set.add(w.id)
                     if getattr(w, "job", "") != job_id:
@@ -1388,8 +1405,7 @@ class PermitManager:
                 status_suffix = f" ({b_count} Building{'s' if b_count > 1 else ''})" if b_count > 0 else " (Ready)"
                 if p.permit_type == "farm":
                     w_count = len(getattr(p, "assigned_workers", []))
-                    w_max = getattr(p, "max_workers", 2)
-                    workers_info = f" ({w_count}/{w_max} Workers)"
+                    workers_info = f" ({w_count} Workers)"
 
                     if getattr(p, "crop", None):
                         g_days = getattr(p, "growth_days", 0.0)

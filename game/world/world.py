@@ -4,7 +4,11 @@ World and Map System
 
 import math
 import pygame
-from game.config import COLOR_GRASS_A, COLOR_GRASS_B, COLOR_GRID, TILE_SIZE
+from game.config import (
+    COLOR_GRASS_A, COLOR_GRASS_B, COLOR_GRID, TILE_SIZE,
+    COLOR_WATER_DEEP, COLOR_WATER_SHALLOW, COLOR_SAND,
+)
+from game.world.island import get_terrain
 
 class World:
     def __init__(self, tile_size=TILE_SIZE):
@@ -12,8 +16,10 @@ class World:
         self.font = None
         self._terrain_surface = None
         self._terrain_key = None
+        self._terrain_cam = None
         self._grid_surface = None
         self._grid_key = None
+        self._grid_cam = None
         self._marker_surfaces = {}
         self._town_center_label = None
 
@@ -40,43 +46,77 @@ class World:
 
         scaled_tile = max(1, math.ceil(self.tile_size * camera.zoom))
 
-        terrain_key = (w, h, camera.x, camera.y, camera.zoom,
-                       start_col, end_col, start_row, end_row)
-        if self._terrain_key != terrain_key:
-            if self._terrain_surface is None or self._terrain_surface.get_size() != (w, h):
-                self._terrain_surface = pygame.Surface((w, h))
+        # Terrain & grid surfaces are rendered with a one-tile margin and
+        # blitted with a camera-delta offset, so they only rebuild when the
+        # visible tile range / zoom / viewport changes — not every frame.
+        margin = 2 * scaled_tile + 8
+        surf_w, surf_h = w + 2 * margin, h + 2 * margin
+        # Camera drift since the surfaces were built (in screen px). When it
+        # approaches the margin, both overlays must be rebuilt.
+        drift_x = drift_y = 0
+        if self._terrain_cam is not None:
+            drift_x = int((self._terrain_cam[0] - camera.x) * camera.zoom)
+            drift_y = int((self._terrain_cam[1] - camera.y) * camera.zoom)
+        drift_limit = margin - scaled_tile - 4
+        force_rebuild = (
+            self._terrain_cam is not None
+            and (abs(drift_x) > drift_limit or abs(drift_y) > drift_limit)
+        )
+
+        terrain = get_terrain()
+        view_key = (surf_w, surf_h, camera.zoom,
+                    start_col, end_col, start_row, end_row,
+                    id(terrain))
+        if self._terrain_key != view_key or force_rebuild:
+            if self._terrain_surface is None or self._terrain_surface.get_size() != (surf_w, surf_h):
+                self._terrain_surface = pygame.Surface((surf_w, surf_h))
             self._terrain_surface.fill(COLOR_GRASS_A)
             for col in range(start_col, end_col + 1):
                 for row in range(start_row, end_row + 1):
                     sx, sy = camera.world_to_screen(col * self.tile_size, row * self.tile_size)
-                    color = COLOR_GRASS_A if (col + row) % 2 == 0 else COLOR_GRASS_B
+                    if terrain is not None:
+                        if not terrain.is_land(col, row):
+                            color = (COLOR_WATER_SHALLOW if terrain.land_value(col, row) < 0.12
+                                     else COLOR_WATER_DEEP)
+                        elif terrain.is_beach(col, row):
+                            color = COLOR_SAND
+                        else:
+                            color = COLOR_GRASS_A if (col + row) % 2 == 0 else COLOR_GRASS_B
+                    else:
+                        color = COLOR_GRASS_A if (col + row) % 2 == 0 else COLOR_GRASS_B
                     pygame.draw.rect(self._terrain_surface, color,
-                                     (sx, sy, scaled_tile + 1, scaled_tile + 1))
-            self._terrain_key = terrain_key
-        surface.blit(self._terrain_surface, (0, 0))
+                                     (sx + margin, sy + margin, scaled_tile + 1, scaled_tile + 1))
+            self._terrain_key = view_key
+            self._terrain_cam = (camera.x, camera.y)
+            drift_x = drift_y = 0
+        surface.blit(self._terrain_surface, (-margin + drift_x, -margin + drift_y))
 
         # The overlay only changes when the camera, zoom or viewport changes.
-        grid_key = (w, h, camera.x, camera.y, camera.zoom,
+        grid_key = (surf_w, surf_h, camera.zoom,
                     start_col, end_col, start_row, end_row)
-        if self._grid_key != grid_key:
-            if self._grid_surface is None or self._grid_surface.get_size() != (w, h):
-                self._grid_surface = pygame.Surface((w, h), pygame.SRCALPHA)
+        if self._grid_key != grid_key or force_rebuild:
+            if self._grid_surface is None or self._grid_surface.get_size() != (surf_w, surf_h):
+                self._grid_surface = pygame.Surface((surf_w, surf_h), pygame.SRCALPHA)
             else:
                 self._grid_surface.fill((0, 0, 0, 0))
             for col in range(start_col, end_col + 1):
                 wx = col * self.tile_size
                 sx, _ = camera.world_to_screen(wx, 0)
-                if 0 <= sx <= w:
-                    pygame.draw.line(self._grid_surface, COLOR_GRID, (sx, 0), (sx, h))
+                sx += margin
+                if -scaled_tile <= sx <= surf_w:
+                    pygame.draw.line(self._grid_surface, COLOR_GRID, (sx, 0), (sx, surf_h))
 
             for row in range(start_row, end_row + 1):
                 wy = row * self.tile_size
                 _, sy = camera.world_to_screen(0, wy)
-                if 0 <= sy <= h:
-                    pygame.draw.line(self._grid_surface, COLOR_GRID, (0, sy), (w, sy))
+                sy += margin
+                if -scaled_tile <= sy <= surf_h:
+                    pygame.draw.line(self._grid_surface, COLOR_GRID, (0, sy), (surf_w, sy))
             self._grid_key = grid_key
-
-        surface.blit(self._grid_surface, (0, 0))
+            self._grid_cam = (camera.x, camera.y)
+        grid_shift_x = int((self._grid_cam[0] - camera.x) * camera.zoom)
+        grid_shift_y = int((self._grid_cam[1] - camera.y) * camera.zoom)
+        surface.blit(self._grid_surface, (-margin + grid_shift_x, -margin + grid_shift_y))
 
         # Town Center Marker di titik (0, 0)
         cx, cy = camera.world_to_screen(0, 0)
