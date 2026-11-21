@@ -277,6 +277,7 @@ class RaportUI:
         # Workers / Jobs Tab Controls
         self.selected_job_id = None
         self.selected_workstation_job_id = None
+        self.highlight_workplace_key = None
         self.back_to_jobs_btn_rect = None
         self.auto_sort_all_btn_rect = None
         self.job_select_btn_rects = {}
@@ -368,6 +369,18 @@ class RaportUI:
             self.selected_permit_category = cat["id"] if cat else None
         else:
             self.selected_permit_category = None
+
+    def open_workplace_workstations(self, job_id, workplace=None):
+        """Contextual View: Opens Town Ledger Workers tab focused on a job's Workstations,
+        optionally highlighting one specific workplace card."""
+        self.is_open = True
+        self.active_tab = 5  # Tab Workers
+        self.selected_job_id = None
+        self.selected_workstation_job_id = job_id
+        self.highlight_workplace_key = self._workplace_key(workplace) if workplace else None
+        self.jobs_scroll_y = 0
+        self.job_search_text = ""
+        self.job_search_active = False
 
     def open_building_directly(self, building):
         """Contextual View: Opens Town Ledger directly to the specified building in its category view"""
@@ -1213,6 +1226,7 @@ class RaportUI:
                 if self.selected_workstation_job_id is not None:
                     if self.back_to_jobs_btn_rect and self.back_to_jobs_btn_rect.collidepoint(mouse_pos):
                         self.selected_workstation_job_id = None
+                        self.highlight_workplace_key = None
                         return "back_to_workstations"
                     for key, rect in list(self.workplace_delta_btn_rects.items()):
                         if rect.collidepoint(mouse_pos):
@@ -3293,6 +3307,9 @@ class RaportUI:
             card = pygame.Rect(mx + 24, y, self.modal_w - 48, card_h)
             pygame.draw.rect(surface, (24, 34, 52), card, border_radius=7)
             pygame.draw.rect(surface, (51, 65, 85), card, width=1, border_radius=7)
+            station_key = self._workplace_key((kind, obj))
+            if getattr(self, "highlight_workplace_key", None) == station_key:
+                pygame.draw.rect(surface, (56, 189, 248), card, width=2, border_radius=7)
             station_name = getattr(obj, "name", None) or getattr(obj, "type_cfg", {}).get("name", getattr(obj, "permit_type", "Workplace").replace("_", " ").title())
             station_workers = workplace_job_workers((kind, obj), job_id, villager_manager)
             label = self.font_sub.render(station_name, True, (241, 245, 249))

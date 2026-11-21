@@ -144,6 +144,18 @@ def workplace_bases_for(kind, obj):
     return bases
 
 
+def workplace_job_for(kind, obj):
+    """Job id whose workplace definition matches this placed object."""
+    for job_id, job_cfg in DEDICATED_JOBS.items():
+        if kind == "permit" and job_cfg.get("workplace_permit") == getattr(obj, "permit_type", None):
+            return job_id
+        if kind == "building" and job_cfg.get("workplace_building_type") == getattr(obj, "building_type", None):
+            return job_id
+        if kind == "furniture" and job_cfg.get("workplace_furniture_type") == getattr(obj, "furniture_type", None):
+            return job_id
+    return None
+
+
 def main():
     pygame.init()
 
@@ -220,10 +232,10 @@ def main():
 
     # Workplace base popup (Permit vs Structure) shown when clicking a
     # placed job-workplace object on the map.
-    workplace_popup = None  # {"kind": "permit"|"building"|"furniture", "obj": ...}
+    workplace_popup = None  # {"kind": "permit"|"building"|"furniture", "obj": ..., "pos": (x, y)}
     wp_popup_rect = pygame.Rect(0, 0, 0, 0)
-    wp_permit_btn_rect = pygame.Rect(0, 0, 0, 0)
-    wp_structure_btn_rect = pygame.Rect(0, 0, 0, 0)
+    wp_base_btn_rect = pygame.Rect(0, 0, 0, 0)
+    wp_ws_btn_rect = pygame.Rect(0, 0, 0, 0)
     wp_close_btn_rect = pygame.Rect(0, 0, 0, 0)
 
     entity_card_rect = pygame.Rect(0, 0, 310, 180)
@@ -1051,24 +1063,29 @@ def main():
                                 permit_drag_start = None
                                 permit_erase_start = None
                         elif not raport_ui.is_open:
-                            # 0A0. Workplace base popup (Permit vs Structure) — klik di luar/close
+                            # 0A0. Workplace popup (Permit/Structure + Workstation) — klik di luar/close
                             if workplace_popup is not None:
                                 kind = workplace_popup["kind"]
                                 obj = workplace_popup["obj"]
                                 bases = workplace_bases_for(kind, obj)
                                 if wp_close_btn_rect.collidepoint(event.pos) or not wp_popup_rect.collidepoint(event.pos):
                                     workplace_popup = None
-                                elif wp_permit_btn_rect.collidepoint(event.pos) and "permit" in bases:
+                                elif wp_base_btn_rect.collidepoint(event.pos):
                                     workplace_popup = None
-                                    if kind == "permit":
+                                    base = "permit" if "permit" in bases else "structure"
+                                    if base == "permit" and kind == "permit":
                                         raport_ui.open_permit_directly(obj.id, permit_manager)
-                                elif wp_structure_btn_rect.collidepoint(event.pos) and "structure" in bases:
+                                    elif base == "structure":
+                                        if kind == "building":
+                                            raport_ui.open_building_directly(obj)
+                                        else:
+                                            selected_furniture = obj
+                                            selected_entity = None
+                                elif wp_ws_btn_rect.collidepoint(event.pos):
                                     workplace_popup = None
-                                    if kind == "building":
-                                        raport_ui.open_building_directly(obj)
-                                    else:
-                                        selected_furniture = obj
-                                        selected_entity = None
+                                    job_id = workplace_job_for(kind, obj)
+                                    if job_id:
+                                        raport_ui.open_workplace_workstations(job_id, (kind, obj))
                                 continue
 
                             # 0A. Klik pada Tombol di Menu Konteks Furniture jika sedang terbuka
@@ -1159,7 +1176,7 @@ def main():
                             if clicked_f:
                                 selected_entity = None
                                 if workplace_bases_for("furniture", clicked_f):
-                                    workplace_popup = {"kind": "furniture", "obj": clicked_f}
+                                    workplace_popup = {"kind": "furniture", "obj": clicked_f, "pos": event.pos}
                                     selected_furniture = None
                                 else:
                                     workplace_popup = None
@@ -1210,7 +1227,7 @@ def main():
                                     market_modal.open(clicked_b)
                                     raport_ui.close()
                                 elif workplace_bases_for("building", clicked_b):
-                                    workplace_popup = {"kind": "building", "obj": clicked_b}
+                                    workplace_popup = {"kind": "building", "obj": clicked_b, "pos": event.pos}
                                     selected_furniture = None
                                     selected_entity = None
                                 else:
@@ -1239,7 +1256,7 @@ def main():
                                 selected_furniture = None
                                 selected_entity = None
                                 if workplace_bases_for("permit", clicked_p):
-                                    workplace_popup = {"kind": "permit", "obj": clicked_p}
+                                    workplace_popup = {"kind": "permit", "obj": clicked_p, "pos": event.pos}
                                 else:
                                     workplace_popup = None
                                     raport_ui.open_permit_directly(clicked_p.id, permit_manager)
@@ -2024,8 +2041,8 @@ def main():
                 kind = workplace_popup["kind"]
                 obj = workplace_popup["obj"]
                 bases = workplace_bases_for(kind, obj)
-                ox, oy = m_pos
-                pw, ph = 230, 96
+                ox, oy = workplace_popup.get("pos", m_pos)
+                pw, ph = 260, 96
                 px = min(max(8, ox - pw // 2), screen.get_width() - pw - 8)
                 py = min(max(8, oy - ph - 14), screen.get_height() - ph - 8)
                 wp_popup_rect.update(px, py, pw, ph)
@@ -2044,14 +2061,14 @@ def main():
 
                 btn_w = (pw - 12 * 3) // 2
                 by = py + 34
-                wp_permit_btn_rect.update(px + 12, by, btn_w, 26)
-                wp_structure_btn_rect.update(px + 12 + btn_w + 12, by, btn_w, 26)
+                wp_base_btn_rect.update(px + 12, by, btn_w, 26)
+                wp_ws_btn_rect.update(px + 12 + btn_w + 12, by, btn_w, 26)
 
-                for rect, label, base in (
-                    (wp_permit_btn_rect, "PERMIT", "permit"),
-                    (wp_structure_btn_rect, "STRUCTURE", "structure"),
+                base_label = "PERMIT" if "permit" in bases else "STRUCTURE"
+                for rect, label, enabled in (
+                    (wp_base_btn_rect, base_label, bool(bases)),
+                    (wp_ws_btn_rect, "WORKSTATION", True),
                 ):
-                    enabled = base in bases
                     hov = enabled and rect.collidepoint(m_pos)
                     if enabled:
                         bg = (37, 99, 235) if hov else (29, 78, 216)
@@ -2067,8 +2084,8 @@ def main():
                     screen.blit(t, (rect.centerx - t.get_width() // 2, rect.centery - t.get_height() // 2))
             else:
                 wp_popup_rect.x = -9999
-                wp_permit_btn_rect.x = -9999
-                wp_structure_btn_rect.x = -9999
+                wp_base_btn_rect.x = -9999
+                wp_ws_btn_rect.x = -9999
                 wp_close_btn_rect.x = -9999
 
             # -------------------------------------------------------------
