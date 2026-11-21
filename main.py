@@ -31,6 +31,7 @@ from game.config import (
     BUILDING_TYPES,
     PERMIT_TYPES,
     FURNITURE_TYPES,
+    DEDICATED_JOBS,
     COST_PER_BLOCK_WOOD,
     COST_PER_BLOCK_STONE,
     PATH_TOGGLE_BTN_WIDTH,
@@ -130,6 +131,19 @@ def draw_placement_orientation(surface, rect, rotation):
     pygame.draw.polygon(surface, PLACEMENT_ORIENTATION_MARKER_OUTLINE, head)
     pygame.draw.polygon(surface, PLACEMENT_ORIENTATION_MARKER_COLOR, head, width=1)
 
+def workplace_bases_for(kind, obj):
+    """Workplace base kinds ('permit'/'structure') provided by a placed object."""
+    bases = set()
+    for job_cfg in DEDICATED_JOBS.values():
+        if kind == "permit" and job_cfg.get("workplace_permit") == getattr(obj, "permit_type", None):
+            bases.add("permit")
+        elif kind == "building" and job_cfg.get("workplace_building_type") == getattr(obj, "building_type", None):
+            bases.add("structure")
+        elif kind == "furniture" and job_cfg.get("workplace_furniture_type") == getattr(obj, "furniture_type", None):
+            bases.add("structure")
+    return bases
+
+
 def main():
     pygame.init()
 
@@ -203,6 +217,14 @@ def main():
     btn_furn_poss_rect = pygame.Rect(0, 0, 116, 26)
     btn_furn_store_rect = pygame.Rect(0, 0, 252, 24)
     btn_furn_pay_carpenter_rect = pygame.Rect(0, 0, 252, 24)
+
+    # Workplace base popup (Permit vs Structure) shown when clicking a
+    # placed job-workplace object on the map.
+    workplace_popup = None  # {"kind": "permit"|"building"|"furniture", "obj": ...}
+    wp_popup_rect = pygame.Rect(0, 0, 0, 0)
+    wp_permit_btn_rect = pygame.Rect(0, 0, 0, 0)
+    wp_structure_btn_rect = pygame.Rect(0, 0, 0, 0)
+    wp_close_btn_rect = pygame.Rect(0, 0, 0, 0)
 
     entity_card_rect = pygame.Rect(0, 0, 310, 180)
     entity_happiness_rect = pygame.Rect(0, 0, 0, 0)
@@ -1029,6 +1051,26 @@ def main():
                                 permit_drag_start = None
                                 permit_erase_start = None
                         elif not raport_ui.is_open:
+                            # 0A0. Workplace base popup (Permit vs Structure) — klik di luar/close
+                            if workplace_popup is not None:
+                                kind = workplace_popup["kind"]
+                                obj = workplace_popup["obj"]
+                                bases = workplace_bases_for(kind, obj)
+                                if wp_close_btn_rect.collidepoint(event.pos) or not wp_popup_rect.collidepoint(event.pos):
+                                    workplace_popup = None
+                                elif wp_permit_btn_rect.collidepoint(event.pos) and "permit" in bases:
+                                    workplace_popup = None
+                                    if kind == "permit":
+                                        raport_ui.open_permit_directly(obj.id, permit_manager)
+                                elif wp_structure_btn_rect.collidepoint(event.pos) and "structure" in bases:
+                                    workplace_popup = None
+                                    if kind == "building":
+                                        raport_ui.open_building_directly(obj)
+                                    else:
+                                        selected_furniture = obj
+                                        selected_entity = None
+                                continue
+
                             # 0A. Klik pada Tombol di Menu Konteks Furniture jika sedang terbuka
                             if selected_furniture is not None:
                                 order = getattr(selected_furniture, "construction_order", None) or {}
@@ -1115,8 +1157,13 @@ def main():
                             # 0B. Cek apakah pemain mengklik furniture fisik di peta (INSTALLED maupun UNINSTALLED)
                             clicked_f = furniture_manager.get_furniture_at(m_gx, m_gy)
                             if clicked_f:
-                                selected_furniture = clicked_f
                                 selected_entity = None
+                                if workplace_bases_for("furniture", clicked_f):
+                                    workplace_popup = {"kind": "furniture", "obj": clicked_f}
+                                    selected_furniture = None
+                                else:
+                                    workplace_popup = None
+                                    selected_furniture = clicked_f
                                 continue
                             else:
                                 if selected_furniture is not None and furn_menu_rect and not furn_menu_rect.collidepoint(event.pos):
@@ -1159,9 +1206,15 @@ def main():
                                 selected_furniture = None
                                 selected_entity = None
                                 if getattr(clicked_b, "building_type", "") == "market":
+                                    workplace_popup = None
                                     market_modal.open(clicked_b)
                                     raport_ui.close()
+                                elif workplace_bases_for("building", clicked_b):
+                                    workplace_popup = {"kind": "building", "obj": clicked_b}
+                                    selected_furniture = None
+                                    selected_entity = None
                                 else:
+                                    workplace_popup = None
                                     raport_ui.open_building_directly(clicked_b)
                                 continue
 
@@ -1185,7 +1238,11 @@ def main():
                             if clicked_p:
                                 selected_furniture = None
                                 selected_entity = None
-                                raport_ui.open_permit_directly(clicked_p.id, permit_manager)
+                                if workplace_bases_for("permit", clicked_p):
+                                    workplace_popup = {"kind": "permit", "obj": clicked_p}
+                                else:
+                                    workplace_popup = None
+                                    raport_ui.open_permit_directly(clicked_p.id, permit_manager)
                                 continue
 
         # Update Game Logic
@@ -1959,6 +2016,60 @@ def main():
                 pygame.draw.rect(screen, (248, 113, 113), btn_furn_destroy_rect, width=1, border_radius=6)
                 des_txt = font_btn.render("Destroy", True, (255, 255, 255))
                 screen.blit(des_txt, (btn_furn_destroy_rect.centerx - des_txt.get_width() // 2, btn_furn_destroy_rect.centery - des_txt.get_height() // 2))
+
+            # -------------------------------------------------------------
+            # 7.75. WORKPLACE BASE POPUP (Permit vs Structure)
+            # -------------------------------------------------------------
+            if workplace_popup is not None and planning_mode == "NONE" and not raport_ui.is_open:
+                kind = workplace_popup["kind"]
+                obj = workplace_popup["obj"]
+                bases = workplace_bases_for(kind, obj)
+                ox, oy = m_pos
+                pw, ph = 230, 96
+                px = min(max(8, ox - pw // 2), screen.get_width() - pw - 8)
+                py = min(max(8, oy - ph - 14), screen.get_height() - ph - 8)
+                wp_popup_rect.update(px, py, pw, ph)
+                pygame.draw.rect(screen, (24, 24, 30), wp_popup_rect, border_radius=8)
+                pygame.draw.rect(screen, (80, 80, 95), wp_popup_rect, width=1, border_radius=8)
+
+                title = f"{getattr(obj, 'name', '') or getattr(obj, 'permit_type', '') or getattr(obj, 'furniture_type', '') or getattr(obj, 'building_type', '')}"
+                title_s = font_badge.render(title[:26], True, (220, 220, 230))
+                screen.blit(title_s, (px + 12, py + 8))
+
+                wp_close_btn_rect.update(px + pw - 24, py + 6, 18, 18)
+                ch_hov = wp_close_btn_rect.collidepoint(m_pos)
+                pygame.draw.rect(screen, (200, 60, 60) if ch_hov else (140, 45, 45), wp_close_btn_rect, border_radius=4)
+                ch_s = font_badge.render("x", True, (255, 255, 255))
+                screen.blit(ch_s, (wp_close_btn_rect.centerx - ch_s.get_width() // 2, wp_close_btn_rect.centery - ch_s.get_height() // 2))
+
+                btn_w = (pw - 12 * 3) // 2
+                by = py + 34
+                wp_permit_btn_rect.update(px + 12, by, btn_w, 26)
+                wp_structure_btn_rect.update(px + 12 + btn_w + 12, by, btn_w, 26)
+
+                for rect, label, base in (
+                    (wp_permit_btn_rect, "PERMIT", "permit"),
+                    (wp_structure_btn_rect, "STRUCTURE", "structure"),
+                ):
+                    enabled = base in bases
+                    hov = enabled and rect.collidepoint(m_pos)
+                    if enabled:
+                        bg = (37, 99, 235) if hov else (29, 78, 216)
+                        fg = (96, 165, 250) if hov else (30, 64, 175)
+                        tc = (255, 255, 255)
+                    else:
+                        bg = (45, 45, 52)
+                        fg = (60, 60, 68)
+                        tc = (110, 110, 120)
+                    pygame.draw.rect(screen, bg, rect, border_radius=6)
+                    pygame.draw.rect(screen, fg, rect, width=1, border_radius=6)
+                    t = font_badge.render(label, True, tc)
+                    screen.blit(t, (rect.centerx - t.get_width() // 2, rect.centery - t.get_height() // 2))
+            else:
+                wp_popup_rect.x = -9999
+                wp_permit_btn_rect.x = -9999
+                wp_structure_btn_rect.x = -9999
+                wp_close_btn_rect.x = -9999
 
             # -------------------------------------------------------------
             # 7.8. OVERLAYS: SELECTED INDIVIDUAL AI PROFILE POPUP (Agent 1)

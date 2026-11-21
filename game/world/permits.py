@@ -12,7 +12,6 @@ from game.config import (
     CROP_TYPES,
     TILE_SIZE,
     DEFAULT_PLOT_MAX_WORKERS,
-    UNLIMITED_WORKER_PERMIT_TYPES,
     COLOR_SOIL_DRY,
     COLOR_SOIL_WET,
     COLOR_WATER_SHEEN,
@@ -41,9 +40,7 @@ def is_connected_tiles(tiles):
     return len(visited) == len(tiles)
 
 def permit_worker_cap(permit):
-    """Worker slot cap for a permit; None means unlimited (e.g. farm lots)."""
-    if getattr(permit, "permit_type", "") in UNLIMITED_WORKER_PERMIT_TYPES:
-        return None
+    """Worker slot cap for a permit; farm lots use a manually set max_workers."""
     return getattr(permit, "max_workers", 2)
 
 def get_exterior_edges_for_tile(tile, tiles):
@@ -1003,6 +1000,8 @@ class PermitManager:
         if worker_cap is not None and len(p.assigned_workers) >= worker_cap:
             if getattr(p, "permit_type", "") == "church":
                 return False, "Church can have exactly one Priest assigned"
+            if getattr(p, "permit_type", "") == "farm":
+                return False, "Farm worker slots are full"
             p.max_workers = len(p.assigned_workers) + 1
 
         # Remove worker from any other permit first
@@ -1046,10 +1045,8 @@ class PermitManager:
             return True, "Worker removed"
         return False, "Worker not assigned to this permit"
 
-    def change_max_workers(self, permit_id, delta, villager_manager=None, furniture_manager=None):
+    def change_max_workers(self, permit_id, delta, villager_manager=None, furniture_manager=None, auto_assign=True):
         p = next((p for p in self.permits if p.id == permit_id), None)
-        if p and permit_worker_cap(p) is None:
-            return
         if p:
             current_max = getattr(p, "max_workers", 2 if p.permit_type == "farm" else 1)
             new_max = max(0, current_max + delta)
@@ -1075,7 +1072,7 @@ class PermitManager:
                                 v.set_job("Unassigned")
 
             # 2. Increasing worker count: automatically select closest available household member
-            elif delta > 0 and villager_manager and len(p.assigned_workers) < p.max_workers:
+            elif auto_assign and delta > 0 and villager_manager and len(p.assigned_workers) < p.max_workers:
                 target_job = "Farmer"
                 if p.permit_type == "church":
                     target_job = "Priest"

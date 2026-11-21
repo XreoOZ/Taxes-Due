@@ -174,9 +174,7 @@ VILLAGER_SPEED = 180.0
 WATERING_DURATION_SECONDS = 2.0
 DOORWAY_WAYPOINT_DISTANCE = 24.0
 DEFAULT_PLOT_MAX_WORKERS = 2
-# Permit types whose worker slots are unlimited (e.g. one farm lot takes any
-# number of farmers). Matched against Area.permit_type.
-UNLIMITED_WORKER_PERMIT_TYPES = {"farm"}
+# Farm plots use a manually configurable worker cap (set via Jobs > Workstations > Farmer).
 
 # Farming Task Durations & Dispersion Settings (Config-Driven, Zero Hardcode)
 WATERING_DURATION_INGAME_HOURS = 20.0 / 60.0  # 20 in-game minutes per tile

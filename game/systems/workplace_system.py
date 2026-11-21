@@ -58,7 +58,7 @@ def workplace_job_workers(workplace, job_id, villager_manager):
 
 
 def workplace_capacity(workplace):
-    """Worker capacity of a workplace; None means unlimited (e.g. farm lots)."""
+    """Worker capacity of a workplace (permit max_workers or furniture/building max_workers)."""
     kind, obj = workplace
     if kind == "permit":
         from game.world.permits import permit_worker_cap
@@ -77,8 +77,6 @@ def change_workplace_workers(job_id, workplace, delta, permit_manager, furniture
             return False
         worker_id = job_workers[-1]
         workers[:] = [item for item in workers if str(item) != str(worker_id)]
-        if kind == "permit":
-            obj.max_workers = max(0, int(getattr(obj, "max_workers", 1)) - 1)
         worker = next((v for v in villager_manager.get_all_villagers() if str(v.id) == str(worker_id)), None)
         if worker:
             worker.set_job("Unassigned")
@@ -88,7 +86,6 @@ def change_workplace_workers(job_id, workplace, delta, permit_manager, furniture
     if (capacity is not None and len(workers) >= capacity) or not villager_manager:
         return False
     if kind == "permit":
-        obj.max_workers = max(int(getattr(obj, "max_workers", 1)), len(workers) + 1)
         x = (obj.grid_x + obj.tiles_w / 2.0) * TILE_SIZE
         y = (obj.grid_y + obj.tiles_h / 2.0) * TILE_SIZE
     else:

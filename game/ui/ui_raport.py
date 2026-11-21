@@ -36,7 +36,6 @@ from game.config import (
     DEMOLITION_REFUND_RATIO,
     SCHEDULE_TYPES,
     DEFAULT_JOB_SCHEDULE,
-    UNLIMITED_WORKER_PERMIT_TYPES,
     is_food_item
 )
 from game.data.config import CHURCH_TAX_HAPPINESS_TIERS_COPPER
@@ -283,6 +282,8 @@ class RaportUI:
         self.job_select_btn_rects = {}
         self.job_workstation_btn_rects = {}
         self.workplace_delta_btn_rects = {}
+        self.workplace_max_btn_rects = {}
+        self.workplace_crop_btn_rects = {}
         self.job_schedule_btn_rects = {}
         self.worker_assign_btn_rects = {}
         self.worker_unassign_btn_rects = {}
@@ -687,6 +688,27 @@ class RaportUI:
                 self.building_scroll_y = 0
                 return f"switch_tab_{i}"
 
+        # Crop picker dialog is modal-ish: handle it before tab dispatch so it
+        # works when opened from Jobs > Workstations as well as the Permit tab.
+        if self.crop_picker_permit_id:
+            if self.close_crop_picker_btn_rect and self.close_crop_picker_btn_rect.collidepoint(mouse_pos):
+                self.crop_picker_permit_id = None
+                return "close_crop_picker"
+
+            for crop_id, rect in self.crop_select_btn_rects.items():
+                if rect.collidepoint(mouse_pos):
+                    c_cfg = CROP_TYPES[crop_id]
+                    if not c_cfg.get("wip", False):
+                        p = next((p for p in permit_manager.permits if p.id == self.crop_picker_permit_id), None)
+                        if p:
+                            p.set_crop(c_cfg["name"])
+                        self.crop_picker_permit_id = None
+                        return f"plant_crop_{crop_id}"
+
+            if self.crop_picker_bg_rect and not self.crop_picker_bg_rect.collidepoint(mouse_pos):
+                self.crop_picker_permit_id = None
+                return "close_crop_picker"
+
         # 4. Tab 0: Building Management
         if self.active_tab == 0:
             # Check Back button when viewing a specific building category
@@ -830,32 +852,6 @@ class RaportUI:
                     if villager_manager:
                         permit_manager.auto_sort_workers(villager_manager, furniture_manager=furniture_manager)
                     return f"auto_worker_{pid}"
-
-            # Check crop picker dialog first if open
-            if self.crop_picker_permit_id:
-                if self.close_crop_picker_btn_rect and self.close_crop_picker_btn_rect.collidepoint(mouse_pos):
-                    self.crop_picker_permit_id = None
-                    return "close_crop_picker"
-
-                for crop_id, rect in self.crop_select_btn_rects.items():
-                    if rect.collidepoint(mouse_pos):
-                        c_cfg = CROP_TYPES[crop_id]
-                        if not c_cfg.get("wip", False):
-                            p = next((p for p in permit_manager.permits if p.id == self.crop_picker_permit_id), None)
-                            if p:
-                                p.set_crop(c_cfg["name"])
-                            self.crop_picker_permit_id = None
-                            return f"plant_crop_{crop_id}"
-
-                if self.crop_picker_bg_rect and not self.crop_picker_bg_rect.collidepoint(mouse_pos):
-                    self.crop_picker_permit_id = None
-                    return "close_crop_picker"
-
-            # Check Plant Crop buttons
-            for pid, rect in list(self.open_plant_btn_rects.items()):
-                if rect.collidepoint(mouse_pos):
-                    self.crop_picker_permit_id = pid if self.crop_picker_permit_id != pid else None
-                    return f"toggle_plant_{pid}"
 
             # Check Edit Permit buttons
             for pid, rect in list(self.edit_permit_btn_rects.items()):
@@ -1227,6 +1223,27 @@ class RaportUI:
                             if station and villager_manager:
                                 change_workplace_workers(job_id, station, delta, permit_manager, furniture_manager, villager_manager, building_manager)
                             return f"workplace_worker_{delta}_{job_id}"
+                    for key, rect in list(self.workplace_max_btn_rects.items()):
+                        if rect.collidepoint(mouse_pos):
+                            job_id, station_key, delta = key
+                            from game.systems.workplace_system import get_job_workplaces
+                            workplaces = get_job_workplaces(job_id, permit_manager, furniture_manager, building_manager)
+                            station = next((ws for ws in workplaces if self._workplace_key(ws) == station_key), None)
+                            if station is not None and getattr(station, "permit_type", None):
+                                permit_manager.change_max_workers(
+                                    station.id, delta, villager_manager,
+                                    furniture_manager=furniture_manager, auto_assign=False,
+                                )
+                            return f"workplace_max_{delta}_{job_id}"
+                    for key, rect in list(self.workplace_crop_btn_rects.items()):
+                        if rect.collidepoint(mouse_pos):
+                            job_id, station_key = key
+                            from game.systems.workplace_system import get_job_workplaces
+                            workplaces = get_job_workplaces(job_id, permit_manager, furniture_manager, building_manager)
+                            station = next((ws for ws in workplaces if self._workplace_key(ws) == station_key), None)
+                            if station is not None and getattr(station, "permit_type", None):
+                                self.crop_picker_permit_id = station.id
+                            return f"workplace_crop_{job_id}"
                 if self.universal_schedule_btn_rect and self.universal_schedule_btn_rect.collidepoint(mouse_pos):
                     if schedule_manager:
                         schedule_manager.activate_universal_schedule()
@@ -1911,18 +1928,7 @@ class RaportUI:
                 surface.blit(f_lbl, (fam_btn.x + (fam_btn.w - f_lbl.get_width()) // 2, fam_btn.y + 4))
             right_cursor -= 68
 
-            # Plant button for Farm permit
-            plant_btn = pygame.Rect(right_cursor - 82, y_cur - 1, 78, 22)
-            self.open_plant_btn_rects[p.id] = plant_btn
-            plant_hover = plant_btn.collidepoint(pygame.mouse.get_pos())
-            pygame.draw.rect(surface, (22, 101, 52) if plant_hover else (20, 83, 45), plant_btn, border_radius=4)
-            pygame.draw.rect(surface, (74, 222, 128), plant_btn, width=1, border_radius=4)
-            p_label = f"{p.crop}" if getattr(p, "crop", None) else "Plant"
-            p_surf = self.font_badge.render(p_label, True, (255, 255, 255))
-            surface.blit(p_surf, (plant_btn.x + (plant_btn.w - p_surf.get_width()) // 2, plant_btn.y + 4))
-            right_cursor -= 86
-
-            # Worker Controls: [⚡ Auto] [+] {count/max} [-]  (Farm lots are unlimited)
+            # Worker Controls: [⚡ Auto] [+] {count/max} [-]
             auto_btn = pygame.Rect(right_cursor - 28, y_cur - 1, 26, 22)
             self.worker_auto_btn_rects[p.id] = auto_btn
             a_hov = auto_btn.collidepoint(pygame.mouse.get_pos())
@@ -1932,29 +1938,24 @@ class RaportUI:
             right_cursor -= 32
 
             w_count = len(getattr(p, 'assigned_workers', set()))
-            farm_unlimited = p.permit_type in UNLIMITED_WORKER_PERMIT_TYPES
-            if farm_unlimited:
-                cnt_str = f"{w_count} Workers"
-            else:
-                w_max = getattr(p, 'max_workers', 2)
-                cnt_str = f"{w_count}/{w_max} Workers"
+            w_max = getattr(p, 'max_workers', 2)
+            cnt_str = f"{w_count}/{w_max} Workers"
             cnt_surf = self.font_badge.render(cnt_str, True, (241, 245, 249))
             surface.blit(cnt_surf, (right_cursor - cnt_surf.get_width() - 4, y_cur + 3))
             right_cursor -= (cnt_surf.get_width() + 8)
 
-            if not farm_unlimited:
-                inc_btn = pygame.Rect(right_cursor - 20, y_cur - 1, 18, 22)
-                self.worker_inc_btn_rects[p.id] = inc_btn
-                inc_hov = inc_btn.collidepoint(pygame.mouse.get_pos())
-                pygame.draw.rect(surface, (37, 99, 235) if inc_hov else (30, 58, 138), inc_btn, border_radius=3)
-                surface.blit(self.font_badge.render("+", True, (255, 255, 255)), (inc_btn.x + 5, inc_btn.y + 3))
-                right_cursor -= 24
+            inc_btn = pygame.Rect(right_cursor - 20, y_cur - 1, 18, 22)
+            self.worker_inc_btn_rects[p.id] = inc_btn
+            inc_hov = inc_btn.collidepoint(pygame.mouse.get_pos())
+            pygame.draw.rect(surface, (37, 99, 235) if inc_hov else (30, 58, 138), inc_btn, border_radius=3)
+            surface.blit(self.font_badge.render("+", True, (255, 255, 255)), (inc_btn.x + 5, inc_btn.y + 3))
+            right_cursor -= 24
 
-                dec_btn = pygame.Rect(right_cursor - 20, y_cur - 1, 18, 22)
-                self.worker_dec_btn_rects[p.id] = dec_btn
-                dec_hov = dec_btn.collidepoint(pygame.mouse.get_pos())
-                pygame.draw.rect(surface, (71, 85, 105) if dec_hov else (51, 65, 85), dec_btn, border_radius=3)
-                surface.blit(self.font_badge.render("-", True, (255, 255, 255)), (dec_btn.x + 6, dec_btn.y + 3))
+            dec_btn = pygame.Rect(right_cursor - 20, y_cur - 1, 18, 22)
+            self.worker_dec_btn_rects[p.id] = dec_btn
+            dec_hov = dec_btn.collidepoint(pygame.mouse.get_pos())
+            pygame.draw.rect(surface, (71, 85, 105) if dec_hov else (51, 65, 85), dec_btn, border_radius=3)
+            surface.blit(self.font_badge.render("-", True, (255, 255, 255)), (dec_btn.x + 6, dec_btn.y + 3))
 
         elif p.permit_type in ("church", "cemetery"):
             p_workers = getattr(p, "assigned_workers", [])
@@ -2270,6 +2271,9 @@ class RaportUI:
                 lbl = self.font_btn.render(b_text, True, (255, 255, 255))
                 surface.blit(lbl, (p_btn.centerx - lbl.get_width() // 2, p_btn.centery - lbl.get_height() // 2))
 
+        self._draw_crop_picker_popup(surface, mx, cy, permit_manager)
+
+    def _draw_crop_picker_popup(self, surface, mx, cy, permit_manager):
         # Crop Selection Popup Dialog
         self.crop_select_btn_rects = {}
         if self.crop_picker_permit_id:
@@ -3275,6 +3279,8 @@ class RaportUI:
         y = cy + 40
         bottom = (surface.get_height() + self.modal_h) // 2 - 14
         self.workplace_delta_btn_rects = {}
+        self.workplace_max_btn_rects = {}
+        self.workplace_crop_btn_rects = {}
         self.jobs_viewport_rect = pygame.Rect(mx + 16, y, self.modal_w - 32, max(0, bottom - y))
         old_clip = surface.get_clip()
         surface.set_clip(self.jobs_viewport_rect)
@@ -3282,7 +3288,9 @@ class RaportUI:
             msg = self.font_body.render("No workplaces are available yet. Place or create one first.", True, COLOR_TEXT_MUTED)
             surface.blit(msg, (mx + 32, y + 12))
         for kind, obj in workplaces:
-            card = pygame.Rect(mx + 24, y, self.modal_w - 48, 54)
+            is_permit = kind == "permit"
+            card_h = 84 if is_permit else 54
+            card = pygame.Rect(mx + 24, y, self.modal_w - 48, card_h)
             pygame.draw.rect(surface, (24, 34, 52), card, border_radius=7)
             pygame.draw.rect(surface, (51, 65, 85), card, width=1, border_radius=7)
             station_name = getattr(obj, "name", None) or getattr(obj, "type_cfg", {}).get("name", getattr(obj, "permit_type", "Workplace").replace("_", " ").title())
@@ -3304,8 +3312,40 @@ class RaportUI:
                 pygame.draw.rect(surface, color, rect, border_radius=4)
                 t = self.font_sub.render("-" if delta < 0 else "+", True, (255, 255, 255))
                 surface.blit(t, (rect.centerx - t.get_width() // 2, rect.centery - t.get_height() // 2))
-            y += 62
+
+            if is_permit:
+                # Row 2: manual worker cap stepper + crop selector (farms)
+                row2_y = card.y + 50
+                max_lbl = self.font_badge.render("Max:", True, COLOR_TEXT_MUTED)
+                surface.blit(max_lbl, (card.x + 14, row2_y + 4))
+                cur_max = int(getattr(obj, "max_workers", 2))
+                max_txt = self.font_sub.render(str(cur_max), True, (241, 245, 249))
+                surface.blit(max_txt, (card.x + 58, row2_y + 2))
+                for delta, x in ((-1, card.x + 84), (1, card.x + 118)):
+                    rect = pygame.Rect(x, row2_y, 30, 24)
+                    self.workplace_max_btn_rects[(job_id, self._workplace_key((kind, obj)), delta)] = rect
+                    hover = rect.collidepoint(mouse_pos)
+                    color = (71, 85, 105) if delta < 0 else (37, 99, 235)
+                    if hover:
+                        color = tuple(min(255, c + 28) for c in color)
+                    pygame.draw.rect(surface, color, rect, border_radius=4)
+                    t = self.font_sub.render("-" if delta < 0 else "+", True, (255, 255, 255))
+                    surface.blit(t, (rect.centerx - t.get_width() // 2, rect.centery - t.get_height() // 2))
+
+                if getattr(obj, "permit_type", "") == "farm":
+                    crop_name = getattr(obj, "crop", None) or "No crop"
+                    crop_lbl = self.font_badge.render(f"Crop: {crop_name}", True, COLOR_TEXT_MUTED)
+                    surface.blit(crop_lbl, (card.x + 160, row2_y + 4))
+                    crop_btn = pygame.Rect(card.right - 104, row2_y - 2, 92, 28)
+                    self.workplace_crop_btn_rects[(job_id, self._workplace_key((kind, obj)))] = crop_btn
+                    cb_hov = crop_btn.collidepoint(mouse_pos)
+                    pygame.draw.rect(surface, (22, 101, 52) if cb_hov else (20, 83, 45), crop_btn, border_radius=5)
+                    pygame.draw.rect(surface, (74, 222, 128), crop_btn, width=1, border_radius=5)
+                    cb_txt = self.font_badge.render("Select", True, (255, 255, 255))
+                    surface.blit(cb_txt, (crop_btn.centerx - cb_txt.get_width() // 2, crop_btn.centery - cb_txt.get_height() // 2))
+            y += card_h + 8
         surface.set_clip(old_clip)
+        self._draw_crop_picker_popup(surface, mx, cy, permit_manager)
 
     def _draw_workers_tab(self, surface, mx, cy, villager_manager, permit_manager, furniture_manager=None, schedule_manager=None, building_manager=None):
         mouse_pos = pygame.mouse.get_pos()
