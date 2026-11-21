@@ -50,7 +50,7 @@ class TestMarketEconomyStallsWealth(unittest.TestCase):
         self.assertEqual(HouseholdStallSystem.get_item_allocation(market, "Potato"), 50)
 
         # Create household chest with 100 potatoes
-        chest = Furniture("furn_chest_1", "household_storage", 5, 5, family_id=family_id)
+        chest = Furniture("furn_chest_1", "household_storage", 5, 5, permit_id="test_permit", family_id=family_id)
         chest.inventory = {"Potato": 100}
         self.fm.furnitures.append(chest)
 
@@ -78,7 +78,7 @@ class TestMarketEconomyStallsWealth(unittest.TestCase):
         HouseholdStallSystem.assign_stall(market, family_id)
         HouseholdStallSystem.set_item_allocation(market, "Potato", 50)
 
-        chest = Furniture("chest_smith", "household_storage", 2, 2, family_id=family_id)
+        chest = Furniture("chest_smith", "household_storage", 2, 2, permit_id="test_permit", family_id=family_id)
         chest.inventory = {"Potato": 40}
         self.fm.furnitures.append(chest)
 
@@ -160,7 +160,7 @@ class TestMarketEconomyStallsWealth(unittest.TestCase):
         self.assertGreater(mkt_copper, 0)
 
         # Household AI collects earnings during leisure time
-        chest = Furniture("chest_farmer", "household_storage", 1, 1, family_id=family_id)
+        chest = Furniture("chest_farmer", "household_storage", 1, 1, permit_id="test_permit", family_id=family_id)
         chest.inventory = {}
         self.fm.furnitures.append(chest)
 
@@ -229,7 +229,7 @@ class TestMarketEconomyStallsWealth(unittest.TestCase):
         fam1.members = [m1]
         self.vm.families = [fam1]
 
-        chest1 = Furniture("c1", "household_storage", 3, 3, family_id="f1")
+        chest1 = Furniture("c1", "household_storage", 3, 3, permit_id="test_permit", family_id="f1")
         chest1.inventory = {"Silver": 2}  # In chest: 2 Silver = 20 Copper
         self.fm.furnitures.append(chest1)
 

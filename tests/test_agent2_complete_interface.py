@@ -36,9 +36,11 @@ def test_building_categories():
     structure_cat = next(c for c in cats if c["id"] == "structure")
     assert "wooden_structure" in structure_cat["building_types"]
     assert "stone_structure" in structure_cat["building_types"]
-    assert "well" in structure_cat["building_types"]
-    assert "market" in structure_cat["building_types"]
-    assert "toilet" in structure_cat["building_types"]
+
+    public_cat = next(c for c in cats if c["id"] == "public_structure")
+    assert "well" in public_cat["building_types"]
+    assert "market" in public_cat["building_types"]
+    assert "toilet" in public_cat["building_types"]
 
 
 def test_toilet_blueprint_and_permit_free():
@@ -85,18 +87,18 @@ def test_schedule_manager_7_days_and_priest_prayer_override():
     assert "Sunday" in DAYS_OF_WEEK
     assert SCHEDULE_PRAYER == "PRAYER"
 
-    # Default prayer block is 12:00 to 14:00 (hours 12 and 13) for Priest
+    # Default prayer block is 03:00 to 04:00 for Priest
     p_start, p_end = sm.get_prayer_hours()
-    assert p_start == 12
-    assert p_end == 14
+    assert p_start == 3
+    assert p_end == 4
 
-    # Hour 12 should be PRAYER for Priest on any day
-    act_hour_12 = sm.get_current_activity("Priest", 12, "Wednesday")
-    assert act_hour_12 == SCHEDULE_PRAYER
+    # Hour 3 should be PRAYER for Priest on any day
+    act_hour_3 = sm.get_current_activity("Priest", 3, "Wednesday")
+    assert act_hour_3 == SCHEDULE_PRAYER
 
-    # Hour 13 should be PRAYER for Priest
-    act_hour_13 = sm.get_current_activity("Priest", 13, "Sunday")
-    assert act_hour_13 == SCHEDULE_PRAYER
+    # Hour 3 should be PRAYER for Priest
+    act_hour_3b = sm.get_current_activity("Priest", 3, "Sunday")
+    assert act_hour_3b == SCHEDULE_PRAYER
 
     # Outside prayer time (e.g. hour 9), normal schedule applies
     act_hour_9 = sm.get_current_activity("Priest", 9, "Monday")

@@ -78,6 +78,7 @@ from game.ui.market_modal import MarketProfileModal
 from game.ui.add_item_modal import AddItemModal
 from game.ui.carpenter_catalog_modal import CarpenterCatalogModal
 from game.ui.path_debug_overlay import PathDebugOverlay
+from game.ui.map_overlay import MapOverlay
 from game.systems.production_distribution import ProductionDistributionSystem
 from game.speed_control import SpeedController
 from game.day_cycle import DayCycleSystem
@@ -148,6 +149,7 @@ def main():
     add_item_modal = AddItemModal()
     carpenter_catalog_modal = CarpenterCatalogModal()
     path_debug_overlay = PathDebugOverlay(enabled=True)
+    map_overlay = MapOverlay()
     production_system = ProductionDistributionSystem.get_instance()
     speed_controller = SpeedController()
     settings_modal = SettingsModal()
@@ -425,6 +427,14 @@ def main():
                         planning_building_tiles.clear()
                         planned_door_tile = None
                         planned_door_side = "bottom"
+                    continue
+
+                # World map overlay (M): fullscreen view-only map; WASD keeps working.
+                if map_overlay.is_open:
+                    map_overlay.handle_event(event)
+                    continue
+                if event.type == pygame.KEYDOWN and event.key == pygame.K_m:
+                    map_overlay.open()
                     continue
 
                 if not raport_ui.is_open:
@@ -1177,6 +1187,7 @@ def main():
                 villager_manager.daily_midnight_update(day_cycle.day_number)
                 furniture_manager.daily_wear_update(days_passed)
                 building_manager.daily_public_maintenance_update(days_passed)
+            furniture_manager.check_breaks_by_time(day_cycle.day_number, day_cycle.current_hour)
             day_dt = game_dt / max(1.0, day_cycle.day_length_seconds)
             cur_day_time = day_cycle.day_number + (day_cycle.current_hour / 24.0)
             wealth_context_timer -= real_dt
@@ -2343,6 +2354,12 @@ def main():
 
             # 14. Save / Load Modal Dialog (Topmost overlay)
             save_modal.draw(screen)
+
+            # 15. World Map Overlay (M) - fullscreen, covers everything
+            map_overlay.draw(
+                screen, player, permit_manager, building_manager, furniture_manager,
+                villager_manager, servant_manager, stockpile_manager,
+            )
 
         pygame.display.flip()
 

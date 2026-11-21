@@ -77,7 +77,7 @@ class TestFoodWaterCategorySync(unittest.TestCase):
         self.villager_manager.families.append(fam)
 
         # Storage chest owns 5 Potatoes and 3 Water
-        chest = Furniture("f_chest_3", "household_storage", 5, 5, family_id="fam_test_3")
+        chest = Furniture("f_chest_3", "household_storage", 5, 5, permit_id="test_permit", family_id="fam_test_3")
         chest.inventory["Potato"] = 5
         chest.inventory["Water"] = 3
         self.furniture_manager.furnitures.append(chest)
@@ -102,7 +102,7 @@ class TestFoodWaterCategorySync(unittest.TestCase):
         fam.members = [v1, v2, v3]
         self.villager_manager.families.append(fam)
 
-        chest = Furniture("f_chest_4", "household_storage", 5, 5, family_id="fam_test_4")
+        chest = Furniture("f_chest_4", "household_storage", 5, 5, permit_id="test_permit", family_id="fam_test_4")
         chest.inventory["Potato"] = 5
         chest.inventory["Water"] = 3
         self.furniture_manager.furnitures.append(chest)
@@ -147,7 +147,7 @@ class TestFoodWaterCategorySync(unittest.TestCase):
         fam.members = [v1]
         self.villager_manager.families.append(fam)
 
-        chest = Furniture("f_chest_5", "household_storage", 5, 5, family_id="fam_test_5")
+        chest = Furniture("f_chest_5", "household_storage", 5, 5, permit_id="test_permit", family_id="fam_test_5")
         chest.inventory["Potato"] = 115
         self.furniture_manager.furnitures.append(chest)
 
@@ -165,7 +165,7 @@ class TestFoodWaterCategorySync(unittest.TestCase):
         self.villager_manager.families.append(fam)
 
         # Chest only has Bread (no Potatoes at all)
-        chest = Furniture("f_chest_6", "household_storage", 5, 5, family_id="fam_test_6")
+        chest = Furniture("f_chest_6", "household_storage", 5, 5, permit_id="test_permit", family_id="fam_test_6")
         chest.inventory["Bread"] = 3
         self.furniture_manager.furnitures.append(chest)
 
@@ -196,7 +196,7 @@ class TestFoodWaterCategorySync(unittest.TestCase):
         self.villager_manager.families = [fam_a, fam_b]
 
         # Family B has plenty of food and water in chest; Family A has NO chest and NO food
-        chest_b = Furniture("chest_b", "household_storage", 5, 5, family_id="fam_B")
+        chest_b = Furniture("chest_b", "household_storage", 5, 5, permit_id="test_permit", family_id="fam_B")
         chest_b.inventory["Potato"] = 20
         chest_b.inventory["Water"] = 10
         self.furniture_manager.furnitures = [chest_b]
@@ -218,7 +218,7 @@ class TestFoodWaterCategorySync(unittest.TestCase):
         fam.members = [v]
         self.villager_manager.families.append(fam)
 
-        chest = Furniture("f_chest_w", "household_storage", 5, 5, family_id="fam_well")
+        chest = Furniture("f_chest_w", "household_storage", 5, 5, permit_id="test_permit", family_id="fam_well")
         chest.inventory["Water"] = 0
         self.furniture_manager.furnitures.append(chest)
 

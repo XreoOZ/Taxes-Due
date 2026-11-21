@@ -1163,7 +1163,7 @@ class CarpenterSystem:
             order["status"] = "BUILDING"
 
         carpenter.task = "CARPENTER_REPAIRING" if is_repair else "CARPENTER_CONSTRUCTING"
-        carpenter.active_tool = None if is_repair else "Saw"
+        carpenter.active_tool = None if is_repair else (cfg.get("required_tools") or ["Saw"])[0]
         target = cls._asset_approach_point(
             carpenter, active, order, all_entities, building_manager,
         )

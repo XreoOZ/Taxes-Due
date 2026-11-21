@@ -5,18 +5,14 @@ Rules applied: Modular, Zero Hardcode, Lean Code.
 
 import unittest
 import pygame
-from game.config import (
-    TILE_SIZE,
-    COLOR_PATH_VILLAGER,
-    COLOR_PATH_SERVANT,
-    PATH_LINE_WIDTH
-)
+from game.config import TILE_SIZE
 from game.buildings.buildings import Building, BuildingManager
 from game.buildings.furniture import FurnitureManager, Furniture
 from game.entities.servants import Servant, ServantManager
 from game.entities.villagers import Villager, VillagerManager, Family
-from game.world.pathfinding import Pathfinder, GlobalPathRegistry, draw_ai_paths
+from game.world.pathfinding import Pathfinder, GlobalPathRegistry
 from game.world.camera import Camera
+from game.ui.path_debug_overlay import PathDebugOverlay
 
 class TestPredeterminedPathfindingAndPriority(unittest.TestCase):
     def setUp(self):
@@ -99,9 +95,9 @@ class TestPredeterminedPathfindingAndPriority(unittest.TestCase):
         s.is_moving = True
 
         # Test with visible lines
-        draw_ai_paths(surface, camera, villagers=[v], servants=[s], show_lines=True)
+        PathDebugOverlay(enabled=True).draw_routes(surface, camera, [v, s])
         # Test with lines turned off
-        draw_ai_paths(surface, camera, villagers=[v], servants=[s], show_lines=False)
+        PathDebugOverlay(enabled=False).draw_routes(surface, camera, [v, s])
 
 if __name__ == "__main__":
     unittest.main()

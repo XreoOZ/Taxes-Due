@@ -281,8 +281,8 @@ class ConfessionSystem:
         is_active_visitor = (
             active and str(active.get("villager_id")) == str(villager.id)
         )
-        is_queue_head = bool(queue) and queue[0] is request
-        can_prepare_payment = is_active_visitor or (not active and is_queue_head)
+        # Allow ALL queued villagers to prepare payment in parallel while waiting
+        can_prepare_payment = is_active_visitor or (request in queue)
         if (not request.get("self_confession") and not request.get("payment_ready")
                 and can_prepare_payment):
             cls._prepare_payment(

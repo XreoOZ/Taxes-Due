@@ -133,7 +133,7 @@ class TestAgent2ChurchPriestPrayerAndTax(unittest.TestCase):
         fam.members.append(mom)
         self.villager_mgr.families = [fam]
 
-        chest = Furniture("chest_miller", "household_storage", 2, 2, family_id="fam_miller")
+        chest = Furniture("chest_miller", "household_storage", 2, 2, permit_id="test_permit", family_id="fam_miller")
         chest.currency = {"Copper": 5, "Silver": 0, "Gold": 0}
         self.furniture_mgr.furnitures = [chest]
 
@@ -166,7 +166,7 @@ class TestAgent2ChurchPriestPrayerAndTax(unittest.TestCase):
         fam.members.append(poor_vil)
         self.villager_mgr.families = [fam]
 
-        chest = Furniture("chest_poor", "household_storage", 3, 3, family_id="fam_poor")
+        chest = Furniture("chest_poor", "household_storage", 3, 3, permit_id="test_permit", family_id="fam_poor")
         chest.currency = {"Copper": 3, "Silver": 0, "Gold": 0}  # Has only 3 Copper
         self.furniture_mgr.furnitures = [chest]
 
@@ -187,7 +187,7 @@ class TestAgent2ChurchPriestPrayerAndTax(unittest.TestCase):
         priest = Villager("priest_1", "Father", "Thomas", "Male", 40, 1, "Priest", family_id="fam_church")
         priest.currency = {"Copper": 8, "Silver": 1, "Gold": 0}
 
-        church_chest = Furniture("chest_church", "household_storage", 0, 0, family_id="fam_church")
+        church_chest = Furniture("chest_church", "household_storage", 0, 0, permit_id="test_permit", family_id="fam_church")
         church_chest.currency = {"Copper": 2, "Silver": 0, "Gold": 0}
         self.furniture_mgr.furnitures = [church_chest]
 

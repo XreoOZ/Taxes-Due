@@ -12,6 +12,7 @@ from game.data.config import (
     PERMIT_TYPES,
     DEDICATED_JOBS,
     ITEM_CATEGORIES,
+    MARKET_TRADEABLE_ITEMS,
     SCHEDULE_PRAYER,
     SCHEDULE_WORK,
     get_building_categories,
@@ -45,15 +46,18 @@ class TestAgent1BuildingJobsScheduleMarketUI(unittest.TestCase):
         cat_ids = [c["id"] for c in cats]
 
         self.assertIn("structure", cat_ids)
+        self.assertIn("public_structure", cat_ids)
         self.assertIn("furniture", cat_ids)
-        self.assertIn("well", cat_ids)
-        self.assertIn("market", cat_ids)
-        self.assertIn("toilet", cat_ids)
 
         struct_cat = next(c for c in cats if c["id"] == "structure")
         self.assertEqual(struct_cat["name"], "Structure")
         self.assertIn("wooden_structure", struct_cat["building_types"])
         self.assertIn("stone_structure", struct_cat["building_types"])
+
+        public_cat = next(c for c in cats if c["id"] == "public_structure")
+        self.assertIn("well", public_cat["building_types"])
+        self.assertIn("market", public_cat["building_types"])
+        self.assertIn("toilet", public_cat["building_types"])
 
         furn_cat = next(c for c in cats if c["id"] == "furniture")
         self.assertEqual(furn_cat["name"], "Furniture")
@@ -73,9 +77,8 @@ class TestAgent1BuildingJobsScheduleMarketUI(unittest.TestCase):
 
         # Screen 1 must show Structure and Furniture, not individual building blueprints directly
         self.assertIn("structure", ui.building_category_btn_rects)
+        self.assertIn("public_structure", ui.building_category_btn_rects)
         self.assertIn("furniture", ui.building_category_btn_rects)
-        self.assertIn("well", ui.building_category_btn_rects)
-        self.assertIn("market", ui.building_category_btn_rects)
         self.assertEqual(len(ui.building_select_rects), 0)
 
         # Click on Structure category card
@@ -244,16 +247,11 @@ class TestAgent1BuildingJobsScheduleMarketUI(unittest.TestCase):
         surf = pygame.Surface((1280, 720))
         modal.draw(surf)
 
-        # All registered commodities in ITEM_CATEGORIES are tradeable
-        tradeable_registered = []
-        for it, cat in ITEM_CATEGORIES.items():
-            if cat != "CURRENCY" and it[0].isupper() and it not in tradeable_registered:
-                tradeable_registered.append(it)
-
-        self.assertGreaterEqual(len(modal.tradeable_items), len(tradeable_registered))
+        # All configured market-tradeable items are offered by the modal
+        self.assertGreaterEqual(len(modal.tradeable_items), len(MARKET_TRADEABLE_ITEMS))
         self.assertIn("Potato", modal.tradeable_items)
-        self.assertIn("Bread", modal.tradeable_items)
         self.assertIn("Wood", modal.tradeable_items)
+        self.assertIn("Hoe", modal.tradeable_items)
 
         # Separate selling price and buying price
         sell_p = MarketService.get_item_price("Potato", market)

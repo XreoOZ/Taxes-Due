@@ -274,7 +274,7 @@ class TestAgent1HouseholdSurvival(unittest.TestCase):
     def test_09_and_10_market_purchasing_hook_and_failed_purchase_no_free_food(self):
         """9 & 10. AI uses AGENT 2 purchasing service when food stock is empty; failed purchase gives no free food."""
         v = Villager("vil_buyer", "Walter", "Fisher", "Male", 30, 2, "Father", "fam_fisher", 64.0, 64.0)
-        chest = Furniture("f_fisher_chest", "household_storage", 1, 1, family_id="fam_fisher")
+        chest = Furniture("f_fisher_chest", "household_storage", 1, 1, permit_id="test_permit", family_id="fam_fisher")
         chest.inventory.clear()  # No food
         self.furniture_manager.furnitures.append(chest)
 

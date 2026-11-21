@@ -994,6 +994,7 @@ class Villager:
         sm = getattr(self, "stockpile_manager", None)
         if fm or sm:
             self.deposit_irrelevant_tools(fm, sm)
+            self.collect_all_job_tools(fm, sm)
 
     def _get_unused_tools(self, assigned_farm=None, sched_activity=None):
         """
@@ -1416,6 +1417,76 @@ class Villager:
         self.current_schedule_activity = sched_activity
         is_free_time_schedule = sched_activity in FREE_TIME_SCHEDULE_ACTIVITIES
 
+        # WORK schedule with genuinely no work available -> behave as free time
+        # so the villager can do needs/chores instead of standing idle.
+        # Work availability is probed per job, not inferred from the current task.
+        no_work_available = False
+        if sched_activity == "WORK":
+            from game.data.config import DEDICATED_JOBS
+            job_cfg = DEDICATED_JOBS.get(self.job, {})
+            if self.job in (None, "Unassigned") or job_cfg.get("wip"):
+                no_work_available = True
+            elif self.job == "Farmer" and permit_manager:
+                farm = next((p for p in permit_manager.permits
+                             if p.permit_type == "farm"
+                             and self.id in getattr(p, "assigned_workers", [])), None)
+                no_work_available = not (
+                    farm and getattr(farm, "crop", None)
+                    and (farm.get_harvestable_tiles()
+                         or farm.get_untilled_tiles()
+                         or farm.get_unwatered_tiles())
+                )
+            elif self.job == "Carpenter" and furniture_manager:
+                from game.systems.carpenter_system import CarpenterSystem
+                order_subjects = (
+                    list(getattr(furniture_manager, "furnitures", []))
+                    + list(getattr(building_manager, "buildings", []) if building_manager else [])
+                    + list(getattr(building_manager, "construction_sites", []) if building_manager else [])
+                )
+                # Only statuses where the Carpenter can act count as work.
+                # PAYMENT_REQUESTED / PAYMENT_TRAVELING / LANDLORD_* mean he is
+                # just waiting on someone else, so he should do needs instead.
+                actionable = ("AWAITING_PAYMENT", "PAID", "BUILDING", "AWAITING_MATERIAL")
+                has_order = any(
+                    isinstance(getattr(s, "construction_order", None), dict)
+                    and s.construction_order.get("status") in actionable
+                    and str(s.construction_order.get("carpenter_id") or "") in ("", str(self.id))
+                    for s in order_subjects
+                )
+                _, totals = CarpenterSystem._materials_in_storage(self, furniture_manager)
+                targets = job_cfg.get("material_stock_target", {})
+                needs_stock = any(
+                    int(totals.get(mat, 0)) < int(target)
+                    for mat, target in targets.items()
+                )
+                no_work_available = not (has_order or needs_stock)
+            elif self.job == "Gravedigger":
+                from game.systems.cemetery_system import CemeterySystem
+                inst = CemeterySystem.get_instance()
+                no_work_available = not (
+                    getattr(inst, "pending_commissions", None)
+                    or getattr(inst, "overflow_corpses", None)
+                )
+            elif self.job == "Tax Collector":
+                from game.systems.taxation_system import TaxationSystem
+                round_state = getattr(self, "socage_tax_round", None)
+                day_number = getattr(day_cycle, "day_number", 1)
+                no_work_available = not (
+                    isinstance(round_state, dict)
+                    or TaxationSystem.next_collection_day(day_number, villager_manager) == day_number
+                )
+            else:
+                # Generic fallback for every other job (Priest, WIP jobs, and any
+                # future job): counts as having work only while actually executing
+                # a WORK-schedule task. Otherwise they get leisure/needs behavior.
+                no_work_available = (
+                    ScheduledActivitySystem.task_schedule(getattr(self, "task", "IDLE")) != "WORK"
+                )
+            if no_work_available:
+                sched_activity = "LEISURE"
+                is_free_time_schedule = True
+                self.current_schedule_activity = sched_activity
+
         if schedule_manager:
             from game.systems.confession_system import ConfessionSystem
             ConfessionSystem.cancel_if_schedule_ended(
@@ -1544,7 +1615,9 @@ class Villager:
             self.need_seek_cooldown > 0.0
             and self.need_seek_cooldown_task in (None, urgent_need_task)
         )
-        if (is_free_time_schedule
+        # Allow needs during WORK if no actual work is available
+        can_handle_needs = is_free_time_schedule or (sched_activity == "WORK" and no_work_available)
+        if (can_handle_needs
                 and (is_crit_hunger or is_crit_thirst or is_crit_toilet)
                 and self.task not in urgent_need_tasks and not cooldown_blocks_need):
             self.sleeping_recharge_active = False
@@ -3303,7 +3376,12 @@ class Villager:
         # -------------------------------------------------------------
         # Rutinitas 3: Waktu Santai / Istirahat (LEISURE / Chores Finished)
         # -------------------------------------------------------------
-        self.task = "LEISURE" if sched_activity in ("LEISURE", "ANY") else "IDLE"
+        # Don't overwrite need tasks when idling
+        need_tasks = ("SEEKING_FOOD", "SEEKING_WATER", "SEEKING_TOILET", "BUYING_FOOD_RETRIEVE_COINS",
+                      "BUYING_FOOD_TRAVEL_TO_MARKET", "BUYING_FOOD_HAULING_HOME", "COLLECTING_HOUSEHOLD_WATER",
+                      "HAULING_HOUSEHOLD_WATER", "DEPOSITING_UNUSED_ITEMS")
+        if self.task not in need_tasks:
+            self.task = "LEISURE" if sched_activity in ("LEISURE", "ANY") else "IDLE"
         self.active_tool = None
 
         if (sched_activity in FREE_TIME_SCHEDULE_ACTIVITIES

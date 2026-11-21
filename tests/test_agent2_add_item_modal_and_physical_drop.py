@@ -151,7 +151,7 @@ class TestAgent2AddItemModalAndPhysicalDrop(unittest.TestCase):
 
     def test_household_chest_storage_and_overflow_near_chest(self):
         """6. Storing in chest respects capacity; overflow drops on ground near chest"""
-        chest = Furniture("f_chest_1", "household_storage", 3, 3)
+        chest = Furniture("f_chest_1", "household_storage", 3, 3, permit_id="test_permit")
         chest.type_cfg["capacity"] = 100
 
         # Add 60 Potato to chest with 100 cap -> fits in chest

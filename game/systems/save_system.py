@@ -5,6 +5,7 @@ Handles serialization and deserialization of complete game world state across sa
 
 import os
 import json
+import random
 import time
 from game.data.config import MARKET_TRADEABLE_ITEMS, MARKET_DEFAULT_HOUSEHOLD_SALE_PERCENT
 from game.config import TILE_SIZE, HAPPINESS_INITIAL_VALUE, SLEEP_INITIAL_VALUE
@@ -202,7 +203,10 @@ def serialize_game_state(day_cycle, resources, player, permit_manager, building_
             "carrier_id": getattr(f, "carrier_id", None),
             "condition": getattr(f, "condition", 1.0),
             "inventory": dict(getattr(f, "inventory", {})),
-            "currency": dict(getattr(f, "currency", {}))
+            "currency": dict(getattr(f, "currency", {})),
+            "break_check_day": getattr(f, "break_check_day", 1),
+            "break_check_hour": getattr(f, "break_check_hour", 0.0),
+            "break_checked_today": getattr(f, "break_checked_today", False)
         })
 
     # 7. Villagers & Families
@@ -577,6 +581,9 @@ def deserialize_game_state(data, day_cycle, resources, player, permit_manager, b
         f.carrier_id = f_d.get("carrier_id", None)
         f.condition = f_d.get("condition", 1.0)
         f.assigned_workers = list(f_d.get("assigned_workers", []))
+        f.break_check_day = f_d.get("break_check_day", data.get("day_number", 1))
+        f.break_check_hour = f_d.get("break_check_hour", random.uniform(0, 24))
+        f.break_checked_today = f_d.get("break_checked_today", False)
         furniture_manager.furnitures.append(f)
     if hasattr(furniture_manager, "invalidate_cache"):
         furniture_manager.invalidate_cache()

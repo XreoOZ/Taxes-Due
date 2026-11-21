@@ -42,7 +42,9 @@ class TestGenericWorkToolManagement(unittest.TestCase):
         self.bm.buildings.append(self.house)
 
         self.chest, _ = self.fm.add_furniture("household_storage", 5, 5, self.pm, self.vm, building_manager=self.bm)
+        self.chest.permit_id = "test_permit"
         self.chest.family_id = "fam_ward"
+        self.chest.construction_order = {"status": "COMPLETE"}
 
         # Villager Arthur Ward
         self.worker = Villager("vil_arthur", "Arthur", "Ward", "male", 28, 2, "Father", "fam_ward",

@@ -188,7 +188,7 @@ class TestParallelWorkAndGrantSystem(unittest.TestCase):
         self.bm.buildings.append(house)
 
         # Family chest inside house at (10, 10)
-        chest = Furniture("chest_1", "household_storage", 10, 10, family_id="fam_ward")
+        chest = Furniture("chest_1", "household_storage", 10, 10, permit_id="test_permit", family_id="fam_ward")
         self.fm.furnitures.append(chest)
 
         # Stockpile with 10 Hoes at (2, 2)

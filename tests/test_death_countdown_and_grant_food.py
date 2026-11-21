@@ -149,7 +149,7 @@ class TestDeathCountdownAndGrantFood(unittest.TestCase):
         fam.members.append(v)
         self.villager_manager.families.append(fam)
 
-        chest = Furniture(701, "household_storage", 5, 5, family_id=7)
+        chest = Furniture(701, "household_storage", 5, 5, permit_id="test_permit", family_id=7)
         chest.inventory["Potato"] = 5
         self.furniture_manager.furnitures.append(chest)
 
@@ -173,7 +173,7 @@ class TestDeathCountdownAndGrantFood(unittest.TestCase):
         fam.members.append(v)
         self.villager_manager.families.append(fam)
 
-        chest = Furniture(801, "household_storage", 5, 5, family_id=8)
+        chest = Furniture(801, "household_storage", 5, 5, permit_id="test_permit", family_id=8)
         chest.inventory["Water"] = 5
         self.furniture_manager.furnitures.append(chest)
 
@@ -309,7 +309,7 @@ class TestDeathCountdownAndGrantFood(unittest.TestCase):
         tiles = set((x, y) for x in range(10, 15) for y in range(10, 15))
         house = Building("wooden_structure", tiles, door_pos=(12, 14), door_side="bottom")
         self.building_manager.buildings.append(house)
-        chest = Furniture(130, "household_storage", 10, 10, family_id=13)
+        chest = Furniture(130, "household_storage", 10, 10, permit_id="test_permit", family_id=13)
         self.furniture_manager.furnitures.append(chest)
 
         # Landlord stockpile has 100 Potato at (2, 2)
@@ -349,7 +349,7 @@ class TestDeathCountdownAndGrantFood(unittest.TestCase):
         fam = Family(14, "Miller")
         self.villager_manager.families.append(fam)
 
-        chest = Furniture(140, "household_storage", 10, 10, family_id=14)
+        chest = Furniture(140, "household_storage", 10, 10, permit_id="test_permit", family_id=14)
         self.furniture_manager.furnitures.append(chest)
 
         # Starter stockpile has generic "Food"
@@ -386,7 +386,7 @@ class TestDeathCountdownAndGrantFood(unittest.TestCase):
         fam = Family(15, "Baker")
         self.villager_manager.families.append(fam)
 
-        chest = Furniture(150, "household_storage", 8, 8, family_id=15)
+        chest = Furniture(150, "household_storage", 8, 8, permit_id="test_permit", family_id=15)
         self.furniture_manager.furnitures.append(chest)
 
         self.stockpile_manager.stacks = [
@@ -419,7 +419,7 @@ class TestDeathCountdownAndGrantFood(unittest.TestCase):
         fam = Family(16, "Carpenter")
         self.villager_manager.families.append(fam)
 
-        chest = Furniture(160, "household_storage", 6, 6, family_id=16)
+        chest = Furniture(160, "household_storage", 6, 6, permit_id="test_permit", family_id=16)
         self.furniture_manager.furnitures.append(chest)
 
         self.stockpile_manager.stacks = [

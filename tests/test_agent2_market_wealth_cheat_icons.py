@@ -149,7 +149,7 @@ def test_add_item_cheat_functionality():
     assert "Potato" in items
 
     # 1. Target is a storage chest
-    chest = Furniture("furn_test_1", "household_storage", 5, 5)
+    chest = Furniture("furn_test_1", "household_storage", 5, 5, permit_id="test_permit")
     success, msg = apply_add_item_cheat(target_storage=chest, amount=25)
     assert success is True
     assert chest.inventory["Wood"] == 25

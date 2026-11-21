@@ -219,7 +219,7 @@ class TestSaveOverwriteAndFurnitureMove(unittest.TestCase):
         - Removes the furniture from the world.
         """
         fam = self.villager_manager.generate_random_family()
-        chest = Furniture("furn_test_del", "household_storage", 3, 3, family_id=fam.id)
+        chest = Furniture("furn_test_del", "household_storage", 3, 3, permit_id="test_permit", family_id=fam.id)
         chest.inventory["Potato"] = 12
         self.furniture_manager.furnitures.append(chest)
 

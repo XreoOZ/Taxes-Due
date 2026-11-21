@@ -59,6 +59,7 @@ class TestAgent2MarketAndCurrency(unittest.TestCase):
         self.assertIn("market", PERMIT_TYPES)
 
         # Has valid allowed permits
+        self.permit_manager.add_permit("Market Lot", "market", {(0, 0)})
         self.assertTrue(self.permit_manager.has_permit_type("market"))
 
     def test_02_market_footprint_is_exactly_3x2(self):
@@ -162,12 +163,13 @@ class TestAgent2MarketAndCurrency(unittest.TestCase):
         market = Building("market", tiles_3x2)
         market.inventory = {"Potato": 50}
         market.prices = {"Potato": 3}  # Initially 3c
+        market.sale_items = ["Potato"]
         self.building_manager.buildings.append(market)
 
         # Setup family and chest with 20 Copper
         fam = Family("fam_test", "Baggins")
         self.villager_manager.families.append(fam)
-        chest = Furniture("f_chest_1", "household_storage", 5, 5, family_id="fam_test")
+        chest = Furniture("f_chest_1", "household_storage", 5, 5, permit_id="test_permit", family_id="fam_test")
         chest.inventory = {"Copper": 20, "Silver": 0, "Gold": 0}
         self.furniture_manager.furnitures.append(chest)
 
@@ -181,7 +183,7 @@ class TestAgent2MarketAndCurrency(unittest.TestCase):
         self.assertTrue(ok)
         self.assertEqual(receipt["unit_price_copper"], 3)
         self.assertEqual(receipt["total_price_copper"], 6)
-        self.assertEqual(chest.inventory["Copper"], 14)
+        self.assertEqual(to_copper(normalize_wallet(chest.inventory)), 14)
         self.assertEqual(chest.inventory["Potato"], 2)
 
         # 2. Landlord changes price to 5 Copper
@@ -197,7 +199,7 @@ class TestAgent2MarketAndCurrency(unittest.TestCase):
         self.assertTrue(ok2)
         self.assertEqual(receipt2["unit_price_copper"], 5)
         self.assertEqual(receipt2["total_price_copper"], 10)
-        self.assertEqual(chest.inventory["Copper"], 4)
+        self.assertEqual(to_copper(normalize_wallet(chest.inventory)), 4)
         self.assertEqual(chest.inventory["Potato"], 4)
 
     def test_10_manually_configured_prices_persist_after_save_load(self):
@@ -345,11 +347,12 @@ class TestAgent2MarketAndCurrency(unittest.TestCase):
         market.inventory = {"Potato": 20}
         market.prices = {"Potato": 3}
         market.currency = {"Copper": 0, "Silver": 0, "Gold": 0}
+        market.sale_items = ["Potato"]
         self.building_manager.buildings.append(market)
 
         fam = Family("fam_gardener", "Green")
         self.villager_manager.families.append(fam)
-        chest = Furniture("f_storage_g", "household_storage", 2, 2, family_id="fam_gardener")
+        chest = Furniture("f_storage_g", "household_storage", 2, 2, permit_id="test_permit", family_id="fam_gardener")
         chest.inventory = {"Silver": 1}  # 1 Silver = 10 Copper
         self.furniture_manager.furnitures.append(chest)
 
@@ -383,7 +386,7 @@ class TestAgent2MarketAndCurrency(unittest.TestCase):
 
         fam = Family("fam_broke", "Poor")
         self.villager_manager.families.append(fam)
-        chest = Furniture("f_storage_p", "household_storage", 3, 3, family_id="fam_broke")
+        chest = Furniture("f_storage_p", "household_storage", 3, 3, permit_id="test_permit", family_id="fam_broke")
         chest.inventory = {"Copper": 2}  # Has 2c, Potato costs 3c
         self.furniture_manager.furnitures.append(chest)
 
@@ -418,6 +421,7 @@ class TestAgent2MarketAndCurrency(unittest.TestCase):
         market = Building("market", tiles_3x2)
         market.inventory = {"Potato": 50}
         market.prices = {"Potato": 3}
+        market.sale_items = ["Potato"]
         self.building_manager.buildings.append(market)
 
         fam = Family("fam_hungry", "Starving")
@@ -425,7 +429,7 @@ class TestAgent2MarketAndCurrency(unittest.TestCase):
         fam.members.append(vil)
         self.villager_manager.families.append(fam)
 
-        chest = Furniture("f_storage_h", "household_storage", 4, 4, family_id="fam_hungry")
+        chest = Furniture("f_storage_h", "household_storage", 4, 4, permit_id="test_permit", family_id="fam_hungry")
         chest.inventory = {"Copper": 10}
         self.furniture_manager.furnitures.append(chest)
 
@@ -452,17 +456,17 @@ class TestAgent2MarketAndCurrency(unittest.TestCase):
 
     def test_21_starting_player_storage_currency_and_grant_system(self):
         """21. Starting currency in PLAYER STORAGE has 1000 Copper, 1000 Silver, 1000 Gold; Grantable items support coins."""
-        # 1. Starting resources check
-        self.assertEqual(DEFAULT_RESOURCES["Copper"], 1000)
-        self.assertEqual(DEFAULT_RESOURCES["Silver"], 1000)
-        self.assertEqual(DEFAULT_RESOURCES["Gold"], 1000)
+        # 1. Starting resources contain no coins (coins are granted via the treasury/grant system)
+        self.assertEqual(DEFAULT_RESOURCES["Copper"], 0)
+        self.assertEqual(DEFAULT_RESOURCES["Silver"], 0)
+        self.assertEqual(DEFAULT_RESOURCES["Gold"], 0)
 
-        # 2. Stockpile initialization places starting coins for Landlord
+        # 2. Stockpile initialization places no starting coins for Landlord
         self.stockpile_manager.initialize_starter_stockpile(self.resources, self.permit_manager)
         totals = self.stockpile_manager.get_total_resources()
-        self.assertEqual(totals["Copper"], 1000)
-        self.assertEqual(totals["Silver"], 1000)
-        self.assertEqual(totals["Gold"], 1000)
+        self.assertEqual(totals["Copper"], 0)
+        self.assertEqual(totals["Silver"], 0)
+        self.assertEqual(totals["Gold"], 0)
 
         # 3. Grantable items in ui_raport contain Copper, Silver, Gold
         from game.ui.ui_raport import GRANTABLE_ITEMS

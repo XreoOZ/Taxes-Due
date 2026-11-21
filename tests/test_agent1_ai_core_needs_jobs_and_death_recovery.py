@@ -81,7 +81,7 @@ class TestAgent1AICoreNeedsJobsAndDeathRecovery(unittest.TestCase):
     def test_03_tool_reassessment_on_job_change_deposits_irrelevant_and_fetches_required(self):
         """3. Changing jobs deposits unneeded tools to storage and fetches required tools without duplication."""
         v = Villager("vil_1", "Arthur", "Mason", "Male", 40, 2, "Father", "fam_mason")
-        chest = Furniture("chest_1", "household_storage", 5, 5, family_id="fam_mason")
+        chest = Furniture("chest_1", "household_storage", 5, 5, permit_id="test_permit", family_id="fam_mason")
         chest.inventory = {"Hammer": 1}
         self.fm.furnitures.append(chest)
         v.furniture_manager = self.fm
@@ -229,7 +229,7 @@ class TestAgent1AICoreNeedsJobsAndDeathRecovery(unittest.TestCase):
         fam = Family("fam_mason", "Mason", [v1, v2])
         self.vm.families = [fam]
 
-        chest = Furniture("chest_mason", "household_storage", 2, 2, family_id="fam_mason")
+        chest = Furniture("chest_mason", "household_storage", 2, 2, permit_id="test_permit", family_id="fam_mason")
         self.fm.furnitures.append(chest)
 
         # v1 dies dropping 5 Wood and 5 Copper

@@ -44,7 +44,7 @@ class TestAIFoodPurchasingPhysicalWorkflow(unittest.TestCase):
         self.permit = self.permit_manager.add_permit("Smith Housing", "housing", lot_tiles)
         self.fam.assigned_permit_id = self.permit.id
 
-        self.chest = Furniture("chest_1", "household_storage", 5, 5, family_id="fam_1")
+        self.chest = Furniture("chest_1", "household_storage", 5, 5, permit_id="test_permit", family_id="fam_1")
         self.chest.inventory = {}
         self.furniture_manager.furnitures.append(self.chest)
 

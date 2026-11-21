@@ -18,7 +18,7 @@ class TestInteractionProximity(unittest.TestCase):
             TILE_SIZE / 2,
         )
 
-        furniture = Furniture("chest", "household_storage", 4, 4)
+        furniture = Furniture("chest", "household_storage", 4, 4, permit_id="test_permit")
         self.assertEqual(distance_to_object(furniture, *approach), TILE_SIZE / 2)
 
     def test_interaction_does_not_finish_outside_one_tile_of_building(self):

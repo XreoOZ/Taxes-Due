@@ -99,8 +99,11 @@ class MarketService:
 
     @classmethod
     def is_item_for_sale(cls, market, item_name):
-        sale_items = getattr(market, "sale_items", None) or []
-        return item_name in MARKET_TRADEABLE_ITEMS and item_name in sale_items
+        sale_items = getattr(market, "sale_items", None)
+        if sale_items:
+            return item_name in MARKET_TRADEABLE_ITEMS and item_name in sale_items
+        inventory = getattr(market, "inventory", None) or {}
+        return item_name in MARKET_TRADEABLE_ITEMS and inventory.get(item_name, 0) > 0
 
     @classmethod
     def resolve_household_info(cls, household, villager_manager=None):

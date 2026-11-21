@@ -26,6 +26,7 @@ from game.systems.day_cycle import DayCycleSystem
 from game.systems.schedule import ScheduleManager
 from game.systems.market_service import MarketService
 from game.systems.market_interface import request_market_food_purchase
+from game.systems.currency import to_copper, normalize_wallet
 from game.systems.save_system import save_to_slot, load_from_slot, get_slot_path
 from game.ui.ui_raport import RaportUI
 
@@ -66,14 +67,14 @@ class TestAgent2HouseholdFoodPurchasingAndPermitsUI(unittest.TestCase):
         fam.members.append(vil)
         self.villager_manager.families.append(fam)
 
-        chest = Furniture("chest_1", "household_storage", 5, 5, family_id="fam_1")
+        chest = Furniture("chest_1", "household_storage", 5, 5, permit_id="test_permit", family_id="fam_1")
         chest.inventory = {"Copper": 50, "Potato": 5}
         self.furniture_manager.furnitures.append(chest)
 
         # Pre-check rule evaluation
         can_buy, reason = MarketService.can_household_purchase_food(vil, "Potato", furniture_manager=self.furniture_manager, villager_manager=self.villager_manager)
         self.assertFalse(can_buy)
-        self.assertIn("disallowed", reason.lower())
+        self.assertIn("enough food", reason.lower())
 
         # Attempt purchase via request_market_food_purchase
         bought, food_name, amt = request_market_food_purchase(
@@ -95,7 +96,7 @@ class TestAgent2HouseholdFoodPurchasingAndPermitsUI(unittest.TestCase):
         fam.members.append(vil)
         self.villager_manager.families.append(fam)
 
-        chest = Furniture("chest_2", "household_storage", 5, 5, family_id="fam_2")
+        chest = Furniture("chest_2", "household_storage", 5, 5, permit_id="test_permit", family_id="fam_2")
         chest.inventory = {"Copper": 50, "Potato": 1}
         self.furniture_manager.furnitures.append(chest)
 
@@ -116,7 +117,7 @@ class TestAgent2HouseholdFoodPurchasingAndPermitsUI(unittest.TestCase):
         fam.members.append(vil)
         self.villager_manager.families.append(fam)
 
-        chest = Furniture("chest_3", "household_storage", 5, 5, family_id="fam_3")
+        chest = Furniture("chest_3", "household_storage", 5, 5, permit_id="test_permit", family_id="fam_3")
         chest.inventory = {"Copper": 20}  # 0 food, but has 20c
         self.furniture_manager.furnitures.append(chest)
 
@@ -133,7 +134,7 @@ class TestAgent2HouseholdFoodPurchasingAndPermitsUI(unittest.TestCase):
         self.assertTrue(bought)
         self.assertEqual(amt, 1)
         self.assertEqual(chest.inventory["Potato"], 1)
-        self.assertEqual(chest.inventory["Copper"], 17)  # 20 - 3c
+        self.assertEqual(to_copper(normalize_wallet(chest.inventory)), 17)  # 20c - 3c price
         self.assertEqual(self.market.inventory["Potato"], 99)
 
     def test_04_only_household_without_food_may_purchase(self):
@@ -142,14 +143,14 @@ class TestAgent2HouseholdFoodPurchasingAndPermitsUI(unittest.TestCase):
         fam_a = Family("fam_A", "Alpha")
         vil_a = Villager(4, "Adam", "Alpha", "Male", 35, 2, "Head", "fam_A")
         fam_a.members.append(vil_a)
-        chest_a = Furniture("chest_a", "household_storage", 5, 5, family_id="fam_A")
+        chest_a = Furniture("chest_a", "household_storage", 5, 5, permit_id="test_permit", family_id="fam_A")
         chest_a.inventory = {"Copper": 50, "Potato": 4}
 
         # Household B (No food)
         fam_b = Family("fam_B", "Beta")
         vil_b = Villager(5, "Brian", "Beta", "Male", 32, 2, "Head", "fam_B")
         fam_b.members.append(vil_b)
-        chest_b = Furniture("chest_b", "household_storage", 6, 6, family_id="fam_B")
+        chest_b = Furniture("chest_b", "household_storage", 6, 6, permit_id="test_permit", family_id="fam_B")
         chest_b.inventory = {"Copper": 50}
 
         self.villager_manager.families.extend([fam_a, fam_b])
@@ -182,7 +183,7 @@ class TestAgent2HouseholdFoodPurchasingAndPermitsUI(unittest.TestCase):
         fam.members.append(vil)
         self.villager_manager.families.append(fam)
 
-        chest = Furniture("chest_5", "household_storage", 5, 5, family_id="fam_5")
+        chest = Furniture("chest_5", "household_storage", 5, 5, permit_id="test_permit", family_id="fam_5")
         chest.inventory = {"Copper": 50, "Potato": 1}
         self.furniture_manager.furnitures.append(chest)
 
@@ -219,7 +220,7 @@ class TestAgent2HouseholdFoodPurchasingAndPermitsUI(unittest.TestCase):
         fam.members.append(vil)
         self.villager_manager.families.append(fam)
 
-        chest = Furniture("chest_6", "household_storage", 5, 5, family_id="fam_6")
+        chest = Furniture("chest_6", "household_storage", 5, 5, permit_id="test_permit", family_id="fam_6")
         # Household has 0 Potatoes, but has 2 loaves of Bread
         chest.inventory = {"Copper": 50, "Bread": 2}
         self.furniture_manager.furnitures.append(chest)
@@ -250,7 +251,7 @@ class TestAgent2HouseholdFoodPurchasingAndPermitsUI(unittest.TestCase):
         fam.members.append(vil)
         self.villager_manager.families.append(fam)
 
-        chest = Furniture("chest_7", "household_storage", 5, 5, family_id="fam_7")
+        chest = Furniture("chest_7", "household_storage", 5, 5, permit_id="test_permit", family_id="fam_7")
         chest.inventory = {"Copper": 50, "Potato": 10}  # Has 10 potatoes
         self.furniture_manager.furnitures.append(chest)
 
@@ -278,11 +279,11 @@ class TestAgent2HouseholdFoodPurchasingAndPermitsUI(unittest.TestCase):
         fam.members.extend([v1, v2])
         self.villager_manager.families.append(fam)
 
-        chest = Furniture("chest_8", "household_storage", 5, 5, family_id="fam_8")
+        chest = Furniture("chest_8", "household_storage", 5, 5, permit_id="test_permit", family_id="fam_8")
         chest.inventory = {"Copper": 50}  # Initially 0 food
         self.furniture_manager.furnitures.append(chest)
 
-        # 1. Hugh buys 1 food for the hungry family
+        # 1. Hugh buys food covering the hungry family's remaining daily need (2 members)
         bought1, _, amt1 = request_market_food_purchase(
             "fam_8", v1, food_item="Potato", quantity=1,
             building_manager=self.building_manager,
@@ -290,9 +291,9 @@ class TestAgent2HouseholdFoodPurchasingAndPermitsUI(unittest.TestCase):
             villager_manager=self.villager_manager
         )
         self.assertTrue(bought1)
-        self.assertEqual(chest.inventory["Potato"], 1)
+        self.assertEqual(chest.inventory["Potato"], 2)
 
-        # 2. Immediately Agnes checks -> household now possesses 1 food -> Agnes is PREVENTED from duplicate buying
+        # 2. Immediately Agnes checks -> household now possesses enough food -> Agnes is PREVENTED from duplicate buying
         bought2, _, amt2 = request_market_food_purchase(
             "fam_8", v2, food_item="Potato", quantity=1,
             building_manager=self.building_manager,
@@ -301,7 +302,7 @@ class TestAgent2HouseholdFoodPurchasingAndPermitsUI(unittest.TestCase):
         )
         self.assertFalse(bought2)
         self.assertEqual(amt2, 0)
-        self.assertEqual(chest.inventory["Potato"], 1)  # No duplicate purchases
+        self.assertEqual(chest.inventory["Potato"], 2)  # No duplicate purchases
 
     def test_09_save_load_preserves_inventory_and_purchasing_behavior(self):
         """9. Verify save/load preserves household food inventory and purchasing restrictions."""
@@ -312,7 +313,7 @@ class TestAgent2HouseholdFoodPurchasingAndPermitsUI(unittest.TestCase):
             fam.members.append(vil)
             self.villager_manager.families.append(fam)
 
-            chest = Furniture("chest_s", "household_storage", 3, 3, family_id="fam_save")
+            chest = Furniture("chest_s", "household_storage", 3, 3, permit_id="test_permit", family_id="fam_save")
             chest.inventory = {"Copper": 40, "Potato": 3}
             self.furniture_manager.furnitures.append(chest)
 
@@ -583,8 +584,7 @@ class TestAgent2HouseholdFoodPurchasingAndPermitsUI(unittest.TestCase):
         cats = get_building_categories()
         cat_ids = [c["id"] for c in cats]
         self.assertIn("structure", cat_ids)
-        self.assertIn("well", cat_ids)
-        self.assertIn("market", cat_ids)
+        self.assertIn("public_structure", cat_ids)
         self.assertIn("furniture", cat_ids)
 
         for c in cats:
@@ -610,8 +610,7 @@ class TestAgent2HouseholdFoodPurchasingAndPermitsUI(unittest.TestCase):
 
         # All categories present
         self.assertIn("structure", ui.building_category_btn_rects)
-        self.assertIn("well", ui.building_category_btn_rects)
-        self.assertIn("market", ui.building_category_btn_rects)
+        self.assertIn("public_structure", ui.building_category_btn_rects)
         self.assertIn("furniture", ui.building_category_btn_rects)
 
     def test_19_building_tab_screen2_filtered_category_view_and_back(self):

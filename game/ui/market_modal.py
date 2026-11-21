@@ -108,6 +108,7 @@ class MarketProfileModal:
         # Pagination for tradeable goods
         self.goods_page = 0
         self.goods_list_rect = None
+        self.tradeable_items = list(MARKET_TRADEABLE_ITEMS)
 
     def _ensure_fonts(self):
         if self.font_title is None:
@@ -147,6 +148,9 @@ class MarketProfileModal:
                 market_building.household_sale_percent = MARKET_DEFAULT_HOUSEHOLD_SALE_PERCENT
             if not hasattr(market_building, "household_sale_limits"):
                 market_building.household_sale_limits = {}
+            self.tradeable_items = list(dict.fromkeys(
+                list(MARKET_TRADEABLE_ITEMS) + list(market_building.sale_items)
+            ))
 
     def close(self):
         self.is_open = False

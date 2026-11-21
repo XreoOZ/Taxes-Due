@@ -257,7 +257,7 @@ class TestFullSuite(unittest.TestCase):
     def test_10_destroying_chest_spills_inventory(self):
         """10. Menghancurkan Chest menumpahkan seluruh isi ke tanah sebagai droppable items milik keluarga."""
         fam = self.villager_manager.generate_random_family()
-        chest = Furniture("f_1", "household_storage", 5, 5, family_id=fam.id)
+        chest = Furniture("f_1", "household_storage", 5, 5, permit_id="test_permit", family_id=fam.id)
         chest.inventory["Sickle"] = 3
         self.furniture_manager.furniture.append(chest)
 
@@ -274,7 +274,7 @@ class TestFullSuite(unittest.TestCase):
     def test_11_moving_chest_preserves_inventory(self):
         """11. Memindahkan Chest mempertahankan isi tanpa tumpah atau hilang."""
         fam = self.villager_manager.generate_random_family()
-        chest = Furniture("f_2", "household_storage", 5, 5, family_id=fam.id)
+        chest = Furniture("f_2", "household_storage", 5, 5, permit_id="test_permit", family_id=fam.id)
         chest.inventory["Hoe"] = 4
         self.furniture_manager.furniture.append(chest)
 

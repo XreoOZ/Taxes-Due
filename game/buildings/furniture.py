@@ -30,6 +30,9 @@ class Furniture:
         self.carrier_id = None  # ID of villager or servant currently hauling this furniture
         self.is_selected = False
         self.font = None
+        self.break_check_day = 1  # Day number for which break_check_hour is valid
+        self.break_check_hour = random.uniform(0, 24)  # Random hour during day to check for break
+        self.break_checked_today = False  # Prevent repeated rolls within the check window
 
     @property
     def name(self):
@@ -506,45 +509,58 @@ class FurnitureManager:
         self._bed_cache.clear()
 
     def daily_wear_update(self, days=1):
-        """Roll daily wear for completed, installed furniture and commission repairs."""
+        """Schedule random break-check times for each furniture at midnight."""
+        day_cycle_day = getattr(self.villager_manager, "current_day_number", 1) if self.villager_manager else 1
+        for _ in range(max(0, int(days))):
+            day_cycle_day += 1
+            for furniture in self.furnitures:
+                furniture.break_check_day = day_cycle_day
+                furniture.break_check_hour = random.uniform(0, 24)
+        return []
+
+    def check_breaks_by_time(self, current_day, current_hour):
+        """Check furniture breaks at their scheduled random time during the day."""
         from game.systems.carpenter_system import CarpenterSystem
 
         newly_broken = []
-        for _ in range(max(0, int(days))):
-            for furniture in self.furnitures:
-                # Wear is a household maintenance expense. Public and unowned
-                # furniture has no household payer, so it must never enter the
-                # repair-order flow (including old saves with stale repair orders).
-                is_household_owned = (
-                    furniture.type_cfg.get("household_owned", True)
-                    and getattr(furniture, "family_id", None) is not None
-                )
-                is_public_maintainable = (
-                    furniture.type_cfg.get("public_structure")
-                    and furniture.type_cfg.get("maintainable", True)
-                )
-                order = getattr(furniture, "construction_order", None) or {}
-                if not is_household_owned and not is_public_maintainable:
-                    continue
-                if (furniture.is_dropped or furniture.stored_in_id is not None
-                        or furniture.status != "INSTALLED"
-                        or (order and order.get("status") != "COMPLETE")
-                        or furniture.is_broken):
-                    continue
-                if random.random() >= FURNITURE_DAILY_BREAK_CHANCE:
-                    continue
-                furniture.condition = 0.0
-                furniture.construction_progress = 0.0
-                furniture.construction_order = CarpenterSystem.create_repair_order(
-                    furniture, self.building_manager, self.villager_manager
-                )
-                if is_public_maintainable:
-                    furniture.construction_order.update({
-                        "status": "LANDLORD_PAYMENT_PENDING",
-                        "payer_type": "landlord",
-                        "payer_id": "landlord",
-                    })
-                newly_broken.append(furniture)
+        for furniture in self.furnitures:
+            if furniture.break_check_day != current_day:
+                continue
+            if furniture.break_checked_today:
+                continue
+            if abs(current_hour - furniture.break_check_hour) > 0.25:  # Within ~15 min window
+                continue
+            furniture.break_checked_today = True  # Mark as checked so it only rolls once
+            is_household_owned = (
+                furniture.type_cfg.get("household_owned", True)
+                and getattr(furniture, "family_id", None) is not None
+            )
+            is_public_maintainable = (
+                furniture.type_cfg.get("public_structure")
+                and furniture.type_cfg.get("maintainable", True)
+            )
+            order = getattr(furniture, "construction_order", None) or {}
+            if not is_household_owned and not is_public_maintainable:
+                continue
+            if (furniture.is_dropped or furniture.stored_in_id is not None
+                    or furniture.status != "INSTALLED"
+                    or (order and order.get("status") != "COMPLETE")
+                    or furniture.is_broken):
+                continue
+            if random.random() >= FURNITURE_DAILY_BREAK_CHANCE:
+                continue
+            furniture.condition = 0.0
+            furniture.construction_progress = 0.0
+            furniture.construction_order = CarpenterSystem.create_repair_order(
+                furniture, self.building_manager, self.villager_manager
+            )
+            if is_public_maintainable:
+                furniture.construction_order.update({
+                    "status": "LANDLORD_PAYMENT_PENDING",
+                    "payer_type": "landlord",
+                    "payer_id": "landlord",
+                })
+            newly_broken.append(furniture)
         if newly_broken:
             self.invalidate_cache()
         return newly_broken

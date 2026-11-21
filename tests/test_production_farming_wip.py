@@ -155,8 +155,8 @@ class TestProductionDistributionAndWIP(unittest.TestCase):
 
     def test_deposit_into_household_storage_chest(self):
         """Output reaches the respective household storage chest."""
-        chest_a = Furniture("f1", "household_storage", 5, 5, family_id="fam_A")
-        chest_b = Furniture("f2", "household_storage", 10, 10, family_id="fam_B")
+        chest_a = Furniture("f1", "household_storage", 5, 5, permit_id="test_permit", family_id="fam_A")
+        chest_b = Furniture("f2", "household_storage", 10, 10, permit_id="test_permit", family_id="fam_B")
         self.furniture_manager.furnitures.extend([chest_a, chest_b])
 
         workers = {"fam_A": 1, "fam_B": 1}
@@ -194,7 +194,7 @@ class TestProductionDistributionAndWIP(unittest.TestCase):
 
     def test_production_not_transferred_to_market(self):
         """Production belongs to household storage and is never deposited into market stalls."""
-        chest = Furniture("f_h", "household_storage", 2, 2, family_id="fam_1")
+        chest = Furniture("f_h", "household_storage", 2, 2, permit_id="test_permit", family_id="fam_1")
         self.furniture_manager.furnitures.append(chest)
 
         self.ps.distribute_production(
@@ -305,7 +305,7 @@ class TestProductionDistributionAndWIP(unittest.TestCase):
 
     def test_no_tax_deductions_applied(self):
         """Zero tax deductions applied to household storage or inventory."""
-        chest = Furniture("f_tax", "household_storage", 1, 1, family_id="fam_tax")
+        chest = Furniture("f_tax", "household_storage", 1, 1, permit_id="test_permit", family_id="fam_tax")
         chest.inventory["Potato"] = 20
         self.furniture_manager.furnitures.append(chest)
 

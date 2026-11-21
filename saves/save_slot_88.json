@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-11-21 16:45",
+  "timestamp": "2026-11-21 17:10",
   "day_number": 1,
   "time_str": "08:00",
   "population": 3,
@@ -164,7 +164,7 @@
       "gx": 5,
       "gy": 5,
       "rotation": 0,
-      "permit_id": null,
+      "permit_id": "test_permit",
       "family_id": "fam_1",
       "assigned_villager_id": null,
       "assigned_workers": [],
