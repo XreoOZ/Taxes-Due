@@ -1097,6 +1097,69 @@ class CarpenterSystem:
         return True
 
     @classmethod
+    def _is_own_household_order(cls, order, carpenter):
+        """True when the commission's payer family is the carpenter's own family."""
+        payer_family = order.get("payer_family_id")
+        return payer_family is not None and str(payer_family) == str(getattr(carpenter, "family_id", ""))
+
+    @classmethod
+    def _select_awaiting_order(cls, carpenter, furniture_manager, villager_manager):
+        """Pick the next AWAITING_PAYMENT furniture order this carpenter may claim."""
+        awaiting_orders = [f for f in furniture_manager.furnitures
+                           if f.construction_order
+                           and f.construction_order.get("status") == "AWAITING_PAYMENT"
+                           and f.construction_order.get("carpenter_id") in (None, str(carpenter.id))]
+        active = next((f for f in awaiting_orders
+                       if str(f.construction_order.get("payer_family_id")) == str(carpenter.family_id)), None)
+        if active is None:
+            for candidate in awaiting_orders:
+                payer_family_id = candidate.construction_order.get("payer_family_id")
+                household_carpenter = next((worker for worker in villager_manager.get_all_villagers()
+                                            if getattr(worker, "job", None) == "Carpenter"
+                                            and getattr(worker, "is_alive", True)
+                                            and str(getattr(worker, "family_id", "")) == str(payer_family_id)), None) if villager_manager else None
+                if household_carpenter and str(household_carpenter.id) != str(carpenter.id):
+                    continue
+                active = candidate
+                break
+        return active
+
+    @classmethod
+    def _claim_awaiting_order(cls, carpenter, order_furniture, villager_manager, furniture_manager, stockpile_manager):
+        """Assign an awaiting order to this carpenter and start its payment flow.
+
+        Own-household orders skip the service fee entirely (free labor —
+        materials are still drawn from the family as usual).
+        """
+        order = order_furniture.construction_order
+        order["carpenter_id"] = str(carpenter.id)
+        if cls._is_own_household_order(order, carpenter):
+            order["status"] = "PAID"
+            order["commission_paid"] = True
+            order["paid_by_id"] = "household"
+            order["paid_amount_copper"] = 0
+            if not getattr(carpenter, "speech_text", None):
+                carpenter.say("Family commission — no fee, straight to work.", duration=2.5)
+            carpenter.task = "IDLE"
+            return
+        if not cls._assign_payment(order_furniture, villager_manager, furniture_manager, stockpile_manager):
+            if not getattr(carpenter, "speech_text", None):
+                carpenter.say("Waiting for the household commission.", duration=2.5)
+            carpenter.task = "IDLE"
+            return
+        if order.get("status") == "LANDLORD_PAYMENT_PENDING":
+            from game.systems.commission_schedule import CommissionScheduleSystem
+            CommissionScheduleSystem.queue(
+                carpenter, "CARPENTER_FEE_LANDLORD_RETRIEVE",
+                carpenter_payment_order_id=order_furniture.id,
+                carpenter_payment_carpenter_id=carpenter.id,
+            )
+            carpenter.task = "IDLE"
+            return
+        carpenter.say("Commission requested from the household.", duration=2.0)
+        carpenter.task = "IDLE"
+
+    @classmethod
     def update_worker(cls, carpenter, dt, schedule_activity, building_manager, furniture_manager,
                       villager_manager, all_entities, player, day_cycle,
                       stockpile_manager=None, permit_manager=None):
@@ -1122,6 +1185,14 @@ class CarpenterSystem:
             for subject in work_orders
         )
         if not has_commission_work:
+            # Own-household commissions are free labor — claim them before
+            # restocking so family orders never queue behind material runs.
+            awaiting = cls._select_awaiting_order(carpenter, furniture_manager, villager_manager)
+            if awaiting is not None and cls._is_own_household_order(
+                    awaiting.construction_order, carpenter):
+                cls._claim_awaiting_order(carpenter, awaiting, villager_manager,
+                                          furniture_manager, stockpile_manager)
+                return False
             _, stored_materials = cls._materials_in_storage(carpenter, furniture_manager, stockpile_manager)
             stock_targets = DEDICATED_JOBS.get("Carpenter", {}).get("material_stock_target", {})
             low_stock = {
@@ -1333,45 +1404,10 @@ class CarpenterSystem:
                        and f.construction_order.get("status") in ("PAID", "BUILDING", "AWAITING_MATERIAL")
                        and str(f.construction_order.get("carpenter_id")) == str(carpenter.id)), None)
         if not active:
-            # Commission requests are errands for the household, not Carpenter
-            # work. Discover and queue them regardless of the Carpenter's shift;
-            # CommissionScheduleSystem runs the payer during that household's free time.
-            awaiting_orders = [f for f in furniture_manager.furnitures
-                               if f.construction_order
-                               and f.construction_order.get("status") == "AWAITING_PAYMENT"
-                               and f.construction_order.get("carpenter_id") in (None, str(carpenter.id))]
-            active = next((f for f in awaiting_orders
-                           if str(f.construction_order.get("payer_family_id")) == str(carpenter.family_id)), None)
-            if active is None:
-                for candidate in awaiting_orders:
-                    payer_family_id = candidate.construction_order.get("payer_family_id")
-                    household_carpenter = next((worker for worker in villager_manager.get_all_villagers()
-                                                if getattr(worker, "job", None) == "Carpenter"
-                                                and getattr(worker, "is_alive", True)
-                                                and str(getattr(worker, "family_id", "")) == str(payer_family_id)), None) if villager_manager else None
-                    if household_carpenter and str(household_carpenter.id) != str(carpenter.id):
-                        continue
-                    active = candidate
-                    break
-            if active:
-                active.construction_order["carpenter_id"] = str(carpenter.id)
-                if not cls._assign_payment(active, villager_manager, furniture_manager, stockpile_manager):
-                    if not getattr(carpenter, "speech_text", None):
-                        carpenter.say("Waiting for the household commission.", duration=2.5)
-                    carpenter.task = "IDLE"
-                    return False
-                order_status = active.construction_order.get("status")
-                if order_status == "LANDLORD_PAYMENT_PENDING":
-                    from game.systems.commission_schedule import CommissionScheduleSystem
-                    CommissionScheduleSystem.queue(
-                        carpenter, "CARPENTER_FEE_LANDLORD_RETRIEVE",
-                        carpenter_payment_order_id=active.id,
-                        carpenter_payment_carpenter_id=carpenter.id,
-                    )
-                    carpenter.task = "IDLE"
-                    return False
-                carpenter.say("Commission requested from the household.", duration=2.0)
-                carpenter.task = "IDLE"
+            awaiting = cls._select_awaiting_order(carpenter, furniture_manager, villager_manager)
+            if awaiting is not None:
+                cls._claim_awaiting_order(carpenter, awaiting, villager_manager,
+                                          furniture_manager, stockpile_manager)
                 return False
         if not active:
             return False
