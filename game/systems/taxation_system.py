@@ -10,7 +10,7 @@ from game.data.config import (
     SOCAGE_TAX_HAPPINESS_TIERS,
     CHURCH_TAX_HAPPINESS_TIERS_COPPER,
     NO_CHURCH_TAX_HAPPINESS_BONUS,
-    SOCAGE_TAX_MAX_WAIT_HOURS,
+    MARKET_SALES_REPORT_PERIOD_DAYS,
     TAX_COLLECTOR_STATION_ARRIVAL_DISTANCE,
     SOCAGE_TAX_GREETING_LINES,
     SOCAGE_TAX_HAPPINESS_REPLIES,
@@ -23,6 +23,39 @@ from game.world.navigation import distance_to_object
 class TaxationSystem:
     _socage_enabled = DEFAULT_SOCAGE_TAX_ENABLED
     _socage_percent = DEFAULT_SOCAGE_TAX_PERCENT
+    _socage_report_period = None
+    _socage_report_collected_copper = 0
+
+    @classmethod
+    def _ensure_socage_report_period(cls, day_number):
+        days = max(1, int(MARKET_SALES_REPORT_PERIOD_DAYS))
+        day = max(1, int(day_number or 1))
+        period = (day - 1) // days
+        if cls._socage_report_period != period:
+            cls._socage_report_period = period
+            cls._socage_report_collected_copper = 0
+        return period
+
+    @classmethod
+    def record_socage_tax_collected(cls, amount_copper, day_number):
+        amount = max(0, int(amount_copper or 0))
+        if amount <= 0:
+            return
+        cls._ensure_socage_report_period(day_number)
+        cls._socage_report_collected_copper += amount
+
+    @classmethod
+    def get_socage_tax_report(cls, day_number):
+        days = max(1, int(MARKET_SALES_REPORT_PERIOD_DAYS))
+        day = max(1, int(day_number or 1))
+        period = cls._ensure_socage_report_period(day)
+        return {
+            "period": period,
+            "start_day": period * days + 1,
+            "end_day": (period + 1) * days,
+            "through_day": min(day, (period + 1) * days),
+            "collected_copper": max(0, int(cls._socage_report_collected_copper)),
+        }
 
     @classmethod
     def set_socage_enabled(cls, enabled):
@@ -71,6 +104,8 @@ class TaxationSystem:
             "church_tax_last_day": int(church_state.last_tax_day),
             "socage_enabled": cls.is_socage_enabled(),
             "socage_percent": cls.get_socage_percent(),
+            "socage_report_period": cls._socage_report_period,
+            "socage_report_collected_copper": cls._socage_report_collected_copper,
         }
 
     @classmethod
@@ -92,6 +127,11 @@ class TaxationSystem:
             )
         cls.set_socage_enabled(data.get("socage_enabled", DEFAULT_SOCAGE_TAX_ENABLED))
         cls.set_socage_percent(data.get("socage_percent", DEFAULT_SOCAGE_TAX_PERCENT))
+        report_period = data.get("socage_report_period")
+        cls._socage_report_period = int(report_period) if report_period is not None else None
+        cls._socage_report_collected_copper = max(
+            0, int(data.get("socage_report_collected_copper", 0) or 0)
+        )
 
     @staticmethod
     def _tier_value(value, tiers):
@@ -256,7 +296,6 @@ class TaxationSystem:
             "family_ids": [str(family.id) for family in families],
             "index": 0,
             "status": "TRAVEL",
-            "wait_seconds": 0.0,
             "target_family_id": None,
         }
         collector.socage_tax_last_cycle = cycle
@@ -346,13 +385,19 @@ class TaxationSystem:
             round_state["index"] = index + 1
             round_state["status"] = "TRAVEL"
             return True
+        if round_state.get("household_paid"):
+            round_state["index"] = index + 1
+            round_state["status"] = "TRAVEL"
+            round_state.pop("household_paid", None)
+            return True
+
         point = cls._family_meeting_point(
             family, permit_manager, building_manager, TILE_SIZE,
             (collector.x, collector.y), all_entities, collector.id,
         )
         if not point:
-            round_state["index"] = index + 1
-            round_state["status"] = "TRAVEL"
+            round_state["status"] = "WAITING_FOR_HOUSEHOLD_LOCATION"
+            collector.task = "WAITING_FOR_HOUSEHOLD_TAX"
             return True
 
         round_state["target_family_id"] = str(family.id)
@@ -367,7 +412,6 @@ class TaxationSystem:
             )
             if arrived or (home and distance_to_object(home, collector.x, collector.y, TILE_SIZE) <= TILE_SIZE):
                 round_state["status"] = "MEET"
-                round_state["wait_seconds"] = 0.0
                 collector.task = "WAITING_FOR_HOUSEHOLD_TAX"
                 collector.say("Pay your household taxes, please.", duration=2.5)
                 family_reps = [member for member in family.members
@@ -382,32 +426,22 @@ class TaxationSystem:
                     )
                     if success:
                         round_state["household_paid"] = True
+                        cls.record_socage_tax_collected(due, day_number)
                         collector.say("I have recorded my own household's tax payment.", duration=2.5)
                         from game.systems.wealth_system import VillageWealthSystem
                         VillageWealthSystem.mark_dirty()
             return True
 
-        if round_state.get("household_paid"):
-            round_state["index"] = index + 1
-            round_state["status"] = "TRAVEL"
-            round_state["wait_seconds"] = 0.0
-            round_state.pop("household_paid", None)
-            return True
-
-        day_seconds = max(1.0, float(getattr(day_cycle, "day_length_seconds", 1200.0)))
-        max_wait = day_seconds * float(SOCAGE_TAX_MAX_WAIT_HOURS) / 24.0
-        round_state["wait_seconds"] = float(round_state.get("wait_seconds", 0.0)) + max(0.0, float(dt))
-        if round_state["wait_seconds"] >= max_wait:
-            collector.say("No representative arrived; I will return another day.", duration=2.5)
-            round_state["index"] = index + 1
-            round_state["status"] = "TRAVEL"
         return True
 
     @classmethod
     def update_household_representative(cls, villager, dt, villager_manager, permit_manager,
                                         building_manager, furniture_manager, all_entities, player,
-                                        day_number, collector_activity=None):
+                                        day_number, collector_activity=None,
+                                        villager_activity=None):
         if not getattr(villager, "is_alive", True) or not villager_manager:
+            return False
+        if villager_activity not in (None, "WORK", "ANY"):
             return False
         collector = cls._active_collector(villager_manager)
         state = getattr(collector, "socage_tax_round", None) if collector else None
@@ -475,6 +509,7 @@ class TaxationSystem:
                 state["household_paid"] = True
                 villager.socage_tax_prepared_amount = 0
                 villager.socage_tax_prepared_cycle = None
+                cls.record_socage_tax_collected(due, day_number)
                 from game.systems.wealth_system import VillageWealthSystem
                 VillageWealthSystem.mark_dirty()
                 replies = SOCAGE_TAX_HAPPINESS_REPLIES.get(

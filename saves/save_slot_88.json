@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-11-19 01:19",
+  "timestamp": "2026-11-21 16:45",
   "day_number": 1,
   "time_str": "08:00",
   "population": 3,
@@ -21,750 +21,6 @@
   "permits": [
     {
       "id": "permit_1",
-      "name": "Starter Housing Lot",
-      "permit_type": "housing",
-      "tiles": [
-        [
-          3,
-          4
-        ],
-        [
-          4,
-          3
-        ],
-        [
-          3,
-          7
-        ],
-        [
-          5,
-          4
-        ],
-        [
-          4,
-          6
-        ],
-        [
-          5,
-          7
-        ],
-        [
-          2,
-          2
-        ],
-        [
-          2,
-          5
-        ],
-        [
-          7,
-          4
-        ],
-        [
-          6,
-          2
-        ],
-        [
-          7,
-          7
-        ],
-        [
-          6,
-          5
-        ],
-        [
-          4,
-          2
-        ],
-        [
-          4,
-          5
-        ],
-        [
-          3,
-          3
-        ],
-        [
-          5,
-          6
-        ],
-        [
-          3,
-          6
-        ],
-        [
-          5,
-          3
-        ],
-        [
-          2,
-          4
-        ],
-        [
-          2,
-          7
-        ],
-        [
-          6,
-          4
-        ],
-        [
-          7,
-          3
-        ],
-        [
-          6,
-          7
-        ],
-        [
-          7,
-          6
-        ],
-        [
-          3,
-          2
-        ],
-        [
-          4,
-          7
-        ],
-        [
-          3,
-          5
-        ],
-        [
-          5,
-          2
-        ],
-        [
-          4,
-          4
-        ],
-        [
-          5,
-          5
-        ],
-        [
-          2,
-          3
-        ],
-        [
-          2,
-          6
-        ],
-        [
-          7,
-          2
-        ],
-        [
-          6,
-          6
-        ],
-        [
-          7,
-          5
-        ],
-        [
-          6,
-          3
-        ]
-      ],
-      "max_workers": 2,
-      "assigned_workers": [],
-      "crop": null,
-      "growth_days": 0.0,
-      "watered_today": false,
-      "tile_crops": {},
-      "tile_graves": {},
-      "church_tax": {
-        "Gold": 0,
-        "Silver": 0,
-        "Copper": 1
-      },
-      "church_tax_paid_households": {},
-      "tax_paid_households_today": [],
-      "batches": [],
-      "active_batch_id": null,
-      "batch_counter": 0,
-      "current_day_time": 1.0
-    },
-    {
-      "id": "permit_2",
-      "name": "Starter Storage Lot",
-      "permit_type": "storage",
-      "tiles": [
-        [
-          3,
-          -5
-        ],
-        [
-          2,
-          -2
-        ],
-        [
-          4,
-          -6
-        ],
-        [
-          3,
-          -2
-        ],
-        [
-          5,
-          -5
-        ],
-        [
-          4,
-          -3
-        ],
-        [
-          6,
-          -5
-        ],
-        [
-          5,
-          -2
-        ],
-        [
-          6,
-          -2
-        ],
-        [
-          4,
-          -5
-        ],
-        [
-          2,
-          -4
-        ],
-        [
-          4,
-          -2
-        ],
-        [
-          3,
-          -4
-        ],
-        [
-          5,
-          -4
-        ],
-        [
-          6,
-          -4
-        ],
-        [
-          2,
-          -3
-        ],
-        [
-          3,
-          -3
-        ],
-        [
-          5,
-          -6
-        ],
-        [
-          4,
-          -4
-        ],
-        [
-          3,
-          -6
-        ],
-        [
-          2,
-          -6
-        ],
-        [
-          5,
-          -3
-        ],
-        [
-          6,
-          -6
-        ],
-        [
-          6,
-          -3
-        ],
-        [
-          2,
-          -5
-        ]
-      ],
-      "max_workers": 2,
-      "assigned_workers": [],
-      "crop": null,
-      "growth_days": 0.0,
-      "watered_today": false,
-      "tile_crops": {},
-      "tile_graves": {},
-      "church_tax": {
-        "Gold": 0,
-        "Silver": 0,
-        "Copper": 1
-      },
-      "church_tax_paid_households": {},
-      "tax_paid_households_today": [],
-      "batches": [],
-      "active_batch_id": null,
-      "batch_counter": 0,
-      "current_day_time": 1.0
-    },
-    {
-      "id": "permit_3",
-      "name": "Starter Farm Lot",
-      "permit_type": "farm",
-      "tiles": [
-        [
-          -5,
-          -3
-        ],
-        [
-          -6,
-          -5
-        ],
-        [
-          -5,
-          -6
-        ],
-        [
-          -6,
-          -2
-        ],
-        [
-          -6,
-          -1
-        ],
-        [
-          -3,
-          -3
-        ],
-        [
-          -3,
-          -6
-        ],
-        [
-          -4,
-          -5
-        ],
-        [
-          -4,
-          -2
-        ],
-        [
-          -4,
-          -1
-        ],
-        [
-          -2,
-          -5
-        ],
-        [
-          -1,
-          -5
-        ],
-        [
-          -2,
-          -2
-        ],
-        [
-          -2,
-          -1
-        ],
-        [
-          -1,
-          -2
-        ],
-        [
-          -1,
-          -1
-        ],
-        [
-          -6,
-          -3
-        ],
-        [
-          -5,
-          -4
-        ],
-        [
-          -6,
-          -6
-        ],
-        [
-          -3,
-          -4
-        ],
-        [
-          -4,
-          -3
-        ],
-        [
-          -4,
-          -6
-        ],
-        [
-          -2,
-          -3
-        ],
-        [
-          -1,
-          -3
-        ],
-        [
-          -2,
-          -6
-        ],
-        [
-          -1,
-          -6
-        ],
-        [
-          -5,
-          -5
-        ],
-        [
-          -5,
-          -1
-        ],
-        [
-          -5,
-          -2
-        ],
-        [
-          -6,
-          -4
-        ],
-        [
-          -3,
-          -5
-        ],
-        [
-          -3,
-          -2
-        ],
-        [
-          -3,
-          -1
-        ],
-        [
-          -1,
-          -4
-        ],
-        [
-          -4,
-          -4
-        ],
-        [
-          -2,
-          -4
-        ]
-      ],
-      "max_workers": 2,
-      "assigned_workers": [],
-      "crop": null,
-      "growth_days": 0.0,
-      "watered_today": false,
-      "tile_crops": {},
-      "tile_graves": {},
-      "church_tax": {
-        "Gold": 0,
-        "Silver": 0,
-        "Copper": 1
-      },
-      "church_tax_paid_households": {},
-      "tax_paid_households_today": [],
-      "batches": [],
-      "active_batch_id": null,
-      "batch_counter": 0,
-      "current_day_time": 1.0
-    },
-    {
-      "id": "permit_4",
-      "name": "Landlord Private Grounds",
-      "permit_type": "landlord_private",
-      "tiles": [
-        [
-          -6,
-          4
-        ],
-        [
-          -5,
-          3
-        ],
-        [
-          -3,
-          9
-        ],
-        [
-          -3,
-          6
-        ],
-        [
-          -9,
-          2
-        ],
-        [
-          -9,
-          8
-        ],
-        [
-          -7,
-          5
-        ],
-        [
-          -4,
-          4
-        ],
-        [
-          -10,
-          3
-        ],
-        [
-          -6,
-          6
-        ],
-        [
-          -5,
-          5
-        ],
-        [
-          -6,
-          3
-        ],
-        [
-          -3,
-          2
-        ],
-        [
-          -3,
-          8
-        ],
-        [
-          -9,
-          4
-        ],
-        [
-          -8,
-          3
-        ],
-        [
-          -7,
-          7
-        ],
-        [
-          -8,
-          9
-        ],
-        [
-          -4,
-          3
-        ],
-        [
-          -10,
-          5
-        ],
-        [
-          -5,
-          7
-        ],
-        [
-          -6,
-          5
-        ],
-        [
-          -3,
-          4
-        ],
-        [
-          -5,
-          4
-        ],
-        [
-          -8,
-          5
-        ],
-        [
-          -9,
-          3
-        ],
-        [
-          -7,
-          9
-        ],
-        [
-          -7,
-          6
-        ],
-        [
-          -4,
-          5
-        ],
-        [
-          -10,
-          7
-        ],
-        [
-          -5,
-          9
-        ],
-        [
-          -6,
-          7
-        ],
-        [
-          -5,
-          6
-        ],
-        [
-          -3,
-          3
-        ],
-        [
-          -8,
-          7
-        ],
-        [
-          -9,
-          5
-        ],
-        [
-          -7,
-          2
-        ],
-        [
-          -8,
-          4
-        ],
-        [
-          -7,
-          8
-        ],
-        [
-          -4,
-          7
-        ],
-        [
-          -10,
-          9
-        ],
-        [
-          -10,
-          6
-        ],
-        [
-          -5,
-          2
-        ],
-        [
-          -6,
-          9
-        ],
-        [
-          -5,
-          8
-        ],
-        [
-          -3,
-          5
-        ],
-        [
-          -9,
-          7
-        ],
-        [
-          -7,
-          4
-        ],
-        [
-          -8,
-          6
-        ],
-        [
-          -4,
-          9
-        ],
-        [
-          -4,
-          6
-        ],
-        [
-          -10,
-          2
-        ],
-        [
-          -10,
-          8
-        ],
-        [
-          -6,
-          2
-        ],
-        [
-          -6,
-          8
-        ],
-        [
-          -3,
-          7
-        ],
-        [
-          -8,
-          2
-        ],
-        [
-          -9,
-          9
-        ],
-        [
-          -8,
-          8
-        ],
-        [
-          -9,
-          6
-        ],
-        [
-          -7,
-          3
-        ],
-        [
-          -4,
-          2
-        ],
-        [
-          -4,
-          8
-        ],
-        [
-          -10,
-          4
-        ]
-      ],
-      "max_workers": 2,
-      "assigned_workers": [],
-      "crop": null,
-      "growth_days": 0.0,
-      "watered_today": false,
-      "tile_crops": {},
-      "tile_graves": {},
-      "church_tax": {
-        "Gold": 0,
-        "Silver": 0,
-        "Copper": 1
-      },
-      "church_tax_paid_households": {},
-      "tax_paid_households_today": [],
-      "batches": [],
-      "active_batch_id": null,
-      "batch_counter": 0,
-      "current_day_time": 1.0
-    },
-    {
-      "id": "permit_5",
       "name": "Smith Housing",
       "permit_type": "housing",
       "tiles": [
@@ -868,6 +124,11 @@
       ],
       "door_pos": null,
       "door_side": null,
+      "rotation": 0,
+      "condition": 1.0,
+      "construction_order": {},
+      "construction_progress": 0.0,
+      "assigned_workers": [],
       "owner": "landlord",
       "inventory": {
         "Potato": 20
@@ -883,7 +144,14 @@
       "assigned_family_id": null,
       "assigned_household_id": null,
       "item_allocations": {},
-      "auto_pricing": true
+      "sale_items": [],
+      "sales_report_period": null,
+      "sales_report_by_item": {},
+      "sales_report_last_day": 1,
+      "household_sale_percent": 20,
+      "household_sale_limits": {},
+      "stall_requested_qty": {},
+      "auto_pricing": false
     }
   ],
   "construction_sites": [],
@@ -895,25 +163,34 @@
       "furniture_type": "household_storage",
       "gx": 5,
       "gy": 5,
+      "rotation": 0,
       "permit_id": null,
       "family_id": "fam_1",
       "assigned_villager_id": null,
+      "assigned_workers": [],
       "is_dropped": false,
+      "stored_in_id": null,
+      "construction_order": {},
+      "construction_progress": 0.0,
       "designated_target": null,
       "carrier_id": null,
       "condition": 1.0,
-      "inventory": {}
+      "inventory": {},
+      "currency": {}
     }
   ],
   "families": [
     {
       "id": "fam_1",
       "surname": "Smith",
-      "assigned_permit_id": "permit_5",
+      "assigned_permit_id": "permit_1",
       "generations_present": [
         2
       ],
       "pending_death_recovery": [],
+      "income_report_period": null,
+      "income_report_by_source": {},
+      "income_report_last_day": 1,
       "members": [
         {
           "id": 1,
@@ -932,6 +209,7 @@
           "inventory": {
             "Silver": 1
           },
+          "currency": {},
           "active_tool": null,
           "has_water": false,
           "water_day": -1,
@@ -943,6 +221,31 @@
           "hunger": 100.0,
           "thirst": 100.0,
           "need_toilet": 100.0,
+          "faith": 100.0,
+          "sleep_need": 100.0,
+          "sleep_forced": false,
+          "sleeping_recharge_active": false,
+          "sleep_any_rest_active": false,
+          "sleep_schedule_task_state": null,
+          "pending_schedule_tasks": [],
+          "socage_tax_round": null,
+          "socage_tax_last_cycle": null,
+          "socage_tax_prepared_cycle": null,
+          "socage_tax_prepared_amount": 0,
+          "happiness": 70.0,
+          "happiness_effects": {},
+          "happiness_trigger_days": {},
+          "happiness_food_day": null,
+          "happiness_food_types": [],
+          "last_faith_decay_day": 1,
+          "prayer_attendance_day": null,
+          "church_tax_prepared_day": null,
+          "church_tax_prepared_amount": 0,
+          "last_faith_prayer_day": null,
+          "last_confession_day": null,
+          "pending_commission_task": null,
+          "pending_commission_data": {},
+          "pending_commission_tasks": [],
           "interrupted_task_state": null,
           "activity_description": null,
           "hunger_death_timer": null,
@@ -954,6 +257,10 @@
           "death_reason": null,
           "death_day": null,
           "carrying_corpse_id": null,
+          "burial_payment_target_corpse_id": null,
+          "burial_payment_gravedigger_id": null,
+          "carpenter_payment_order_id": null,
+          "carpenter_payment_carpenter_id": null,
           "is_buried": false,
           "is_picked_up": false
         }
@@ -973,7 +280,15 @@
         "Crafting": 0,
         "Cooking": 0
       },
-      "carrying_furniture_id": null
+      "carrying_furniture_id": null,
+      "state": "IDLE",
+      "inventory": {},
+      "carpenter_commission_order_id": null,
+      "carpenter_commission_carpenter_id": null,
+      "carpenter_commission_fee_copper": 0,
+      "carpenter_commission_remaining_copper": 0,
+      "carpenter_commission_storage_tile": null,
+      "carpenter_commission_treasury_id": null
     },
     {
       "id": "servant_2",
@@ -987,12 +302,49 @@
         "Crafting": 0,
         "Cooking": 0
       },
-      "carrying_furniture_id": null
+      "carrying_furniture_id": null,
+      "state": "IDLE",
+      "inventory": {},
+      "carpenter_commission_order_id": null,
+      "carpenter_commission_carpenter_id": null,
+      "carpenter_commission_fee_copper": 0,
+      "carpenter_commission_remaining_copper": 0,
+      "carpenter_commission_storage_tile": null,
+      "carpenter_commission_treasury_id": null
     }
   ],
   "schedules": {
-    "Unassigned": {
-      "Monday": [
+    "prayer_start_hour": 3,
+    "prayer_end_hour": 4,
+    "universal_schedule": [
+      "SLEEP",
+      "SLEEP",
+      "SLEEP",
+      "SLEEP",
+      "SLEEP",
+      "SLEEP",
+      "LEISURE",
+      "LEISURE",
+      "WORK",
+      "WORK",
+      "WORK",
+      "WORK",
+      "WORK",
+      "WORK",
+      "WORK",
+      "WORK",
+      "WORK",
+      "WORK",
+      "LEISURE",
+      "LEISURE",
+      "LEISURE",
+      "LEISURE",
+      "SLEEP",
+      "SLEEP"
+    ],
+    "universal_schedule_enabled": false,
+    "job_schedules": {
+      "Unassigned": [
         "SLEEP",
         "SLEEP",
         "SLEEP",
@@ -1018,7 +370,7 @@
         "SLEEP",
         "SLEEP"
       ],
-      "Tuesday": [
+      "Farmer": [
         "SLEEP",
         "SLEEP",
         "SLEEP",
@@ -1044,7 +396,7 @@
         "SLEEP",
         "SLEEP"
       ],
-      "Wednesday": [
+      "Builder": [
         "SLEEP",
         "SLEEP",
         "SLEEP",
@@ -1070,7 +422,7 @@
         "SLEEP",
         "SLEEP"
       ],
-      "Thursday": [
+      "Blacksmith": [
         "SLEEP",
         "SLEEP",
         "SLEEP",
@@ -1096,7 +448,7 @@
         "SLEEP",
         "SLEEP"
       ],
-      "Friday": [
+      "Carpenter": [
         "SLEEP",
         "SLEEP",
         "SLEEP",
@@ -1122,7 +474,7 @@
         "SLEEP",
         "SLEEP"
       ],
-      "Saturday": [
+      "Tax Collector": [
         "SLEEP",
         "SLEEP",
         "SLEEP",
@@ -1148,35 +500,7 @@
         "SLEEP",
         "SLEEP"
       ],
-      "Sunday": [
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "LEISURE",
-        "LEISURE",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "SLEEP",
-        "SLEEP"
-      ]
-    },
-    "Farmer": {
-      "Monday": [
+      "Baker": [
         "SLEEP",
         "SLEEP",
         "SLEEP",
@@ -1202,7 +526,7 @@
         "SLEEP",
         "SLEEP"
       ],
-      "Tuesday": [
+      "Fisherman": [
         "SLEEP",
         "SLEEP",
         "SLEEP",
@@ -1228,1247 +552,11 @@
         "SLEEP",
         "SLEEP"
       ],
-      "Wednesday": [
+      "Priest": [
         "SLEEP",
         "SLEEP",
         "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "LEISURE",
-        "LEISURE",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "SLEEP",
-        "SLEEP"
-      ],
-      "Thursday": [
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "LEISURE",
-        "LEISURE",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "SLEEP",
-        "SLEEP"
-      ],
-      "Friday": [
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "LEISURE",
-        "LEISURE",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "SLEEP",
-        "SLEEP"
-      ],
-      "Saturday": [
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "LEISURE",
-        "LEISURE",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "SLEEP",
-        "SLEEP"
-      ],
-      "Sunday": [
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "LEISURE",
-        "LEISURE",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "SLEEP",
-        "SLEEP"
-      ]
-    },
-    "Builder": {
-      "Monday": [
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "LEISURE",
-        "LEISURE",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "SLEEP",
-        "SLEEP"
-      ],
-      "Tuesday": [
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "LEISURE",
-        "LEISURE",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "SLEEP",
-        "SLEEP"
-      ],
-      "Wednesday": [
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "LEISURE",
-        "LEISURE",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "SLEEP",
-        "SLEEP"
-      ],
-      "Thursday": [
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "LEISURE",
-        "LEISURE",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "SLEEP",
-        "SLEEP"
-      ],
-      "Friday": [
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "LEISURE",
-        "LEISURE",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "SLEEP",
-        "SLEEP"
-      ],
-      "Saturday": [
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "LEISURE",
-        "LEISURE",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "SLEEP",
-        "SLEEP"
-      ],
-      "Sunday": [
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "LEISURE",
-        "LEISURE",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "SLEEP",
-        "SLEEP"
-      ]
-    },
-    "Blacksmith": {
-      "Monday": [
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "LEISURE",
-        "LEISURE",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "SLEEP",
-        "SLEEP"
-      ],
-      "Tuesday": [
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "LEISURE",
-        "LEISURE",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "SLEEP",
-        "SLEEP"
-      ],
-      "Wednesday": [
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "LEISURE",
-        "LEISURE",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "SLEEP",
-        "SLEEP"
-      ],
-      "Thursday": [
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "LEISURE",
-        "LEISURE",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "SLEEP",
-        "SLEEP"
-      ],
-      "Friday": [
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "LEISURE",
-        "LEISURE",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "SLEEP",
-        "SLEEP"
-      ],
-      "Saturday": [
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "LEISURE",
-        "LEISURE",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "SLEEP",
-        "SLEEP"
-      ],
-      "Sunday": [
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "LEISURE",
-        "LEISURE",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "SLEEP",
-        "SLEEP"
-      ]
-    },
-    "Carpenter": {
-      "Monday": [
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "LEISURE",
-        "LEISURE",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "SLEEP",
-        "SLEEP"
-      ],
-      "Tuesday": [
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "LEISURE",
-        "LEISURE",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "SLEEP",
-        "SLEEP"
-      ],
-      "Wednesday": [
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "LEISURE",
-        "LEISURE",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "SLEEP",
-        "SLEEP"
-      ],
-      "Thursday": [
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "LEISURE",
-        "LEISURE",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "SLEEP",
-        "SLEEP"
-      ],
-      "Friday": [
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "LEISURE",
-        "LEISURE",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "SLEEP",
-        "SLEEP"
-      ],
-      "Saturday": [
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "LEISURE",
-        "LEISURE",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "SLEEP",
-        "SLEEP"
-      ],
-      "Sunday": [
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "LEISURE",
-        "LEISURE",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "SLEEP",
-        "SLEEP"
-      ]
-    },
-    "Baker": {
-      "Monday": [
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "LEISURE",
-        "LEISURE",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "SLEEP",
-        "SLEEP"
-      ],
-      "Tuesday": [
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "LEISURE",
-        "LEISURE",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "SLEEP",
-        "SLEEP"
-      ],
-      "Wednesday": [
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "LEISURE",
-        "LEISURE",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "SLEEP",
-        "SLEEP"
-      ],
-      "Thursday": [
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "LEISURE",
-        "LEISURE",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "SLEEP",
-        "SLEEP"
-      ],
-      "Friday": [
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "LEISURE",
-        "LEISURE",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "SLEEP",
-        "SLEEP"
-      ],
-      "Saturday": [
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "LEISURE",
-        "LEISURE",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "SLEEP",
-        "SLEEP"
-      ],
-      "Sunday": [
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "LEISURE",
-        "LEISURE",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "SLEEP",
-        "SLEEP"
-      ]
-    },
-    "Fisherman": {
-      "Monday": [
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "LEISURE",
-        "LEISURE",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "SLEEP",
-        "SLEEP"
-      ],
-      "Tuesday": [
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "LEISURE",
-        "LEISURE",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "SLEEP",
-        "SLEEP"
-      ],
-      "Wednesday": [
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "LEISURE",
-        "LEISURE",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "SLEEP",
-        "SLEEP"
-      ],
-      "Thursday": [
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "LEISURE",
-        "LEISURE",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "SLEEP",
-        "SLEEP"
-      ],
-      "Friday": [
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "LEISURE",
-        "LEISURE",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "SLEEP",
-        "SLEEP"
-      ],
-      "Saturday": [
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "LEISURE",
-        "LEISURE",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "SLEEP",
-        "SLEEP"
-      ],
-      "Sunday": [
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "LEISURE",
-        "LEISURE",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "SLEEP",
-        "SLEEP"
-      ]
-    },
-    "Priest": {
-      "Monday": [
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "LEISURE",
-        "LEISURE",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
         "PRAYER",
-        "PRAYER",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "SLEEP",
-        "SLEEP"
-      ],
-      "Tuesday": [
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "LEISURE",
-        "LEISURE",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "PRAYER",
-        "PRAYER",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "SLEEP",
-        "SLEEP"
-      ],
-      "Wednesday": [
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "LEISURE",
-        "LEISURE",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "PRAYER",
-        "PRAYER",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "SLEEP",
-        "SLEEP"
-      ],
-      "Thursday": [
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "LEISURE",
-        "LEISURE",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "PRAYER",
-        "PRAYER",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "SLEEP",
-        "SLEEP"
-      ],
-      "Friday": [
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "LEISURE",
-        "LEISURE",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "PRAYER",
-        "PRAYER",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "SLEEP",
-        "SLEEP"
-      ],
-      "Saturday": [
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "LEISURE",
-        "LEISURE",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "PRAYER",
-        "PRAYER",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "SLEEP",
-        "SLEEP"
-      ],
-      "Sunday": [
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "LEISURE",
-        "LEISURE",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "PRAYER",
-        "PRAYER",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "SLEEP",
-        "SLEEP"
-      ]
-    },
-    "Gravedigger": {
-      "Monday": [
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
         "SLEEP",
         "SLEEP",
         "LEISURE",
@@ -2490,137 +578,7 @@
         "SLEEP",
         "SLEEP"
       ],
-      "Tuesday": [
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "LEISURE",
-        "LEISURE",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "SLEEP",
-        "SLEEP"
-      ],
-      "Wednesday": [
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "LEISURE",
-        "LEISURE",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "SLEEP",
-        "SLEEP"
-      ],
-      "Thursday": [
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "LEISURE",
-        "LEISURE",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "SLEEP",
-        "SLEEP"
-      ],
-      "Friday": [
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "LEISURE",
-        "LEISURE",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "SLEEP",
-        "SLEEP"
-      ],
-      "Saturday": [
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "LEISURE",
-        "LEISURE",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "SLEEP",
-        "SLEEP"
-      ],
-      "Sunday": [
+      "Gravedigger": [
         "SLEEP",
         "SLEEP",
         "SLEEP",
@@ -2648,5 +606,24 @@
       ]
     }
   },
-  "production_records": {}
+  "production_records": {},
+  "burial_commissions": [],
+  "confession_state": {
+    "queues": {},
+    "active": {}
+  },
+  "taxation_state": {
+    "church_enabled": true,
+    "church_tax": {
+      "Gold": 0,
+      "Silver": 0,
+      "Copper": 1
+    },
+    "church_tax_paid_households_today": [],
+    "church_tax_last_day": 1,
+    "socage_enabled": true,
+    "socage_percent": 10,
+    "socage_report_period": null,
+    "socage_report_collected_copper": 0
+  }
 }

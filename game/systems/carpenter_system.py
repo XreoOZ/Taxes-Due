@@ -16,7 +16,6 @@ from game.data.config import (
     FURNITURE_TYPES,
     BUILDING_TYPES,
     MARKET_TRADEABLE_ITEMS,
-    FREE_TIME_SCHEDULE_ACTIVITIES,
     ROUTE_STATE_FAILED,
     CARPENTER_INSUFFICIENT_LANDLORD_COIN_MESSAGES,
 )
@@ -859,36 +858,37 @@ class CarpenterSystem:
                       stockpile_manager=None, permit_manager=None):
         if getattr(carpenter, "job", None) != "Carpenter" or not furniture_manager:
             return False
-        if carpenter.task.startswith("CARPENTER_RESTOCK_"):
-            if cls._update_restock(carpenter, dt, building_manager, furniture_manager,
-                                   villager_manager, all_entities, player,
-                                   stockpile_manager, permit_manager):
-                return True
+        if schedule_activity != "WORK":
+            return False
 
-        if schedule_activity in FREE_TIME_SCHEDULE_ACTIVITIES:
-            work_orders = (
-                list(getattr(furniture_manager, "furnitures", []))
-                + list(getattr(building_manager, "construction_sites", []))
-                + list(getattr(building_manager, "buildings", []))
-            )
-            has_commission_work = any(
-                isinstance(getattr(subject, "construction_order", None), dict)
-                and str(subject.construction_order.get("carpenter_id")) == str(carpenter.id)
-                and subject.construction_order.get("status") in ("PAID", "BUILDING", "AWAITING_MATERIAL")
-                for subject in work_orders
-            )
-            if not has_commission_work:
-                _, stored_materials = cls._materials_in_storage(carpenter, furniture_manager)
-                stock_targets = DEDICATED_JOBS.get("Carpenter", {}).get("material_stock_target", {})
-                low_stock = {
-                    material: max(0, int(target) - int(stored_materials.get(material, 0)))
-                    for material, target in stock_targets.items()
-                    if int(stored_materials.get(material, 0)) < int(target)
-                }
-                if low_stock and cls._begin_restock(
-                        carpenter, low_stock, building_manager, furniture_manager, villager_manager):
-                    carpenter.active_tool = None
-                    return True
+        if carpenter.task.startswith("CARPENTER_RESTOCK_"):
+            return cls._update_restock(carpenter, dt, building_manager, furniture_manager,
+                                       villager_manager, all_entities, player,
+                                       stockpile_manager, permit_manager)
+
+        work_orders = (
+            list(getattr(furniture_manager, "furnitures", []))
+            + list(getattr(building_manager, "construction_sites", []))
+            + list(getattr(building_manager, "buildings", []))
+        )
+        has_commission_work = any(
+            isinstance(getattr(subject, "construction_order", None), dict)
+            and str(subject.construction_order.get("carpenter_id")) == str(carpenter.id)
+            and subject.construction_order.get("status") in ("PAID", "BUILDING", "AWAITING_MATERIAL")
+            for subject in work_orders
+        )
+        if not has_commission_work:
+            _, stored_materials = cls._materials_in_storage(carpenter, furniture_manager)
+            stock_targets = DEDICATED_JOBS.get("Carpenter", {}).get("material_stock_target", {})
+            low_stock = {
+                material: max(0, int(target) - int(stored_materials.get(material, 0)))
+                for material, target in stock_targets.items()
+                if int(stored_materials.get(material, 0)) < int(target)
+            }
+            if low_stock and cls._begin_restock(
+                    carpenter, low_stock, building_manager, furniture_manager, villager_manager):
+                carpenter.active_tool = None
+                return True
 
         landlord_payment = next((f for f in furniture_manager.furnitures
                                  if f.construction_order

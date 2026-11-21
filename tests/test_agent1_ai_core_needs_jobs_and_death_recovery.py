@@ -20,6 +20,7 @@ from game.buildings.buildings import Building, BuildingManager
 from game.world.stockpile import StockpileManager
 from game.world.permits import AreaPermit, PermitManager
 from game.systems.day_cycle import DayCycleSystem
+from game.systems.schedule import ScheduleManager
 from game.systems.save_system import save_to_slot, load_from_slot, get_slot_path
 import os
 
@@ -119,7 +120,14 @@ class TestAgent1AICoreNeedsJobsAndDeathRecovery(unittest.TestCase):
         # Trigger critical need toilet
         v.need_toilet = 15.0
         self.assertTrue(v.need_toilet <= AI_NEED_TOILET_URGENT_THRESHOLD)
-        v.update(0.1, self.pm, self.bm, [v], None, day_cycle=self.day_cycle)
+        schedule_manager = ScheduleManager()
+        schedule_manager.set_hour_activity(
+            v.job, int(self.day_cycle.current_hour), "LEISURE"
+        )
+        v.update(
+            0.1, self.pm, self.bm, [v], None,
+            day_cycle=self.day_cycle, schedule_manager=schedule_manager,
+        )
         self.assertEqual(v.task, "SEEKING_TOILET")
 
     def test_05_task_interruption_preserves_state_and_resumes_after_need(self):

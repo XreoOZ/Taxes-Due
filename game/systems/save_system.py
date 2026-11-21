@@ -251,6 +251,10 @@ def serialize_game_state(day_cycle, resources, player, permit_manager, building_
                     "sleeping_recharge_active": getattr(m, "sleeping_recharge_active", False),
                     "sleep_any_rest_active": getattr(m, "sleep_any_rest_active", False),
                     "sleep_schedule_task_state": getattr(m, "sleep_schedule_task_state", None),
+                    "pending_schedule_tasks": [
+                        dict(entry) for entry in getattr(m, "pending_schedule_tasks", [])
+                        if isinstance(entry, dict)
+                    ],
                     "socage_tax_round": dict(getattr(m, "socage_tax_round", {}) or {}) or None,
                     "socage_tax_last_cycle": getattr(m, "socage_tax_last_cycle", None),
                     "socage_tax_prepared_cycle": getattr(m, "socage_tax_prepared_cycle", None),
@@ -623,6 +627,10 @@ def deserialize_game_state(data, day_cycle, resources, player, permit_manager, b
             v.sleeping_recharge_active = bool(m_d.get("sleeping_recharge_active", False))
             v.sleep_any_rest_active = bool(m_d.get("sleep_any_rest_active", False))
             v.sleep_schedule_task_state = m_d.get("sleep_schedule_task_state")
+            v.pending_schedule_tasks = [
+                dict(entry) for entry in m_d.get("pending_schedule_tasks", [])
+                if isinstance(entry, dict)
+            ]
             v.socage_tax_round = dict(m_d.get("socage_tax_round", {}) or {}) or None
             v.socage_tax_last_cycle = m_d.get("socage_tax_last_cycle")
             v.socage_tax_prepared_cycle = m_d.get("socage_tax_prepared_cycle")

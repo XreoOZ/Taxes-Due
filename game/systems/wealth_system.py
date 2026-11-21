@@ -26,13 +26,12 @@ HOUSEHOLD_PALETTE = [
 
 
 def _wallet_with_mirror_fallback(primary, fallback):
-    """Prefer physical inventory; use a mirrored wallet only when that coin is absent."""
+    """Prefer the physical wallet as a whole; fall back only for legacy-only wallets."""
     primary_wallet = normalize_wallet(primary)
+    if any(primary_wallet.values()):
+        return primary_wallet
     fallback_wallet = normalize_wallet(fallback)
-    return {
-        denom: primary_wallet[denom] if primary_wallet[denom] > 0 else fallback_wallet[denom]
-        for denom in CURRENCY_DENOMINATIONS
-    }
+    return fallback_wallet
 
 
 class VillageWealthSystem:

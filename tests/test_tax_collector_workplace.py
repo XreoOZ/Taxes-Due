@@ -8,7 +8,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 
 from game.systems.taxation_system import TaxationSystem
 from game.systems.currency import to_copper
-from game.config import SCHEDULE_NON_WORK_TASKS
+from game.systems.scheduled_activity import ScheduledActivitySystem
 
 
 class _Collector:
@@ -120,14 +120,16 @@ class TestTaxCollectorWorkplace(unittest.TestCase):
         self.assertIsNone(collector.socage_tax_round)
         start_round.assert_not_called()
 
-    def test_collection_tasks_do_not_override_the_sleep_schedule(self):
+    def test_collection_tasks_are_bound_to_work_schedule(self):
         tax_tasks = {
             "VISITING_HOUSEHOLD_FOR_TAX",
             "WAITING_FOR_HOUSEHOLD_TAX",
             "RETURNING_TAX_TO_TREASURY",
         }
 
-        self.assertTrue(tax_tasks.issubset(SCHEDULE_NON_WORK_TASKS))
+        for task in tax_tasks:
+            self.assertEqual(ScheduledActivitySystem.task_schedule(task), "WORK")
+            self.assertFalse(ScheduledActivitySystem.task_is_allowed(task, "LEISURE"))
 
     def test_active_collection_pauses_outside_work_schedule(self):
         collector = _Collector()
@@ -159,6 +161,60 @@ class TestTaxCollectorWorkplace(unittest.TestCase):
         TaxationSystem._refresh_household_queue(round_state, manager)
 
         self.assertEqual(round_state["family_ids"], ["family-a", "family-b"])
+
+    def test_collector_waits_indefinitely_for_household_representative(self):
+        collector = _Collector()
+        representative = type("Representative", (), {"is_alive": True})()
+        family = type("Family", (), {"id": "family-a", "members": [representative]})()
+        manager = type("VillagerManager", (), {
+            "families": [family],
+            "get_all_villagers": lambda _self: [collector],
+            "get_family_by_id": lambda _self, family_id: family if family_id == "family-a" else None,
+        })()
+        collector.socage_tax_round = {
+            "family_ids": ["family-a"],
+            "index": 0,
+            "status": "MEET",
+            "target_family_id": "family-a",
+            "wait_seconds": 1000000.0,
+        }
+
+        with patch.object(TaxationSystem, "_family_meeting_point", return_value=(0.0, 0.0)):
+            handled = TaxationSystem.update_collector(
+                collector, 1000.0, "WORK", _DayCycle(), None, manager,
+                type("BuildingManager", (), {"buildings": [_TaxOffice()]})(),
+                object(), [collector], None,
+            )
+
+        self.assertTrue(handled)
+        self.assertEqual(collector.socage_tax_round["index"], 0)
+        self.assertEqual(collector.socage_tax_round["status"], "MEET")
+
+    def test_collector_does_not_skip_household_without_meeting_location(self):
+        collector = _Collector()
+        representative = type("Representative", (), {"is_alive": True})()
+        family = type("Family", (), {"id": "family-a", "members": [representative]})()
+        manager = type("VillagerManager", (), {
+            "families": [family],
+            "get_all_villagers": lambda _self: [collector],
+            "get_family_by_id": lambda _self, family_id: family if family_id == "family-a" else None,
+        })()
+        collector.socage_tax_round = {
+            "family_ids": ["family-a"],
+            "index": 0,
+            "status": "TRAVEL",
+        }
+
+        with patch.object(TaxationSystem, "_family_meeting_point", return_value=None):
+            handled = TaxationSystem.update_collector(
+                collector, 0.1, "WORK", _DayCycle(), None, manager,
+                type("BuildingManager", (), {"buildings": [_TaxOffice()]})(),
+                object(), [collector], None,
+            )
+
+        self.assertTrue(handled)
+        self.assertEqual(collector.socage_tax_round["index"], 0)
+        self.assertEqual(collector.socage_tax_round["status"], "WAITING_FOR_HOUSEHOLD_LOCATION")
 
     def test_completed_collection_is_deposited_in_landlord_treasury(self):
         collector = _Collector()

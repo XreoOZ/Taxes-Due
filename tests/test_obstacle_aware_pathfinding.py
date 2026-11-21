@@ -24,7 +24,7 @@ from game.entities.servants import Servant
 from game.world.permits import PermitManager
 from game.world.stockpile import StockpileManager
 from game.systems.day_cycle import DayCycleSystem
-from game.world.pathfinding import Pathfinder
+from game.world.pathfinding import Pathfinder, get_tiles_along_segment
 
 class TestObstacleAwarePathfinding(unittest.TestCase):
     def setUp(self):
@@ -80,6 +80,40 @@ class TestObstacleAwarePathfinding(unittest.TestCase):
             p2 = path[i + 1]
             clear = self.bm.pathfinder.is_segment_clear(p1, p2, self.bm)
             self.assertTrue(clear, f"Segment {p1}->{p2} must not cut through solid well!")
+
+    def test_open_route_is_pulled_into_direct_diagonal(self):
+        start = (2.5 * TILE_SIZE, 2.5 * TILE_SIZE)
+        target = (9.5 * TILE_SIZE, 7.5 * TILE_SIZE)
+
+        path = self.bm.find_path(start, target)
+
+        self.assertEqual(path, [target])
+
+    def test_diagonal_route_does_not_cut_between_obstacles(self):
+        self.bm.buildings.append(Building("well", {(3, 2), (2, 3)}))
+        start = (2.5 * TILE_SIZE, 2.5 * TILE_SIZE)
+        target = (3.5 * TILE_SIZE, 3.5 * TILE_SIZE)
+
+        path = self.bm.find_path(start, target)
+
+        self.assertTrue(path)
+        self.assertNotEqual(path, [target])
+        for p1, p2 in zip([start] + path, path):
+            self.assertTrue(self.bm.pathfinder.is_segment_clear(p1, p2, self.bm))
+
+    def test_smoothing_preserves_avoided_tiles(self):
+        start = (2.5 * TILE_SIZE, 5.5 * TILE_SIZE)
+        target = (8.5 * TILE_SIZE, 5.5 * TILE_SIZE)
+        avoided_tile = (5, 5)
+
+        path = self.bm.find_path(start, target, avoid_tiles={avoided_tile})
+
+        self.assertTrue(path)
+        for p1, p2 in zip([start] + path, path):
+            self.assertNotIn(
+                avoided_tile,
+                get_tiles_along_segment(p1, p2, TILE_SIZE),
+            )
 
     def test_3_unreachable_target_never_appends_path_through_obstacle(self):
         """If a target is completely enclosed by impassable walls with no door, return empty path."""

@@ -1,13 +1,15 @@
 import unittest
 import pygame
 from game.config import TILE_SIZE, WATERING_DURATION_INGAME_HOURS, TILLING_DURATION_INGAME_HOURS
+from game.data.config import VILLAGER_INVENTORY_CAPACITY
 from game.buildings.buildings import BuildingManager, Building
-from game.buildings.furniture import FurnitureManager
+from game.buildings.furniture import Furniture, FurnitureManager
 from game.world.permits import PermitManager
 from game.world.stockpile import StockpileManager
 from game.entities.villagers import VillagerManager, Villager, Family
 from game.entities.servants import ServantManager, Servant
 from game.systems.day_cycle import DayCycleSystem
+from game.systems.schedule import ScheduleManager
 
 class TestPossessionAndDispersalFarming(unittest.TestCase):
     def setUp(self):
@@ -73,6 +75,10 @@ class TestPossessionAndDispersalFarming(unittest.TestCase):
         farm_p = self.permit_manager.add_permit("Farm", "farm", [(0, 0), (0, 1), (1, 0), (1, 1)])
         farm_p.set_crop("potato")
         farm_p.assigned_workers = ["vil_1"]
+        schedule_manager = ScheduleManager()
+        schedule_manager.set_hour_activity(
+            v.job, int(self.day_cycle.current_hour), "WORK"
+        )
 
         # Check irrelevant tools: Sickle is RELEVANT to Farmer so it's NOT returned; only excess Hoe is returned!
         unused = v.get_irrelevant_tools()
@@ -83,7 +89,7 @@ class TestPossessionAndDispersalFarming(unittest.TestCase):
         all_ents = [v]
         v.update(0.1, self.permit_manager, self.building_manager, all_ents, player=None,
                  stockpile_manager=self.stockpile_manager, furniture_manager=self.furniture_manager,
-                 day_cycle=self.day_cycle)
+                 day_cycle=self.day_cycle, schedule_manager=schedule_manager)
 
         self.assertEqual(chest.inventory.get("Hoe", 0), 1)
         self.assertEqual(v.inventory.get("Hoe", 0), 1)     # 1 required Hoe remains in inventory
@@ -93,7 +99,7 @@ class TestPossessionAndDispersalFarming(unittest.TestCase):
         v.set_job("Builder")
         v.update(0.1, self.permit_manager, self.building_manager, all_ents, player=None,
                  stockpile_manager=self.stockpile_manager, furniture_manager=self.furniture_manager,
-                 day_cycle=self.day_cycle)
+                 day_cycle=self.day_cycle, schedule_manager=schedule_manager)
 
         self.assertEqual(v.inventory.get("Sickle", 0), 0)
         self.assertEqual(v.inventory.get("Hoe", 0), 0)
@@ -130,8 +136,13 @@ class TestPossessionAndDispersalFarming(unittest.TestCase):
     def test_gather_dropped_items_into_chest(self):
         """Family members gather dropped tools and items into household chest."""
         # 1. Place household chest at (10, 10)
-        chest, _ = self.furniture_manager.add_furniture("household_storage", 10, 10, self.permit_manager, self.villager_manager)
-        chest.family_id = "fam_1"
+        home = self.permit_manager.add_permit("Home", "housing", [(10, 10)])
+        chest = Furniture(
+            "home-chest", "household_storage", 10, 10,
+            permit_id=home.id, family_id="fam_1",
+        )
+        self.furniture_manager.furnitures.append(chest)
+        chest.inventory["Potato"] = 1
 
         # 2. Drop 6 sickles on the ground outside at (15, 15)
         self.stockpile_manager.drop_resource("Sickle", 6, 15, 15, owner_type="villager", owner_id="fam_1")
@@ -140,7 +151,12 @@ class TestPossessionAndDispersalFarming(unittest.TestCase):
 
         # 3. Create villager
         v = Villager("vil_1", "Arthur", "Ward", "Male", 25, 2, "Father", "fam_1", x=15.0 * TILE_SIZE, y=15.0 * TILE_SIZE)
+        v.inventory["Wood"] = VILLAGER_INVENTORY_CAPACITY - 5
         all_ents = [v]
+        schedule_manager = ScheduleManager()
+        schedule_manager.set_hour_activity(
+            v.job, int(self.day_cycle.current_hour), "LEISURE"
+        )
 
         # 4. Villager spots dropped stack
         s = v._find_family_loose_stack_to_retrieve(self.stockpile_manager, self.furniture_manager, self.permit_manager, self.building_manager, all_ents)
@@ -151,21 +167,24 @@ class TestPossessionAndDispersalFarming(unittest.TestCase):
         # First tick transitions to FETCHING_POSSESSION
         v.update(0.1, self.permit_manager, self.building_manager, all_ents, player=None,
                  stockpile_manager=self.stockpile_manager, furniture_manager=self.furniture_manager,
-                 day_cycle=self.day_cycle)
+                 day_cycle=self.day_cycle, schedule_manager=schedule_manager)
         self.assertEqual(v.task, "FETCHING_POSSESSION")
 
-        # Second tick picks up and transitions to HAULING_HOME
+        # Second tick picks up and transitions to the Leisure hauling task
         v.update(0.1, self.permit_manager, self.building_manager, all_ents, player=None,
                  stockpile_manager=self.stockpile_manager, furniture_manager=self.furniture_manager,
-                 day_cycle=self.day_cycle)
-        self.assertEqual(v.task, "HAULING_HOME")
+                 day_cycle=self.day_cycle, schedule_manager=schedule_manager)
+        self.assertEqual(v.task, "HAULING_POSSESSION_HOME")
         self.assertEqual(v.inventory.get("Sickle", 0), 5)
 
-        # Teleport to chest and finish hauling
-        v.x, v.y = chest.get_world_pos(TILE_SIZE)
+        # Move to the chest's current legal interaction point and finish hauling
+        v.x, v.y = chest.get_approach_point(
+            v.x, v.y, worker_id=v.id, all_entities=all_ents,
+            tile_size=TILE_SIZE, bm=self.building_manager,
+        )
         v.update(0.1, self.permit_manager, self.building_manager, all_ents, player=None,
                  stockpile_manager=self.stockpile_manager, furniture_manager=self.furniture_manager,
-                 day_cycle=self.day_cycle)
+                 day_cycle=self.day_cycle, schedule_manager=schedule_manager)
 
         # 5 sickles should now be in the chest, 1 remains on ground
         self.assertEqual(chest.inventory.get("Sickle", 0), 5)

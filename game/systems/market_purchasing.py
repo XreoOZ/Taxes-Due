@@ -13,7 +13,12 @@ Coordinates the complete, realistic physical market food purchasing workflow for
 """
 
 import math
-from game.config import TILE_SIZE, AI_NEED_MAX, AI_NEED_FOOD_RESTORE
+from game.config import (
+    TILE_SIZE,
+    AI_NEED_MAX,
+    AI_NEED_FOOD_RESTORE,
+    AI_NEED_SEEK_COOLDOWN_SECONDS,
+)
 from game.data.config import is_food_item, CHEST_INTERACTION_RADIUS, VILLAGER_INVENTORY_CAPACITY
 from game.systems.currency import (
     to_copper,
@@ -378,7 +383,10 @@ class AIFoodPurchasingSystem:
         villager.purchase_food_item = None
         villager.purchase_target_price = 0
         villager.task = "IDLE"
-        villager.need_seek_cooldown = 4.0
+        villager._set_need_seek_cooldown(
+            AI_NEED_SEEK_COOLDOWN_SECONDS,
+            task="SEEKING_FOOD",
+        )
 
 
 class AIMarketPurchasingSystem:

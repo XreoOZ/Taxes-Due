@@ -1,5 +1,6 @@
 import unittest
 from types import SimpleNamespace
+from unittest.mock import patch
 
 from game.systems.carpenter_system import CarpenterSystem
 
@@ -103,6 +104,48 @@ class TestCarpenterAssetWorkRange(unittest.TestCase):
             [], None, None, _FurnitureManager(), furniture_target=True,
         )
         self.assertTrue(order["materials_committed"])
+
+    def test_restock_is_started_only_during_work(self):
+        carpenter = _Carpenter(96.0, 96.0)
+        building_manager = SimpleNamespace(buildings=[], construction_sites=[])
+        furniture_manager = _FurnitureManager()
+
+        with patch.object(CarpenterSystem, "_begin_restock", return_value=True) as begin_restock:
+            for schedule in ("LEISURE", "ANY"):
+                self.assertFalse(CarpenterSystem.update_worker(
+                    carpenter, 0.25, schedule, building_manager, furniture_manager,
+                    None, [], None, None,
+                ))
+            begin_restock.assert_not_called()
+
+            self.assertTrue(CarpenterSystem.update_worker(
+                carpenter, 0.25, "WORK", building_manager, furniture_manager,
+                None, [], None, None,
+            ))
+            begin_restock.assert_called_once()
+
+    def test_active_restock_pauses_outside_work(self):
+        carpenter = _Carpenter(96.0, 96.0)
+        carpenter.task = "CARPENTER_RESTOCK_HAULING_HOME"
+        building_manager = SimpleNamespace(buildings=[], construction_sites=[])
+        furniture_manager = _FurnitureManager()
+
+        with patch.object(CarpenterSystem, "_update_restock", return_value=True) as update_restock:
+            self.assertFalse(CarpenterSystem.update_worker(
+                carpenter, 0.25, "LEISURE", building_manager, furniture_manager,
+                None, [], None, None,
+            ))
+            self.assertFalse(CarpenterSystem.update_worker(
+                carpenter, 0.25, "ANY", building_manager, furniture_manager,
+                None, [], None, None,
+            ))
+            update_restock.assert_not_called()
+
+            self.assertTrue(CarpenterSystem.update_worker(
+                carpenter, 0.25, "WORK", building_manager, furniture_manager,
+                None, [], None, None,
+            ))
+            update_restock.assert_called_once()
 
 
 if __name__ == "__main__":

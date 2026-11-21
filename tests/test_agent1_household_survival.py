@@ -22,6 +22,7 @@ from game.entities.servants import Servant
 from game.buildings.furniture import Furniture, FurnitureManager
 from game.world.permits import AreaPermit, PermitManager
 from game.systems.day_cycle import DayCycleSystem
+from game.systems.schedule import ScheduleManager
 from game.world.stockpile import StockpileManager
 from game.systems.market_interface import request_market_food_purchase
 from game.world.pathfinding import GlobalPathRegistry
@@ -79,37 +80,104 @@ class TestAgent1HouseholdSurvival(unittest.TestCase):
         self.assertEqual(fam.daily_food_required, 3 * DAILY_FOOD_REQUIREMENT)
         self.assertEqual(fam.daily_water_required, 3 * DAILY_WATER_REQUIREMENT)
 
-    def test_04_ai_interrupts_work_at_20_percent_hunger(self):
-        """4. AI interrupts work at 20% Hunger to seek food."""
+    def test_04_critical_hunger_waits_for_leisure_schedule(self):
+        """4. Critical hunger waits during work and starts during leisure."""
         v = Villager("vil_test_4", "Arthur", "Miller", "Male", 45, 2, "Father", "fam_1", 0.0, 0.0)
-        v.task = "TILLING"
+        v.task = "IDLE"
         v.hunger = 20.0  # Hit critical threshold
         v.thirst = 80.0
+        v.inventory["Potato"] = 1
 
-        # Family has food in chest across the room
-        chest = Furniture("f_chest_4", "household_storage", 5, 5, family_id="fam_1")
-        chest.inventory["Potato"] = 10
-        self.furniture_manager.furnitures.append(chest)
+        schedule_manager = ScheduleManager()
+        current_hour = int(self.day_cycle.current_hour)
+        schedule_manager.set_hour_activity(v.job, current_hour, "WORK")
+        v.update(
+            0.1, self.permit_manager, None, [v], None,
+            furniture_manager=self.furniture_manager, day_cycle=self.day_cycle,
+            schedule_manager=schedule_manager,
+        )
+        self.assertNotEqual(v.task, "SEEKING_FOOD")
+        self.assertLessEqual(v.hunger, AI_CRITICAL_NEED_THRESHOLD)
+        self.assertEqual(v.inventory["Potato"], 1)
 
-        v.update(0.1, self.permit_manager, None, [v], None, furniture_manager=self.furniture_manager, day_cycle=self.day_cycle)
-        self.assertEqual(v.task, "SEEKING_FOOD")
-        self.assertEqual(v.previous_task_before_need, "TILLING")
+        schedule_manager.set_hour_activity(v.job, current_hour, "LEISURE")
+        v.update(
+            0.1, self.permit_manager, None, [v], None,
+            furniture_manager=self.furniture_manager, day_cycle=self.day_cycle,
+            schedule_manager=schedule_manager,
+        )
+        self.assertGreater(v.hunger, AI_CRITICAL_NEED_THRESHOLD)
+        self.assertNotIn("Potato", v.inventory)
 
-    def test_05_ai_interrupts_work_at_20_percent_thirst(self):
-        """5. AI interrupts work at 20% Thirst to seek water."""
+    def test_05_critical_thirst_is_allowed_during_any_schedule(self):
+        """5. Critical thirst can be handled during an Anything schedule."""
         v = Villager("vil_test_5", "Arthur", "Miller", "Male", 45, 2, "Father", "fam_1", 0.0, 0.0)
-        v.task = "WATERING"
+        v.task = "IDLE"
         v.hunger = 80.0
         v.thirst = 18.0  # Hit critical threshold
+        v.inventory["Water"] = 1
 
-        # Family has water in chest across the room
-        chest = Furniture("f_chest_5", "household_storage", 5, 5, family_id="fam_1")
-        chest.inventory["Water"] = 10
-        self.furniture_manager.furnitures.append(chest)
+        schedule_manager = ScheduleManager()
+        schedule_manager.set_hour_activity(
+            v.job, int(self.day_cycle.current_hour), "ANY"
+        )
+        v.update(
+            0.1, self.permit_manager, None, [v], None,
+            furniture_manager=self.furniture_manager, day_cycle=self.day_cycle,
+            schedule_manager=schedule_manager,
+        )
+        self.assertGreater(v.thirst, AI_CRITICAL_NEED_THRESHOLD)
+        self.assertNotIn("Water", v.inventory)
 
-        v.update(0.1, self.permit_manager, None, [v], None, furniture_manager=self.furniture_manager, day_cycle=self.day_cycle)
-        self.assertEqual(v.task, "SEEKING_WATER")
-        self.assertEqual(v.previous_task_before_need, "WATERING")
+    def test_critical_need_task_pauses_when_free_time_ends(self):
+        villager = Villager(
+            "vil_schedule-need", "Arthur", "Miller", "Male", 45, 2,
+            "Father", "fam_schedule", 0.0, 0.0,
+        )
+        villager.task = "SEEKING_WATER"
+        villager.thirst = AI_CRITICAL_NEED_THRESHOLD - 1.0
+        villager.inventory["Water"] = 1
+        villager.interrupted_task_state = {"task": "IDLE"}
+        schedule_manager = ScheduleManager()
+        current_hour = int(self.day_cycle.current_hour)
+        schedule_manager.set_hour_activity(villager.job, current_hour, "WORK")
+
+        villager.update(
+            0.1, self.permit_manager, None, [villager], None,
+            day_cycle=self.day_cycle, schedule_manager=schedule_manager,
+        )
+
+        self.assertNotEqual(villager.task, "SEEKING_WATER")
+        self.assertEqual(villager.inventory["Water"], 1)
+
+    def test_household_food_purchase_waits_for_free_time(self):
+        villager = Villager(
+            "vil_food-schedule", "Arthur", "Miller", "Male", 45, 2,
+            "Father", "fam_food-schedule", 0.0, 0.0,
+        )
+        schedule_manager = ScheduleManager()
+        schedule_manager.set_hour_activity(
+            villager.job, int(self.day_cycle.current_hour), "WORK"
+        )
+
+        villager.update(
+            0.1, self.permit_manager, None, [villager], None,
+            furniture_manager=self.furniture_manager, day_cycle=self.day_cycle,
+            schedule_manager=schedule_manager,
+        )
+
+        self.assertNotEqual(villager.task, "SEEKING_FOOD")
+        self.assertEqual(villager.need_seek_cooldown, 0.0)
+
+        schedule_manager.set_hour_activity(
+            villager.job, int(self.day_cycle.current_hour), "LEISURE"
+        )
+        villager.update(
+            0.1, self.permit_manager, None, [villager], None,
+            furniture_manager=self.furniture_manager, day_cycle=self.day_cycle,
+            schedule_manager=schedule_manager,
+        )
+        self.assertEqual(villager.need_seek_cooldown_task, "SEEKING_FOOD")
 
     def test_06_ai_retrieves_food_and_water_from_own_household_storage(self):
         """6. AI retrieves food and water from its OWN household storage chest."""
@@ -118,11 +186,19 @@ class TestAgent1HouseholdSurvival(unittest.TestCase):
         chest.inventory["Potato"] = 5
         chest.inventory["Water"] = 5
         self.furniture_manager.furnitures.append(chest)
+        schedule_manager = ScheduleManager()
+        schedule_manager.set_hour_activity(
+            v.job, int(self.day_cycle.current_hour), "LEISURE"
+        )
 
         # Consume Food
         v.hunger = 15.0
         v.task = "SEEKING_FOOD"
-        v.update(0.1, self.permit_manager, None, [v], None, furniture_manager=self.furniture_manager, day_cycle=self.day_cycle)
+        v.update(
+            0.1, self.permit_manager, None, [v], None,
+            furniture_manager=self.furniture_manager, day_cycle=self.day_cycle,
+            schedule_manager=schedule_manager,
+        )
         self.assertEqual(chest.inventory["Potato"], 4)
         self.assertEqual(v.hunger, 100.0)
         self.assertEqual(v.daily_food_consumed, 1)
@@ -131,7 +207,11 @@ class TestAgent1HouseholdSurvival(unittest.TestCase):
         # Consume Water
         v.thirst = 10.0
         v.task = "SEEKING_WATER"
-        v.update(0.1, self.permit_manager, None, [v], None, furniture_manager=self.furniture_manager, day_cycle=self.day_cycle)
+        v.update(
+            0.1, self.permit_manager, None, [v], None,
+            furniture_manager=self.furniture_manager, day_cycle=self.day_cycle,
+            schedule_manager=schedule_manager,
+        )
         self.assertEqual(chest.inventory["Water"], 4)
         self.assertEqual(v.thirst, 100.0)
         self.assertEqual(v.daily_water_consumed, 1)
@@ -205,7 +285,15 @@ class TestAgent1HouseholdSurvival(unittest.TestCase):
         v.market_service = MockSuccessfulMarket()
         v.hunger = 15.0
         v.task = "SEEKING_FOOD"
-        v.update(0.1, self.permit_manager, None, [v], None, furniture_manager=self.furniture_manager, day_cycle=self.day_cycle)
+        schedule_manager = ScheduleManager()
+        schedule_manager.set_hour_activity(
+            v.job, int(self.day_cycle.current_hour), "LEISURE"
+        )
+        v.update(
+            0.1, self.permit_manager, None, [v], None,
+            furniture_manager=self.furniture_manager, day_cycle=self.day_cycle,
+            schedule_manager=schedule_manager,
+        )
         self.assertEqual(v.hunger, 100.0)
         self.assertEqual(v.daily_food_consumed, 1)
 
@@ -218,7 +306,11 @@ class TestAgent1HouseholdSurvival(unittest.TestCase):
         v2.market_service = MockFailedMarket()
         v2.hunger = 10.0
         v2.task = "SEEKING_FOOD"
-        v2.update(0.1, self.permit_manager, None, [v2], None, furniture_manager=self.furniture_manager, day_cycle=self.day_cycle)
+        v2.update(
+            0.1, self.permit_manager, None, [v2], None,
+            furniture_manager=self.furniture_manager, day_cycle=self.day_cycle,
+            schedule_manager=schedule_manager,
+        )
         # Hunger did NOT restore!
         self.assertLessEqual(v2.hunger, 10.0)
         self.assertEqual(v2.daily_food_consumed, 0)

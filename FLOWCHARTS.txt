@@ -1,0 +1,307 @@
+PROJECT FLOWCHARTS
+==================
+
+Repository scan
+---------------
+No pre-existing flowchart source files or diagram exports were found in the
+repository (including Mermaid, Draw.io, PlantUML, SVG, PNG, JPG, and TXT
+diagram files). Sections 1-5 below transcribe owner requirements from this
+conversation. Sections 6 onward summarize the implemented simulation flows;
+the code is authoritative where an implementation detail differs from a
+requirement.
+
+Owner requirements
+------------------
+
+1. Scheduled sleep with an urgent need
+--------------------------------------
+Sleep schedule begins
+  -> Villager goes to bed and sleeps
+  -> Sleeping increases the sleep bar
+  -> Eight in-game sleep hours restore the amount drained by twenty
+     in-game waking hours
+  -> Zonked forced-wake threshold is 10%
+
+Urgent food, water, or toilet need is detected
+  -> During Work, Sleep, or Prayer, keep the scheduled activity and defer the need
+  -> During Leisure or Anything, perform the urgent activity
+
+2. Confession queue
+-------------------
+Faith reaches the confession threshold during Leisure or Anything
+  -> Add the villager to the church's FIFO queue
+  -> Keep waiting requests until the requester's Leisure/Anything schedule ends
+  -> Withdraw the offering from the household chest
+  -> Requester approaches the Priest directly
+  -> If several requests are active, serve them FIFO
+  -> Requester and Priest go to the confession box
+  -> Confession lasts 5 in-game seconds
+  -> Mark this request complete
+  -> If another requester is queued, repeat for the next requester
+  -> If the queue is empty, Priest returns to deposit remaining coins
+
+If a request is cancelled before the Priest receives the offering:
+  -> Refund the withdrawn offering to the household chest
+  -> Clear the request
+
+3. Household socage tax collection
+----------------------------------
+Tax Collector enters scheduled work time
+  -> Start a collection round when taxation is enabled and due
+  -> Build/refresh a queue from living households
+  -> Visit the next household
+  -> Ask the household to pay
+  -> Wait until that household's representative arrives; do not skip on timeout
+  -> Representative withdraws the configured percentage from the household chest
+  -> Representative gives the coins directly to the Tax Collector
+  -> Advance to the next household and refresh the dynamic queue
+  -> When no households remain, deposit collected coins in the landlord's Treasury
+
+4. Object interaction distance
+------------------------------
+AI chooses an object interaction
+  -> Navigate to a reachable position within one tile of the object's footprint
+  -> Perform the interaction only from that proximity
+
+Queue/waiting positions are not object-interaction targets and should keep their
+own spacing rules.
+
+5. Potato harvest yield
+-----------------------
+Potato tile reaches harvest maturity
+  -> Roll the configured weighted yield for that tile:
+       2 potatoes: 80%
+       4 potatoes: 15%
+       5 potatoes: 5%
+  -> Add the result to the harvest
+  -> Continue the configured 10-day crop cycle
+
+Implemented simulation flow catalog
+------------------------------------
+These are code-derived high-level flows for the simulation systems. They
+describe the normal paths and important branches, not every UI control or
+rendering detail.
+
+6. Villager update and schedule boundaries
+------------------------------------------
+Each AI update
+  -> Resolve the villager's current job schedule
+  -> Apply the shared Prayer schedule override when active
+  -> For an Anything slot, activate automatic rest only when the configured
+     sleep-rest threshold is reached; leave it at the configured wake threshold
+  -> Advance needs, sleep, and happiness state
+  -> Reconcile the current task against the effective schedule
+       -> Task is allowed now: keep executing it
+       -> Task is outside its slot: save task state, clear movement/path
+          reservations, release task-specific toilet/church/farm reservations,
+          and set the active task to idle
+       -> Boundary-cancel task (sleep transition, prayer, confession):
+          clean up instead of adding it to the resumable queue
+  -> Resume the first queued task eligible for the current slot when the
+     villager is otherwise idle
+  -> Execute schedule-eligible systems and choose the next available task
+
+Work, Leisure, Sleep, and Prayer task groups are data-driven in configuration.
+Anything permits ordinary task groups; tax-collector route states remain
+Work-only. Without schedule or day-cycle context, the update is unconstrained
+rather than assuming a specific time slot. Pending task state is serialized.
+
+7. Needs, food, and household purchasing
+-----------------------------------------
+Need meters decay with simulation time
+  -> Critical food, water, or toilet need occurs
+       -> Effective schedule is Leisure or Anything: interrupt eligible work
+          and handle the need
+       -> Otherwise: retain the need and continue the scheduled activity
+  -> Food task
+       -> Use edible item in personal inventory when applicable
+       -> Else locate household food in chest or household-owned ground stack
+       -> If usable food exists: travel to a valid interaction point, take one,
+          restore hunger, update daily consumption, and resume/idle
+       -> If household stock is below requirement: prevent duplicate family
+          purchases and select an eligible market with listed stock and price
+       -> Retrieve real household/personal/ground currency
+       -> Travel to the market; validate stock, price, funds, and inventory
+       -> Execute currency-conserving purchase and record the sale
+       -> Return home, deposit change, consume the food, and clear the task
+       -> If no eligible market, funds, stock, or chest: report/cool down and
+          return to Leisure/idle without creating food or currency
+  -> Water task uses available personal or household water before waiting for
+     a valid source; need is not restored without a successful transfer
+
+8. Toilet use and queue
+-----------------------
+Critical toilet need is eligible
+  -> Find a completed usable toilet
+       -> None: explain unavailable facility, preserve need, and retry later
+       -> Found: request access
+            -> Occupied or queued ahead: join queue and wait at assigned point
+            -> First and free: reserve toilet and approach its interior
+  -> Use timer completes
+  -> Release occupancy and advance the queue
+  -> If schedule leaves Leisure/Anything before completion, release the
+     reservation and pause the need task for a later eligible slot
+
+9. Household water and loose possessions
+-----------------------------------------
+Leisure/Anything household supply check
+  -> Compare chest and household-owned ground stock with living-member demand
+  -> Water is short and a collector slot is available
+       -> Travel to a well; draw the assigned amount
+       -> Carry water home and deposit it in the household chest
+  -> Household-owned loose item is eligible for retrieval
+       -> Travel to its ground stack and collect within inventory capacity
+       -> Carry it home and deposit it in the household chest
+  -> If no shortage/eligible stack remains, do not start a collection task
+
+Household hauling uses its own `HAULING_POSSESSION_HOME` task. Farmer crop
+delivery uses `HAULING_HOME` and remains a Work task; the two routes do not
+share a schedule classification.
+
+10. Furniture relocation and household stall chores
+---------------------------------------------------
+Leisure/Anything household logistics
+  -> Designated furniture move or household-owned dropped furniture exists
+       -> Claim item, navigate to it, carry to installation/storage target
+       -> Install/store it and clear carrier state
+  -> Assigned household market stall has allocated goods or earnings
+       -> Choose an available family transporter
+       -> Fetch goods/coins from household storage or stall
+       -> Deliver to the stall or household chest
+       -> Stop when allocation, stock, earnings, or eligible work is exhausted
+
+11. Job tools and Farmer workflow
+---------------------------------
+During an eligible Work slot
+  -> Compare carried tools with job requirements
+       -> Irrelevant tools: return to household/tool storage
+       -> Missing tools in storage: retrieve the required set
+       -> Missing tools everywhere: seek a valid market purchase or wait
+  -> Farmer selects available farm work in priority order
+       -> Harvestable crop and Sickle available: reserve tile, harvest, divide
+          output by participating household, then carry own share home
+       -> Untilled tile and Hoe available: reserve, till/sow, release tile
+       -> Unwatered tile and Watering Can available: obtain daily well water,
+          reserve, water, and release tile
+       -> No available work/tool: clear stale reservation and wait
+  -> Task reaches a schedule boundary
+       -> Preserve task progress and carried goods; release farm/path locks
+       -> Resume the work task in a later Work slot
+
+Production distribution
+  -> Determine participating household shares from workers and configured
+     distribution rules
+  -> Deposit other households' shares to their storage/stockpile
+  -> Carry the acting household's share home when auto-deposit is disabled
+  -> Record production for household/workplace reporting
+
+12. Carpenter commission, construction, and repair
+--------------------------------------------------
+Commission/order is created
+  -> Validate target, quote materials/fees, and identify payer
+  -> Payer collects required fee during eligible free time
+       -> Fee unavailable or cancelled: retain a valid unpaid order or return
+          the payment according to the order's current state
+       -> Paid: mark payment and make order eligible for construction
+  -> Commission requests and household payment errands may happen during
+     Leisure/Anything
+  -> Artisan job tasks (Carpenter, Blacksmith, Baker) are Work-only; currently
+     implemented Carpenter construction/repair and material restocking obey
+     this slot, while WIP jobs remain unimplemented
+  -> An in-progress work task pauses at the schedule boundary and resumes
+     during Work
+       -> Gather materials from storage
+        -> If materials are missing, restock during Work, then return to the
+           construction task
+       -> Travel to the target asset and work within its valid range
+       -> Complete construction/repair, consume materials, clear the order
+  -> If the schedule changes mid-task, pause and resume the order in its
+     eligible slot without repeating payment or construction progress
+
+13. Tax collection and household representative
+------------------------------------------------
+Tax collection is due and enabled
+  -> Tax Collector enters Work and starts/refreshes a dynamic household queue
+  -> Travel to the assigned tax office and take station
+  -> Visit the next eligible household and request payment
+  -> Household representative is eligible under its schedule
+       -> Withdraw configured amount from household storage
+       -> Travel to collector and transfer actual currency
+       -> Collector advances to the next household
+  -> Representative or collector leaves its eligible slot
+       -> Pause route/payment task without losing prepared funds
+       -> Resume during the appropriate Work slot
+  -> No households remain: deposit collected currency in the landlord Treasury
+
+14. Church prayer, tax, preaching, and confession
+------------------------------------------------
+Prayer schedule becomes active
+  -> Assigned Priest leads prayer; eligible villagers travel to church
+  -> Reserve a church tile, pray, apply daily faith/happiness effects, release
+     the tile
+  -> Apply configured household church tax/payment rules and refund an
+     uncompleted payment when appropriate
+  -> During Priest Work, preach when no higher-priority confession is pending
+
+Confession threshold is reached during Leisure/Anything
+  -> Join the church's FIFO request queue
+  -> Requester retrieves the configured offering from household storage
+  -> Requester approaches the Priest; a busy Priest serves the queue in order
+  -> Transfer offering to Priest and move both participants to the confession
+     box
+  -> Run the configured confession duration, restore faith, and complete request
+  -> Continue with the next queued request; when empty, Priest may deposit
+     remaining coins and return to normal duty
+  -> Either participant leaves Leisure/Anything before completion
+       -> Cancel the request/session, refund offering not retained by Priest,
+          release queue/box state, and resume normal schedule activity
+
+15. Cemetery, burial, and death recovery
+----------------------------------------
+Villager dies
+  -> Drop recoverable inventory and register household recovery location
+  -> Available family representative claims the recovery job during eligible
+     Leisure/Anything
+       -> Collect household-owned dropped stacks
+       -> Carry items to household chest and deposit
+       -> Complete the claim; if interrupted, release/reassign it
+  -> Burial is commissioned
+       -> Collect household and/or landlord fee under the configured rules
+       -> Assign an available Gravedigger and cemetery
+       -> During Work, obtain corpse/materials, reserve grave, dig, carry corpse,
+          bury, and complete the grave lifecycle
+       -> If cemetery has no available grave, use the configured overflow path
+       -> Missing materials may trigger the Gravedigger restock workflow
+
+16. Save and load
+-----------------
+Save requested
+  -> Serialize day/time, world managers, permits, buildings, furniture,
+     households/villagers, schedule settings, economy/system state, and pending
+     schedule tasks
+  -> Write selected save slot
+Load requested
+  -> Read and validate slot data
+  -> Rebuild managers/entities and cross-references
+  -> Restore system queues and pending task state
+  -> Resume normal simulation updates
+
+17. Happiness and daily state
+-----------------------------
+Daily event or activity occurs
+  -> Record configured effect and expiration/accumulation
+  -> Refresh happiness from current household, needs, sleep, faith, taxes, and
+     other configured conditions
+  -> Apply activity multiplier to simulation work rate
+  -> Expire or refresh timed effects at the relevant day boundary
+
+18. World-map individual AI profile
+----------------------------------
+Click a villager or servant
+  -> Select the entity and show its current activity and needs
+  -> Recompute up to five next activities from the live task and valid queues
+  -> When the task or queues change, replace the preview without retaining a
+     cancelled task plan
+  -> For villagers, show every current happiness factor and its signed value;
+     scroll the factor list when it exceeds the visible area
+   

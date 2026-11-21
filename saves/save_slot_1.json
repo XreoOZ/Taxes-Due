@@ -1,10 +1,10 @@
 {
-  "timestamp": "2026-11-20 19:35",
-  "day_number": 68,
-  "time_str": "18:28",
+  "timestamp": "2026-11-21 15:36",
+  "day_number": 80,
+  "time_str": "03:36",
   "population": 19,
   "resources": {
-    "Wood": 443,
+    "Wood": 383,
     "Food": 0,
     "Stone": 587,
     "Water": 0,
@@ -13,14 +13,14 @@
     "Gold": 0
   },
   "day_cycle": {
-    "day_number": 68,
-    "time_seconds": 461.85749999986837,
+    "day_number": 80,
+    "time_seconds": 90.32099999990244,
     "day_length_index": 0,
-    "time_str": "18:28"
+    "time_str": "03:36"
   },
   "player": {
-    "x": 686.9202827286985,
-    "y": 289.48216696339733
+    "x": -128.89709093691818,
+    "y": 132.2831026398333
   },
   "permits": [
     {
@@ -130,7 +130,7 @@
       "batches": [],
       "active_batch_id": null,
       "batch_counter": 0,
-      "current_day_time": 68.76976249999979
+      "current_day_time": 80.15053499999983
     },
     {
       "id": "permit_2",
@@ -296,7 +296,7 @@
       "batches": [],
       "active_batch_id": null,
       "batch_counter": 0,
-      "current_day_time": 68.76976249999979
+      "current_day_time": 80.15053499999983
     },
     {
       "id": "permit_3",
@@ -308,8 +308,8 @@
           0
         ],
         [
-          4,
-          9
+          5,
+          4
         ],
         [
           5,
@@ -320,12 +320,12 @@
           0
         ],
         [
-          8,
-          9
+          -3,
+          0
         ],
         [
-          -3,
-          6
+          9,
+          2
         ],
         [
           0,
@@ -336,14 +336,22 @@
           2
         ],
         [
-          9,
-          8
+          1,
+          0
+        ],
+        [
+          -4,
+          4
         ],
         [
           6,
           2
         ],
         [
+          7,
+          4
+        ],
+        [
           -4,
           1
         ],
@@ -352,20 +360,12 @@
           1
         ],
         [
-          -2,
-          7
-        ],
-        [
-          -1,
-          7
-        ],
-        [
           4,
           2
         ],
         [
           3,
-          6
+          0
         ],
         [
           5,
@@ -376,16 +376,12 @@
           2
         ],
         [
+          -3,
+          2
+        ],
+        [
           9,
           1
-        ],
-        [
-          -3,
-          8
-        ],
-        [
-          0,
-          7
         ],
         [
           2,
@@ -393,7 +389,19 @@
         ],
         [
           1,
-          8
+          2
+        ],
+        [
+          0,
+          4
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          -2,
+          5
         ],
         [
           6,
@@ -416,16 +424,12 @@
           3
         ],
         [
-          -2,
-          9
-        ],
-        [
-          -1,
-          9
-        ],
-        [
           3,
-          8
+          2
+        ],
+        [
+          4,
+          1
         ],
         [
           5,
@@ -433,6 +437,10 @@
         ],
         [
           8,
+          4
+        ],
+        [
+          -3,
           4
         ],
         [
@@ -448,15 +456,23 @@
           3
         ],
         [
-          0,
-          9
+          8,
+          1
         ],
         [
           6,
-          6
+          0
         ],
         [
-          -4,
+          1,
+          4
+        ],
+        [
+          2,
+          3
+        ],
+        [
+          7,
           5
         ],
         [
@@ -464,282 +480,18 @@
           2
         ],
         [
-          7,
+          -4,
           5
         ],
         [
           -1,
           2
-        ],
-        [
-          3,
-          1
-        ],
-        [
-          5,
-          7
-        ],
-        [
-          -3,
-          3
-        ],
-        [
-          0,
-          2
-        ],
-        [
-          9,
-          5
-        ],
-        [
-          1,
-          3
-        ],
-        [
-          -4,
-          7
-        ],
-        [
-          -2,
-          4
-        ],
-        [
-          -1,
-          4
-        ],
-        [
-          7,
-          7
-        ],
-        [
-          3,
-          3
-        ],
-        [
-          5,
-          0
-        ],
-        [
-          -4,
-          8
-        ],
-        [
-          5,
-          9
-        ],
-        [
-          -3,
-          5
-        ],
-        [
-          9,
-          7
-        ],
-        [
-          1,
-          5
-        ],
-        [
-          6,
-          1
-        ],
-        [
-          -4,
-          0
-        ],
-        [
-          7,
-          0
-        ],
-        [
-          -4,
-          9
-        ],
-        [
-          7,
-          9
-        ],
-        [
-          3,
-          5
-        ],
-        [
-          5,
-          2
-        ],
-        [
-          4,
-          4
-        ],
-        [
-          9,
-          0
-        ],
-        [
-          -3,
-          7
-        ],
-        [
-          9,
-          9
-        ],
-        [
-          1,
-          7
-        ],
-        [
-          2,
-          6
-        ],
-        [
-          -4,
-          2
-        ],
-        [
-          7,
-          2
-        ],
-        [
-          3,
-          7
-        ],
-        [
-          5,
-          4
-        ],
-        [
-          4,
-          6
-        ],
-        [
-          -3,
-          0
-        ],
-        [
-          9,
-          2
-        ],
-        [
-          -3,
-          9
-        ],
-        [
-          8,
-          6
-        ],
-        [
-          1,
-          0
-        ],
-        [
-          1,
-          9
-        ],
-        [
-          2,
-          8
-        ],
-        [
-          -4,
-          4
-        ],
-        [
-          7,
-          4
-        ],
-        [
-          6,
-          8
-        ],
-        [
-          3,
-          0
-        ],
-        [
-          3,
-          9
-        ],
-        [
-          5,
-          6
-        ],
-        [
-          4,
-          8
-        ],
-        [
-          -3,
-          2
-        ],
-        [
-          8,
-          8
-        ],
-        [
-          1,
-          2
-        ],
-        [
-          0,
-          4
-        ],
-        [
-          2,
-          1
-        ],
-        [
-          -1,
-          5
-        ],
-        [
-          -1,
-          6
-        ],
-        [
-          -2,
-          6
-        ],
-        [
-          3,
-          2
-        ],
-        [
-          4,
-          1
-        ],
-        [
-          -3,
-          4
-        ],
-        [
-          8,
-          1
-        ],
-        [
-          1,
-          4
-        ],
-        [
-          0,
-          6
-        ],
-        [
-          2,
-          3
         ],
         [
           6,
           3
         ],
         [
-          -2,
-          8
-        ],
-        [
-          -1,
-          8
-        ],
-        [
           3,
           4
         ],
@@ -748,20 +500,40 @@
           3
         ],
         [
+          3,
+          1
+        ],
+        [
+          -3,
+          3
+        ],
+        [
+          0,
+          2
+        ],
+        [
+          9,
+          5
+        ],
+        [
           8,
           3
         ],
         [
-          1,
-          6
-        ],
-        [
-          0,
-          8
-        ],
-        [
           2,
           5
+        ],
+        [
+          1,
+          3
+        ],
+        [
+          -2,
+          4
+        ],
+        [
+          -1,
+          4
         ],
         [
           6,
@@ -780,6 +552,18 @@
           5
         ],
         [
+          3,
+          3
+        ],
+        [
+          5,
+          0
+        ],
+        [
+          -3,
+          5
+        ],
+        [
           8,
           5
         ],
@@ -792,16 +576,20 @@
           1
         ],
         [
-          2,
-          7
+          1,
+          5
         ],
         [
           6,
-          7
+          1
         ],
         [
           -4,
-          6
+          0
+        ],
+        [
+          7,
+          0
         ],
         [
           -2,
@@ -812,20 +600,20 @@
           3
         ],
         [
-          7,
-          6
-        ],
-        [
-          4,
-          7
+          3,
+          5
         ],
         [
           5,
-          8
+          2
         ],
         [
-          8,
-          7
+          4,
+          4
+        ],
+        [
+          9,
+          0
         ],
         [
           1,
@@ -840,27 +628,15 @@
           0
         ],
         [
-          9,
-          6
-        ],
-        [
-          2,
-          9
-        ],
-        [
-          6,
-          0
-        ],
-        [
-          6,
-          9
+          -4,
+          2
         ],
         [
           7,
-          8
+          2
         ],
         [
-          -2,
+          -1,
           5
         ]
       ],
@@ -879,1126 +655,678 @@
         "vil_9"
       ],
       "crop": "Potato",
-      "growth_days": 4.765579166666615,
-      "watered_today": true,
+      "growth_days": 3.8110016666667046,
+      "watered_today": false,
       "tile_crops": {
         "4,0": {
           "crop": "Potato",
-          "batch_id": "permit_3_batch_10",
-          "growth_days": 4.765579166666626,
-          "watered_today": true,
+          "batch_id": "permit_3_batch_13",
+          "growth_days": 3.811001666666712,
+          "watered_today": false,
           "unwatered_days": 0,
           "is_dead": false
         },
         "5,4": {
           "crop": "Potato",
-          "batch_id": "permit_3_batch_10",
-          "growth_days": 4.765579166666626,
-          "watered_today": true,
+          "batch_id": "permit_3_batch_13",
+          "growth_days": 3.811001666666712,
+          "watered_today": false,
           "unwatered_days": 0,
           "is_dead": false
         },
         "-3,0": {
           "crop": "Potato",
-          "batch_id": "permit_3_batch_10",
-          "growth_days": 4.765579166666626,
-          "watered_today": true,
+          "batch_id": "permit_3_batch_13",
+          "growth_days": 3.811001666666712,
+          "watered_today": false,
           "unwatered_days": 0,
           "is_dead": false
         },
         "5,1": {
           "crop": "Potato",
-          "batch_id": "permit_3_batch_10",
-          "growth_days": 4.765579166666626,
-          "watered_today": true,
+          "batch_id": "permit_3_batch_13",
+          "growth_days": 3.811001666666712,
+          "watered_today": false,
           "unwatered_days": 0,
           "is_dead": false
         },
         "8,0": {
           "crop": "Potato",
-          "batch_id": "permit_3_batch_10",
-          "growth_days": 4.765579166666626,
-          "watered_today": true,
+          "batch_id": "permit_3_batch_13",
+          "growth_days": 3.811001666666712,
+          "watered_today": false,
           "unwatered_days": 0,
           "is_dead": false
         },
         "9,2": {
           "crop": "Potato",
-          "batch_id": "permit_3_batch_10",
-          "growth_days": 4.765579166666626,
-          "watered_today": true,
+          "batch_id": "permit_3_batch_13",
+          "growth_days": 3.811001666666712,
+          "watered_today": false,
           "unwatered_days": 0,
           "is_dead": false
         },
         "0,5": {
           "crop": "Potato",
-          "batch_id": "permit_3_batch_10",
-          "growth_days": 4.765579166666626,
-          "watered_today": true,
+          "batch_id": "permit_3_batch_13",
+          "growth_days": 3.811001666666712,
+          "watered_today": false,
           "unwatered_days": 0,
           "is_dead": false
         },
         "2,2": {
           "crop": "Potato",
-          "batch_id": "permit_3_batch_10",
-          "growth_days": 4.765579166666626,
-          "watered_today": true,
+          "batch_id": "permit_3_batch_13",
+          "growth_days": 3.811001666666712,
+          "watered_today": false,
           "unwatered_days": 0,
           "is_dead": false
         },
         "1,0": {
           "crop": "Potato",
-          "batch_id": "permit_3_batch_10",
-          "growth_days": 4.765579166666626,
-          "watered_today": true,
+          "batch_id": "permit_3_batch_13",
+          "growth_days": 3.811001666666712,
+          "watered_today": false,
           "unwatered_days": 0,
           "is_dead": false
         },
         "-4,4": {
           "crop": "Potato",
-          "batch_id": "permit_3_batch_10",
-          "growth_days": 4.765579166666626,
-          "watered_today": true,
+          "batch_id": "permit_3_batch_13",
+          "growth_days": 3.811001666666712,
+          "watered_today": false,
           "unwatered_days": 0,
           "is_dead": false
         },
         "6,2": {
           "crop": "Potato",
-          "batch_id": "permit_3_batch_10",
-          "growth_days": 4.765579166666626,
-          "watered_today": true,
+          "batch_id": "permit_3_batch_13",
+          "growth_days": 3.811001666666712,
+          "watered_today": false,
           "unwatered_days": 0,
           "is_dead": false
         },
         "7,4": {
           "crop": "Potato",
-          "batch_id": "permit_3_batch_10",
-          "growth_days": 4.765579166666626,
-          "watered_today": true,
+          "batch_id": "permit_3_batch_13",
+          "growth_days": 3.811001666666712,
+          "watered_today": false,
           "unwatered_days": 0,
           "is_dead": false
         },
         "-4,1": {
           "crop": "Potato",
-          "batch_id": "permit_3_batch_10",
-          "growth_days": 4.765579166666626,
-          "watered_today": true,
+          "batch_id": "permit_3_batch_13",
+          "growth_days": 3.811001666666712,
+          "watered_today": false,
           "unwatered_days": 0,
           "is_dead": false
         },
         "7,1": {
           "crop": "Potato",
-          "batch_id": "permit_3_batch_10",
-          "growth_days": 4.765579166666626,
-          "watered_today": true,
+          "batch_id": "permit_3_batch_13",
+          "growth_days": 3.811001666666712,
+          "watered_today": false,
           "unwatered_days": 0,
           "is_dead": false
         },
         "4,2": {
           "crop": "Potato",
-          "batch_id": "permit_3_batch_10",
-          "growth_days": 4.765579166666626,
-          "watered_today": true,
+          "batch_id": "permit_3_batch_13",
+          "growth_days": 3.811001666666712,
+          "watered_today": false,
           "unwatered_days": 0,
           "is_dead": false
         },
         "3,0": {
           "crop": "Potato",
-          "batch_id": "permit_3_batch_10",
-          "growth_days": 4.765579166666626,
-          "watered_today": true,
+          "batch_id": "permit_3_batch_13",
+          "growth_days": 3.811001666666712,
+          "watered_today": false,
           "unwatered_days": 0,
           "is_dead": false
         },
         "-3,2": {
-          "crop": "Potato",
-          "batch_id": "permit_3_batch_10",
-          "growth_days": 4.765579166666626,
-          "watered_today": true,
-          "unwatered_days": 0,
-          "is_dead": false
+          "crop": null,
+          "batch_id": null,
+          "growth_days": 0.0,
+          "watered_today": false,
+          "unwatered_days": 1,
+          "is_dead": true
         },
         "5,3": {
           "crop": "Potato",
-          "batch_id": "permit_3_batch_10",
-          "growth_days": 4.765579166666626,
-          "watered_today": true,
+          "batch_id": "permit_3_batch_13",
+          "growth_days": 3.811001666666712,
+          "watered_today": false,
           "unwatered_days": 0,
           "is_dead": false
         },
         "8,2": {
           "crop": "Potato",
-          "batch_id": "permit_3_batch_10",
-          "growth_days": 4.765579166666626,
-          "watered_today": true,
+          "batch_id": "permit_3_batch_13",
+          "growth_days": 3.811001666666712,
+          "watered_today": false,
           "unwatered_days": 0,
           "is_dead": false
         },
         "9,1": {
           "crop": "Potato",
-          "batch_id": "permit_3_batch_10",
-          "growth_days": 4.765579166666626,
-          "watered_today": true,
+          "batch_id": "permit_3_batch_13",
+          "growth_days": 3.811001666666712,
+          "watered_today": false,
           "unwatered_days": 0,
           "is_dead": false
         },
         "2,4": {
           "crop": "Potato",
-          "batch_id": "permit_3_batch_10",
-          "growth_days": 4.765579166666626,
-          "watered_today": true,
+          "batch_id": "permit_3_batch_13",
+          "growth_days": 3.811001666666712,
+          "watered_today": false,
           "unwatered_days": 0,
           "is_dead": false
         },
         "1,2": {
-          "crop": "Potato",
-          "batch_id": "permit_3_batch_10",
-          "growth_days": 4.765579166666626,
-          "watered_today": true,
-          "unwatered_days": 0,
-          "is_dead": false
+          "crop": null,
+          "batch_id": null,
+          "growth_days": 0.0,
+          "watered_today": false,
+          "unwatered_days": 1,
+          "is_dead": true
         },
         "0,4": {
           "crop": "Potato",
-          "batch_id": "permit_3_batch_10",
-          "growth_days": 4.765579166666626,
-          "watered_today": true,
+          "batch_id": "permit_3_batch_13",
+          "growth_days": 3.811001666666712,
+          "watered_today": false,
           "unwatered_days": 0,
           "is_dead": false
         },
         "2,1": {
           "crop": "Potato",
-          "batch_id": "permit_3_batch_10",
-          "growth_days": 4.765579166666626,
-          "watered_today": true,
+          "batch_id": "permit_3_batch_13",
+          "growth_days": 3.811001666666712,
+          "watered_today": false,
           "unwatered_days": 0,
           "is_dead": false
         },
         "-1,5": {
           "crop": "Potato",
-          "batch_id": "permit_3_batch_10",
-          "growth_days": 4.765579166666626,
-          "watered_today": true,
+          "batch_id": "permit_3_batch_13",
+          "growth_days": 3.811001666666712,
+          "watered_today": false,
           "unwatered_days": 0,
           "is_dead": false
         },
         "6,4": {
           "crop": "Potato",
-          "batch_id": "permit_3_batch_10",
-          "growth_days": 4.765579166666626,
-          "watered_today": true,
+          "batch_id": "permit_3_batch_13",
+          "growth_days": 3.811001666666712,
+          "watered_today": false,
           "unwatered_days": 0,
           "is_dead": false
         },
         "-4,3": {
           "crop": "Potato",
-          "batch_id": "permit_3_batch_10",
-          "growth_days": 4.765579166666626,
-          "watered_today": true,
+          "batch_id": "permit_3_batch_13",
+          "growth_days": 3.811001666666712,
+          "watered_today": false,
           "unwatered_days": 0,
           "is_dead": false
         },
         "-2,0": {
           "crop": "Potato",
-          "batch_id": "permit_3_batch_10",
-          "growth_days": 4.765579166666626,
-          "watered_today": true,
+          "batch_id": "permit_3_batch_13",
+          "growth_days": 3.811001666666712,
+          "watered_today": false,
           "unwatered_days": 0,
           "is_dead": false
         },
         "-1,0": {
           "crop": "Potato",
-          "batch_id": "permit_3_batch_10",
-          "growth_days": 4.765579166666626,
-          "watered_today": true,
+          "batch_id": "permit_3_batch_13",
+          "growth_days": 3.811001666666712,
+          "watered_today": false,
           "unwatered_days": 0,
           "is_dead": false
         },
         "7,3": {
           "crop": "Potato",
-          "batch_id": "permit_3_batch_10",
-          "growth_days": 4.765579166666626,
-          "watered_today": true,
+          "batch_id": "permit_3_batch_13",
+          "growth_days": 3.811001666666712,
+          "watered_today": false,
           "unwatered_days": 0,
           "is_dead": false
         },
         "3,2": {
           "crop": "Potato",
-          "batch_id": "permit_3_batch_10",
-          "growth_days": 4.765579166666626,
-          "watered_today": true,
+          "batch_id": "permit_3_batch_13",
+          "growth_days": 3.811001666666712,
+          "watered_today": false,
           "unwatered_days": 0,
           "is_dead": false
         },
         "4,1": {
           "crop": "Potato",
-          "batch_id": "permit_3_batch_10",
-          "growth_days": 4.765579166666626,
-          "watered_today": true,
+          "batch_id": "permit_3_batch_13",
+          "growth_days": 3.811001666666712,
+          "watered_today": false,
           "unwatered_days": 0,
           "is_dead": false
         },
         "-3,4": {
           "crop": "Potato",
-          "batch_id": "permit_3_batch_10",
-          "growth_days": 4.765579166666626,
-          "watered_today": true,
+          "batch_id": "permit_3_batch_13",
+          "growth_days": 3.811001666666712,
+          "watered_today": false,
           "unwatered_days": 0,
           "is_dead": false
         },
         "8,4": {
           "crop": "Potato",
-          "batch_id": "permit_3_batch_10",
-          "growth_days": 4.765579166666626,
-          "watered_today": true,
+          "batch_id": "permit_3_batch_13",
+          "growth_days": 3.811001666666712,
+          "watered_today": false,
           "unwatered_days": 0,
           "is_dead": false
         },
         "5,5": {
           "crop": "Potato",
-          "batch_id": "permit_3_batch_10",
-          "growth_days": 4.765579166666626,
-          "watered_today": true,
+          "batch_id": "permit_3_batch_13",
+          "growth_days": 3.811001666666712,
+          "watered_today": false,
           "unwatered_days": 0,
           "is_dead": false
         },
         "-3,1": {
           "crop": "Potato",
-          "batch_id": "permit_3_batch_10",
-          "growth_days": 4.765579166666626,
-          "watered_today": true,
+          "batch_id": "permit_3_batch_13",
+          "growth_days": 3.811001666666712,
+          "watered_today": false,
           "unwatered_days": 0,
           "is_dead": false
         },
         "0,0": {
           "crop": "Potato",
-          "batch_id": "permit_3_batch_10",
-          "growth_days": 4.765579166666626,
-          "watered_today": true,
+          "batch_id": "permit_3_batch_13",
+          "growth_days": 3.811001666666712,
+          "watered_today": false,
           "unwatered_days": 0,
           "is_dead": false
         },
         "8,1": {
           "crop": "Potato",
-          "batch_id": "permit_3_batch_10",
-          "growth_days": 4.765579166666626,
-          "watered_today": true,
+          "batch_id": "permit_3_batch_13",
+          "growth_days": 3.811001666666712,
+          "watered_today": false,
           "unwatered_days": 0,
           "is_dead": false
         },
         "9,3": {
           "crop": "Potato",
-          "batch_id": "permit_3_batch_10",
-          "growth_days": 4.765579166666626,
-          "watered_today": true,
+          "batch_id": "permit_3_batch_13",
+          "growth_days": 3.811001666666712,
+          "watered_today": false,
           "unwatered_days": 0,
           "is_dead": false
         },
         "1,4": {
           "crop": "Potato",
-          "batch_id": "permit_3_batch_10",
-          "growth_days": 4.765579166666626,
-          "watered_today": true,
+          "batch_id": "permit_3_batch_13",
+          "growth_days": 3.811001666666712,
+          "watered_today": false,
           "unwatered_days": 0,
           "is_dead": false
         },
         "2,3": {
           "crop": "Potato",
-          "batch_id": "permit_3_batch_10",
-          "growth_days": 4.765579166666626,
-          "watered_today": true,
+          "batch_id": "permit_3_batch_13",
+          "growth_days": 3.811001666666712,
+          "watered_today": false,
           "unwatered_days": 0,
           "is_dead": false
         },
         "7,5": {
           "crop": "Potato",
-          "batch_id": "permit_3_batch_10",
-          "growth_days": 4.765579166666626,
-          "watered_today": true,
+          "batch_id": "permit_3_batch_13",
+          "growth_days": 3.811001666666712,
+          "watered_today": false,
           "unwatered_days": 0,
           "is_dead": false
         },
         "6,3": {
           "crop": "Potato",
-          "batch_id": "permit_3_batch_10",
-          "growth_days": 4.765579166666626,
-          "watered_today": true,
+          "batch_id": "permit_3_batch_13",
+          "growth_days": 3.811001666666712,
+          "watered_today": false,
           "unwatered_days": 0,
           "is_dead": false
         },
         "-2,2": {
           "crop": "Potato",
-          "batch_id": "permit_3_batch_10",
-          "growth_days": 4.765579166666626,
-          "watered_today": true,
+          "batch_id": "permit_3_batch_13",
+          "growth_days": 3.811001666666712,
+          "watered_today": false,
           "unwatered_days": 0,
           "is_dead": false
         },
         "-1,2": {
-          "crop": "Potato",
-          "batch_id": "permit_3_batch_10",
-          "growth_days": 4.765579166666626,
-          "watered_today": true,
-          "unwatered_days": 0,
-          "is_dead": false
+          "crop": null,
+          "batch_id": null,
+          "growth_days": 0.0,
+          "watered_today": false,
+          "unwatered_days": 1,
+          "is_dead": true
         },
         "-4,5": {
           "crop": "Potato",
-          "batch_id": "permit_3_batch_10",
-          "growth_days": 4.765579166666626,
-          "watered_today": true,
+          "batch_id": "permit_3_batch_13",
+          "growth_days": 3.811001666666712,
+          "watered_today": false,
           "unwatered_days": 0,
           "is_dead": false
         },
         "3,4": {
           "crop": "Potato",
-          "batch_id": "permit_3_batch_10",
-          "growth_days": 4.765579166666626,
-          "watered_today": true,
+          "batch_id": "permit_3_batch_13",
+          "growth_days": 3.811001666666712,
+          "watered_today": false,
           "unwatered_days": 0,
           "is_dead": false
         },
         "4,3": {
           "crop": "Potato",
-          "batch_id": "permit_3_batch_10",
-          "growth_days": 4.765579166666626,
-          "watered_today": true,
+          "batch_id": "permit_3_batch_13",
+          "growth_days": 3.811001666666712,
+          "watered_today": false,
           "unwatered_days": 0,
           "is_dead": false
         },
         "3,1": {
           "crop": "Potato",
-          "batch_id": "permit_3_batch_10",
-          "growth_days": 4.765579166666626,
-          "watered_today": true,
+          "batch_id": "permit_3_batch_13",
+          "growth_days": 3.811001666666712,
+          "watered_today": false,
           "unwatered_days": 0,
           "is_dead": false
         },
         "-3,3": {
-          "crop": "Potato",
-          "batch_id": "permit_3_batch_10",
-          "growth_days": 4.765579166666626,
-          "watered_today": true,
-          "unwatered_days": 0,
-          "is_dead": false
+          "crop": null,
+          "batch_id": null,
+          "growth_days": 0.0,
+          "watered_today": false,
+          "unwatered_days": 1,
+          "is_dead": true
         },
         "0,2": {
           "crop": "Potato",
-          "batch_id": "permit_3_batch_10",
-          "growth_days": 4.765579166666626,
-          "watered_today": true,
+          "batch_id": "permit_3_batch_13",
+          "growth_days": 3.811001666666712,
+          "watered_today": false,
           "unwatered_days": 0,
           "is_dead": false
         },
         "8,3": {
           "crop": "Potato",
-          "batch_id": "permit_3_batch_10",
-          "growth_days": 4.765579166666626,
-          "watered_today": true,
+          "batch_id": "permit_3_batch_13",
+          "growth_days": 3.811001666666712,
+          "watered_today": false,
           "unwatered_days": 0,
           "is_dead": false
         },
         "9,5": {
           "crop": "Potato",
-          "batch_id": "permit_3_batch_10",
-          "growth_days": 4.765579166666626,
-          "watered_today": true,
+          "batch_id": "permit_3_batch_13",
+          "growth_days": 3.811001666666712,
+          "watered_today": false,
           "unwatered_days": 0,
           "is_dead": false
         },
         "2,5": {
           "crop": "Potato",
-          "batch_id": "permit_3_batch_10",
-          "growth_days": 4.765579166666626,
-          "watered_today": true,
+          "batch_id": "permit_3_batch_13",
+          "growth_days": 3.811001666666712,
+          "watered_today": false,
           "unwatered_days": 0,
           "is_dead": false
         },
         "1,3": {
           "crop": "Potato",
-          "batch_id": "permit_3_batch_10",
-          "growth_days": 4.765579166666626,
-          "watered_today": true,
+          "batch_id": "permit_3_batch_13",
+          "growth_days": 3.811001666666712,
+          "watered_today": false,
           "unwatered_days": 0,
           "is_dead": false
         },
         "-2,4": {
           "crop": "Potato",
-          "batch_id": "permit_3_batch_10",
-          "growth_days": 4.765579166666626,
-          "watered_today": true,
+          "batch_id": "permit_3_batch_13",
+          "growth_days": 3.811001666666712,
+          "watered_today": false,
           "unwatered_days": 0,
           "is_dead": false
         },
         "-1,4": {
           "crop": "Potato",
-          "batch_id": "permit_3_batch_10",
-          "growth_days": 4.765579166666626,
-          "watered_today": true,
+          "batch_id": "permit_3_batch_13",
+          "growth_days": 3.811001666666712,
+          "watered_today": false,
           "unwatered_days": 0,
           "is_dead": false
         },
         "6,5": {
           "crop": "Potato",
-          "batch_id": "permit_3_batch_10",
-          "growth_days": 4.765579166666626,
-          "watered_today": true,
+          "batch_id": "permit_3_batch_13",
+          "growth_days": 3.811001666666712,
+          "watered_today": false,
           "unwatered_days": 0,
           "is_dead": false
         },
         "-2,1": {
           "crop": "Potato",
-          "batch_id": "permit_3_batch_10",
-          "growth_days": 4.765579166666626,
-          "watered_today": true,
+          "batch_id": "permit_3_batch_13",
+          "growth_days": 3.811001666666712,
+          "watered_today": false,
           "unwatered_days": 0,
           "is_dead": false
         },
         "-1,1": {
           "crop": "Potato",
-          "batch_id": "permit_3_batch_10",
-          "growth_days": 4.765579166666626,
-          "watered_today": true,
+          "batch_id": "permit_3_batch_13",
+          "growth_days": 3.811001666666712,
+          "watered_today": false,
           "unwatered_days": 0,
           "is_dead": false
         },
         "4,5": {
           "crop": "Potato",
-          "batch_id": "permit_3_batch_10",
-          "growth_days": 4.765579166666626,
-          "watered_today": true,
+          "batch_id": "permit_3_batch_13",
+          "growth_days": 3.811001666666712,
+          "watered_today": false,
           "unwatered_days": 0,
           "is_dead": false
         },
         "3,3": {
           "crop": "Potato",
-          "batch_id": "permit_3_batch_10",
-          "growth_days": 4.765579166666626,
-          "watered_today": true,
+          "batch_id": "permit_3_batch_13",
+          "growth_days": 3.811001666666712,
+          "watered_today": false,
           "unwatered_days": 0,
           "is_dead": false
         },
         "5,0": {
           "crop": "Potato",
-          "batch_id": "permit_3_batch_10",
-          "growth_days": 4.765579166666626,
-          "watered_today": true,
+          "batch_id": "permit_3_batch_13",
+          "growth_days": 3.811001666666712,
+          "watered_today": false,
           "unwatered_days": 0,
           "is_dead": false
         },
         "-3,5": {
           "crop": "Potato",
-          "batch_id": "permit_3_batch_10",
-          "growth_days": 4.765579166666626,
-          "watered_today": true,
+          "batch_id": "permit_3_batch_13",
+          "growth_days": 3.811001666666712,
+          "watered_today": false,
           "unwatered_days": 0,
           "is_dead": false
         },
         "8,5": {
           "crop": "Potato",
-          "batch_id": "permit_3_batch_10",
-          "growth_days": 4.765579166666626,
-          "watered_today": true,
+          "batch_id": "permit_3_batch_13",
+          "growth_days": 3.811001666666712,
+          "watered_today": false,
           "unwatered_days": 0,
           "is_dead": false
         },
         "9,4": {
           "crop": "Potato",
-          "batch_id": "permit_3_batch_10",
-          "growth_days": 4.765579166666626,
-          "watered_today": true,
+          "batch_id": "permit_3_batch_13",
+          "growth_days": 3.811001666666712,
+          "watered_today": false,
           "unwatered_days": 0,
           "is_dead": false
         },
         "0,1": {
           "crop": "Potato",
-          "batch_id": "permit_3_batch_10",
-          "growth_days": 4.765579166666626,
-          "watered_today": true,
+          "batch_id": "permit_3_batch_13",
+          "growth_days": 3.811001666666712,
+          "watered_today": false,
           "unwatered_days": 0,
           "is_dead": false
         },
         "1,5": {
           "crop": "Potato",
-          "batch_id": "permit_3_batch_10",
-          "growth_days": 4.765579166666626,
-          "watered_today": true,
+          "batch_id": "permit_3_batch_13",
+          "growth_days": 3.811001666666712,
+          "watered_today": false,
           "unwatered_days": 0,
           "is_dead": false
         },
         "6,1": {
           "crop": "Potato",
-          "batch_id": "permit_3_batch_10",
-          "growth_days": 4.765579166666626,
-          "watered_today": true,
+          "batch_id": "permit_3_batch_13",
+          "growth_days": 3.811001666666712,
+          "watered_today": false,
           "unwatered_days": 0,
           "is_dead": false
         },
         "-4,0": {
           "crop": "Potato",
-          "batch_id": "permit_3_batch_10",
-          "growth_days": 4.765579166666626,
-          "watered_today": true,
+          "batch_id": "permit_3_batch_13",
+          "growth_days": 3.811001666666712,
+          "watered_today": false,
           "unwatered_days": 0,
           "is_dead": false
         },
         "7,0": {
           "crop": "Potato",
-          "batch_id": "permit_3_batch_10",
-          "growth_days": 4.765579166666626,
-          "watered_today": true,
+          "batch_id": "permit_3_batch_13",
+          "growth_days": 3.811001666666712,
+          "watered_today": false,
           "unwatered_days": 0,
           "is_dead": false
         },
         "-2,3": {
           "crop": "Potato",
-          "batch_id": "permit_3_batch_10",
-          "growth_days": 4.765579166666626,
-          "watered_today": true,
+          "batch_id": "permit_3_batch_13",
+          "growth_days": 3.811001666666712,
+          "watered_today": false,
           "unwatered_days": 0,
           "is_dead": false
         },
         "-1,3": {
           "crop": "Potato",
-          "batch_id": "permit_3_batch_10",
-          "growth_days": 4.765579166666626,
-          "watered_today": true,
+          "batch_id": "permit_3_batch_13",
+          "growth_days": 3.811001666666712,
+          "watered_today": false,
           "unwatered_days": 0,
           "is_dead": false
         },
         "3,5": {
           "crop": "Potato",
-          "batch_id": "permit_3_batch_10",
-          "growth_days": 4.765579166666626,
-          "watered_today": true,
+          "batch_id": "permit_3_batch_13",
+          "growth_days": 3.811001666666712,
+          "watered_today": false,
           "unwatered_days": 0,
           "is_dead": false
         },
         "5,2": {
           "crop": "Potato",
-          "batch_id": "permit_3_batch_10",
-          "growth_days": 4.765579166666626,
-          "watered_today": true,
+          "batch_id": "permit_3_batch_13",
+          "growth_days": 3.811001666666712,
+          "watered_today": false,
           "unwatered_days": 0,
           "is_dead": false
         },
         "4,4": {
           "crop": "Potato",
-          "batch_id": "permit_3_batch_10",
-          "growth_days": 4.765579166666626,
-          "watered_today": true,
+          "batch_id": "permit_3_batch_13",
+          "growth_days": 3.811001666666712,
+          "watered_today": false,
           "unwatered_days": 0,
           "is_dead": false
         },
         "9,0": {
           "crop": "Potato",
-          "batch_id": "permit_3_batch_10",
-          "growth_days": 4.765579166666626,
-          "watered_today": true,
+          "batch_id": "permit_3_batch_13",
+          "growth_days": 3.811001666666712,
+          "watered_today": false,
           "unwatered_days": 0,
           "is_dead": false
         },
         "1,1": {
           "crop": "Potato",
-          "batch_id": "permit_3_batch_10",
-          "growth_days": 4.765579166666626,
-          "watered_today": true,
+          "batch_id": "permit_3_batch_13",
+          "growth_days": 3.811001666666712,
+          "watered_today": false,
           "unwatered_days": 0,
           "is_dead": false
         },
         "0,3": {
           "crop": "Potato",
-          "batch_id": "permit_3_batch_10",
-          "growth_days": 4.765579166666626,
-          "watered_today": true,
+          "batch_id": "permit_3_batch_13",
+          "growth_days": 3.811001666666712,
+          "watered_today": false,
           "unwatered_days": 0,
           "is_dead": false
         },
         "2,0": {
           "crop": "Potato",
-          "batch_id": "permit_3_batch_10",
-          "growth_days": 4.765579166666626,
-          "watered_today": true,
+          "batch_id": "permit_3_batch_13",
+          "growth_days": 3.811001666666712,
+          "watered_today": false,
           "unwatered_days": 0,
           "is_dead": false
         },
         "-4,2": {
-          "crop": "Potato",
-          "batch_id": "permit_3_batch_10",
-          "growth_days": 4.765579166666626,
-          "watered_today": true,
-          "unwatered_days": 0,
-          "is_dead": false
+          "crop": null,
+          "batch_id": null,
+          "growth_days": 0.0,
+          "watered_today": false,
+          "unwatered_days": 1,
+          "is_dead": true
         },
         "6,0": {
           "crop": "Potato",
-          "batch_id": "permit_3_batch_10",
-          "growth_days": 4.765579166666626,
-          "watered_today": true,
+          "batch_id": "permit_3_batch_13",
+          "growth_days": 3.811001666666712,
+          "watered_today": false,
           "unwatered_days": 0,
           "is_dead": false
         },
         "7,2": {
           "crop": "Potato",
-          "batch_id": "permit_3_batch_10",
-          "growth_days": 4.765579166666626,
-          "watered_today": true,
+          "batch_id": "permit_3_batch_13",
+          "growth_days": 3.811001666666712,
+          "watered_today": false,
           "unwatered_days": 0,
           "is_dead": false
         },
         "-2,5": {
           "crop": "Potato",
-          "batch_id": "permit_3_batch_10",
-          "growth_days": 4.765579166666626,
-          "watered_today": true,
-          "unwatered_days": 0,
-          "is_dead": false
-        },
-        "-2,8": {
-          "crop": "Potato",
-          "batch_id": "permit_3_batch_10",
-          "growth_days": 4.765579166666626,
-          "watered_today": true,
-          "unwatered_days": 0,
-          "is_dead": false
-        },
-        "-1,8": {
-          "crop": "Potato",
-          "batch_id": "permit_3_batch_10",
-          "growth_days": 4.765579166666626,
-          "watered_today": true,
-          "unwatered_days": 0,
-          "is_dead": false
-        },
-        "4,9": {
-          "crop": "Potato",
-          "batch_id": "permit_3_batch_10",
-          "growth_days": 4.765579166666626,
-          "watered_today": true,
-          "unwatered_days": 0,
-          "is_dead": false
-        },
-        "3,7": {
-          "crop": "Potato",
-          "batch_id": "permit_3_batch_10",
-          "growth_days": 4.765579166666626,
-          "watered_today": true,
-          "unwatered_days": 0,
-          "is_dead": false
-        },
-        "4,6": {
-          "crop": "Potato",
-          "batch_id": "permit_3_batch_10",
-          "growth_days": 4.765579166666626,
-          "watered_today": true,
-          "unwatered_days": 0,
-          "is_dead": false
-        },
-        "5,7": {
-          "crop": "Potato",
-          "batch_id": "permit_3_batch_10",
-          "growth_days": 4.765579166666626,
-          "watered_today": true,
-          "unwatered_days": 0,
-          "is_dead": false
-        },
-        "-3,9": {
-          "crop": "Potato",
-          "batch_id": "permit_3_batch_10",
-          "growth_days": 4.765579166666626,
-          "watered_today": true,
-          "unwatered_days": 0,
-          "is_dead": false
-        },
-        "8,9": {
-          "crop": "Potato",
-          "batch_id": "permit_3_batch_10",
-          "growth_days": 4.765579166666626,
-          "watered_today": true,
-          "unwatered_days": 0,
-          "is_dead": false
-        },
-        "9,8": {
-          "crop": "Potato",
-          "batch_id": "permit_3_batch_10",
-          "growth_days": 4.765579166666626,
-          "watered_today": true,
-          "unwatered_days": 0,
-          "is_dead": false
-        },
-        "-3,6": {
-          "crop": "Potato",
-          "batch_id": "permit_3_batch_10",
-          "growth_days": 4.765579166666626,
-          "watered_today": true,
-          "unwatered_days": 0,
-          "is_dead": false
-        },
-        "8,6": {
-          "crop": "Potato",
-          "batch_id": "permit_3_batch_10",
-          "growth_days": 4.765579166666626,
-          "watered_today": true,
-          "unwatered_days": 0,
-          "is_dead": false
-        },
-        "1,6": {
-          "crop": "Potato",
-          "batch_id": "permit_3_batch_10",
-          "growth_days": 4.765579166666626,
-          "watered_today": true,
-          "unwatered_days": 0,
-          "is_dead": false
-        },
-        "0,8": {
-          "crop": "Potato",
-          "batch_id": "permit_3_batch_10",
-          "growth_days": 4.765579166666626,
-          "watered_today": true,
-          "unwatered_days": 0,
-          "is_dead": false
-        },
-        "1,9": {
-          "crop": "Potato",
-          "batch_id": "permit_3_batch_10",
-          "growth_days": 4.765579166666626,
-          "watered_today": true,
-          "unwatered_days": 0,
-          "is_dead": false
-        },
-        "2,8": {
-          "crop": "Potato",
-          "batch_id": "permit_3_batch_10",
-          "growth_days": 4.765579166666626,
-          "watered_today": true,
-          "unwatered_days": 0,
-          "is_dead": false
-        },
-        "-4,7": {
-          "crop": "Potato",
-          "batch_id": "permit_3_batch_10",
-          "growth_days": 4.765579166666626,
-          "watered_today": true,
-          "unwatered_days": 0,
-          "is_dead": false
-        },
-        "7,7": {
-          "crop": "Potato",
-          "batch_id": "permit_3_batch_10",
-          "growth_days": 4.765579166666626,
-          "watered_today": true,
-          "unwatered_days": 0,
-          "is_dead": false
-        },
-        "-2,7": {
-          "crop": "Potato",
-          "batch_id": "permit_3_batch_10",
-          "growth_days": 4.765579166666626,
-          "watered_today": true,
-          "unwatered_days": 0,
-          "is_dead": false
-        },
-        "-1,7": {
-          "crop": "Potato",
-          "batch_id": "permit_3_batch_10",
-          "growth_days": 4.765579166666626,
-          "watered_today": true,
-          "unwatered_days": 0,
-          "is_dead": false
-        },
-        "6,8": {
-          "crop": "Potato",
-          "batch_id": "permit_3_batch_10",
-          "growth_days": 4.765579166666626,
-          "watered_today": true,
-          "unwatered_days": 0,
-          "is_dead": false
-        },
-        "3,9": {
-          "crop": "Potato",
-          "batch_id": "permit_3_batch_10",
-          "growth_days": 4.765579166666626,
-          "watered_today": true,
-          "unwatered_days": 0,
-          "is_dead": false
-        },
-        "5,6": {
-          "crop": "Potato",
-          "batch_id": "permit_3_batch_10",
-          "growth_days": 4.765579166666626,
-          "watered_today": true,
-          "unwatered_days": 0,
-          "is_dead": false
-        },
-        "4,8": {
-          "crop": "Potato",
-          "batch_id": "permit_3_batch_10",
-          "growth_days": 4.765579166666626,
-          "watered_today": true,
-          "unwatered_days": 0,
-          "is_dead": false
-        },
-        "3,6": {
-          "crop": "Potato",
-          "batch_id": "permit_3_batch_10",
-          "growth_days": 4.765579166666626,
-          "watered_today": true,
-          "unwatered_days": 0,
-          "is_dead": false
-        },
-        "-4,8": {
-          "crop": "Potato",
-          "batch_id": "permit_3_batch_10",
-          "growth_days": 4.765579166666626,
-          "watered_today": true,
-          "unwatered_days": 0,
-          "is_dead": false
-        },
-        "5,9": {
-          "crop": "Potato",
-          "batch_id": "permit_3_batch_10",
-          "growth_days": 4.765579166666626,
-          "watered_today": true,
-          "unwatered_days": 0,
-          "is_dead": false
-        },
-        "9,7": {
-          "crop": "Potato",
-          "batch_id": "permit_3_batch_10",
-          "growth_days": 4.765579166666626,
-          "watered_today": true,
-          "unwatered_days": 0,
-          "is_dead": false
-        },
-        "-3,8": {
-          "crop": "Potato",
-          "batch_id": "permit_3_batch_10",
-          "growth_days": 4.765579166666626,
-          "watered_today": true,
-          "unwatered_days": 0,
-          "is_dead": false
-        },
-        "0,7": {
-          "crop": "Potato",
-          "batch_id": "permit_3_batch_10",
-          "growth_days": 4.765579166666626,
-          "watered_today": true,
-          "unwatered_days": 0,
-          "is_dead": false
-        },
-        "8,8": {
-          "crop": "Potato",
-          "batch_id": "permit_3_batch_10",
-          "growth_days": 4.765579166666626,
-          "watered_today": true,
-          "unwatered_days": 0,
-          "is_dead": false
-        },
-        "2,7": {
-          "crop": "Potato",
-          "batch_id": "permit_3_batch_10",
-          "growth_days": 4.765579166666626,
-          "watered_today": true,
-          "unwatered_days": 0,
-          "is_dead": false
-        },
-        "1,8": {
-          "crop": "Potato",
-          "batch_id": "permit_3_batch_10",
-          "growth_days": 4.765579166666626,
-          "watered_today": true,
-          "unwatered_days": 0,
-          "is_dead": false
-        },
-        "-4,9": {
-          "crop": "Potato",
-          "batch_id": "permit_3_batch_10",
-          "growth_days": 4.765579166666626,
-          "watered_today": true,
-          "unwatered_days": 0,
-          "is_dead": false
-        },
-        "7,9": {
-          "crop": "Potato",
-          "batch_id": "permit_3_batch_10",
-          "growth_days": 4.765579166666626,
-          "watered_today": true,
-          "unwatered_days": 0,
-          "is_dead": false
-        },
-        "6,7": {
-          "crop": "Potato",
-          "batch_id": "permit_3_batch_10",
-          "growth_days": 4.765579166666626,
-          "watered_today": true,
-          "unwatered_days": 0,
-          "is_dead": false
-        },
-        "-4,6": {
-          "crop": "Potato",
-          "batch_id": "permit_3_batch_10",
-          "growth_days": 4.765579166666626,
-          "watered_today": true,
-          "unwatered_days": 0,
-          "is_dead": false
-        },
-        "7,6": {
-          "crop": "Potato",
-          "batch_id": "permit_3_batch_10",
-          "growth_days": 4.765579166666626,
-          "watered_today": true,
-          "unwatered_days": 0,
-          "is_dead": false
-        },
-        "-2,9": {
-          "crop": "Potato",
-          "batch_id": "permit_3_batch_10",
-          "growth_days": 4.765579166666626,
-          "watered_today": true,
-          "unwatered_days": 0,
-          "is_dead": false
-        },
-        "-1,9": {
-          "crop": "Potato",
-          "batch_id": "permit_3_batch_10",
-          "growth_days": 4.765579166666626,
-          "watered_today": true,
-          "unwatered_days": 0,
-          "is_dead": false
-        },
-        "-1,6": {
-          "crop": "Potato",
-          "batch_id": "permit_3_batch_10",
-          "growth_days": 4.765579166666626,
-          "watered_today": true,
-          "unwatered_days": 0,
-          "is_dead": false
-        },
-        "-2,6": {
-          "crop": "Potato",
-          "batch_id": "permit_3_batch_10",
-          "growth_days": 4.765579166666626,
-          "watered_today": true,
-          "unwatered_days": 0,
-          "is_dead": false
-        },
-        "4,7": {
-          "crop": "Potato",
-          "batch_id": "permit_3_batch_10",
-          "growth_days": 4.765579166666626,
-          "watered_today": true,
-          "unwatered_days": 0,
-          "is_dead": false
-        },
-        "3,8": {
-          "crop": "Potato",
-          "batch_id": "permit_3_batch_10",
-          "growth_days": 4.765579166666626,
-          "watered_today": true,
-          "unwatered_days": 0,
-          "is_dead": false
-        },
-        "-3,7": {
-          "crop": "Potato",
-          "batch_id": "permit_3_batch_10",
-          "growth_days": 4.765579166666626,
-          "watered_today": true,
-          "unwatered_days": 0,
-          "is_dead": false
-        },
-        "9,9": {
-          "crop": "Potato",
-          "batch_id": "permit_3_batch_10",
-          "growth_days": 4.765579166666626,
-          "watered_today": true,
-          "unwatered_days": 0,
-          "is_dead": false
-        },
-        "5,8": {
-          "crop": "Potato",
-          "batch_id": "permit_3_batch_10",
-          "growth_days": 4.765579166666626,
-          "watered_today": true,
-          "unwatered_days": 0,
-          "is_dead": false
-        },
-        "8,7": {
-          "crop": "Potato",
-          "batch_id": "permit_3_batch_10",
-          "growth_days": 4.765579166666626,
-          "watered_today": true,
-          "unwatered_days": 0,
-          "is_dead": false
-        },
-        "9,6": {
-          "crop": "Potato",
-          "batch_id": "permit_3_batch_10",
-          "growth_days": 4.765579166666626,
-          "watered_today": true,
-          "unwatered_days": 0,
-          "is_dead": false
-        },
-        "0,9": {
-          "crop": "Potato",
-          "batch_id": "permit_3_batch_10",
-          "growth_days": 4.765579166666626,
-          "watered_today": true,
-          "unwatered_days": 0,
-          "is_dead": false
-        },
-        "0,6": {
-          "crop": "Potato",
-          "batch_id": "permit_3_batch_10",
-          "growth_days": 4.765579166666626,
-          "watered_today": true,
-          "unwatered_days": 0,
-          "is_dead": false
-        },
-        "2,9": {
-          "crop": "Potato",
-          "batch_id": "permit_3_batch_10",
-          "growth_days": 4.765579166666626,
-          "watered_today": true,
-          "unwatered_days": 0,
-          "is_dead": false
-        },
-        "1,7": {
-          "crop": "Potato",
-          "batch_id": "permit_3_batch_10",
-          "growth_days": 4.765579166666626,
-          "watered_today": true,
-          "unwatered_days": 0,
-          "is_dead": false
-        },
-        "2,6": {
-          "crop": "Potato",
-          "batch_id": "permit_3_batch_10",
-          "growth_days": 4.765579166666626,
-          "watered_today": true,
-          "unwatered_days": 0,
-          "is_dead": false
-        },
-        "6,6": {
-          "crop": "Potato",
-          "batch_id": "permit_3_batch_10",
-          "growth_days": 4.765579166666626,
-          "watered_today": true,
-          "unwatered_days": 0,
-          "is_dead": false
-        },
-        "6,9": {
-          "crop": "Potato",
-          "batch_id": "permit_3_batch_10",
-          "growth_days": 4.765579166666626,
-          "watered_today": true,
-          "unwatered_days": 0,
-          "is_dead": false
-        },
-        "7,8": {
-          "crop": "Potato",
-          "batch_id": "permit_3_batch_10",
-          "growth_days": 4.765579166666626,
-          "watered_today": true,
+          "batch_id": "permit_3_batch_13",
+          "growth_days": 3.811001666666712,
+          "watered_today": false,
           "unwatered_days": 0,
           "is_dead": false
         }
@@ -2013,13 +1341,13 @@
       "tax_paid_households_today": [],
       "batches": [
         {
-          "id": "permit_3_batch_10",
+          "id": "permit_3_batch_13",
           "permit_id": "permit_3",
           "crop": "Potato",
-          "start_day": 64.00418333333316,
+          "start_day": 76.33953333333312,
           "window_duration_days": 1.0,
-          "close_day": 65.00422999999986,
-          "completion_day": 74.00418333333316,
+          "close_day": 77.3395549999999,
+          "completion_day": 86.33953333333312,
           "closed": true,
           "tiles": [
             [
@@ -2032,10 +1360,6 @@
             ],
             [
               -4,
-              2
-            ],
-            [
-              -4,
               3
             ],
             [
@@ -2047,22 +1371,6 @@
               5
             ],
             [
-              -4,
-              6
-            ],
-            [
-              -4,
-              7
-            ],
-            [
-              -4,
-              8
-            ],
-            [
-              -4,
-              9
-            ],
-            [
               -3,
               0
             ],
@@ -2072,35 +1380,11 @@
             ],
             [
               -3,
-              2
-            ],
-            [
-              -3,
-              3
-            ],
-            [
-              -3,
               4
             ],
             [
               -3,
               5
-            ],
-            [
-              -3,
-              6
-            ],
-            [
-              -3,
-              7
-            ],
-            [
-              -3,
-              8
-            ],
-            [
-              -3,
-              9
             ],
             [
               -2,
@@ -2127,32 +1411,12 @@
               5
             ],
             [
-              -2,
-              6
-            ],
-            [
-              -2,
-              7
-            ],
-            [
-              -2,
-              8
-            ],
-            [
-              -2,
-              9
-            ],
-            [
               -1,
               0
             ],
             [
               -1,
               1
-            ],
-            [
-              -1,
-              2
             ],
             [
               -1,
@@ -2169,18 +1433,6 @@
             [
               -1,
               6
-            ],
-            [
-              -1,
-              7
-            ],
-            [
-              -1,
-              8
-            ],
-            [
-              -1,
-              9
             ],
             [
               0,
@@ -2211,28 +1463,12 @@
               6
             ],
             [
-              0,
-              7
-            ],
-            [
-              0,
-              8
-            ],
-            [
-              0,
-              9
-            ],
-            [
               1,
               0
             ],
             [
               1,
               1
-            ],
-            [
-              1,
-              2
             ],
             [
               1,
@@ -2245,22 +1481,6 @@
             [
               1,
               5
-            ],
-            [
-              1,
-              6
-            ],
-            [
-              1,
-              7
-            ],
-            [
-              1,
-              8
-            ],
-            [
-              1,
-              9
             ],
             [
               2,
@@ -2287,22 +1507,6 @@
               5
             ],
             [
-              2,
-              6
-            ],
-            [
-              2,
-              7
-            ],
-            [
-              2,
-              8
-            ],
-            [
-              2,
-              9
-            ],
-            [
               3,
               0
             ],
@@ -2327,22 +1531,6 @@
               5
             ],
             [
-              3,
-              6
-            ],
-            [
-              3,
-              7
-            ],
-            [
-              3,
-              8
-            ],
-            [
-              3,
-              9
-            ],
-            [
               4,
               0
             ],
@@ -2365,22 +1553,6 @@
             [
               4,
               5
-            ],
-            [
-              4,
-              6
-            ],
-            [
-              4,
-              7
-            ],
-            [
-              4,
-              8
-            ],
-            [
-              4,
-              9
             ],
             [
               5,
@@ -2408,19 +1580,7 @@
             ],
             [
               5,
-              6
-            ],
-            [
-              5,
               7
-            ],
-            [
-              5,
-              8
-            ],
-            [
-              5,
-              9
             ],
             [
               6,
@@ -2455,14 +1615,6 @@
               7
             ],
             [
-              6,
-              8
-            ],
-            [
-              6,
-              9
-            ],
-            [
               7,
               0
             ],
@@ -2485,22 +1637,6 @@
             [
               7,
               5
-            ],
-            [
-              7,
-              6
-            ],
-            [
-              7,
-              7
-            ],
-            [
-              7,
-              8
-            ],
-            [
-              7,
-              9
             ],
             [
               8,
@@ -2528,19 +1664,7 @@
             ],
             [
               8,
-              6
-            ],
-            [
-              8,
               7
-            ],
-            [
-              8,
-              8
-            ],
-            [
-              8,
-              9
             ],
             [
               9,
@@ -2573,25 +1697,17 @@
             [
               9,
               7
-            ],
-            [
-              9,
-              8
-            ],
-            [
-              9,
-              9
             ]
           ],
-          "growth_days": 4.765579166666626,
-          "watered_today": true,
+          "growth_days": 3.811001666666712,
+          "watered_today": false,
           "unwatered_days": 0,
           "is_dead": false
         }
       ],
       "active_batch_id": null,
-      "batch_counter": 10,
-      "current_day_time": 68.76976249999979
+      "batch_counter": 13,
+      "current_day_time": 80.15053499999983
     },
     {
       "id": "permit_4",
@@ -2793,7 +1909,7 @@
       "batches": [],
       "active_batch_id": null,
       "batch_counter": 0,
-      "current_day_time": 68.76976249999979
+      "current_day_time": 80.15053499999983
     },
     {
       "id": "permit_5",
@@ -2857,7 +1973,7 @@
       "batches": [],
       "active_batch_id": null,
       "batch_counter": 0,
-      "current_day_time": 68.76976249999979
+      "current_day_time": 80.15053499999983
     },
     {
       "id": "permit_6",
@@ -2890,11 +2006,11 @@
         ],
         [
           16,
-          -1
+          -2
         ],
         [
           16,
-          -2
+          -1
         ],
         [
           16,
@@ -3015,13 +2131,13 @@
       "tax_paid_households_today": [
         "fam_3",
         "fam_2",
-        "fam_4",
-        "fam_1"
+        "fam_1",
+        "fam_4"
       ],
       "batches": [],
       "active_batch_id": null,
       "batch_counter": 0,
-      "current_day_time": 68.76976249999979
+      "current_day_time": 80.15053499999983
     },
     {
       "id": "permit_7",
@@ -3065,12 +2181,12 @@
           -5
         ],
         [
-          15,
-          -4
-        ],
-        [
           18,
           -5
+        ],
+        [
+          15,
+          -4
         ],
         [
           19,
@@ -3118,7 +2234,7 @@
       "batches": [],
       "active_batch_id": null,
       "batch_counter": 0,
-      "current_day_time": 68.76976249999979
+      "current_day_time": 80.15053499999983
     },
     {
       "id": "permit_8",
@@ -3163,11 +2279,11 @@
         ],
         [
           17,
-          -1
+          -2
         ],
         [
           17,
-          -2
+          -1
         ],
         [
           18,
@@ -3527,7 +2643,7 @@
       "batches": [],
       "active_batch_id": null,
       "batch_counter": 0,
-      "current_day_time": 68.76976249999979
+      "current_day_time": 80.15053499999983
     },
     {
       "id": "permit_9",
@@ -3640,7 +2756,7 @@
       "batches": [],
       "active_batch_id": null,
       "batch_counter": 0,
-      "current_day_time": 68.76976249999979
+      "current_day_time": 80.15053499999983
     },
     {
       "id": "permit_10",
@@ -3689,7 +2805,7 @@
       "batches": [],
       "active_batch_id": null,
       "batch_counter": 0,
-      "current_day_time": 68.76976249999979
+      "current_day_time": 80.15053499999983
     },
     {
       "id": "permit_11",
@@ -3738,7 +2854,7 @@
       "batches": [],
       "active_batch_id": null,
       "batch_counter": 0,
-      "current_day_time": 68.76976249999979
+      "current_day_time": 80.15053499999983
     }
   ],
   "buildings": [
@@ -3766,8 +2882,33 @@
       "door_side": null,
       "rotation": 0,
       "condition": 1.0,
-      "construction_order": {},
-      "construction_progress": 0.0,
+      "construction_order": {
+        "id": "building:well:0:-3",
+        "order_type": "REPAIR",
+        "status": "COMPLETE",
+        "payer_family_id": null,
+        "payer_type": "landlord",
+        "payer_id": "landlord",
+        "carpenter_id": "vil_17",
+        "commission_paid": true,
+        "materials": {
+          "Wood": 2
+        },
+        "material_cost_copper": 2,
+        "living_wage_copper": 3,
+        "price_copper": 5,
+        "food_unit_price_at_order": 1,
+        "progress_ratio": 1.0,
+        "build_duration_seconds": 25.0,
+        "paid_by_id": "landlord",
+        "paid_amount_copper": 5,
+        "materials_delivered": {
+          "Wood": 2
+        },
+        "materials_committed": true
+      },
+      "construction_progress": 25.00000000000022,
+      "assigned_workers": [],
       "owner": "landlord",
       "inventory": {},
       "currency": {
@@ -3885,6 +3026,7 @@
       "condition": 1.0,
       "construction_order": {},
       "construction_progress": 0.0,
+      "assigned_workers": [],
       "owner": "landlord",
       "inventory": {},
       "currency": {
@@ -4002,6 +3144,7 @@
       "condition": 1.0,
       "construction_order": {},
       "construction_progress": 0.0,
+      "assigned_workers": [],
       "owner": "landlord",
       "inventory": {},
       "currency": {
@@ -4053,6 +3196,7 @@
         "paid_amount_copper": 3
       },
       "construction_progress": 25.00000000000022,
+      "assigned_workers": [],
       "owner": "landlord",
       "inventory": {},
       "currency": {
@@ -4105,16 +3249,40 @@
       "door_side": null,
       "rotation": 0,
       "condition": 1.0,
-      "construction_order": {},
-      "construction_progress": 0.0,
+      "construction_order": {
+        "id": "building:market:-9:0",
+        "order_type": "REPAIR",
+        "status": "COMPLETE",
+        "payer_family_id": null,
+        "payer_type": "landlord",
+        "payer_id": "landlord",
+        "carpenter_id": "vil_16",
+        "commission_paid": true,
+        "materials": {
+          "Wood": 2
+        },
+        "material_cost_copper": 4,
+        "living_wage_copper": 3,
+        "price_copper": 7,
+        "food_unit_price_at_order": 1,
+        "progress_ratio": 1.0,
+        "build_duration_seconds": 25.0,
+        "paid_by_id": "landlord",
+        "paid_amount_copper": 7,
+        "materials_delivered": {
+          "Wood": 2
+        },
+        "materials_committed": true
+      },
+      "construction_progress": 25.05000000000022,
+      "assigned_workers": [],
       "owner": "landlord",
       "inventory": {
-        "Wood": 64,
-        "Stone": 105
+        "Wood": 75,
+        "Stone": 90
       },
       "currency": {
-        "Copper": 5,
-        "Silver": 1
+        "Copper": 8
       },
       "prices": {
         "Potato": 1,
@@ -4132,14 +3300,14 @@
         "Wood",
         "Stone"
       ],
-      "sales_report_period": 6,
+      "sales_report_period": 7,
       "sales_report_by_item": {
         "Wood": {
-          "quantity": 10,
-          "revenue_copper": 10
+          "quantity": 28,
+          "revenue_copper": 28
         }
       },
-      "sales_report_last_day": 66,
+      "sales_report_last_day": 79,
       "household_sale_percent": 50,
       "household_sale_limits": {},
       "stall_requested_qty": {},
@@ -4185,12 +3353,12 @@
           -5
         ],
         [
-          15,
-          -4
-        ],
-        [
           18,
           -5
+        ],
+        [
+          15,
+          -4
         ],
         [
           19,
@@ -4230,6 +3398,7 @@
       "condition": 1.0,
       "construction_order": {},
       "construction_progress": 0.0,
+      "assigned_workers": [],
       "owner": "landlord",
       "inventory": {},
       "currency": {
@@ -4281,6 +3450,7 @@
         "paid_amount_copper": 3
       },
       "construction_progress": 25.00000000000022,
+      "assigned_workers": [],
       "owner": "landlord",
       "inventory": {},
       "currency": {
@@ -4330,11 +3500,11 @@
         ],
         [
           16,
-          -1
+          -2
         ],
         [
           16,
-          -2
+          -1
         ],
         [
           16,
@@ -4446,6 +3616,7 @@
       "condition": 1.0,
       "construction_order": {},
       "construction_progress": 0.0,
+      "assigned_workers": [],
       "owner": "landlord",
       "inventory": {},
       "currency": {
@@ -4567,6 +3738,7 @@
       "condition": 1.0,
       "construction_order": {},
       "construction_progress": 0.0,
+      "assigned_workers": [],
       "owner": "landlord",
       "inventory": {},
       "currency": {
@@ -4638,11 +3810,16 @@
         "paid_amount_copper": 3
       },
       "construction_progress": 25.00000000000022,
+      "assigned_workers": [],
       "owner": "fam_2",
       "inventory": {
         "Potato": 134
       },
-      "currency": {},
+      "currency": {
+        "Copper": 0,
+        "Silver": 0,
+        "Gold": 0
+      },
       "prices": {
         "Potato": 1,
         "Wood": 2,
@@ -4662,14 +3839,14 @@
       "sale_items": [
         "Potato"
       ],
-      "sales_report_period": 6,
+      "sales_report_period": 7,
       "sales_report_by_item": {
         "Potato": {
-          "quantity": 24,
-          "revenue_copper": 24
+          "quantity": 27,
+          "revenue_copper": 27
         }
       },
-      "sales_report_last_day": 68,
+      "sales_report_last_day": 79,
       "household_sale_percent": 20,
       "household_sale_limits": {
         "Potato": 134
@@ -4691,6 +3868,7 @@
       "condition": 1.0,
       "construction_order": {},
       "construction_progress": 0.0,
+      "assigned_workers": [],
       "owner": "landlord",
       "inventory": {},
       "currency": {
@@ -4743,11 +3921,33 @@
       "door_side": null,
       "rotation": 0,
       "condition": 1.0,
-      "construction_order": {},
-      "construction_progress": 0.0,
+      "construction_order": {
+        "id": "building:market:7:-3",
+        "order_type": "REPAIR",
+        "status": "COMPLETE",
+        "payer_family_id": null,
+        "payer_type": "landlord",
+        "payer_id": "landlord",
+        "carpenter_id": "vil_16",
+        "commission_paid": true,
+        "material_cost_copper": 0,
+        "living_wage_copper": 3,
+        "price_copper": 3,
+        "food_unit_price_at_order": 1,
+        "progress_ratio": 1.0,
+        "build_duration_seconds": 25.0,
+        "paid_by_id": "landlord",
+        "paid_amount_copper": 3,
+        "materials_delivered": {
+          "Wood": 2
+        },
+        "materials_committed": true
+      },
+      "construction_progress": 25.00000000000022,
+      "assigned_workers": [],
       "owner": "fam_3",
       "inventory": {
-        "Potato": 183
+        "Potato": 150
       },
       "currency": {},
       "prices": {
@@ -4769,14 +3969,14 @@
       "sale_items": [
         "Potato"
       ],
-      "sales_report_period": 6,
+      "sales_report_period": 7,
       "sales_report_by_item": {
         "Potato": {
-          "quantity": 24,
-          "revenue_copper": 24
+          "quantity": 27,
+          "revenue_copper": 27
         }
       },
-      "sales_report_last_day": 68,
+      "sales_report_last_day": 79,
       "household_sale_percent": 20,
       "household_sale_limits": {
         "Potato": 102
@@ -4798,6 +3998,80 @@
       "condition": 1.0,
       "construction_order": {},
       "construction_progress": 0.0,
+      "assigned_workers": [],
+      "owner": "landlord",
+      "inventory": {},
+      "currency": {
+        "Copper": 0,
+        "Silver": 0,
+        "Gold": 0
+      },
+      "prices": {},
+      "assigned_family_id": null,
+      "assigned_household_id": null,
+      "item_allocations": {},
+      "sale_items": [],
+      "sales_report_period": null,
+      "sales_report_by_item": {},
+      "sales_report_last_day": 1,
+      "household_sale_percent": 20,
+      "household_sale_limits": {},
+      "stall_requested_qty": {},
+      "auto_pricing": false
+    },
+    {
+      "building_type": "tax_house",
+      "tiles": [
+        [
+          -8,
+          -5
+        ],
+        [
+          -8,
+          -4
+        ],
+        [
+          -7,
+          -4
+        ],
+        [
+          -7,
+          -5
+        ]
+      ],
+      "door_pos": null,
+      "door_side": null,
+      "rotation": 0,
+      "condition": 1.0,
+      "construction_order": {
+        "id": "building:tax_house:-8:-5",
+        "order_type": "REPAIR",
+        "status": "COMPLETE",
+        "payer_family_id": null,
+        "payer_type": "landlord",
+        "payer_id": "landlord",
+        "carpenter_id": "vil_16",
+        "commission_paid": true,
+        "materials": {
+          "Wood": 2
+        },
+        "material_cost_copper": 4,
+        "living_wage_copper": 3,
+        "price_copper": 7,
+        "food_unit_price_at_order": 1,
+        "progress_ratio": 1.0,
+        "build_duration_seconds": 25.0,
+        "paid_by_id": "landlord",
+        "paid_amount_copper": 7,
+        "materials_delivered": {
+          "Wood": 2
+        },
+        "materials_committed": true
+      },
+      "construction_progress": 25.004999999999637,
+      "assigned_workers": [
+        "vil_18"
+      ],
       "owner": "landlord",
       "inventory": {},
       "currency": {
@@ -4840,7 +4114,7 @@
     },
     {
       "resource_type": "Wood",
-      "amount": 443,
+      "amount": 383,
       "grid_x": -12,
       "grid_y": -6,
       "owner_type": "landlord",
@@ -4866,18 +4140,17 @@
       "carrier_id": null,
       "condition": 1.0,
       "inventory": {
-        "Hoe": 1,
-        "Sickle": 1,
-        "Watering_Can": 1,
-        "Potato": 361,
-        "Water": 9,
-        "Copper": 6,
-        "Silver": 2,
+        "Hoe": 7,
+        "Sickle": 7,
+        "Watering_Can": 7,
+        "Potato": 469,
+        "Water": 7,
+        "Copper": 1,
         "Gold": 1
       },
       "currency": {
-        "Copper": 5,
-        "Silver": 6
+        "Copper": 8,
+        "Silver": 9
       }
     },
     {
@@ -4915,14 +4188,14 @@
       "carrier_id": null,
       "condition": 1.0,
       "inventory": {
-        "Hoe": 1,
+        "Hoe": 3,
         "Watering_Can": 3,
         "Sickle": 3,
         "Wood": 9,
         "Stone": 9,
-        "Water": 5,
-        "Copper": 4,
-        "Silver": 5
+        "Water": 3,
+        "Copper": 12,
+        "Silver": 3
       },
       "currency": {
         "Copper": 3
@@ -4943,25 +4216,28 @@
       "construction_order": {
         "id": "furn_3",
         "order_type": "REPAIR",
-        "status": "COMPLETE",
+        "status": "PAID",
         "payer_family_id": "fam_2",
+        "payer_type": "household",
         "payer_id": "vil_6",
         "carpenter_id": "vil_17",
         "commission_paid": true,
-        "material_cost_copper": 0,
+        "materials": {
+          "Wood": 2
+        },
+        "material_cost_copper": 2,
         "living_wage_copper": 3,
-        "price_copper": 3,
+        "price_copper": 5,
         "food_unit_price_at_order": 1,
-        "progress_ratio": 1.0,
+        "progress_ratio": 0.0,
         "paid_by_id": "vil_6",
         "paid_by_family_id": "fam_2",
-        "paid_amount_copper": 3,
-        "materials_committed": true
+        "paid_amount_copper": 5
       },
-      "construction_progress": 25.00000000000022,
+      "construction_progress": 0.0,
       "designated_target": null,
       "carrier_id": null,
-      "condition": 1.0,
+      "condition": 0.0,
       "inventory": {},
       "currency": {}
     },
@@ -4984,16 +4260,22 @@
         "payer_family_id": "fam_2",
         "payer_type": "household",
         "payer_id": "vil_6",
-        "carpenter_id": "vil_16",
+        "carpenter_id": "vil_17",
         "commission_paid": true,
-        "material_cost_copper": 0,
+        "materials": {
+          "Wood": 2
+        },
+        "material_cost_copper": 2,
         "living_wage_copper": 3,
-        "price_copper": 3,
+        "price_copper": 5,
         "food_unit_price_at_order": 1,
         "progress_ratio": 1.0,
         "paid_by_id": "vil_6",
         "paid_by_family_id": "fam_2",
-        "paid_amount_copper": 3,
+        "paid_amount_copper": 5,
+        "materials_delivered": {
+          "Wood": 2
+        },
         "materials_committed": true
       },
       "construction_progress": 25.00000000000022,
@@ -5020,20 +4302,27 @@
         "order_type": "REPAIR",
         "status": "COMPLETE",
         "payer_family_id": "fam_2",
+        "payer_type": "household",
         "payer_id": "vil_6",
         "carpenter_id": "vil_16",
         "commission_paid": true,
-        "material_cost_copper": 0,
-        "living_wage_copper": 9,
-        "price_copper": 9,
-        "food_unit_price_at_order": 3,
+        "materials": {
+          "Wood": 2
+        },
+        "material_cost_copper": 2,
+        "living_wage_copper": 3,
+        "price_copper": 5,
+        "food_unit_price_at_order": 1,
         "progress_ratio": 1.0,
         "paid_by_id": "vil_6",
         "paid_by_family_id": "fam_2",
-        "paid_amount_copper": 9,
+        "paid_amount_copper": 5,
+        "materials_delivered": {
+          "Wood": 2
+        },
         "materials_committed": true
       },
-      "construction_progress": 25.007999999999562,
+      "construction_progress": 25.00000000000022,
       "designated_target": null,
       "carrier_id": null,
       "condition": 1.0,
@@ -5132,17 +4421,24 @@
         "order_type": "REPAIR",
         "status": "COMPLETE",
         "payer_family_id": "fam_1",
+        "payer_type": "household",
         "payer_id": "vil_1",
         "carpenter_id": "vil_17",
         "commission_paid": true,
-        "material_cost_copper": 0,
+        "materials": {
+          "Wood": 2
+        },
+        "material_cost_copper": 2,
         "living_wage_copper": 3,
-        "price_copper": 3,
+        "price_copper": 5,
         "food_unit_price_at_order": 1,
         "progress_ratio": 1.0,
         "paid_by_id": "vil_1",
         "paid_by_family_id": "fam_1",
-        "paid_amount_copper": 3,
+        "paid_amount_copper": 5,
+        "materials_delivered": {
+          "Wood": 2
+        },
         "materials_committed": true
       },
       "construction_progress": 25.00000000000022,
@@ -5269,14 +4565,20 @@
         "payer_id": "vil_12",
         "carpenter_id": "vil_16",
         "commission_paid": true,
-        "material_cost_copper": 0,
+        "materials": {
+          "Wood": 2
+        },
+        "material_cost_copper": 2,
         "living_wage_copper": 3,
-        "price_copper": 3,
+        "price_copper": 5,
         "food_unit_price_at_order": 1,
         "progress_ratio": 1.0,
         "paid_by_id": "vil_12",
         "paid_by_family_id": "fam_3",
-        "paid_amount_copper": 3,
+        "paid_amount_copper": 5,
+        "materials_delivered": {
+          "Wood": 2
+        },
         "materials_committed": true
       },
       "construction_progress": 25.00000000000022,
@@ -5284,18 +4586,18 @@
       "carrier_id": null,
       "condition": 1.0,
       "inventory": {
-        "Sickle": 1,
-        "Hoe": 1,
-        "Watering_Can": 1,
-        "Potato": 188,
+        "Sickle": 6,
+        "Hoe": 6,
+        "Watering_Can": 6,
+        "Potato": 307,
         "Water": 7,
-        "Copper": 7,
-        "Silver": 5,
+        "Copper": 9,
+        "Silver": 1,
         "Gold": 1
       },
       "currency": {
-        "Copper": 9,
-        "Silver": 5
+        "Copper": 2,
+        "Silver": 9
       }
     },
     {
@@ -5312,18 +4614,30 @@
       "stored_in_id": null,
       "construction_order": {
         "id": "furn_13",
+        "order_type": "REPAIR",
         "status": "COMPLETE",
-        "material_cost_copper": 10,
-        "living_wage_copper": 2,
-        "price_copper": 12,
         "payer_family_id": "fam_3",
+        "payer_type": "household",
         "payer_id": "vil_12",
         "carpenter_id": "vil_17",
-        "food_unit_price_at_order": 2,
-        "materials_committed": true,
-        "progress_ratio": 1.0
+        "commission_paid": true,
+        "materials": {
+          "Wood": 2
+        },
+        "material_cost_copper": 2,
+        "living_wage_copper": 3,
+        "price_copper": 5,
+        "food_unit_price_at_order": 1,
+        "progress_ratio": 1.0,
+        "paid_by_id": "vil_12",
+        "paid_by_family_id": "fam_3",
+        "paid_amount_copper": 5,
+        "materials_delivered": {
+          "Wood": 2
+        },
+        "materials_committed": true
       },
-      "construction_progress": 25.0009999999996,
+      "construction_progress": 25.00000000000022,
       "designated_target": null,
       "carrier_id": null,
       "condition": 1.0,
@@ -5383,26 +4697,28 @@
       "construction_order": {
         "id": "furn_15",
         "order_type": "REPAIR",
-        "status": "COMPLETE",
+        "status": "PAID",
         "payer_family_id": "fam_3",
         "payer_type": "household",
         "payer_id": "vil_12",
-        "carpenter_id": "vil_17",
+        "carpenter_id": "vil_16",
         "commission_paid": true,
-        "material_cost_copper": 0,
+        "materials": {
+          "Wood": 2
+        },
+        "material_cost_copper": 2,
         "living_wage_copper": 3,
-        "price_copper": 3,
+        "price_copper": 5,
         "food_unit_price_at_order": 1,
-        "progress_ratio": 1.0,
+        "progress_ratio": 0.0,
         "paid_by_id": "vil_12",
         "paid_by_family_id": "fam_3",
-        "paid_amount_copper": 3,
-        "materials_committed": true
+        "paid_amount_copper": 5
       },
-      "construction_progress": 25.00000000000022,
+      "construction_progress": 0.0,
       "designated_target": null,
       "carrier_id": null,
-      "condition": 1.0,
+      "condition": 0.0,
       "inventory": {},
       "currency": {}
     },
@@ -5613,17 +4929,24 @@
         "order_type": "REPAIR",
         "status": "COMPLETE",
         "payer_family_id": "fam_4",
-        "payer_id": "vil_16",
-        "carpenter_id": "vil_17",
+        "payer_type": "household",
+        "payer_id": "vil_17",
+        "carpenter_id": "vil_16",
         "commission_paid": true,
-        "material_cost_copper": 0,
+        "materials": {
+          "Wood": 2
+        },
+        "material_cost_copper": 2,
         "living_wage_copper": 3,
-        "price_copper": 3,
+        "price_copper": 5,
         "food_unit_price_at_order": 1,
         "progress_ratio": 1.0,
-        "paid_by_id": "vil_16",
+        "paid_by_id": "vil_17",
         "paid_by_family_id": "fam_4",
-        "paid_amount_copper": 3,
+        "paid_amount_copper": 5,
+        "materials_delivered": {
+          "Wood": 2
+        },
         "materials_committed": true
       },
       "construction_progress": 25.00000000000022,
@@ -5668,11 +4991,10 @@
       "carrier_id": null,
       "condition": 1.0,
       "inventory": {
+        "Wood": 10,
         "Stone": 10,
-        "Wood": 15,
-        "Water": 2,
-        "Copper": 12,
-        "Silver": 1,
+        "Water": 4,
+        "Silver": 4,
         "Gold": 1
       },
       "currency": {}
@@ -5696,16 +5018,22 @@
         "payer_family_id": null,
         "payer_type": "landlord",
         "payer_id": "landlord",
-        "carpenter_id": "vil_16",
+        "carpenter_id": "vil_17",
         "commission_paid": true,
-        "material_cost_copper": 0,
+        "materials": {
+          "Wood": 2
+        },
+        "material_cost_copper": 2,
         "living_wage_copper": 3,
-        "price_copper": 3,
+        "price_copper": 5,
         "food_unit_price_at_order": 1,
         "progress_ratio": 1.0,
         "build_duration_seconds": 25.0,
         "paid_by_id": "landlord",
-        "paid_amount_copper": 3,
+        "paid_amount_copper": 5,
+        "materials_delivered": {
+          "Wood": 2
+        },
         "materials_committed": true
       },
       "construction_progress": 25.00000000000022,
@@ -5733,8 +5061,8 @@
       "carrier_id": null,
       "condition": 1.0,
       "inventory": {
-        "Copper": 4,
-        "Silver": 2,
+        "Copper": 9,
+        "Silver": 8,
         "Gold": 5
       },
       "currency": {}
@@ -5750,11 +5078,12 @@
         3
       ],
       "pending_death_recovery": [],
-      "income_report_period": 6,
+      "income_report_period": 7,
       "income_report_by_source": {
-        "Confession Offerings": 12
+        "Church Tax": 26,
+        "Confession Offerings": 15
       },
-      "income_report_last_day": 68,
+      "income_report_last_day": 79,
       "members": [
         {
           "id": "vil_1",
@@ -5766,13 +5095,11 @@
           "role": "Father",
           "family_id": "fam_1",
           "job": "Priest",
-          "x": 927.3932950903213,
-          "y": -38.543427596087156,
-          "task": "PREACHING",
+          "x": 1184.0,
+          "y": -160.0,
+          "task": "SLEEPING",
           "carrying_crop": 0,
-          "inventory": {
-            "Copper": 1
-          },
+          "inventory": {},
           "currency": {},
           "active_tool": null,
           "has_water": true,
@@ -5782,49 +5109,69 @@
           "carrying_furniture_id": null,
           "watering_timer": 0.0,
           "tilling_timer": 0.0,
-          "hunger": 24.5499999999736,
-          "thirst": 48.91666666663888,
-          "need_toilet": 57.63749999999037,
-          "faith": 33.457389587157394,
-          "sleep_need": 9.52499999998582,
+          "hunger": 6.899999999974486,
+          "thirst": 5.77499999997443,
+          "need_toilet": 41.749999999986755,
+          "faith": 54.410059555020375,
+          "sleep_need": 99.37250000000104,
           "sleep_forced": false,
-          "sleeping_recharge_active": false,
-          "happiness": 78.486,
+          "sleeping_recharge_active": true,
+          "sleep_any_rest_active": false,
+          "sleep_schedule_task_state": null,
+          "pending_schedule_tasks": [
+            {
+              "task": "PREACHING",
+              "schedule": "WORK",
+              "state": {
+                "current_work_tile": null,
+                "tilling_timer": 0.0,
+                "watering_timer": 0.0,
+                "well_draw_timer": 0.0,
+                "has_water": true,
+                "water_day": 16,
+                "water_charges": 9999,
+                "carrying_crop": 0,
+                "carrying_res": null,
+                "carrying_amount": 0,
+                "water_collect_amount": 0
+              }
+            }
+          ],
+          "socage_tax_round": null,
+          "socage_tax_last_cycle": null,
+          "socage_tax_prepared_cycle": null,
+          "socage_tax_prepared_amount": 0,
+          "happiness": 30.0,
           "happiness_effects": {
-            "needs_comfortable": {
-              "amount": 5.0,
-              "expires_day": 68
+            "need_low:thirst": {
+              "amount": -10.0,
+              "expires_day": 80
             },
-            "prayer_completed": {
-              "amount": 5.0,
-              "expires_day": 68
-            },
-            "leisure_per_hour": {
-              "amount": 0.4860000000000004,
-              "expires_day": 68
-            },
-            "sleep_fatigue": {
-              "amount": -7.0,
-              "expires_day": 68
+            "need_low:hunger": {
+              "amount": -10.0,
+              "expires_day": 80
             }
           },
           "happiness_trigger_days": {
-            "need_low:thirst": 67,
-            "need_low:toilet": 68,
-            "need_low:hunger": 68,
-            "need_empty:hunger": 67,
-            "needs_comfortable": 68,
-            "prayer_completed": 68,
-            "need_empty:toilet": 66
+            "need_low:thirst": 80,
+            "need_low:toilet": 79,
+            "need_low:hunger": 80,
+            "need_empty:hunger": 78,
+            "needs_comfortable": 77,
+            "prayer_completed": 79,
+            "need_empty:toilet": 79,
+            "need_empty:thirst": 78
           },
-          "happiness_food_day": 68,
+          "happiness_food_day": 79,
           "happiness_food_types": [
             "Potato"
           ],
-          "last_faith_decay_day": 68,
+          "last_faith_decay_day": 80,
           "prayer_attendance_day": null,
-          "last_faith_prayer_day": 68,
-          "last_confession_day": 59,
+          "church_tax_prepared_day": null,
+          "church_tax_prepared_amount": 0,
+          "last_faith_prayer_day": 79,
+          "last_confession_day": 74,
           "pending_commission_task": null,
           "pending_commission_data": {},
           "pending_commission_tasks": [],
@@ -5832,8 +5179,8 @@
           "activity_description": null,
           "hunger_death_timer": null,
           "thirst_death_timer": null,
-          "daily_food_consumed": 1,
-          "daily_water_consumed": 1,
+          "daily_food_consumed": 0,
+          "daily_water_consumed": 0,
           "is_alive": true,
           "status": "ALIVE",
           "death_reason": null,
@@ -5856,65 +5203,65 @@
           "role": "Mother",
           "family_id": "fam_1",
           "job": "Gravedigger",
-          "x": 926.7968152636763,
-          "y": -290,
-          "task": "IDLE",
+          "x": 1184.0,
+          "y": -288.0,
+          "task": "SLEEPING",
           "carrying_crop": 0,
-          "inventory": {
-            "Hoe": 1
-          },
+          "inventory": {},
           "currency": {},
           "active_tool": null,
           "has_water": true,
           "water_day": 16,
           "water_charges": 9999,
-          "assigned_bed_id": null,
+          "assigned_bed_id": "furn_9",
           "carrying_furniture_id": null,
           "watering_timer": 0.0,
           "tilling_timer": 0.0,
-          "hunger": 24.774999999973588,
-          "thirst": 30.366666666639937,
-          "need_toilet": 63.52499999999171,
-          "faith": 26.388465963675692,
-          "sleep_need": 9.52499999998582,
+          "hunger": 7.624999999974522,
+          "thirst": 5.77499999997443,
+          "need_toilet": 43.637499999987185,
+          "faith": 67.63474663650362,
+          "sleep_need": 99.37250000000104,
           "sleep_forced": false,
-          "sleeping_recharge_active": false,
-          "happiness": 81.44999999999995,
+          "sleeping_recharge_active": true,
+          "sleep_any_rest_active": false,
+          "sleep_schedule_task_state": null,
+          "pending_schedule_tasks": [],
+          "socage_tax_round": null,
+          "socage_tax_last_cycle": null,
+          "socage_tax_prepared_cycle": null,
+          "socage_tax_prepared_amount": 0,
+          "happiness": 30.0,
           "happiness_effects": {
-            "needs_comfortable": {
-              "amount": 5.0,
-              "expires_day": 68
+            "need_low:thirst": {
+              "amount": -10.0,
+              "expires_day": 80
             },
-            "prayer_completed": {
-              "amount": 5.0,
-              "expires_day": 68
-            },
-            "leisure_per_hour": {
-              "amount": 3.449999999999949,
-              "expires_day": 68
-            },
-            "sleep_fatigue": {
-              "amount": -7.0,
-              "expires_day": 68
+            "need_low:hunger": {
+              "amount": -10.0,
+              "expires_day": 80
             }
           },
           "happiness_trigger_days": {
-            "need_low:toilet": 68,
-            "need_low:hunger": 68,
-            "need_low:thirst": 68,
-            "need_empty:hunger": 68,
-            "needs_comfortable": 68,
-            "prayer_completed": 68,
-            "need_empty:toilet": 57
+            "need_low:toilet": 79,
+            "need_low:hunger": 80,
+            "need_low:thirst": 80,
+            "need_empty:hunger": 79,
+            "needs_comfortable": 77,
+            "prayer_completed": 79,
+            "need_empty:toilet": 79,
+            "need_empty:thirst": 78
           },
-          "happiness_food_day": 68,
+          "happiness_food_day": 79,
           "happiness_food_types": [
             "Potato"
           ],
-          "last_faith_decay_day": 68,
+          "last_faith_decay_day": 80,
           "prayer_attendance_day": null,
-          "last_faith_prayer_day": 68,
-          "last_confession_day": 57,
+          "church_tax_prepared_day": null,
+          "church_tax_prepared_amount": 0,
+          "last_faith_prayer_day": 79,
+          "last_confession_day": 79,
           "pending_commission_task": null,
           "pending_commission_data": {},
           "pending_commission_tasks": [],
@@ -5922,8 +5269,8 @@
           "activity_description": null,
           "hunger_death_timer": null,
           "thirst_death_timer": null,
-          "daily_food_consumed": 1,
-          "daily_water_consumed": 1,
+          "daily_food_consumed": 0,
+          "daily_water_consumed": 0,
           "is_alive": true,
           "status": "ALIVE",
           "death_reason": null,
@@ -5946,13 +5293,11 @@
           "role": "Adult Son",
           "family_id": "fam_1",
           "job": "Gravedigger",
-          "x": 864.1931237273759,
-          "y": -40.807554836198904,
-          "task": "SEEKING_TOILET",
+          "x": 1056.0,
+          "y": -288.0,
+          "task": "SLEEPING",
           "carrying_crop": 0,
-          "inventory": {
-            "Hoe": 1
-          },
+          "inventory": {},
           "currency": {},
           "active_tool": null,
           "has_water": true,
@@ -5962,48 +5307,51 @@
           "carrying_furniture_id": null,
           "watering_timer": 0.0,
           "tilling_timer": 0.0,
-          "hunger": 24.683333333306926,
-          "thirst": 48.88333333330555,
-          "need_toilet": 18.6749999999853,
-          "faith": 64.16137194253918,
-          "sleep_need": 9.51249999998582,
+          "hunger": 7.149999999974498,
+          "thirst": 6.033333333307776,
+          "need_toilet": 45.574999999987625,
+          "faith": 35.80863466411405,
+          "sleep_need": 99.37250000000104,
           "sleep_forced": false,
-          "sleeping_recharge_active": false,
-          "happiness": 81.41399999999996,
+          "sleeping_recharge_active": true,
+          "sleep_any_rest_active": false,
+          "sleep_schedule_task_state": null,
+          "pending_schedule_tasks": [],
+          "socage_tax_round": null,
+          "socage_tax_last_cycle": null,
+          "socage_tax_prepared_cycle": null,
+          "socage_tax_prepared_amount": 0,
+          "happiness": 30.0,
           "happiness_effects": {
-            "needs_comfortable": {
-              "amount": 5.0,
-              "expires_day": 68
+            "need_low:thirst": {
+              "amount": -10.0,
+              "expires_day": 80
             },
-            "prayer_completed": {
-              "amount": 5.0,
-              "expires_day": 68
-            },
-            "leisure_per_hour": {
-              "amount": 3.4139999999999504,
-              "expires_day": 68
-            },
-            "sleep_fatigue": {
-              "amount": -7.0,
-              "expires_day": 68
+            "need_low:hunger": {
+              "amount": -10.0,
+              "expires_day": 80
             }
           },
           "happiness_trigger_days": {
-            "need_low:toilet": 68,
-            "need_low:hunger": 68,
-            "need_empty:hunger": 67,
-            "need_low:thirst": 67,
-            "needs_comfortable": 68,
-            "prayer_completed": 68
+            "need_low:toilet": 79,
+            "need_low:hunger": 80,
+            "need_empty:hunger": 78,
+            "need_low:thirst": 80,
+            "needs_comfortable": 77,
+            "prayer_completed": 79,
+            "need_empty:toilet": 79,
+            "need_empty:thirst": 78
           },
-          "happiness_food_day": 68,
+          "happiness_food_day": 79,
           "happiness_food_types": [
             "Potato"
           ],
-          "last_faith_decay_day": 68,
+          "last_faith_decay_day": 80,
           "prayer_attendance_day": null,
-          "last_faith_prayer_day": 68,
-          "last_confession_day": 63,
+          "church_tax_prepared_day": null,
+          "church_tax_prepared_amount": 0,
+          "last_faith_prayer_day": 79,
+          "last_confession_day": 73,
           "pending_commission_task": null,
           "pending_commission_data": {},
           "pending_commission_tasks": [],
@@ -6011,8 +5359,8 @@
           "activity_description": null,
           "hunger_death_timer": null,
           "thirst_death_timer": null,
-          "daily_food_consumed": 1,
-          "daily_water_consumed": 1,
+          "daily_food_consumed": 0,
+          "daily_water_consumed": 0,
           "is_alive": true,
           "status": "ALIVE",
           "death_reason": null,
@@ -6051,65 +5399,69 @@
           "role": "Grandfather",
           "family_id": "fam_2",
           "job": "Farmer",
-          "x": -98.06253888999457,
-          "y": -289.8203514531635,
-          "task": "IDLE",
+          "x": -226,
+          "y": -354,
+          "task": "SLEEPING",
           "carrying_crop": 0,
-          "inventory": {
-            "Hoe": 1,
-            "Watering_Can": 1,
-            "Sickle": 1
-          },
+          "inventory": {},
           "currency": {},
           "active_tool": null,
           "has_water": true,
-          "water_day": 68,
+          "water_day": 79,
           "water_charges": 9999,
-          "assigned_bed_id": "furn_3",
+          "assigned_bed_id": null,
           "carrying_furniture_id": null,
           "watering_timer": 0.0,
           "tilling_timer": 0.0,
-          "hunger": 29.949999999973294,
-          "thirst": 29.958333333306626,
-          "need_toilet": 87.09999999999707,
-          "faith": 44.366816253001716,
-          "sleep_need": 9.51249999998582,
+          "hunger": 6.199999999974451,
+          "thirst": 6.191666666641117,
+          "need_toilet": 49.47499999998851,
+          "faith": 8.790228080267461,
+          "sleep_need": 61.983333333331096,
           "sleep_forced": false,
-          "sleeping_recharge_active": false,
-          "happiness": 82.52999999999994,
+          "sleeping_recharge_active": true,
+          "sleep_any_rest_active": false,
+          "sleep_schedule_task_state": null,
+          "pending_schedule_tasks": [],
+          "socage_tax_round": null,
+          "socage_tax_last_cycle": null,
+          "socage_tax_prepared_cycle": null,
+          "socage_tax_prepared_amount": 0,
+          "happiness": 18.0,
           "happiness_effects": {
-            "needs_comfortable": {
-              "amount": 5.0,
-              "expires_day": 68
-            },
-            "prayer_completed": {
-              "amount": 5.0,
-              "expires_day": 68
-            },
-            "leisure_per_hour": {
-              "amount": 4.52999999999995,
-              "expires_day": 68
-            },
             "sleep_fatigue": {
-              "amount": -7.0,
-              "expires_day": 68
+              "amount": -2.0,
+              "expires_day": 80
+            },
+            "need_low:thirst": {
+              "amount": -10.0,
+              "expires_day": 80
+            },
+            "need_low:hunger": {
+              "amount": -10.0,
+              "expires_day": 80
             }
           },
           "happiness_trigger_days": {
-            "need_low:hunger": 68,
-            "need_low:thirst": 68,
-            "needs_comfortable": 68,
-            "need_low:toilet": 68,
-            "prayer_completed": 68
+            "need_low:hunger": 80,
+            "need_low:thirst": 80,
+            "needs_comfortable": 76,
+            "need_low:toilet": 79,
+            "prayer_completed": 79,
+            "need_empty:toilet": 79,
+            "need_empty:thirst": 79,
+            "need_empty:hunger": 79
           },
-          "happiness_food_day": 68,
+          "happiness_food_day": 79,
           "happiness_food_types": [
             "Potato"
           ],
-          "last_faith_decay_day": 68,
+          "last_faith_decay_day": 80,
           "prayer_attendance_day": null,
-          "last_faith_prayer_day": 68,
-          "last_confession_day": 63,
+          "church_tax_prepared_day": 79,
+          "church_tax_prepared_amount": 0,
+          "last_faith_prayer_day": 79,
+          "last_confession_day": 71,
           "pending_commission_task": null,
           "pending_commission_data": {},
           "pending_commission_tasks": [],
@@ -6117,8 +5469,8 @@
           "activity_description": null,
           "hunger_death_timer": null,
           "thirst_death_timer": null,
-          "daily_food_consumed": 1,
-          "daily_water_consumed": 1,
+          "daily_food_consumed": 0,
+          "daily_water_consumed": 0,
           "is_alive": true,
           "status": "ALIVE",
           "death_reason": null,
@@ -6141,66 +5493,71 @@
           "role": "Grandmother",
           "family_id": "fam_2",
           "job": "Farmer",
-          "x": -116.1555251197495,
-          "y": -225.02102030595955,
-          "task": "IDLE",
+          "x": 96.0,
+          "y": -224.0,
+          "task": "SLEEPING",
           "carrying_crop": 0,
           "inventory": {
-            "Potato": 0,
-            "Hoe": 1,
-            "Watering_Can": 1,
-            "Sickle": 1
+            "Potato": 0
           },
           "currency": {},
           "active_tool": null,
           "has_water": true,
-          "water_day": 68,
+          "water_day": 79,
           "water_charges": 9999,
           "assigned_bed_id": "furn_4",
           "carrying_furniture_id": null,
           "watering_timer": 0.0,
           "tilling_timer": 0.0,
-          "hunger": 29.174999999973338,
-          "thirst": 29.191666666640003,
-          "need_toilet": 88.81249999999746,
-          "faith": 73.16967272543604,
-          "sleep_need": 9.51249999998582,
+          "hunger": 5.983333333307773,
+          "thirst": 5.97499999997444,
+          "need_toilet": 41.89999999998679,
+          "faith": 67.63298022291036,
+          "sleep_need": 84.46000000000234,
           "sleep_forced": false,
-          "sleeping_recharge_active": false,
-          "happiness": 81.49199999999995,
+          "sleeping_recharge_active": true,
+          "sleep_any_rest_active": false,
+          "sleep_schedule_task_state": null,
+          "pending_schedule_tasks": [],
+          "socage_tax_round": null,
+          "socage_tax_last_cycle": null,
+          "socage_tax_prepared_cycle": null,
+          "socage_tax_prepared_amount": 0,
+          "happiness": 28.0,
           "happiness_effects": {
-            "needs_comfortable": {
-              "amount": 5.0,
-              "expires_day": 68
-            },
-            "prayer_completed": {
-              "amount": 5.0,
-              "expires_day": 68
-            },
-            "leisure_per_hour": {
-              "amount": 3.4919999999999476,
-              "expires_day": 68
-            },
             "sleep_fatigue": {
-              "amount": -7.0,
-              "expires_day": 68
+              "amount": -2.0,
+              "expires_day": 80
+            },
+            "need_low:thirst": {
+              "amount": -10.0,
+              "expires_day": 80
+            },
+            "need_low:hunger": {
+              "amount": -10.0,
+              "expires_day": 80
             }
           },
           "happiness_trigger_days": {
-            "need_low:toilet": 68,
-            "needs_comfortable": 68,
-            "need_low:hunger": 68,
-            "need_low:thirst": 68,
-            "prayer_completed": 68
+            "need_low:toilet": 79,
+            "needs_comfortable": 77,
+            "need_low:hunger": 80,
+            "need_low:thirst": 80,
+            "prayer_completed": 79,
+            "need_empty:toilet": 79,
+            "need_empty:hunger": 78,
+            "need_empty:thirst": 78
           },
-          "happiness_food_day": 68,
+          "happiness_food_day": 79,
           "happiness_food_types": [
             "Potato"
           ],
-          "last_faith_decay_day": 68,
+          "last_faith_decay_day": 80,
           "prayer_attendance_day": null,
-          "last_faith_prayer_day": 68,
-          "last_confession_day": 65,
+          "church_tax_prepared_day": null,
+          "church_tax_prepared_amount": 0,
+          "last_faith_prayer_day": 79,
+          "last_confession_day": 79,
           "pending_commission_task": null,
           "pending_commission_data": {},
           "pending_commission_tasks": [],
@@ -6208,8 +5565,8 @@
           "activity_description": null,
           "hunger_death_timer": null,
           "thirst_death_timer": null,
-          "daily_food_consumed": 1,
-          "daily_water_consumed": 1,
+          "daily_food_consumed": 0,
+          "daily_water_consumed": 0,
           "is_alive": true,
           "status": "ALIVE",
           "death_reason": null,
@@ -6232,66 +5589,65 @@
           "role": "Father",
           "family_id": "fam_2",
           "job": "Farmer",
-          "x": 47.46788611773005,
-          "y": -224.71722906789495,
-          "task": "IDLE",
+          "x": -32.0,
+          "y": -352.0,
+          "task": "SLEEPING",
           "carrying_crop": 0,
           "inventory": {
-            "Potato": 0,
-            "Hoe": 1,
-            "Watering_Can": 1,
-            "Sickle": 1
+            "Potato": 0
           },
           "currency": {},
           "active_tool": null,
           "has_water": true,
-          "water_day": 68,
+          "water_day": 79,
           "water_charges": 9999,
           "assigned_bed_id": "furn_5",
           "carrying_furniture_id": null,
           "watering_timer": 0.0,
-          "tilling_timer": 0.0,
-          "hunger": 29.199999999973336,
-          "thirst": 29.20833333330667,
-          "need_toilet": 90.3374999999978,
-          "faith": 23.11633054209078,
-          "sleep_need": 9.51249999998582,
+          "tilling_timer": 0.2,
+          "hunger": 5.858333333307767,
+          "thirst": 5.849999999974433,
+          "need_toilet": 41.962499999986804,
+          "faith": 65.48244184223098,
+          "sleep_need": 99.52249999999545,
           "sleep_forced": false,
-          "sleeping_recharge_active": false,
-          "happiness": 82.52999999999994,
+          "sleeping_recharge_active": true,
+          "sleep_any_rest_active": false,
+          "sleep_schedule_task_state": null,
+          "pending_schedule_tasks": [],
+          "socage_tax_round": null,
+          "socage_tax_last_cycle": null,
+          "socage_tax_prepared_cycle": null,
+          "socage_tax_prepared_amount": 0,
+          "happiness": 30.0,
           "happiness_effects": {
-            "needs_comfortable": {
-              "amount": 5.0,
-              "expires_day": 68
+            "need_low:thirst": {
+              "amount": -10.0,
+              "expires_day": 80
             },
-            "prayer_completed": {
-              "amount": 5.0,
-              "expires_day": 68
-            },
-            "leisure_per_hour": {
-              "amount": 4.52999999999995,
-              "expires_day": 68
-            },
-            "sleep_fatigue": {
-              "amount": -7.0,
-              "expires_day": 68
+            "need_low:hunger": {
+              "amount": -10.0,
+              "expires_day": 80
             }
           },
           "happiness_trigger_days": {
-            "need_low:toilet": 68,
-            "needs_comfortable": 68,
-            "need_low:hunger": 68,
-            "need_low:thirst": 68,
-            "prayer_completed": 68
+            "need_low:toilet": 79,
+            "needs_comfortable": 77,
+            "need_low:hunger": 80,
+            "need_low:thirst": 80,
+            "prayer_completed": 79,
+            "need_empty:toilet": 79
           },
-          "happiness_food_day": 68,
+          "happiness_food_day": 79,
           "happiness_food_types": [
             "Potato"
           ],
-          "last_faith_decay_day": 68,
+          "last_faith_decay_day": 80,
           "prayer_attendance_day": null,
-          "last_faith_prayer_day": 68,
-          "last_confession_day": 60,
+          "church_tax_prepared_day": null,
+          "church_tax_prepared_amount": 0,
+          "last_faith_prayer_day": 79,
+          "last_confession_day": 75,
           "pending_commission_task": null,
           "pending_commission_data": {},
           "pending_commission_tasks": [],
@@ -6299,8 +5655,8 @@
           "activity_description": null,
           "hunger_death_timer": null,
           "thirst_death_timer": null,
-          "daily_food_consumed": 1,
-          "daily_water_consumed": 1,
+          "daily_food_consumed": 0,
+          "daily_water_consumed": 0,
           "is_alive": true,
           "status": "ALIVE",
           "death_reason": null,
@@ -6323,65 +5679,65 @@
           "role": "Mother",
           "family_id": "fam_2",
           "job": "Farmer",
-          "x": -157.78675699329736,
-          "y": -228.80906094345573,
-          "task": "IDLE",
+          "x": 96.0,
+          "y": -352.0,
+          "task": "SLEEPING",
           "carrying_crop": 0,
           "inventory": {
-            "Hoe": 1,
-            "Watering_Can": 1,
-            "Sickle": 1
+            "Potato": 0
           },
           "currency": {},
           "active_tool": null,
           "has_water": true,
-          "water_day": 68,
+          "water_day": 79,
           "water_charges": 9999,
           "assigned_bed_id": "furn_6",
           "carrying_furniture_id": null,
           "watering_timer": 0.0,
-          "tilling_timer": 0.0,
-          "hunger": 33.34166666663977,
-          "thirst": 33.333333333306435,
-          "need_toilet": 81.33749999999576,
-          "faith": 68.19719982281693,
-          "sleep_need": 9.51249999998582,
+          "tilling_timer": 24.500000000000213,
+          "hunger": 5.758333333307762,
+          "thirst": 5.7499999999744285,
+          "need_toilet": 43.67499999998719,
+          "faith": 37.254750351087424,
+          "sleep_need": 99.37250000000104,
           "sleep_forced": false,
-          "sleeping_recharge_active": false,
-          "happiness": 83.21399999999997,
+          "sleeping_recharge_active": true,
+          "sleep_any_rest_active": false,
+          "sleep_schedule_task_state": null,
+          "pending_schedule_tasks": [],
+          "socage_tax_round": null,
+          "socage_tax_last_cycle": null,
+          "socage_tax_prepared_cycle": null,
+          "socage_tax_prepared_amount": 0,
+          "happiness": 30.0,
           "happiness_effects": {
-            "needs_comfortable": {
-              "amount": 5.0,
-              "expires_day": 68
+            "need_low:thirst": {
+              "amount": -10.0,
+              "expires_day": 80
             },
-            "prayer_completed": {
-              "amount": 5.0,
-              "expires_day": 68
-            },
-            "leisure_per_hour": {
-              "amount": 5.2139999999999755,
-              "expires_day": 68
-            },
-            "sleep_fatigue": {
-              "amount": -7.0,
-              "expires_day": 68
+            "need_low:hunger": {
+              "amount": -10.0,
+              "expires_day": 80
             }
           },
           "happiness_trigger_days": {
-            "need_low:toilet": 68,
-            "needs_comfortable": 68,
-            "need_low:hunger": 68,
-            "need_low:thirst": 68,
-            "prayer_completed": 68
+            "need_low:toilet": 79,
+            "needs_comfortable": 77,
+            "need_low:hunger": 80,
+            "need_low:thirst": 80,
+            "prayer_completed": 79,
+            "need_empty:toilet": 79
           },
-          "happiness_food_day": 68,
+          "happiness_food_day": 79,
           "happiness_food_types": [
             "Potato"
           ],
-          "last_faith_decay_day": 68,
+          "last_faith_decay_day": 80,
           "prayer_attendance_day": null,
-          "last_faith_prayer_day": 68,
-          "last_confession_day": 65,
+          "church_tax_prepared_day": null,
+          "church_tax_prepared_amount": 0,
+          "last_faith_prayer_day": 79,
+          "last_confession_day": 76,
           "pending_commission_task": null,
           "pending_commission_data": {},
           "pending_commission_tasks": [],
@@ -6389,8 +5745,8 @@
           "activity_description": null,
           "hunger_death_timer": null,
           "thirst_death_timer": null,
-          "daily_food_consumed": 1,
-          "daily_water_consumed": 1,
+          "daily_food_consumed": 0,
+          "daily_water_consumed": 0,
           "is_alive": true,
           "status": "ALIVE",
           "death_reason": null,
@@ -6413,65 +5769,65 @@
           "role": "Adult Son",
           "family_id": "fam_2",
           "job": "Farmer",
-          "x": 11.67977059894893,
-          "y": -350.9349592674925,
-          "task": "IDLE",
+          "x": -160.0,
+          "y": -352.0,
+          "task": "SLEEPING",
           "carrying_crop": 0,
-          "inventory": {
-            "Hoe": 1,
-            "Watering_Can": 1,
-            "Sickle": 1
-          },
+          "inventory": {},
           "currency": {},
           "active_tool": null,
           "has_water": true,
-          "water_day": 68,
+          "water_day": 79,
           "water_charges": 9999,
           "assigned_bed_id": "furn_7",
           "carrying_furniture_id": null,
           "watering_timer": 0.0,
-          "tilling_timer": 0.0,
-          "hunger": 30.041666666639955,
-          "thirst": 30.049999999973288,
-          "need_toilet": 82.64999999999606,
-          "faith": 82.93531551639771,
-          "sleep_need": 9.51249999998582,
+          "tilling_timer": 0.49999999999999994,
+          "hunger": 6.199999999974451,
+          "thirst": 6.191666666641117,
+          "need_toilet": 41.82499999998677,
+          "faith": 63.0478235637393,
+          "sleep_need": 99.37250000000104,
           "sleep_forced": false,
-          "sleeping_recharge_active": false,
-          "happiness": 83.05199999999996,
+          "sleeping_recharge_active": true,
+          "sleep_any_rest_active": false,
+          "sleep_schedule_task_state": null,
+          "pending_schedule_tasks": [],
+          "socage_tax_round": null,
+          "socage_tax_last_cycle": null,
+          "socage_tax_prepared_cycle": null,
+          "socage_tax_prepared_amount": 0,
+          "happiness": 30.0,
           "happiness_effects": {
-            "needs_comfortable": {
-              "amount": 5.0,
-              "expires_day": 68
+            "need_low:thirst": {
+              "amount": -10.0,
+              "expires_day": 80
             },
-            "prayer_completed": {
-              "amount": 5.0,
-              "expires_day": 68
-            },
-            "leisure_per_hour": {
-              "amount": 5.051999999999969,
-              "expires_day": 68
-            },
-            "sleep_fatigue": {
-              "amount": -7.0,
-              "expires_day": 68
+            "need_low:hunger": {
+              "amount": -10.0,
+              "expires_day": 80
             }
           },
           "happiness_trigger_days": {
-            "need_low:toilet": 68,
-            "needs_comfortable": 68,
-            "need_low:hunger": 68,
-            "need_low:thirst": 68,
-            "prayer_completed": 68
+            "need_low:toilet": 79,
+            "needs_comfortable": 77,
+            "need_low:hunger": 80,
+            "need_low:thirst": 80,
+            "prayer_completed": 79,
+            "need_empty:toilet": 79,
+            "need_empty:hunger": 79,
+            "need_empty:thirst": 79
           },
-          "happiness_food_day": 68,
+          "happiness_food_day": 79,
           "happiness_food_types": [
             "Potato"
           ],
-          "last_faith_decay_day": 68,
+          "last_faith_decay_day": 80,
           "prayer_attendance_day": null,
-          "last_faith_prayer_day": 68,
-          "last_confession_day": 65,
+          "church_tax_prepared_day": null,
+          "church_tax_prepared_amount": 0,
+          "last_faith_prayer_day": 79,
+          "last_confession_day": 76,
           "pending_commission_task": null,
           "pending_commission_data": {},
           "pending_commission_tasks": [],
@@ -6479,8 +5835,8 @@
           "activity_description": null,
           "hunger_death_timer": null,
           "thirst_death_timer": null,
-          "daily_food_consumed": 1,
-          "daily_water_consumed": 1,
+          "daily_food_consumed": 0,
+          "daily_water_consumed": 0,
           "is_alive": true,
           "status": "ALIVE",
           "death_reason": null,
@@ -6503,66 +5859,65 @@
           "role": "Adult Daughter",
           "family_id": "fam_2",
           "job": "Farmer",
-          "x": -108.90320351501823,
-          "y": -224.07123470348506,
-          "task": "IDLE",
+          "x": -160.0,
+          "y": -224.0,
+          "task": "SLEEPING",
           "carrying_crop": 0,
-          "inventory": {
-            "Potato": 0,
-            "Hoe": 1,
-            "Watering_Can": 1,
-            "Sickle": 1
-          },
+          "inventory": {},
           "currency": {},
           "active_tool": null,
           "has_water": true,
-          "water_day": 68,
+          "water_day": 79,
           "water_charges": 9999,
           "assigned_bed_id": "furn_11",
           "carrying_furniture_id": null,
           "watering_timer": 0.0,
           "tilling_timer": 0.0,
-          "hunger": 29.541666666639983,
-          "thirst": 29.549999999973316,
-          "need_toilet": 85.18749999999663,
-          "faith": 21.7330485531283,
-          "sleep_need": 9.51249999998582,
+          "hunger": 6.116666666641113,
+          "thirst": 6.10833333330778,
+          "need_toilet": 43.31249999998711,
+          "faith": 37.30326027808258,
+          "sleep_need": 99.37250000000104,
           "sleep_forced": false,
-          "sleeping_recharge_active": false,
-          "happiness": 83.09999999999997,
+          "sleeping_recharge_active": true,
+          "sleep_any_rest_active": false,
+          "sleep_schedule_task_state": null,
+          "pending_schedule_tasks": [],
+          "socage_tax_round": null,
+          "socage_tax_last_cycle": null,
+          "socage_tax_prepared_cycle": null,
+          "socage_tax_prepared_amount": 0,
+          "happiness": 30.0,
           "happiness_effects": {
-            "needs_comfortable": {
-              "amount": 5.0,
-              "expires_day": 68
+            "need_low:thirst": {
+              "amount": -10.0,
+              "expires_day": 80
             },
-            "prayer_completed": {
-              "amount": 5.0,
-              "expires_day": 68
-            },
-            "leisure_per_hour": {
-              "amount": 5.099999999999971,
-              "expires_day": 68
-            },
-            "sleep_fatigue": {
-              "amount": -7.0,
-              "expires_day": 68
+            "need_low:hunger": {
+              "amount": -10.0,
+              "expires_day": 80
             }
           },
           "happiness_trigger_days": {
-            "need_low:toilet": 68,
-            "needs_comfortable": 68,
-            "need_low:hunger": 68,
-            "need_low:thirst": 68,
-            "prayer_completed": 68
+            "need_low:toilet": 79,
+            "needs_comfortable": 77,
+            "need_low:hunger": 80,
+            "need_low:thirst": 80,
+            "prayer_completed": 79,
+            "need_empty:toilet": 79,
+            "need_empty:hunger": 78,
+            "need_empty:thirst": 78
           },
-          "happiness_food_day": 68,
+          "happiness_food_day": 79,
           "happiness_food_types": [
             "Potato"
           ],
-          "last_faith_decay_day": 68,
+          "last_faith_decay_day": 80,
           "prayer_attendance_day": null,
-          "last_faith_prayer_day": 68,
-          "last_confession_day": 63,
+          "church_tax_prepared_day": null,
+          "church_tax_prepared_amount": 0,
+          "last_faith_prayer_day": 79,
+          "last_confession_day": 76,
           "pending_commission_task": null,
           "pending_commission_data": {},
           "pending_commission_tasks": [],
@@ -6570,8 +5925,8 @@
           "activity_description": null,
           "hunger_death_timer": null,
           "thirst_death_timer": null,
-          "daily_food_consumed": 1,
-          "daily_water_consumed": 1,
+          "daily_food_consumed": 0,
+          "daily_water_consumed": 0,
           "is_alive": true,
           "status": "ALIVE",
           "death_reason": null,
@@ -6610,66 +5965,65 @@
           "role": "Grandfather",
           "family_id": "fam_3",
           "job": "Farmer",
-          "x": 415.499482995052,
-          "y": -158,
-          "task": "IDLE",
+          "x": 608.0,
+          "y": -352.0,
+          "task": "SLEEPING",
           "carrying_crop": 0,
-          "inventory": {
-            "Potato": 0,
-            "Hoe": 1,
-            "Watering_Can": 1,
-            "Sickle": 1
-          },
+          "inventory": {},
           "currency": {},
           "active_tool": null,
           "has_water": true,
-          "water_day": 68,
+          "water_day": 79,
           "water_charges": 9999,
           "assigned_bed_id": "furn_13",
           "carrying_furniture_id": null,
-          "watering_timer": 6.499999999999985,
-          "tilling_timer": 0.0,
-          "hunger": 29.024999999973346,
-          "thirst": 29.833333333306634,
-          "need_toilet": 65.97499999999226,
-          "faith": 76.37911161070242,
-          "sleep_need": 9.51249999998582,
+          "watering_timer": 0.0,
+          "tilling_timer": 21.850000000000176,
+          "hunger": 5.758333333307762,
+          "thirst": 5.7499999999744285,
+          "need_toilet": 51.1874999999889,
+          "faith": 28.52006844744612,
+          "sleep_need": 99.37250000000104,
           "sleep_forced": false,
-          "sleeping_recharge_active": false,
-          "happiness": 83.48399999999998,
+          "sleeping_recharge_active": true,
+          "sleep_any_rest_active": false,
+          "sleep_schedule_task_state": null,
+          "pending_schedule_tasks": [],
+          "socage_tax_round": null,
+          "socage_tax_last_cycle": null,
+          "socage_tax_prepared_cycle": null,
+          "socage_tax_prepared_amount": 0,
+          "happiness": 30.0,
           "happiness_effects": {
-            "needs_comfortable": {
-              "amount": 5.0,
-              "expires_day": 68
+            "need_low:thirst": {
+              "amount": -10.0,
+              "expires_day": 80
             },
-            "prayer_completed": {
-              "amount": 5.0,
-              "expires_day": 68
-            },
-            "leisure_per_hour": {
-              "amount": 5.483999999999986,
-              "expires_day": 68
-            },
-            "sleep_fatigue": {
-              "amount": -7.0,
-              "expires_day": 68
+            "need_low:hunger": {
+              "amount": -10.0,
+              "expires_day": 80
             }
           },
           "happiness_trigger_days": {
-            "need_low:hunger": 68,
-            "need_low:thirst": 68,
-            "needs_comfortable": 68,
-            "need_low:toilet": 68,
-            "prayer_completed": 68
+            "need_low:hunger": 80,
+            "need_low:thirst": 80,
+            "needs_comfortable": 76,
+            "need_low:toilet": 79,
+            "prayer_completed": 79,
+            "need_empty:toilet": 79,
+            "need_empty:thirst": 78,
+            "need_empty:hunger": 78
           },
-          "happiness_food_day": 68,
+          "happiness_food_day": 79,
           "happiness_food_types": [
             "Potato"
           ],
-          "last_faith_decay_day": 68,
+          "last_faith_decay_day": 80,
           "prayer_attendance_day": null,
-          "last_faith_prayer_day": 68,
-          "last_confession_day": 66,
+          "church_tax_prepared_day": 79,
+          "church_tax_prepared_amount": 0,
+          "last_faith_prayer_day": 79,
+          "last_confession_day": 75,
           "pending_commission_task": null,
           "pending_commission_data": {},
           "pending_commission_tasks": [],
@@ -6677,8 +6031,8 @@
           "activity_description": null,
           "hunger_death_timer": null,
           "thirst_death_timer": null,
-          "daily_food_consumed": 1,
-          "daily_water_consumed": 1,
+          "daily_food_consumed": 0,
+          "daily_water_consumed": 0,
           "is_alive": true,
           "status": "ALIVE",
           "death_reason": null,
@@ -6701,66 +6055,65 @@
           "role": "Grandmother",
           "family_id": "fam_3",
           "job": "Farmer",
-          "x": 538.8855948102835,
-          "y": -224.00966783585497,
-          "task": "IDLE",
+          "x": 608.0,
+          "y": -224.0,
+          "task": "SLEEPING",
           "carrying_crop": 0,
-          "inventory": {
-            "Potato": 0,
-            "Hoe": 1,
-            "Watering_Can": 1,
-            "Sickle": 1
-          },
+          "inventory": {},
           "currency": {},
           "active_tool": null,
           "has_water": true,
-          "water_day": 68,
+          "water_day": 79,
           "water_charges": 9999,
           "assigned_bed_id": "furn_14",
           "carrying_furniture_id": null,
           "watering_timer": 0.0,
-          "tilling_timer": 0.0,
-          "hunger": 30.358333333306604,
-          "thirst": 30.37499999997327,
-          "need_toilet": 67.13749999999253,
-          "faith": 72.6234972760868,
-          "sleep_need": 9.51249999998582,
+          "tilling_timer": 22.600000000000186,
+          "hunger": 5.758333333307762,
+          "thirst": 5.7499999999744285,
+          "need_toilet": 44.699999999987426,
+          "faith": 26.936182502271933,
+          "sleep_need": 99.37250000000104,
           "sleep_forced": false,
-          "sleeping_recharge_active": false,
-          "happiness": 82.87199999999996,
+          "sleeping_recharge_active": true,
+          "sleep_any_rest_active": false,
+          "sleep_schedule_task_state": null,
+          "pending_schedule_tasks": [],
+          "socage_tax_round": null,
+          "socage_tax_last_cycle": null,
+          "socage_tax_prepared_cycle": null,
+          "socage_tax_prepared_amount": 0,
+          "happiness": 30.0,
           "happiness_effects": {
-            "needs_comfortable": {
-              "amount": 5.0,
-              "expires_day": 68
+            "need_low:thirst": {
+              "amount": -10.0,
+              "expires_day": 80
             },
-            "prayer_completed": {
-              "amount": 5.0,
-              "expires_day": 68
-            },
-            "leisure_per_hour": {
-              "amount": 4.871999999999963,
-              "expires_day": 68
-            },
-            "sleep_fatigue": {
-              "amount": -7.0,
-              "expires_day": 68
+            "need_low:hunger": {
+              "amount": -10.0,
+              "expires_day": 80
             }
           },
           "happiness_trigger_days": {
-            "needs_comfortable": 68,
-            "need_low:hunger": 68,
-            "need_low:thirst": 68,
-            "need_low:toilet": 68,
-            "prayer_completed": 68
+            "needs_comfortable": 76,
+            "need_low:hunger": 80,
+            "need_low:thirst": 80,
+            "need_low:toilet": 79,
+            "prayer_completed": 79,
+            "need_empty:toilet": 79,
+            "need_empty:thirst": 78,
+            "need_empty:hunger": 78
           },
-          "happiness_food_day": 68,
+          "happiness_food_day": 79,
           "happiness_food_types": [
             "Potato"
           ],
-          "last_faith_decay_day": 68,
+          "last_faith_decay_day": 80,
           "prayer_attendance_day": null,
-          "last_faith_prayer_day": 68,
-          "last_confession_day": 65,
+          "church_tax_prepared_day": null,
+          "church_tax_prepared_amount": 0,
+          "last_faith_prayer_day": 79,
+          "last_confession_day": 75,
           "pending_commission_task": null,
           "pending_commission_data": {},
           "pending_commission_tasks": [],
@@ -6768,8 +6121,8 @@
           "activity_description": null,
           "hunger_death_timer": null,
           "thirst_death_timer": null,
-          "daily_food_consumed": 1,
-          "daily_water_consumed": 1,
+          "daily_food_consumed": 0,
+          "daily_water_consumed": 0,
           "is_alive": true,
           "status": "ALIVE",
           "death_reason": null,
@@ -6792,64 +6145,72 @@
           "role": "Father",
           "family_id": "fam_3",
           "job": "Farmer",
-          "x": 605.660771407021,
-          "y": -286.69959275207987,
-          "task": "IDLE",
+          "x": 433.9999999999999,
+          "y": -354,
+          "task": "SLEEPING",
           "carrying_crop": 0,
-          "inventory": {
-            "Hoe": 1,
-            "Watering_Can": 1,
-            "Sickle": 1
-          },
+          "inventory": {},
           "currency": {},
           "active_tool": null,
           "has_water": true,
-          "water_day": 68,
+          "water_day": 79,
           "water_charges": 9999,
-          "assigned_bed_id": "furn_15",
+          "assigned_bed_id": null,
           "carrying_furniture_id": null,
           "watering_timer": 0.0,
           "tilling_timer": 0.0,
-          "hunger": 50.291666666638804,
-          "thirst": 50.30833333330547,
-          "need_toilet": 68.59999999999286,
-          "faith": 63.79039870158113,
-          "sleep_need": 9.51249999998582,
+          "hunger": 5.891666666641102,
+          "thirst": 5.883333333307768,
+          "need_toilet": 0.0,
+          "faith": 0.0,
+          "sleep_need": 58.88333333333149,
           "sleep_forced": false,
-          "sleeping_recharge_active": false,
-          "happiness": 81.28799999999995,
+          "sleeping_recharge_active": true,
+          "sleep_any_rest_active": false,
+          "sleep_schedule_task_state": null,
+          "pending_schedule_tasks": [],
+          "socage_tax_round": null,
+          "socage_tax_last_cycle": null,
+          "socage_tax_prepared_cycle": null,
+          "socage_tax_prepared_amount": 0,
+          "happiness": 0.0,
           "happiness_effects": {
-            "needs_comfortable": {
-              "amount": 5.0,
-              "expires_day": 68
-            },
-            "prayer_completed": {
-              "amount": 5.0,
-              "expires_day": 68
-            },
-            "leisure_per_hour": {
-              "amount": 3.287999999999955,
-              "expires_day": 68
+            "need_empty:toilet": {
+              "amount": -20.0,
+              "expires_day": 80
             },
             "sleep_fatigue": {
-              "amount": -7.0,
-              "expires_day": 68
+              "amount": -5.0,
+              "expires_day": 80
+            },
+            "need_low:thirst": {
+              "amount": -10.0,
+              "expires_day": 80
+            },
+            "need_low:hunger": {
+              "amount": -10.0,
+              "expires_day": 80
             }
           },
           "happiness_trigger_days": {
-            "needs_comfortable": 68,
-            "need_low:hunger": 67,
-            "need_low:thirst": 67,
-            "need_low:toilet": 68,
-            "prayer_completed": 68
+            "needs_comfortable": 77,
+            "need_low:hunger": 80,
+            "need_low:thirst": 80,
+            "need_low:toilet": 79,
+            "prayer_completed": 79,
+            "need_empty:toilet": 80,
+            "need_empty:hunger": 78,
+            "need_empty:thirst": 78
           },
-          "happiness_food_day": 68,
+          "happiness_food_day": 79,
           "happiness_food_types": [
             "Potato"
           ],
-          "last_faith_decay_day": 68,
+          "last_faith_decay_day": 80,
           "prayer_attendance_day": null,
-          "last_faith_prayer_day": 68,
+          "church_tax_prepared_day": null,
+          "church_tax_prepared_amount": 0,
+          "last_faith_prayer_day": 79,
           "last_confession_day": 65,
           "pending_commission_task": null,
           "pending_commission_data": {},
@@ -6858,8 +6219,8 @@
           "activity_description": null,
           "hunger_death_timer": null,
           "thirst_death_timer": null,
-          "daily_food_consumed": 1,
-          "daily_water_consumed": 1,
+          "daily_food_consumed": 0,
+          "daily_water_consumed": 0,
           "is_alive": true,
           "status": "ALIVE",
           "death_reason": null,
@@ -6882,65 +6243,69 @@
           "role": "Mother",
           "family_id": "fam_3",
           "job": "Farmer",
-          "x": 288.86915907090514,
-          "y": -235.62729022470776,
-          "task": "IDLE",
+          "x": 480.0,
+          "y": -352.0,
+          "task": "SLEEPING",
           "carrying_crop": 0,
-          "inventory": {
-            "Hoe": 1,
-            "Watering_Can": 1,
-            "Sickle": 1
-          },
+          "inventory": {},
           "currency": {},
           "active_tool": null,
           "has_water": true,
-          "water_day": 68,
+          "water_day": 79,
           "water_charges": 9999,
           "assigned_bed_id": "furn_16",
           "carrying_furniture_id": null,
           "watering_timer": 0.0,
-          "tilling_timer": 0.0,
-          "hunger": 48.808333333305555,
-          "thirst": 48.82499999997222,
-          "need_toilet": 71.13749999999344,
-          "faith": 84.00174083529345,
-          "sleep_need": 9.51249999998582,
+          "tilling_timer": 17.15000000000011,
+          "hunger": 5.958333333307772,
+          "thirst": 5.949999999974438,
+          "need_toilet": 0.0,
+          "faith": 63.13330127202815,
+          "sleep_need": 99.38250000000104,
           "sleep_forced": false,
-          "sleeping_recharge_active": false,
-          "happiness": 82.28399999999993,
+          "sleeping_recharge_active": true,
+          "sleep_any_rest_active": false,
+          "sleep_schedule_task_state": null,
+          "pending_schedule_tasks": [],
+          "socage_tax_round": null,
+          "socage_tax_last_cycle": null,
+          "socage_tax_prepared_cycle": null,
+          "socage_tax_prepared_amount": 0,
+          "happiness": 10.0,
           "happiness_effects": {
-            "needs_comfortable": {
-              "amount": 5.0,
-              "expires_day": 68
+            "need_empty:toilet": {
+              "amount": -20.0,
+              "expires_day": 80
             },
-            "prayer_completed": {
-              "amount": 5.0,
-              "expires_day": 68
+            "need_low:thirst": {
+              "amount": -10.0,
+              "expires_day": 80
             },
-            "leisure_per_hour": {
-              "amount": 4.28399999999994,
-              "expires_day": 68
-            },
-            "sleep_fatigue": {
-              "amount": -7.0,
-              "expires_day": 68
+            "need_low:hunger": {
+              "amount": -10.0,
+              "expires_day": 80
             }
           },
           "happiness_trigger_days": {
-            "need_low:hunger": 67,
-            "need_low:thirst": 67,
-            "needs_comfortable": 68,
-            "need_low:toilet": 68,
-            "prayer_completed": 68
+            "need_low:hunger": 80,
+            "need_low:thirst": 80,
+            "needs_comfortable": 77,
+            "need_low:toilet": 79,
+            "prayer_completed": 79,
+            "need_empty:toilet": 80,
+            "need_empty:thirst": 79,
+            "need_empty:hunger": 79
           },
-          "happiness_food_day": 68,
+          "happiness_food_day": 79,
           "happiness_food_types": [
             "Potato"
           ],
-          "last_faith_decay_day": 68,
+          "last_faith_decay_day": 80,
           "prayer_attendance_day": null,
-          "last_faith_prayer_day": 68,
-          "last_confession_day": 66,
+          "church_tax_prepared_day": null,
+          "church_tax_prepared_amount": 0,
+          "last_faith_prayer_day": 79,
+          "last_confession_day": 78,
           "pending_commission_task": null,
           "pending_commission_data": {},
           "pending_commission_tasks": [],
@@ -6948,8 +6313,8 @@
           "activity_description": null,
           "hunger_death_timer": null,
           "thirst_death_timer": null,
-          "daily_food_consumed": 1,
-          "daily_water_consumed": 1,
+          "daily_food_consumed": 0,
+          "daily_water_consumed": 0,
           "is_alive": true,
           "status": "ALIVE",
           "death_reason": null,
@@ -6972,64 +6337,68 @@
           "role": "Adult Daughter",
           "family_id": "fam_3",
           "job": "Farmer",
-          "x": 348.06930026180396,
-          "y": -284.703462893508,
-          "task": "IDLE",
+          "x": 352.0,
+          "y": -352.0,
+          "task": "SLEEPING",
           "carrying_crop": 0,
-          "inventory": {
-            "Hoe": 1,
-            "Watering_Can": 1,
-            "Sickle": 1
-          },
+          "inventory": {},
           "currency": {},
           "active_tool": null,
           "has_water": true,
-          "water_day": 68,
+          "water_day": 79,
           "water_charges": 9999,
           "assigned_bed_id": "furn_17",
           "carrying_furniture_id": null,
           "watering_timer": 0.0,
           "tilling_timer": 0.0,
-          "hunger": 29.083333333306676,
-          "thirst": 29.949999999973294,
-          "need_toilet": 69.84999999999314,
-          "faith": 35.22787483020554,
-          "sleep_need": 9.51249999998582,
+          "hunger": 6.083333333307778,
+          "thirst": 6.074999999974445,
+          "need_toilet": 0.0,
+          "faith": 0.0,
+          "sleep_need": 99.38250000000104,
           "sleep_forced": false,
-          "sleeping_recharge_active": false,
-          "happiness": 83.48399999999998,
+          "sleeping_recharge_active": true,
+          "sleep_any_rest_active": false,
+          "sleep_schedule_task_state": null,
+          "pending_schedule_tasks": [],
+          "socage_tax_round": null,
+          "socage_tax_last_cycle": null,
+          "socage_tax_prepared_cycle": null,
+          "socage_tax_prepared_amount": 0,
+          "happiness": 10.0,
           "happiness_effects": {
-            "needs_comfortable": {
-              "amount": 5.0,
-              "expires_day": 68
+            "need_empty:toilet": {
+              "amount": -20.0,
+              "expires_day": 80
             },
-            "prayer_completed": {
-              "amount": 5.0,
-              "expires_day": 68
+            "need_low:thirst": {
+              "amount": -10.0,
+              "expires_day": 80
             },
-            "leisure_per_hour": {
-              "amount": 5.483999999999986,
-              "expires_day": 68
-            },
-            "sleep_fatigue": {
-              "amount": -7.0,
-              "expires_day": 68
+            "need_low:hunger": {
+              "amount": -10.0,
+              "expires_day": 80
             }
           },
           "happiness_trigger_days": {
-            "needs_comfortable": 68,
-            "need_low:hunger": 68,
-            "need_low:thirst": 68,
-            "need_low:toilet": 68,
-            "prayer_completed": 68
+            "needs_comfortable": 77,
+            "need_low:hunger": 80,
+            "need_low:thirst": 80,
+            "need_low:toilet": 79,
+            "prayer_completed": 79,
+            "need_empty:toilet": 80,
+            "need_empty:hunger": 78,
+            "need_empty:thirst": 78
           },
-          "happiness_food_day": 68,
+          "happiness_food_day": 79,
           "happiness_food_types": [
             "Potato"
           ],
-          "last_faith_decay_day": 68,
+          "last_faith_decay_day": 80,
           "prayer_attendance_day": null,
-          "last_faith_prayer_day": 68,
+          "church_tax_prepared_day": null,
+          "church_tax_prepared_amount": 0,
+          "last_faith_prayer_day": 79,
           "last_confession_day": 60,
           "pending_commission_task": null,
           "pending_commission_data": {},
@@ -7038,8 +6407,8 @@
           "activity_description": null,
           "hunger_death_timer": null,
           "thirst_death_timer": null,
-          "daily_food_consumed": 1,
-          "daily_water_consumed": 1,
+          "daily_food_consumed": 0,
+          "daily_water_consumed": 0,
           "is_alive": true,
           "status": "ALIVE",
           "death_reason": null,
@@ -7063,12 +6432,12 @@
         3
       ],
       "pending_death_recovery": [],
-      "income_report_period": 6,
+      "income_report_period": 7,
       "income_report_by_source": {
-        "Public Carpenter Commissions": 12,
-        "Carpenter Commissions": 18
+        "Carpenter Commissions": 45,
+        "Public Carpenter Commissions": 29
       },
-      "income_report_last_day": 68,
+      "income_report_last_day": 79,
       "members": [
         {
           "id": "vil_16",
@@ -7080,9 +6449,9 @@
           "role": "Father",
           "family_id": "fam_4",
           "job": "Carpenter",
-          "x": -483.4717385452682,
-          "y": 355.46893578601316,
-          "task": "IDLE",
+          "x": -608.0,
+          "y": 608.0,
+          "task": "SLEEPING",
           "carrying_crop": 0,
           "inventory": {
             "Adze": 1,
@@ -7097,48 +6466,47 @@
           "carrying_furniture_id": null,
           "watering_timer": 0.0,
           "tilling_timer": 0.0,
-          "hunger": 24.641666666640262,
-          "thirst": 65.88333333330618,
-          "need_toilet": 86.72499999999698,
-          "faith": 95.35456427483719,
-          "sleep_need": 7.737500000000611,
+          "hunger": 7.483333333307848,
+          "thirst": 64.02499999997137,
+          "need_toilet": 45.612499999987634,
+          "faith": 73.78933336211796,
+          "sleep_need": 99.38250000000104,
           "sleep_forced": false,
-          "sleeping_recharge_active": false,
-          "happiness": 70.0,
+          "sleeping_recharge_active": true,
+          "sleep_any_rest_active": false,
+          "sleep_schedule_task_state": null,
+          "pending_schedule_tasks": [],
+          "socage_tax_round": null,
+          "socage_tax_last_cycle": null,
+          "socage_tax_prepared_cycle": null,
+          "socage_tax_prepared_amount": 0,
+          "happiness": 40.0,
           "happiness_effects": {
-            "sleep_fatigue": {
-              "amount": -20.0,
-              "expires_day": 68
-            },
-            "prayer_completed": {
-              "amount": 5.0,
-              "expires_day": 68
-            },
-            "confession_completed": {
-              "amount": 5.0,
-              "expires_day": 68
-            },
-            "needs_comfortable": {
-              "amount": 5.0,
-              "expires_day": 68
+            "need_low:hunger": {
+              "amount": -10.0,
+              "expires_day": 80
             }
           },
           "happiness_trigger_days": {
-            "need_low:thirst": 68,
-            "need_low:hunger": 68,
-            "need_empty:hunger": 67,
-            "need_low:toilet": 68,
-            "needs_comfortable": 68,
-            "prayer_completed": 68
+            "need_low:thirst": 79,
+            "need_low:hunger": 80,
+            "need_empty:hunger": 78,
+            "need_low:toilet": 79,
+            "needs_comfortable": 77,
+            "prayer_completed": 79,
+            "need_empty:thirst": 79,
+            "need_empty:toilet": 79
           },
-          "happiness_food_day": 68,
+          "happiness_food_day": 79,
           "happiness_food_types": [
             "Potato"
           ],
-          "last_faith_decay_day": 68,
+          "last_faith_decay_day": 80,
           "prayer_attendance_day": null,
-          "last_faith_prayer_day": 68,
-          "last_confession_day": 68,
+          "church_tax_prepared_day": 79,
+          "church_tax_prepared_amount": 0,
+          "last_faith_prayer_day": 79,
+          "last_confession_day": 78,
           "pending_commission_task": null,
           "pending_commission_data": {},
           "pending_commission_tasks": [],
@@ -7146,8 +6514,8 @@
           "activity_description": null,
           "hunger_death_timer": null,
           "thirst_death_timer": null,
-          "daily_food_consumed": 1,
-          "daily_water_consumed": 1,
+          "daily_food_consumed": 0,
+          "daily_water_consumed": 0,
           "is_alive": true,
           "status": "ALIVE",
           "death_reason": null,
@@ -7170,9 +6538,9 @@
           "role": "Mother",
           "family_id": "fam_4",
           "job": "Carpenter",
-          "x": -589.1539553303289,
-          "y": 480.53378676986796,
-          "task": "IDLE",
+          "x": -544.0,
+          "y": 608.0,
+          "task": "SLEEPING",
           "carrying_crop": 0,
           "inventory": {
             "Adze": 1,
@@ -7187,49 +6555,47 @@
           "carrying_furniture_id": null,
           "watering_timer": 0.0,
           "tilling_timer": 0.0,
-          "hunger": 25.258333333306894,
-          "thirst": 54.01666666663859,
-          "need_toilet": 22.074999999985106,
-          "faith": 69.67382876099873,
-          "sleep_need": 9.51249999998582,
+          "hunger": 9.183333333307807,
+          "thirst": 65.29166666663905,
+          "need_toilet": 47.512499999988066,
+          "faith": 71.89654113446656,
+          "sleep_need": 99.38250000000104,
           "sleep_forced": false,
-          "sleeping_recharge_active": false,
-          "happiness": 79.686,
+          "sleeping_recharge_active": true,
+          "sleep_any_rest_active": false,
+          "sleep_schedule_task_state": null,
+          "pending_schedule_tasks": [],
+          "socage_tax_round": null,
+          "socage_tax_last_cycle": null,
+          "socage_tax_prepared_cycle": null,
+          "socage_tax_prepared_amount": 0,
+          "happiness": 40.0,
           "happiness_effects": {
-            "needs_comfortable": {
-              "amount": 5.0,
-              "expires_day": 68
-            },
-            "prayer_completed": {
-              "amount": 5.0,
-              "expires_day": 68
-            },
-            "leisure_per_hour": {
-              "amount": 1.6860000000000013,
-              "expires_day": 68
-            },
-            "sleep_fatigue": {
-              "amount": -7.0,
-              "expires_day": 68
+            "need_low:hunger": {
+              "amount": -10.0,
+              "expires_day": 80
             }
           },
           "happiness_trigger_days": {
-            "need_low:thirst": 67,
-            "need_low:hunger": 68,
-            "need_empty:hunger": 67,
-            "need_low:toilet": 68,
-            "prayer_completed": 68,
-            "needs_comfortable": 68,
-            "need_empty:toilet": 67
+            "need_low:thirst": 79,
+            "need_low:hunger": 80,
+            "need_empty:hunger": 79,
+            "need_low:toilet": 79,
+            "prayer_completed": 79,
+            "needs_comfortable": 76,
+            "need_empty:toilet": 79,
+            "need_empty:thirst": 79
           },
-          "happiness_food_day": 68,
+          "happiness_food_day": 79,
           "happiness_food_types": [
             "Potato"
           ],
-          "last_faith_decay_day": 68,
+          "last_faith_decay_day": 80,
           "prayer_attendance_day": null,
-          "last_faith_prayer_day": 68,
-          "last_confession_day": 63,
+          "church_tax_prepared_day": null,
+          "church_tax_prepared_amount": 0,
+          "last_faith_prayer_day": 79,
+          "last_confession_day": 79,
           "pending_commission_task": null,
           "pending_commission_data": {},
           "pending_commission_tasks": [],
@@ -7237,8 +6603,8 @@
           "activity_description": null,
           "hunger_death_timer": null,
           "thirst_death_timer": null,
-          "daily_food_consumed": 1,
-          "daily_water_consumed": 1,
+          "daily_food_consumed": 0,
+          "daily_water_consumed": 0,
           "is_alive": true,
           "status": "ALIVE",
           "death_reason": null,
@@ -7260,10 +6626,10 @@
           "generation": 3,
           "role": "Adult Son",
           "family_id": "fam_4",
-          "job": "Unassigned",
-          "x": -545.5072610358036,
-          "y": 538.8451566350103,
-          "task": "IDLE",
+          "job": "Tax Collector",
+          "x": -480.0,
+          "y": 608.0,
+          "task": "SLEEPING",
           "carrying_crop": 0,
           "inventory": {},
           "currency": {},
@@ -7275,49 +6641,72 @@
           "carrying_furniture_id": null,
           "watering_timer": 0.0,
           "tilling_timer": 0.0,
-          "hunger": 25.383333333306886,
-          "thirst": 30.999999999973234,
-          "need_toilet": 20.58749999998519,
-          "faith": 50.21455187520558,
-          "sleep_need": 9.52499999998582,
+          "hunger": 9.258333333307803,
+          "thirst": 5.791666666641097,
+          "need_toilet": 49.91249999998861,
+          "faith": 0.0,
+          "sleep_need": 84.47000000000233,
           "sleep_forced": false,
-          "sleeping_recharge_active": false,
-          "happiness": 60.39999999999999,
+          "sleeping_recharge_active": true,
+          "sleep_any_rest_active": false,
+          "sleep_schedule_task_state": null,
+          "pending_schedule_tasks": [
+            {
+              "task": "STATIONED_AT_TAX_OFFICE",
+              "schedule": "WORK",
+              "state": {
+                "current_work_tile": null,
+                "tilling_timer": 0.0,
+                "watering_timer": 0.0,
+                "well_draw_timer": 0.0,
+                "has_water": false,
+                "water_day": -1,
+                "water_charges": 0,
+                "carrying_crop": 0,
+                "carrying_res": null,
+                "carrying_amount": 0,
+                "water_collect_amount": 0
+              }
+            }
+          ],
+          "socage_tax_round": null,
+          "socage_tax_last_cycle": 7,
+          "socage_tax_prepared_cycle": null,
+          "socage_tax_prepared_amount": 0,
+          "happiness": 28.0,
           "happiness_effects": {
-            "needs_comfortable": {
-              "amount": 5.0,
-              "expires_day": 68
-            },
-            "prayer_completed": {
-              "amount": 5.0,
-              "expires_day": 68
-            },
-            "leisure_per_hour": {
-              "amount": 2.399999999999987,
-              "expires_day": 68
-            },
             "sleep_fatigue": {
-              "amount": -7.0,
-              "expires_day": 68
+              "amount": -2.0,
+              "expires_day": 80
+            },
+            "need_low:thirst": {
+              "amount": -10.0,
+              "expires_day": 80
+            },
+            "need_low:hunger": {
+              "amount": -10.0,
+              "expires_day": 80
             }
           },
           "happiness_trigger_days": {
-            "need_low:thirst": 68,
-            "need_low:hunger": 68,
-            "need_empty:hunger": 68,
-            "need_low:toilet": 68,
-            "needs_comfortable": 68,
-            "prayer_completed": 68,
-            "need_empty:toilet": 67
+            "need_low:thirst": 80,
+            "need_low:hunger": 80,
+            "need_empty:hunger": 79,
+            "need_low:toilet": 79,
+            "needs_comfortable": 77,
+            "prayer_completed": 79,
+            "need_empty:toilet": 79
           },
-          "happiness_food_day": 68,
+          "happiness_food_day": 79,
           "happiness_food_types": [
             "Potato"
           ],
-          "last_faith_decay_day": 68,
+          "last_faith_decay_day": 80,
           "prayer_attendance_day": null,
-          "last_faith_prayer_day": 68,
-          "last_confession_day": 63,
+          "church_tax_prepared_day": null,
+          "church_tax_prepared_amount": 0,
+          "last_faith_prayer_day": 79,
+          "last_confession_day": 72,
           "pending_commission_task": null,
           "pending_commission_data": {},
           "pending_commission_tasks": [],
@@ -7325,8 +6714,8 @@
           "activity_description": null,
           "hunger_death_timer": null,
           "thirst_death_timer": null,
-          "daily_food_consumed": 1,
-          "daily_water_consumed": 1,
+          "daily_food_consumed": 0,
+          "daily_water_consumed": 0,
           "is_alive": true,
           "status": "ALIVE",
           "death_reason": null,
@@ -7346,8 +6735,8 @@
     {
       "id": "servant_1",
       "name": "Servant Alden",
-      "x": 704.0601879251267,
-      "y": 229.34733901908135,
+      "x": -78.82809282269879,
+      "y": 214.99452474220575,
       "work_priorities": {
         "Building": 1,
         "Hauling": 1,
@@ -7368,8 +6757,8 @@
     {
       "id": "servant_2",
       "name": "Servant Barnaby",
-      "x": 636.8412703140496,
-      "y": 283.6776415242732,
+      "x": -84.42538636656761,
+      "y": 156.0289968661508,
       "work_priorities": {
         "Building": 1,
         "Hauling": 1,
@@ -7389,8 +6778,8 @@
     }
   ],
   "schedules": {
-    "prayer_start_hour": 4,
-    "prayer_end_hour": 6,
+    "prayer_start_hour": 20,
+    "prayer_end_hour": 21,
     "universal_schedule": [
       "SLEEP",
       "SLEEP",
@@ -7399,19 +6788,19 @@
       "SLEEP",
       "LEISURE",
       "LEISURE",
+      "WORK",
+      "WORK",
+      "WORK",
+      "WORK",
+      "WORK",
+      "WORK",
+      "WORK",
+      "WORK",
+      "WORK",
+      "WORK",
+      "WORK",
       "LEISURE",
-      "WORK",
-      "WORK",
-      "WORK",
-      "WORK",
-      "WORK",
-      "WORK",
-      "WORK",
-      "WORK",
-      "WORK",
-      "WORK",
-      "WORK",
-      "SLEEP",
+      "LEISURE",
       "SLEEP",
       "SLEEP",
       "SLEEP",
@@ -7427,19 +6816,19 @@
         "SLEEP",
         "LEISURE",
         "LEISURE",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
         "LEISURE",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "SLEEP",
+        "LEISURE",
         "SLEEP",
         "SLEEP",
         "SLEEP",
@@ -7453,19 +6842,19 @@
         "SLEEP",
         "LEISURE",
         "LEISURE",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
         "LEISURE",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "SLEEP",
+        "LEISURE",
         "SLEEP",
         "SLEEP",
         "SLEEP",
@@ -7479,19 +6868,19 @@
         "SLEEP",
         "LEISURE",
         "LEISURE",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
         "LEISURE",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "SLEEP",
+        "LEISURE",
         "SLEEP",
         "SLEEP",
         "SLEEP",
@@ -7505,19 +6894,19 @@
         "SLEEP",
         "LEISURE",
         "LEISURE",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
         "LEISURE",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "SLEEP",
+        "LEISURE",
         "SLEEP",
         "SLEEP",
         "SLEEP",
@@ -7531,6 +6920,31 @@
         "SLEEP",
         "LEISURE",
         "LEISURE",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "LEISURE",
+        "LEISURE",
+        "SLEEP",
+        "SLEEP",
+        "SLEEP",
+        "SLEEP"
+      ],
+      "Tax Collector": [
+        "SLEEP",
+        "SLEEP",
+        "SLEEP",
+        "SLEEP",
+        "SLEEP",
+        "LEISURE",
         "LEISURE",
         "WORK",
         "WORK",
@@ -7543,7 +6957,8 @@
         "WORK",
         "WORK",
         "WORK",
-        "SLEEP",
+        "LEISURE",
+        "LEISURE",
         "SLEEP",
         "SLEEP",
         "SLEEP",
@@ -7557,19 +6972,19 @@
         "SLEEP",
         "LEISURE",
         "LEISURE",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
         "LEISURE",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "SLEEP",
+        "LEISURE",
         "SLEEP",
         "SLEEP",
         "SLEEP",
@@ -7583,19 +6998,19 @@
         "SLEEP",
         "LEISURE",
         "LEISURE",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
         "LEISURE",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "SLEEP",
+        "LEISURE",
         "SLEEP",
         "SLEEP",
         "SLEEP",
@@ -7606,8 +7021,7 @@
         "SLEEP",
         "SLEEP",
         "SLEEP",
-        "PRAYER",
-        "PRAYER",
+        "SLEEP",
         "LEISURE",
         "LEISURE",
         "WORK",
@@ -7621,8 +7035,9 @@
         "WORK",
         "WORK",
         "WORK",
-        "SLEEP",
-        "SLEEP",
+        "LEISURE",
+        "LEISURE",
+        "PRAYER",
         "SLEEP",
         "SLEEP",
         "SLEEP"
@@ -7635,19 +7050,19 @@
         "SLEEP",
         "LEISURE",
         "LEISURE",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
         "LEISURE",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "SLEEP",
+        "LEISURE",
         "SLEEP",
         "SLEEP",
         "SLEEP",
@@ -7968,308 +7383,308 @@
     },
     "fam_2": {
       "total_produced": {
-        "Potato": 1095
+        "Potato": 1325
       },
       "workplaces": [
         "permit_3"
       ],
       "history": [
         {
-          "day": 63,
+          "day": 74,
           "resource": "Potato",
           "amount": 1,
           "workplace": "permit_3"
         },
         {
-          "day": 63,
+          "day": 74,
           "resource": "Potato",
           "amount": 1,
           "workplace": "permit_3"
         },
         {
-          "day": 63,
+          "day": 74,
           "resource": "Potato",
           "amount": 1,
           "workplace": "permit_3"
         },
         {
-          "day": 63,
+          "day": 74,
           "resource": "Potato",
           "amount": 2,
           "workplace": "permit_3"
         },
         {
-          "day": 63,
+          "day": 74,
           "resource": "Potato",
           "amount": 1,
           "workplace": "permit_3"
         },
         {
-          "day": 63,
-          "resource": "Potato",
-          "amount": 2,
-          "workplace": "permit_3"
-        },
-        {
-          "day": 63,
+          "day": 74,
           "resource": "Potato",
           "amount": 1,
           "workplace": "permit_3"
         },
         {
-          "day": 63,
+          "day": 74,
           "resource": "Potato",
           "amount": 2,
           "workplace": "permit_3"
         },
         {
-          "day": 63,
+          "day": 74,
           "resource": "Potato",
           "amount": 1,
           "workplace": "permit_3"
         },
         {
-          "day": 63,
+          "day": 74,
           "resource": "Potato",
           "amount": 2,
           "workplace": "permit_3"
         },
         {
-          "day": 63,
+          "day": 74,
           "resource": "Potato",
           "amount": 2,
           "workplace": "permit_3"
         },
         {
-          "day": 63,
+          "day": 74,
           "resource": "Potato",
           "amount": 3,
           "workplace": "permit_3"
         },
         {
-          "day": 63,
-          "resource": "Potato",
-          "amount": 1,
-          "workplace": "permit_3"
-        },
-        {
-          "day": 63,
-          "resource": "Potato",
-          "amount": 1,
-          "workplace": "permit_3"
-        },
-        {
-          "day": 63,
+          "day": 74,
           "resource": "Potato",
           "amount": 2,
           "workplace": "permit_3"
         },
         {
-          "day": 63,
-          "resource": "Potato",
-          "amount": 2,
-          "workplace": "permit_3"
-        },
-        {
-          "day": 63,
-          "resource": "Potato",
-          "amount": 2,
-          "workplace": "permit_3"
-        },
-        {
-          "day": 63,
-          "resource": "Potato",
-          "amount": 2,
-          "workplace": "permit_3"
-        },
-        {
-          "day": 63,
+          "day": 74,
           "resource": "Potato",
           "amount": 1,
           "workplace": "permit_3"
         },
         {
-          "day": 63,
-          "resource": "Potato",
-          "amount": 2,
-          "workplace": "permit_3"
-        },
-        {
-          "day": 63,
+          "day": 74,
           "resource": "Potato",
           "amount": 1,
           "workplace": "permit_3"
         },
         {
-          "day": 63,
-          "resource": "Potato",
-          "amount": 1,
-          "workplace": "permit_3"
-        },
-        {
-          "day": 63,
-          "resource": "Potato",
-          "amount": 1,
-          "workplace": "permit_3"
-        },
-        {
-          "day": 63,
-          "resource": "Potato",
-          "amount": 1,
-          "workplace": "permit_3"
-        },
-        {
-          "day": 63,
-          "resource": "Potato",
-          "amount": 2,
-          "workplace": "permit_3"
-        },
-        {
-          "day": 63,
-          "resource": "Potato",
-          "amount": 1,
-          "workplace": "permit_3"
-        },
-        {
-          "day": 63,
-          "resource": "Potato",
-          "amount": 2,
-          "workplace": "permit_3"
-        },
-        {
-          "day": 63,
-          "resource": "Potato",
-          "amount": 1,
-          "workplace": "permit_3"
-        },
-        {
-          "day": 63,
-          "resource": "Potato",
-          "amount": 1,
-          "workplace": "permit_3"
-        },
-        {
-          "day": 63,
-          "resource": "Potato",
-          "amount": 1,
-          "workplace": "permit_3"
-        },
-        {
-          "day": 63,
-          "resource": "Potato",
-          "amount": 2,
-          "workplace": "permit_3"
-        },
-        {
-          "day": 63,
-          "resource": "Potato",
-          "amount": 1,
-          "workplace": "permit_3"
-        },
-        {
-          "day": 63,
-          "resource": "Potato",
-          "amount": 1,
-          "workplace": "permit_3"
-        },
-        {
-          "day": 63,
-          "resource": "Potato",
-          "amount": 1,
-          "workplace": "permit_3"
-        },
-        {
-          "day": 63,
-          "resource": "Potato",
-          "amount": 2,
-          "workplace": "permit_3"
-        },
-        {
-          "day": 63,
+          "day": 74,
           "resource": "Potato",
           "amount": 3,
           "workplace": "permit_3"
         },
         {
-          "day": 63,
-          "resource": "Potato",
-          "amount": 1,
-          "workplace": "permit_3"
-        },
-        {
-          "day": 63,
-          "resource": "Potato",
-          "amount": 1,
-          "workplace": "permit_3"
-        },
-        {
-          "day": 63,
-          "resource": "Potato",
-          "amount": 1,
-          "workplace": "permit_3"
-        },
-        {
-          "day": 63,
-          "resource": "Potato",
-          "amount": 1,
-          "workplace": "permit_3"
-        },
-        {
-          "day": 63,
-          "resource": "Potato",
-          "amount": 1,
-          "workplace": "permit_3"
-        },
-        {
-          "day": 63,
-          "resource": "Potato",
-          "amount": 1,
-          "workplace": "permit_3"
-        },
-        {
-          "day": 63,
-          "resource": "Potato",
-          "amount": 1,
-          "workplace": "permit_3"
-        },
-        {
-          "day": 63,
+          "day": 74,
           "resource": "Potato",
           "amount": 2,
           "workplace": "permit_3"
         },
         {
-          "day": 63,
-          "resource": "Potato",
-          "amount": 2,
-          "workplace": "permit_3"
-        },
-        {
-          "day": 63,
-          "resource": "Potato",
-          "amount": 1,
-          "workplace": "permit_3"
-        },
-        {
-          "day": 63,
-          "resource": "Potato",
-          "amount": 1,
-          "workplace": "permit_3"
-        },
-        {
-          "day": 63,
-          "resource": "Potato",
-          "amount": 1,
-          "workplace": "permit_3"
-        },
-        {
-          "day": 63,
+          "day": 74,
           "resource": "Potato",
           "amount": 3,
           "workplace": "permit_3"
         },
         {
-          "day": 63,
+          "day": 74,
+          "resource": "Potato",
+          "amount": 2,
+          "workplace": "permit_3"
+        },
+        {
+          "day": 74,
+          "resource": "Potato",
+          "amount": 1,
+          "workplace": "permit_3"
+        },
+        {
+          "day": 74,
+          "resource": "Potato",
+          "amount": 1,
+          "workplace": "permit_3"
+        },
+        {
+          "day": 74,
+          "resource": "Potato",
+          "amount": 1,
+          "workplace": "permit_3"
+        },
+        {
+          "day": 74,
+          "resource": "Potato",
+          "amount": 1,
+          "workplace": "permit_3"
+        },
+        {
+          "day": 74,
+          "resource": "Potato",
+          "amount": 1,
+          "workplace": "permit_3"
+        },
+        {
+          "day": 74,
+          "resource": "Potato",
+          "amount": 1,
+          "workplace": "permit_3"
+        },
+        {
+          "day": 74,
+          "resource": "Potato",
+          "amount": 2,
+          "workplace": "permit_3"
+        },
+        {
+          "day": 74,
+          "resource": "Potato",
+          "amount": 2,
+          "workplace": "permit_3"
+        },
+        {
+          "day": 74,
+          "resource": "Potato",
+          "amount": 1,
+          "workplace": "permit_3"
+        },
+        {
+          "day": 74,
+          "resource": "Potato",
+          "amount": 1,
+          "workplace": "permit_3"
+        },
+        {
+          "day": 74,
+          "resource": "Potato",
+          "amount": 1,
+          "workplace": "permit_3"
+        },
+        {
+          "day": 74,
+          "resource": "Potato",
+          "amount": 2,
+          "workplace": "permit_3"
+        },
+        {
+          "day": 74,
+          "resource": "Potato",
+          "amount": 1,
+          "workplace": "permit_3"
+        },
+        {
+          "day": 74,
+          "resource": "Potato",
+          "amount": 3,
+          "workplace": "permit_3"
+        },
+        {
+          "day": 74,
+          "resource": "Potato",
+          "amount": 1,
+          "workplace": "permit_3"
+        },
+        {
+          "day": 74,
+          "resource": "Potato",
+          "amount": 3,
+          "workplace": "permit_3"
+        },
+        {
+          "day": 74,
+          "resource": "Potato",
+          "amount": 1,
+          "workplace": "permit_3"
+        },
+        {
+          "day": 74,
+          "resource": "Potato",
+          "amount": 1,
+          "workplace": "permit_3"
+        },
+        {
+          "day": 74,
+          "resource": "Potato",
+          "amount": 1,
+          "workplace": "permit_3"
+        },
+        {
+          "day": 74,
+          "resource": "Potato",
+          "amount": 2,
+          "workplace": "permit_3"
+        },
+        {
+          "day": 74,
+          "resource": "Potato",
+          "amount": 1,
+          "workplace": "permit_3"
+        },
+        {
+          "day": 74,
+          "resource": "Potato",
+          "amount": 2,
+          "workplace": "permit_3"
+        },
+        {
+          "day": 74,
+          "resource": "Potato",
+          "amount": 1,
+          "workplace": "permit_3"
+        },
+        {
+          "day": 74,
+          "resource": "Potato",
+          "amount": 2,
+          "workplace": "permit_3"
+        },
+        {
+          "day": 74,
+          "resource": "Potato",
+          "amount": 2,
+          "workplace": "permit_3"
+        },
+        {
+          "day": 74,
+          "resource": "Potato",
+          "amount": 2,
+          "workplace": "permit_3"
+        },
+        {
+          "day": 74,
+          "resource": "Potato",
+          "amount": 2,
+          "workplace": "permit_3"
+        },
+        {
+          "day": 74,
+          "resource": "Potato",
+          "amount": 1,
+          "workplace": "permit_3"
+        },
+        {
+          "day": 74,
+          "resource": "Potato",
+          "amount": 1,
+          "workplace": "permit_3"
+        },
+        {
+          "day": 74,
+          "resource": "Potato",
+          "amount": 1,
+          "workplace": "permit_3"
+        },
+        {
+          "day": 74,
+          "resource": "Potato",
+          "amount": 2,
+          "workplace": "permit_3"
+        },
+        {
+          "day": 74,
           "resource": "Potato",
           "amount": 2,
           "workplace": "permit_3"
@@ -8278,308 +7693,308 @@
     },
     "fam_3": {
       "total_produced": {
-        "Potato": 782
+        "Potato": 974
       },
       "workplaces": [
         "permit_3"
       ],
       "history": [
         {
-          "day": 63,
+          "day": 74,
           "resource": "Potato",
           "amount": 1,
           "workplace": "permit_3"
         },
         {
-          "day": 63,
+          "day": 74,
           "resource": "Potato",
           "amount": 1,
           "workplace": "permit_3"
         },
         {
-          "day": 63,
+          "day": 74,
           "resource": "Potato",
           "amount": 1,
           "workplace": "permit_3"
         },
         {
-          "day": 63,
+          "day": 74,
           "resource": "Potato",
           "amount": 0,
           "workplace": "permit_3"
         },
         {
-          "day": 63,
+          "day": 74,
           "resource": "Potato",
           "amount": 1,
           "workplace": "permit_3"
         },
         {
-          "day": 63,
+          "day": 74,
+          "resource": "Potato",
+          "amount": 1,
+          "workplace": "permit_3"
+        },
+        {
+          "day": 74,
+          "resource": "Potato",
+          "amount": 2,
+          "workplace": "permit_3"
+        },
+        {
+          "day": 74,
+          "resource": "Potato",
+          "amount": 1,
+          "workplace": "permit_3"
+        },
+        {
+          "day": 74,
+          "resource": "Potato",
+          "amount": 2,
+          "workplace": "permit_3"
+        },
+        {
+          "day": 74,
+          "resource": "Potato",
+          "amount": 2,
+          "workplace": "permit_3"
+        },
+        {
+          "day": 74,
+          "resource": "Potato",
+          "amount": 1,
+          "workplace": "permit_3"
+        },
+        {
+          "day": 74,
           "resource": "Potato",
           "amount": 3,
           "workplace": "permit_3"
         },
         {
-          "day": 63,
+          "day": 74,
           "resource": "Potato",
           "amount": 1,
           "workplace": "permit_3"
         },
         {
-          "day": 63,
+          "day": 74,
+          "resource": "Potato",
+          "amount": 1,
+          "workplace": "permit_3"
+        },
+        {
+          "day": 74,
+          "resource": "Potato",
+          "amount": 1,
+          "workplace": "permit_3"
+        },
+        {
+          "day": 74,
+          "resource": "Potato",
+          "amount": 3,
+          "workplace": "permit_3"
+        },
+        {
+          "day": 74,
+          "resource": "Potato",
+          "amount": 1,
+          "workplace": "permit_3"
+        },
+        {
+          "day": 74,
+          "resource": "Potato",
+          "amount": 2,
+          "workplace": "permit_3"
+        },
+        {
+          "day": 74,
+          "resource": "Potato",
+          "amount": 1,
+          "workplace": "permit_3"
+        },
+        {
+          "day": 74,
+          "resource": "Potato",
+          "amount": 1,
+          "workplace": "permit_3"
+        },
+        {
+          "day": 74,
+          "resource": "Potato",
+          "amount": 1,
+          "workplace": "permit_3"
+        },
+        {
+          "day": 74,
+          "resource": "Potato",
+          "amount": 1,
+          "workplace": "permit_3"
+        },
+        {
+          "day": 74,
+          "resource": "Potato",
+          "amount": 1,
+          "workplace": "permit_3"
+        },
+        {
+          "day": 74,
+          "resource": "Potato",
+          "amount": 1,
+          "workplace": "permit_3"
+        },
+        {
+          "day": 74,
+          "resource": "Potato",
+          "amount": 2,
+          "workplace": "permit_3"
+        },
+        {
+          "day": 74,
           "resource": "Potato",
           "amount": 0,
           "workplace": "permit_3"
         },
         {
-          "day": 63,
+          "day": 74,
           "resource": "Potato",
           "amount": 1,
           "workplace": "permit_3"
         },
         {
-          "day": 63,
-          "resource": "Potato",
-          "amount": 2,
-          "workplace": "permit_3"
-        },
-        {
-          "day": 63,
-          "resource": "Potato",
-          "amount": 2,
-          "workplace": "permit_3"
-        },
-        {
-          "day": 63,
-          "resource": "Potato",
-          "amount": 2,
-          "workplace": "permit_3"
-        },
-        {
-          "day": 63,
+          "day": 74,
           "resource": "Potato",
           "amount": 1,
           "workplace": "permit_3"
         },
         {
-          "day": 63,
+          "day": 74,
           "resource": "Potato",
           "amount": 1,
           "workplace": "permit_3"
         },
         {
-          "day": 63,
+          "day": 74,
           "resource": "Potato",
           "amount": 2,
           "workplace": "permit_3"
         },
         {
-          "day": 63,
+          "day": 74,
+          "resource": "Potato",
+          "amount": 1,
+          "workplace": "permit_3"
+        },
+        {
+          "day": 74,
           "resource": "Potato",
           "amount": 2,
           "workplace": "permit_3"
         },
         {
-          "day": 63,
+          "day": 74,
+          "resource": "Potato",
+          "amount": 1,
+          "workplace": "permit_3"
+        },
+        {
+          "day": 74,
           "resource": "Potato",
           "amount": 2,
           "workplace": "permit_3"
         },
         {
-          "day": 63,
+          "day": 74,
+          "resource": "Potato",
+          "amount": 1,
+          "workplace": "permit_3"
+        },
+        {
+          "day": 74,
+          "resource": "Potato",
+          "amount": 1,
+          "workplace": "permit_3"
+        },
+        {
+          "day": 74,
+          "resource": "Potato",
+          "amount": 1,
+          "workplace": "permit_3"
+        },
+        {
+          "day": 74,
+          "resource": "Potato",
+          "amount": 2,
+          "workplace": "permit_3"
+        },
+        {
+          "day": 74,
+          "resource": "Potato",
+          "amount": 1,
+          "workplace": "permit_3"
+        },
+        {
+          "day": 74,
+          "resource": "Potato",
+          "amount": 2,
+          "workplace": "permit_3"
+        },
+        {
+          "day": 74,
+          "resource": "Potato",
+          "amount": 1,
+          "workplace": "permit_3"
+        },
+        {
+          "day": 74,
           "resource": "Potato",
           "amount": 0,
           "workplace": "permit_3"
         },
         {
-          "day": 63,
+          "day": 74,
           "resource": "Potato",
-          "amount": 1,
+          "amount": 3,
           "workplace": "permit_3"
         },
         {
-          "day": 63,
-          "resource": "Potato",
-          "amount": 2,
-          "workplace": "permit_3"
-        },
-        {
-          "day": 63,
-          "resource": "Potato",
-          "amount": 1,
-          "workplace": "permit_3"
-        },
-        {
-          "day": 63,
-          "resource": "Potato",
-          "amount": 1,
-          "workplace": "permit_3"
-        },
-        {
-          "day": 63,
-          "resource": "Potato",
-          "amount": 1,
-          "workplace": "permit_3"
-        },
-        {
-          "day": 63,
-          "resource": "Potato",
-          "amount": 1,
-          "workplace": "permit_3"
-        },
-        {
-          "day": 63,
+          "day": 74,
           "resource": "Potato",
           "amount": 2,
           "workplace": "permit_3"
         },
         {
-          "day": 63,
-          "resource": "Potato",
-          "amount": 1,
-          "workplace": "permit_3"
-        },
-        {
-          "day": 63,
+          "day": 74,
           "resource": "Potato",
           "amount": 0,
           "workplace": "permit_3"
         },
         {
-          "day": 63,
+          "day": 74,
           "resource": "Potato",
           "amount": 1,
           "workplace": "permit_3"
         },
         {
-          "day": 63,
+          "day": 74,
           "resource": "Potato",
           "amount": 1,
           "workplace": "permit_3"
         },
         {
-          "day": 63,
+          "day": 74,
           "resource": "Potato",
           "amount": 1,
           "workplace": "permit_3"
         },
         {
-          "day": 63,
+          "day": 74,
           "resource": "Potato",
           "amount": 2,
           "workplace": "permit_3"
         },
         {
-          "day": 63,
-          "resource": "Potato",
-          "amount": 1,
-          "workplace": "permit_3"
-        },
-        {
-          "day": 63,
-          "resource": "Potato",
-          "amount": 1,
-          "workplace": "permit_3"
-        },
-        {
-          "day": 63,
-          "resource": "Potato",
-          "amount": 1,
-          "workplace": "permit_3"
-        },
-        {
-          "day": 63,
-          "resource": "Potato",
-          "amount": 2,
-          "workplace": "permit_3"
-        },
-        {
-          "day": 63,
-          "resource": "Potato",
-          "amount": 1,
-          "workplace": "permit_3"
-        },
-        {
-          "day": 63,
-          "resource": "Potato",
-          "amount": 1,
-          "workplace": "permit_3"
-        },
-        {
-          "day": 63,
-          "resource": "Potato",
-          "amount": 1,
-          "workplace": "permit_3"
-        },
-        {
-          "day": 63,
-          "resource": "Potato",
-          "amount": 1,
-          "workplace": "permit_3"
-        },
-        {
-          "day": 63,
-          "resource": "Potato",
-          "amount": 1,
-          "workplace": "permit_3"
-        },
-        {
-          "day": 63,
-          "resource": "Potato",
-          "amount": 1,
-          "workplace": "permit_3"
-        },
-        {
-          "day": 63,
-          "resource": "Potato",
-          "amount": 1,
-          "workplace": "permit_3"
-        },
-        {
-          "day": 63,
-          "resource": "Potato",
-          "amount": 1,
-          "workplace": "permit_3"
-        },
-        {
-          "day": 63,
-          "resource": "Potato",
-          "amount": 2,
-          "workplace": "permit_3"
-        },
-        {
-          "day": 63,
-          "resource": "Potato",
-          "amount": 0,
-          "workplace": "permit_3"
-        },
-        {
-          "day": 63,
-          "resource": "Potato",
-          "amount": 1,
-          "workplace": "permit_3"
-        },
-        {
-          "day": 63,
-          "resource": "Potato",
-          "amount": 1,
-          "workplace": "permit_3"
-        },
-        {
-          "day": 63,
-          "resource": "Potato",
-          "amount": 1,
-          "workplace": "permit_3"
-        },
-        {
-          "day": 63,
-          "resource": "Potato",
-          "amount": 2,
-          "workplace": "permit_3"
-        },
-        {
-          "day": 63,
+          "day": 74,
           "resource": "Potato",
           "amount": 2,
           "workplace": "permit_3"
@@ -8593,5 +8008,19 @@
       "permit_6": []
     },
     "active": {}
+  },
+  "taxation_state": {
+    "church_enabled": true,
+    "church_tax": {
+      "Gold": 0,
+      "Silver": 0,
+      "Copper": 1
+    },
+    "church_tax_paid_households_today": [],
+    "church_tax_last_day": 80,
+    "socage_enabled": true,
+    "socage_percent": 11,
+    "socage_report_period": 7,
+    "socage_report_collected_copper": 0
   }
 }

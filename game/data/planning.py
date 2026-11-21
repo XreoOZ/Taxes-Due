@@ -70,11 +70,11 @@ PLANNING_FEATURES = [
     {
         "id": "household_taxation",
         "name": "Household Taxation",
-        "status": STATUS_PARTIAL,
+        "status": STATUS_IMPLEMENTED,
         "category": "Taxation & Governance",
         "owner_agent": "Agent 3",
-        "summary": "Implement actual taxation through produced goods or currency.",
-        "description": "Reporting structure and UI are implemented in Reports -> Taxes (WIP). Actual tax calculation, collection, and deductions remain WIP for future decree."
+        "summary": "Collect configured household socage tax during the tax collector's work schedule.",
+        "description": "The collector visits living households in a dynamic queue; a household representative transfers the configured share of chest currency directly to the collector, who deposits it in the landlord's Treasury after the round. Production-based tithes remain future work."
     },
     {
         "id": "food_categories",
@@ -113,7 +113,7 @@ PLANNING_FEATURES = [
         "status": STATUS_IMPLEMENTED,
         "category": "Agriculture & Food",
         "owner_agent": "Agent 3",
-        "summary": "Each harvested potato tile yields 2, 4, or 5 Potatoes every 10 days (60%, 30%, 10%).",
+        "summary": "Each harvested potato tile yields 2 Potatoes 80% of the time, 4 Potatoes 15%, or 5 Potatoes 5% every 10 days.",
         "description": "Potato yield is selected from configurable weighted outcomes per tile harvest."
     },
     {

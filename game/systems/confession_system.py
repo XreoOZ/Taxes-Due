@@ -4,8 +4,6 @@ import random
 
 from game.config import (
     TILE_SIZE,
-    DEFAULT_DAY_LENGTH_SECONDS,
-    HOURS_PER_DAY,
     AI_NEED_FAITH_CONFESSION_THRESHOLD,
     AI_NEED_FAITH_CONFESSION_RESTORE_MIN,
     AI_NEED_FAITH_CONFESSION_RESTORE_MAX,
@@ -13,9 +11,13 @@ from game.config import (
     AI_NEED_FAITH_PRAYER_RESTORE_MAX,
     CONFESSION_DURATION_SECONDS,
     CONFESSION_BUBBLE_DURATION_SECONDS,
-    CONFESSION_MAX_WAIT_HOURS,
 )
-from game.data.config import DEFAULT_ITEM_PRICES, MARKET_TRADEABLE_ITEMS, is_food_item
+from game.data.config import (
+    DEFAULT_ITEM_PRICES,
+    FREE_TIME_SCHEDULE_ACTIVITIES,
+    MARKET_TRADEABLE_ITEMS,
+    is_food_item,
+)
 from game.systems.church_system import ChurchSystem
 from game.systems.currency import (
     normalize_wallet,
@@ -59,11 +61,6 @@ class ConfessionSystem:
             str(key): dict(request) for key, request in data.get("active", {}).items()
             if isinstance(request, dict)
         }
-
-    @staticmethod
-    def _wait_limit(day_cycle):
-        day_seconds = max(1.0, float(getattr(day_cycle, "day_length_seconds", DEFAULT_DAY_LENGTH_SECONDS)))
-        return day_seconds * float(CONFESSION_MAX_WAIT_HOURS) / float(HOURS_PER_DAY)
 
     @staticmethod
     def _confession_duration():
@@ -225,8 +222,14 @@ class ConfessionSystem:
         inst = cls.get_instance()
         faith = float(getattr(villager, "faith", 100.0))
         has_request = cls._request_for_villager(villager.id) is not None
+        current_schedule = (
+            schedule_manager.get_current_activity(
+                villager.job, getattr(day_cycle, "current_hour", 0.0)
+            )
+            if schedule_manager else sched_activity
+        )
         if (not has_request and faith <= AI_NEED_FAITH_CONFESSION_THRESHOLD
-                and sched_activity == "LEISURE"):
+                and current_schedule in FREE_TIME_SCHEDULE_ACTIVITIES):
             service = cls._find_service(villager, permit_manager, villager_manager,
                                         building_manager, furniture_manager)
             if service:
@@ -264,6 +267,14 @@ class ConfessionSystem:
                                     "The Priest is unavailable; I will return later.",
                                     furniture_manager)
                 return False
+        if cls._free_time_ended(
+                request, villager_manager, day_cycle, schedule_manager):
+            cls._cancel_request(
+                request, villager_manager,
+                "My free time is over; I will return later.",
+                furniture_manager,
+            )
+            return False
 
         queue = inst.queues.get(church_key, [])
         active = inst.active.get(church_key)
@@ -303,13 +314,6 @@ class ConfessionSystem:
                     cls._finish_request(church_key, villager, villager, success=True)
                 return True
             active["wait_seconds"] += max(0.0, dt)
-            elapsed_limit = cls._wait_limit(day_cycle)
-            if (active["wait_seconds"] >= elapsed_limit
-                    or cls._is_sleep_time(active, villager_manager, day_cycle, schedule_manager)):
-                cls._cancel_request(active, villager_manager,
-                                    "The confession queue took too long; I will return later.",
-                                    furniture_manager)
-                return False
             cls._move_to_box(villager, box, dt, all_entities, player,
                              building_manager, furniture_manager, side=0)
             if cls._at_approach(villager, box, building_manager, furniture_manager, side=0):
@@ -323,13 +327,6 @@ class ConfessionSystem:
         if request in queue:
             index = queue.index(request)
             request["wait_seconds"] += max(0.0, dt)
-            elapsed_limit = cls._wait_limit(day_cycle)
-            if (request["wait_seconds"] >= elapsed_limit
-                    or cls._is_sleep_time(request, villager_manager, day_cycle, schedule_manager)):
-                cls._cancel_request(request, villager_manager,
-                                    "The confession queue took too long; I will return later.",
-                                    furniture_manager)
-                return False
             tiles = ChurchSystem.get_church_walkable_tiles(church, building_manager)
             position = cls._queue_position(index, tiles, furniture_manager, box)
             if position:
@@ -353,13 +350,25 @@ class ConfessionSystem:
             return False
         church_key = str(church.id)
         queue = inst.queues.setdefault(church_key, [])
+        if (schedule_manager and schedule_manager.get_current_activity(
+                priest.job, getattr(day_cycle, "current_hour", 0.0),
+        ) not in FREE_TIME_SCHEDULE_ACTIVITIES):
+            request = inst.active.get(church_key)
+            if request:
+                cls._cancel_request(
+                    request, villager_manager,
+                    "The Priest's free time is over; I will return later.",
+                    furniture_manager,
+                )
+            priest.confession_task = None
+            return False
         request = inst.active.get(church_key)
         if request is None:
             request = cls._activate_next_request(church_key, queue)
             if request is None and queue:
-                priest.task = "PREACHING"
-                priest.confession_task = None
-                return False
+                priest.task = "WAITING_FOR_CONFESSION"
+                priest.confession_task = "WAITING_FOR_PAYMENT"
+                return True
         if request is None:
             priest.confession_task = None
             return False
@@ -374,6 +383,16 @@ class ConfessionSystem:
                 furniture_manager,
             )
             return False
+        if request.get("state") != "IN_PROGRESS":
+            request["wait_seconds"] = request.get("wait_seconds", 0.0) + max(0.0, dt)
+        if cls._free_time_ended(
+                request, villager_manager, day_cycle, schedule_manager):
+            cls._cancel_request(
+                request, villager_manager,
+                "My free time is over; I will return later.",
+                furniture_manager,
+            )
+            return False
         interrupted_state = getattr(visitor, "interrupted_task_state", None)
         if (interrupted_state
                 and interrupted_state.get("task") in (
@@ -384,16 +403,6 @@ class ConfessionSystem:
             priest.task = "PREACHING"
             priest.confession_task = "WAITING_FOR_VISITOR"
             return True
-        if request.get("state") != "IN_PROGRESS":
-            request["wait_seconds"] = request.get("wait_seconds", 0.0) + max(0.0, dt)
-            if (request["wait_seconds"] >= cls._wait_limit(day_cycle)
-                    or cls._is_sleep_time(request, villager_manager, day_cycle, schedule_manager)):
-                cls._cancel_request(
-                    request, villager_manager,
-                    "The confession queue took too long; I will return later.",
-                    furniture_manager,
-                )
-                return False
         if request.get("state") == "VISITOR_TO_PRIEST":
             priest.task = "GOING_TO_CONFESSOR"
             priest.confession_task = "APPROACHING_VISITOR"
@@ -584,16 +593,41 @@ class ConfessionSystem:
         return distance_to_object(box, villager.x, villager.y, TILE_SIZE) <= TILE_SIZE
 
     @classmethod
-    def _is_sleep_time(cls, request, villager_manager, day_cycle, schedule_manager=None):
+    def _free_time_ended(cls, request, villager_manager, day_cycle,
+                         schedule_manager=None):
         visitor = cls._find_priest(request, villager_manager, priest_role=False)
-        priest = cls._find_priest(request, villager_manager)
-        hour = getattr(day_cycle, "current_hour", 0.0)
-        if schedule_manager:
-            if visitor and schedule_manager.get_scheduled_activity(visitor.job, hour) == "SLEEP":
+        if not visitor:
+            return True
+        if not schedule_manager:
+            return False
+        actors = [visitor]
+        if not request.get("self_confession"):
+            priest = cls._find_priest(request, villager_manager)
+            if not priest:
                 return True
-            if priest and schedule_manager.get_scheduled_activity(priest.job, hour) == "SLEEP":
-                return True
-        return False
+            actors.append(priest)
+        current_hour = getattr(day_cycle, "current_hour", 0.0)
+        return any(
+            schedule_manager.get_current_activity(
+                actor.job, current_hour,
+            ) not in FREE_TIME_SCHEDULE_ACTIVITIES
+            for actor in actors
+        )
+
+    @classmethod
+    def cancel_if_schedule_ended(cls, villager, villager_manager,
+                                 furniture_manager, day_cycle,
+                                 schedule_manager):
+        request = cls._request_for_villager(getattr(villager, "id", None))
+        if (not request or not cls._free_time_ended(
+                request, villager_manager, day_cycle, schedule_manager)):
+            return False
+        cls._cancel_request(
+            request, villager_manager,
+            "My free time is over; I will return later.",
+            furniture_manager,
+        )
+        return True
 
     @classmethod
     def _daily_livelihood_cost(cls, building_manager):

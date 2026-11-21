@@ -14,7 +14,7 @@
 | :--- | :--- | :--- |
 | **Household Survival, Hunger, Thirst** | **AGENT 1** | Owns Villager daily consumption records, thirst/water needs, starvation/death checks, Family List primary need indicators. |
 | **Market, Currency, Economy** | **AGENT 2** | Owns Market stall construction, Market Profile, Currency/Coin transactions, Purchasing algorithms, Stall pricing. |
-| **Production, Farming, Distribution & Planning** | **AGENT 3** | Owns Proportional production distribution, participating worker math, indivisible item apportionment, Potato farming yield (2/tile), Reports Production & Tax (WIP) UI, and Persistent WIP Planning. |
+| **Production, Farming, Distribution & Planning** | **AGENT 3** | Owns proportional production distribution, participating worker math, indivisible item apportionment, weighted potato farming yields, production reports, and persistent roadmap planning. |
 
 ---
 
@@ -27,34 +27,32 @@
    - **Delivery**: Output is deposited directly into each household's private storage (chests), never redirected to the market without player/household decree.
    - **Generic Support**: Agnostic of profession (Farmers, Builders, Blacksmiths, Bakers).
 
-2. **Potato Farming Yield Adjustment (2 Potatoes / Tile)**
-   - **Yield**: Exactly 2 Potatoes per harvested tile every 10 days.
+2. **Potato Farming Yield Distribution**
+   - **Yield**: 2 Potatoes with 80% probability, 4 with 15%, and 5 with 5% per harvested tile every 10 days.
    - **Cycle**: Standard 10-day growth cycle preserved (Sprout: Day 2, Leaf: Day 4, Harvest: Day 10).
-   - **Multiplier Safety**: Single config-driven yield parameter (`CROP_TYPES["potato"]["yield_per_tile"] = 2`). No stacked multipliers.
+   - **Configuration**: Weighted outcomes are read from `CROP_TYPES["potato"]["yield_distribution"]`.
 
-3. **RimWorld-Style Work Priorities Grid**
+3. **Household Socage Tax Collection**
+   - The Tax Collector works only during scheduled work hours and visits living households through a dynamic queue.
+   - A household representative must arrive and transfer the configured share of chest currency directly to the collector.
+   - After the round handles every household, the collector deposits the collected currency in the landlord's Treasury.
+
+4. **RimWorld-Style Work Priorities Grid**
    - Dynamic 1–4 priority matrix and activity schedule.
 
-4. **RimWorld-Style 24-Hour Schedule Matrix**
+5. **RimWorld-Style 24-Hour Schedule Matrix**
    - Hourly activity brush painter for routines (Work, Sleep, Recreation, Any).
 
-5. **Universal Parallel AI Work Execution**
+6. **Universal Parallel AI Work Execution**
    - Obstacle-aware path reservation, dynamic yielding, and parallel tile operations.
 
 ---
 
-## 3. Partially Implemented Systems (WIP)
+## 3. Future Tax Modes (WIP)
 
-### Item 7: Household Taxation
-- **Current Status**: `PARTIAL (WIP)`
-- **Implemented Scope**:
-  - UI layout and reporting structure in Reports menu (`Reports -> Taxes`).
-  - Household production and income assessment projection.
-  - Policy framework prepared for future crop tithes and market coin taxation.
-- **WIP Scope (Pending Future Decree)**:
-  - Automated tax calculation formulas.
-  - Tax collector dispatch and deduction mechanics.
-  - Zero deductions are active during the initial settlement stage.
+Household socage coin collection through the Tax Collector is active. Agricultural
+tithes and production-based deductions remain future work; household production
+distribution is not taxed.
 
 ---
 
@@ -96,7 +94,7 @@ Planned features and implemented milestones remain recorded below and mirrored i
 ### 7. Household Taxation
 - **Category**: Taxation & Governance
 - **Lead Agent**: Agent 3
-- **Description**: Active revenue collection through agricultural tithes (e.g. % of potato harvest) or coin head taxes.
+- **Description**: Household socage coin collection is active; agricultural tithes (such as a percentage of potato harvest) remain future work.
 
 ### 8. Additional Food Categories & Types
 - **Category**: Agriculture & Nutrition

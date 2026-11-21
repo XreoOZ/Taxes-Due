@@ -4056,9 +4056,12 @@ class RaportUI:
         self.cached_wealth_data = wealth_data
 
         from game.systems.taxation_system import TaxationSystem
+        from game.systems.currency import from_copper
         from game.data.config import SOCAGE_TAX_INTERVAL_DAYS, SOCAGE_TAX_QUICK_STEP, SOCAGE_TAX_HAPPINESS_TIERS
         current_day = int(getattr(day_cycle, "day_number", 1)) if day_cycle else 1
         next_day = TaxationSystem.next_collection_day(current_day, villager_manager)
+        tax_report = TaxationSystem.get_socage_tax_report(current_day)
+        collected = from_copper(tax_report["collected_copper"])
         socage_card = pygame.Rect(mx + 24, cy + 130, self.modal_w - 48, 90)
         pygame.draw.rect(surface, (24, 34, 52), socage_card, border_radius=6)
         pygame.draw.rect(surface, (217, 119, 6), socage_card, width=1, border_radius=6)
@@ -4097,6 +4100,20 @@ class RaportUI:
         surface.blit(rate_text, (self.socage_tax_input_rect.centerx - rate_text.get_width() // 2,
                                  self.socage_tax_input_rect.centery - rate_text.get_height() // 2))
         surface.blit(self.font_badge.render("Rate", True, COLOR_TEXT_MUTED), (rate_x, socage_card.y + 53))
+        collected_amount = (
+            f"{collected['Gold']}g {collected['Silver']}s {collected['Copper']}c"
+        )
+        collected_label = (
+            f"Collected (Days {tax_report['start_day']}–{tax_report['end_day']}, "
+            f"through {tax_report['through_day']}): {collected_amount}"
+        )
+        available_label_width = rate_x - socage_card.x - 24
+        collected_text = self.font_badge.render(collected_label, True, COLOR_TEXT_MAIN)
+        if collected_text.get_width() > available_label_width:
+            collected_text = self.font_badge.render(
+                f"Collected this period: {collected_amount}", True, COLOR_TEXT_MAIN,
+            )
+        surface.blit(collected_text, (socage_card.x + 14, socage_card.y + 53))
         socage_tier_text = "Happiness: " + " | ".join(
             f"{lower}–{upper if upper is not None else '∞'}% −{abs(penalty)}"
             for lower, upper, penalty in SOCAGE_TAX_HAPPINESS_TIERS

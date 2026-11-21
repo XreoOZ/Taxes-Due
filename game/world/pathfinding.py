@@ -11,6 +11,8 @@ from game.config import (
     TILE_SIZE,
     PATH_WAYPOINT_TOLERANCE,
     PATH_SEGMENT_COLLISION_RADIUS,
+    PATH_DIAGONAL_STEP_COST,
+    PATH_NEIGHBOR_OFFSETS,
     PATH_MAX_ASTAR_ITERATIONS,
     PATH_ROUTE_CACHE_MAX_ENTRIES,
     PATH_RESERVATION_CLEARANCE,
@@ -300,7 +302,7 @@ class Pathfinder:
         cache_key = (
             id(bm), getattr(bm, "_navigation_revision", 0),
             id(furniture_manager), getattr(furniture_manager, "_navigation_revision", 0),
-            tile_size, start_tile, target_tile, (tx, ty),
+            tile_size, start_tile, (sx, sy), target_tile, (tx, ty),
             tuple(sorted(filtered_avoid)),
         )
         cached_route = self._route_cache.get(cache_key)
@@ -309,7 +311,7 @@ class Pathfinder:
             return list(cached_route)
 
         # Algoritma A* Search
-        h_start = abs(start_tile[0] - target_tile[0]) + abs(start_tile[1] - target_tile[1])
+        h_start = self._octile_distance(start_tile, target_tile)
         open_heap = [(h_start, h_start, start_tile)]
         came_from = {}
         g_score = {start_tile: 0}
@@ -332,21 +334,49 @@ class Pathfinder:
             closed_set.add(current)
 
             cx, cy = current
-            neighbors = [(cx + 1, cy), (cx - 1, cy), (cx, cy + 1), (cx, cy - 1)]
 
-            for n in neighbors:
+            for dx, dy in PATH_NEIGHBOR_OFFSETS:
+                n = (cx + dx, cy + dy)
                 if n in closed_set:
                     continue
+
+                if dx and dy:
+                    side_x = (cx + dx, cy)
+                    side_y = (cx, cy + dy)
+                    diagonal_sides = (
+                        self.can_traverse_edge(
+                            cx, cy, side_x[0], side_x[1], bm,
+                            furniture_manager=furniture_manager,
+                            avoid_tiles=filtered_avoid,
+                        ),
+                        self.can_traverse_edge(
+                            cx, cy, side_y[0], side_y[1], bm,
+                            furniture_manager=furniture_manager,
+                            avoid_tiles=filtered_avoid,
+                        ),
+                        self.can_traverse_edge(
+                            side_x[0], side_x[1], n[0], n[1], bm,
+                            furniture_manager=furniture_manager,
+                            avoid_tiles=filtered_avoid,
+                        ),
+                        self.can_traverse_edge(
+                            side_y[0], side_y[1], n[0], n[1], bm,
+                            furniture_manager=furniture_manager,
+                            avoid_tiles=filtered_avoid,
+                        ),
+                    )
+                    if not all(diagonal_sides):
+                        continue
 
                 if not self.can_traverse_edge(cx, cy, n[0], n[1], bm, furniture_manager=furniture_manager, avoid_tiles=filtered_avoid):
                     continue
 
-                step_cost = 1.0
+                step_cost = PATH_DIAGONAL_STEP_COST if dx and dy else 1.0
                 tentative_g = g_score[current] + step_cost
                 if tentative_g < g_score.get(n, float('inf')):
                     came_from[n] = current
                     g_score[n] = tentative_g
-                    h_val = abs(n[0] - target_tile[0]) + abs(n[1] - target_tile[1])
+                    h_val = self._octile_distance(n, target_tile)
                     f_val = tentative_g + h_val
                     heapq.heappush(open_heap, (f_val, h_val, n))
 
@@ -365,7 +395,7 @@ class Pathfinder:
         path_tiles.reverse()
 
         # Konversi jalur petak ke waypoint world coordinates
-        raw_waypoints = []
+        raw_waypoints = [(sx, sy)]
         for i in range(1, len(path_tiles)):
             pt = path_tiles[i]
             prev_pt = path_tiles[i - 1]
@@ -375,14 +405,18 @@ class Pathfinder:
             if b_cur and not b_prev and pt == getattr(b_cur, "door_pos", None):
                 # Masuk pintu: lewati titik outside pintu, threshold tengah, lalu inside pintu
                 d_out = b_cur.get_door_world_outside(tile_size)
+                d_threshold = b_cur.get_door_world_threshold(tile_size)
                 d_in = b_cur.get_door_world_inside(tile_size)
                 raw_waypoints.append(d_out)
+                raw_waypoints.append(d_threshold)
                 raw_waypoints.append(d_in)
             elif b_prev and not b_cur and prev_pt == getattr(b_prev, "door_pos", None):
                 # Keluar pintu: lewati titik inside pintu, threshold tengah, lalu outside pintu
                 d_in = b_prev.get_door_world_inside(tile_size)
+                d_threshold = b_prev.get_door_world_threshold(tile_size)
                 d_out = b_prev.get_door_world_outside(tile_size)
                 raw_waypoints.append(d_in)
+                raw_waypoints.append(d_threshold)
                 raw_waypoints.append(d_out)
             else:
                 raw_waypoints.append(((pt[0] + 0.5) * tile_size, (pt[1] + 0.5) * tile_size))
@@ -392,52 +426,81 @@ class Pathfinder:
             if not raw_waypoints or raw_waypoints[-1] != (tx, ty):
                 raw_waypoints.append((tx, ty))
 
-        # Haluskan waypoint kolinear dengan validasi segment collision
+        # Pull each route segment as far as collision and doorway rules allow.
         route = self._simplify_waypoints(
             raw_waypoints, bm=bm, tile_size=tile_size,
             furniture_manager=furniture_manager, exclude_tile=target_tile,
-        )
+            avoid_tiles=filtered_avoid,
+        )[1:]
         self._cache_route(cache_key, route)
         return route
 
-    def _simplify_waypoints(self, waypoints, bm=None, tile_size=TILE_SIZE, furniture_manager=None, exclude_tile=None):
-        """Menyederhanakan waypoint yang berada pada satu garis lurus dengan validasi bebas tabrakan dinding & perabotan"""
+    @staticmethod
+    def _octile_distance(start, target):
+        dx = abs(start[0] - target[0])
+        dy = abs(start[1] - target[1])
+        diagonal_steps = min(dx, dy)
+        return max(dx, dy) + (PATH_DIAGONAL_STEP_COST - 1.0) * diagonal_steps
+
+    @staticmethod
+    def _is_doorway_waypoint(point, building_manager, tile_size):
+        if not building_manager:
+            return False
+        for building in getattr(building_manager, "buildings", []):
+            if not getattr(building, "door_pos", None):
+                continue
+            if building.is_in_door_threshold(point[0], point[1], tile_size):
+                return True
+            door_points = (
+                building.get_door_world_outside(tile_size),
+                building.get_door_world_threshold(tile_size),
+                building.get_door_world_inside(tile_size),
+            )
+            if any(math.dist(point, door_point) <= PATH_WAYPOINT_TOLERANCE
+                   for door_point in door_points):
+                return True
+        return False
+
+    def _smoothing_segment_is_clear(self, start, end, bm, tile_size,
+                                    furniture_manager, exclude_tile, avoid_tiles):
+        if avoid_tiles and get_tiles_along_segment(start, end, tile_size).intersection(avoid_tiles):
+            return False
+        return self.is_segment_clear(
+            start, end, bm, tile_size=tile_size,
+            furniture_manager=furniture_manager, exclude_tile=exclude_tile,
+        )
+
+    def _simplify_waypoints(self, waypoints, bm=None, tile_size=TILE_SIZE,
+                            furniture_manager=None, exclude_tile=None,
+                            avoid_tiles=None):
+        """Pull a route toward its farthest visible waypoint without skipping doors or obstacles."""
         if len(waypoints) <= 2:
             return list(waypoints)
 
+        door_points = [
+            self._is_doorway_waypoint(point, bm, tile_size)
+            for point in waypoints
+        ]
         simplified = [waypoints[0]]
-        for i in range(1, len(waypoints) - 1):
-            p_prev = simplified[-1]
-            p_curr = waypoints[i]
-            p_next = waypoints[i + 1]
+        anchor = 0
 
-            # JANGAN sederhanakan waypoint yang merupakan titik lintasan pintu bangunan
-            if bm and any(b.is_in_door_threshold(p_curr[0], p_curr[1], tile_size) for b in getattr(bm, "buildings", []) if getattr(b, "door_pos", None)):
-                simplified.append(p_curr)
-                continue
+        while anchor < len(waypoints) - 1:
+            next_door = next(
+                (index for index in range(anchor + 1, len(waypoints))
+                 if door_points[index]),
+                len(waypoints) - 1,
+            )
+            candidate = next_door
+            while candidate > anchor + 1:
+                if self._smoothing_segment_is_clear(
+                    waypoints[anchor], waypoints[candidate], bm, tile_size,
+                    furniture_manager, exclude_tile, avoid_tiles,
+                ):
+                    break
+                candidate -= 1
+            simplified.append(waypoints[candidate])
+            anchor = candidate
 
-            # Cek apakah p_curr kolinear (horizontal atau vertikal sejajar) dengan p_prev dan p_next
-            dx1 = p_curr[0] - p_prev[0]
-            dy1 = p_curr[1] - p_prev[1]
-            dx2 = p_next[0] - p_curr[0]
-            dy2 = p_next[1] - p_curr[1]
-
-            is_collinear_x = (abs(dx1) < 0.1 and abs(dx2) < 0.1 and (dy1 * dy2 > 0))
-            is_collinear_y = (abs(dy1) < 0.1 and abs(dy2) < 0.1 and (dx1 * dx2 > 0))
-
-            if is_collinear_x or is_collinear_y:
-                # Validasi apakah garis langsung p_prev ke p_next bebas benturan dinding & perabotan
-                if self.is_segment_clear(p_prev, p_next, bm, tile_size=tile_size, furniture_manager=furniture_manager, exclude_tile=exclude_tile):
-                    continue
-
-            simplified.append(p_curr)
-
-        # Pastikan segmen langsung ke waypoints[-1] bebas benturan
-        if bm and not self.is_segment_clear(simplified[-1], waypoints[-1], bm, tile_size=tile_size, furniture_manager=furniture_manager, exclude_tile=exclude_tile):
-            if len(waypoints) >= 2 and waypoints[-2] != simplified[-1]:
-                simplified.append(waypoints[-2])
-
-        simplified.append(waypoints[-1])
         return simplified
 
 

@@ -11,18 +11,19 @@ from game.data.config import (
 )
 from game.entities.villagers import Family, Villager, VillagerManager
 from game.systems.schedule import ScheduleManager
+from game.systems.scheduled_activity import ScheduledActivitySystem
 from game.systems.sleep_system import SleepSystem
 from game.world.permits import PermitManager
 
 
 class TestSleepUrgentInterruption(unittest.TestCase):
-    def test_eight_hours_of_sleep_repay_sixteen_awake_hours(self):
+    def test_eight_hours_of_sleep_repay_twenty_awake_hours(self):
         villager = Villager(
             "villager-sleep-rate", "Ada", "Smith", "Female", 30, 2, "Mother",
             "family-1",
         )
         day_length_seconds = 1200.0
-        waking_seconds = day_length_seconds * 16.0 / HOURS_PER_DAY
+        waking_seconds = day_length_seconds * 20.0 / HOURS_PER_DAY
         sleeping_seconds = day_length_seconds * 8.0 / HOURS_PER_DAY
 
         SleepSystem.advance(
@@ -76,13 +77,13 @@ class TestSleepUrgentInterruption(unittest.TestCase):
         )
 
         self.assertEqual(villager.task, "SLEEPING")
-        self.assertEqual(villager.sleep_schedule_task_state["task"], "ACTIVE_WORK")
+        self.assertEqual(villager.pending_schedule_tasks[0]["task"], "ACTIVE_WORK")
         self.assertGreater(villager.sleep_need, 50.0)
 
-        villager._restore_sleep_schedule_task(permit_manager)
+        ScheduledActivitySystem.reconcile(villager, "WORK", permit_manager)
         self.assertEqual(villager.task, "ACTIVE_WORK")
 
-    def test_scheduled_sleep_returns_to_bed_after_urgent_water_need(self):
+    def test_scheduled_sleep_does_not_interrupt_for_urgent_water_need(self):
         villager = Villager(
             "villager-1", "Ada", "Smith", "Female", 30, 2, "Mother",
             "family-1", 500.0, 500.0,
@@ -138,6 +139,7 @@ class TestSleepUrgentInterruption(unittest.TestCase):
         )
         self.assertEqual(villager.task, "SLEEPING")
         self.assertGreater(villager.sleep_need, starting_sleep_need)
+        self.assertLess(villager.thirst, AI_CRITICAL_NEED_THRESHOLD)
 
         villager.update(
             0.1, permit_manager, None, [villager], None,
@@ -148,6 +150,8 @@ class TestSleepUrgentInterruption(unittest.TestCase):
         bed_position = bed.get_world_pos(TILE_SIZE)
         self.assertIn(bed_position, movement_targets)
         self.assertEqual((villager.x, villager.y), bed_position)
+        self.assertEqual(villager.task, "SLEEPING")
+        self.assertEqual(villager.inventory["Water"], 1)
 
     def test_forced_sleep_moves_villager_to_assigned_bed(self):
         villager = Villager(

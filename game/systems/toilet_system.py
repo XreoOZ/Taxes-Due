@@ -18,6 +18,7 @@ from game.config import (
     AI_NEED_TOILET_DECAY_PER_DAY,
     AI_NEED_TOILET_URGENT_THRESHOLD,
     AI_NEED_TOILET_RESTORE,
+    AI_NEED_SEEK_COOLDOWN_SECONDS,
     TOILET_USE_DURATION_SECONDS,
 )
 from game.world.navigation import find_nearest_target
@@ -195,6 +196,10 @@ class ToiletSystem:
                 # No toilet facility available in settlement: preserve need, wait/idle politely
                 villager.say("I desperately need a Toilet, Lord! Please build an outhouse.", duration=2.5)
                 villager._resume_or_idle_after_need()
+                villager._set_need_seek_cooldown(
+                    AI_NEED_SEEK_COOLDOWN_SECONDS,
+                    task="SEEKING_TOILET",
+                )
                 return True
 
         can_enter, target_pos = cls.request_toilet_access(villager, toilet, tile_size=TILE_SIZE)

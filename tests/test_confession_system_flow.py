@@ -5,6 +5,7 @@ from game.config import TILE_SIZE
 from game.systems.church_system import ChurchSystem
 from game.systems.confession_system import ConfessionSystem
 from game.systems.currency import to_copper
+from game.systems.schedule import ScheduleManager
 
 
 class _Actor:
@@ -100,6 +101,141 @@ class TestConfessionSystemFlow(unittest.TestCase):
         self.assertEqual(priest.task, "GOING_TO_CONFESSOR")
         self.assertIs(instance.active["church-1"], request)
         self.assertEqual(instance.queues["church-1"], [])
+
+    def test_confession_request_can_start_during_any_schedule(self):
+        visitor = _Actor("visitor-1", "Farmer", "family-1")
+        visitor.faith = 0.0
+        priest = _Actor("priest-1", "Priest", "family-2")
+        church = type("Church", (), {
+            "id": "church-1",
+            "permit_type": "church",
+            "assigned_workers": [priest.id],
+        })()
+        box = type("Box", (), {
+            "id": "box-1",
+            "is_available_for_use": True,
+        })()
+        permit_manager = type("PermitManager", (), {"permits": [church]})()
+        furniture_manager = type("FurnitureManager", (), {
+            "get_furniture_by_id": lambda _self, _box_id: box,
+            "get_storage_for_family": lambda _self, _family_id: None,
+        })()
+        villager_manager = type("VillagerManager", (), {
+            "get_all_villagers": lambda _self: [visitor, priest],
+        })()
+        day_cycle = type("DayCycle", (), {
+            "current_hour": 10.0,
+            "day_number": 1,
+            "day_length_seconds": 1200.0,
+        })()
+        schedule_manager = ScheduleManager()
+        schedule_manager.set_hour_activity("Farmer", 10, "ANY")
+        schedule_manager.set_hour_activity("Priest", 10, "ANY")
+
+        with patch.object(
+            ConfessionSystem, "_find_service", return_value=(church, priest, box)
+        ):
+            handled = ConfessionSystem.update_villager(
+                visitor, 0.1, "ANY", day_cycle, permit_manager,
+                villager_manager, None, furniture_manager, [visitor, priest],
+                None, schedule_manager,
+            )
+
+        self.assertTrue(handled)
+        self.assertEqual(
+            ConfessionSystem.get_instance().active["church-1"]["villager_id"],
+            visitor.id,
+        )
+
+    def test_confession_queue_waits_until_visitor_free_time_ends(self):
+        visitor = _Actor("visitor-1", "Farmer", "family-1")
+        priest = _Actor("priest-1", "Priest", "family-2", x=3 * TILE_SIZE)
+        church = type("Church", (), {
+            "id": "church-1",
+            "permit_type": "church",
+            "assigned_workers": [priest.id],
+        })()
+        box = type("Box", (), {
+            "id": "box-1",
+            "is_available_for_use": True,
+        })()
+        permit_manager = type("PermitManager", (), {"permits": [church]})()
+        furniture_manager = type("FurnitureManager", (), {
+            "get_furniture_by_id": lambda _self, _box_id: box,
+        })()
+        villager_manager = type("VillagerManager", (), {
+            "get_all_villagers": lambda _self: [visitor, priest],
+        })()
+        day_cycle = type("DayCycle", (), {
+            "current_hour": 10.0,
+            "day_number": 1,
+            "day_length_seconds": 1200.0,
+        })()
+        schedule_manager = ScheduleManager()
+        schedule_manager.set_hour_activity("Farmer", 10, "LEISURE")
+        schedule_manager.set_hour_activity("Priest", 10, "LEISURE")
+        request = self._request(visitor.id)
+        request["state"] = "VISITOR_TO_PRIEST"
+        ConfessionSystem.get_instance().active["church-1"] = request
+
+        ConfessionSystem.update_priest(
+            priest, day_cycle.day_length_seconds, day_cycle,
+            schedule_manager, permit_manager,
+            villager_manager, None, furniture_manager, [visitor, priest], None,
+        )
+        self.assertIs(
+            ConfessionSystem.get_instance().active["church-1"], request
+        )
+
+        schedule_manager.set_hour_activity("Farmer", 10, "WORK")
+        ConfessionSystem.update_priest(
+            priest, 0.1, day_cycle, schedule_manager, permit_manager,
+            villager_manager, None, furniture_manager, [visitor, priest], None,
+        )
+        self.assertNotIn("church-1", ConfessionSystem.get_instance().active)
+        self.assertEqual(visitor.task, "IDLE")
+
+    def test_confession_stops_when_priest_schedule_ends_and_refunds_offering(self):
+        visitor = _Actor("visitor-1", "Farmer", "family-1")
+        priest = _Actor("priest-1", "Priest", "family-2")
+        priest.inventory = {"Copper": 10}
+        church = type("Church", (), {
+            "id": "church-1",
+            "permit_type": "church",
+            "assigned_workers": [priest.id],
+        })()
+        box = type("Box", (), {
+            "id": "box-1",
+            "is_available_for_use": True,
+        })()
+        permit_manager = type("PermitManager", (), {"permits": [church]})()
+        furniture_manager = type("FurnitureManager", (), {
+            "get_furniture_by_id": lambda _self, _box_id: box,
+        })()
+        villager_manager = type("VillagerManager", (), {
+            "get_all_villagers": lambda _self: [visitor, priest],
+        })()
+        day_cycle = type("DayCycle", (), {
+            "current_hour": 10.0,
+            "day_number": 1,
+        })()
+        schedule_manager = ScheduleManager()
+        schedule_manager.set_hour_activity("Farmer", 10, "LEISURE")
+        schedule_manager.set_hour_activity("Priest", 10, "WORK")
+        request = self._request(visitor.id)
+        request.update({"state": "IN_PROGRESS", "fee_paid": 10})
+        ConfessionSystem.get_instance().active["church-1"] = request
+
+        handled = ConfessionSystem.update_priest(
+            priest, 0.1, day_cycle, schedule_manager, permit_manager,
+            villager_manager, None, furniture_manager, [visitor, priest], None,
+        )
+
+        self.assertFalse(handled)
+        self.assertNotIn("church-1", ConfessionSystem.get_instance().active)
+        self.assertEqual(to_copper(visitor.inventory), 10)
+        self.assertEqual(priest.inventory, {})
+        self.assertEqual(visitor.task, "IDLE")
 
     def test_confessor_and_priest_interact_within_one_tile(self):
         visitor = _Actor("visitor-1", "Farmer", "family-1")

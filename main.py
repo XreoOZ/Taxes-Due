@@ -48,6 +48,19 @@ from game.config import (
     SLEEP_MAX_VALUE,
     SLEEP_MIN_VALUE,
     SLEEP_STATUS_COLORS,
+    AI_ACTIVITY_PREVIEW_MAX_NEXT,
+    AI_PROFILE_HAPPINESS_VISIBLE_ROWS,
+    AI_PROFILE_ACTIVITY_ROW_HEIGHT,
+    AI_PROFILE_NEED_ROW_HEIGHT,
+    AI_PROFILE_CARD_WIDTH,
+    AI_PROFILE_ACTIVITY_OFFSET,
+    AI_PROFILE_DECEASED_ACTIVITY_OFFSET,
+    AI_PROFILE_ACTIVITY_HEADER_OFFSET,
+    AI_PROFILE_NEED_SECTION_GAP,
+    AI_PROFILE_INFO_SECTION_GAP,
+    AI_PROFILE_FACTOR_SECTION_GAP,
+    AI_PROFILE_FACTOR_PANEL_HEADER_HEIGHT,
+    AI_PROFILE_PANEL_BOTTOM_PADDING,
 )
 from game.camera import Camera
 from game.player import Player
@@ -77,6 +90,8 @@ from game.systems.market_pricing import MarketPricingSystem
 from game.systems.market_service import MarketService
 from game.systems.wealth_system import VillageWealthSystem
 from game.systems.cheat_system import apply_add_item_cheat, clean_resources_dictionary, spawn_item_physically
+from game.systems.activity_preview import ActivityPreviewSystem
+from game.systems.happiness_system import HappinessSystem
 
 STATE_MENU = "menu"
 STATE_PLAYING = "playing"
@@ -171,6 +186,7 @@ def main():
     selected_furniture = None
     moving_furniture = None
     selected_entity = None
+    selected_entity_happiness_scroll = 0
 
     furn_menu_rect = pygame.Rect(0, 0, 270, 140)
     btn_furn_move_rect = pygame.Rect(0, 0, 112, 30)
@@ -182,6 +198,7 @@ def main():
     btn_furn_pay_carpenter_rect = pygame.Rect(0, 0, 252, 24)
 
     entity_card_rect = pygame.Rect(0, 0, 310, 180)
+    entity_happiness_rect = pygame.Rect(0, 0, 0, 0)
     btn_entity_close_rect = pygame.Rect(0, 0, 22, 22)
     btn_entity_household_rect = pygame.Rect(0, 0, 96, 22)
 
@@ -410,9 +427,10 @@ def main():
                         planned_door_side = "bottom"
                     continue
 
-                speed_action = speed_controller.handle_event(event)
-                if speed_action is not None:
-                    continue
+                if not raport_ui.is_open:
+                    speed_action = speed_controller.handle_event(event)
+                    if speed_action is not None:
+                        continue
 
                 if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                     if not raport_ui.is_open and path_debug_overlay.handle_event(event):
@@ -926,7 +944,12 @@ def main():
                             if not raport_ui.is_text_input_active():
                                 raport_ui.open()
                     elif event.type == pygame.MOUSEWHEEL:
-                        camera.handle_zoom(event.y)
+                        if entity_happiness_rect.collidepoint(pygame.mouse.get_pos()):
+                            selected_entity_happiness_scroll = max(
+                                0, selected_entity_happiness_scroll - event.y
+                            )
+                        else:
+                            camera.handle_zoom(event.y)
                     elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                         action = raport_ui.handle_event(event, building_manager, permit_manager, resources, servant_manager, villager_manager, schedule_manager=schedule_manager, day_cycle=day_cycle, stockpile_manager=stockpile_manager, furniture_manager=furniture_manager, production_system=production_system)
                         if action == "toggle_raport":
@@ -1019,6 +1042,7 @@ def main():
                             if selected_entity is not None:
                                 if btn_entity_close_rect and btn_entity_close_rect.collidepoint(event.pos):
                                     selected_entity = None
+                                    selected_entity_happiness_scroll = 0
                                     continue
                                 elif btn_entity_household_rect and btn_entity_household_rect.collidepoint(event.pos):
                                     fam_id = getattr(selected_entity, "family_id", None)
@@ -1053,11 +1077,13 @@ def main():
 
                             if clicked_ai:
                                 selected_entity = clicked_ai
+                                selected_entity_happiness_scroll = 0
                                 selected_furniture = None
                                 continue
                             else:
                                 if selected_entity is not None and entity_card_rect and not entity_card_rect.collidepoint(event.pos):
                                     selected_entity = None
+                                    selected_entity_happiness_scroll = 0
 
                             # 0B. Cek apakah pemain mengklik furniture fisik di peta (INSTALLED maupun UNINSTALLED)
                             clicked_f = furniture_manager.get_furniture_at(m_gx, m_gy)
@@ -1916,7 +1942,46 @@ def main():
                 # Ring indicator around entity
                 pygame.draw.circle(screen, (56, 189, 248), (esx, esy), er + 6, 2)
 
-                cw, ch = 380, (259 if hasattr(selected_entity, "happiness") else 225)
+                is_alive = getattr(selected_entity, "is_alive", True)
+                h_timer = getattr(selected_entity, "hunger_death_timer", None)
+                t_timer = getattr(selected_entity, "thirst_death_timer", None)
+                has_happiness = hasattr(selected_entity, "happiness")
+                next_activities = ActivityPreviewSystem.get_next_activities(selected_entity)
+                next_activities = next_activities[:AI_ACTIVITY_PREVIEW_MAX_NEXT]
+                next_rows = next_activities or ["No queued activity"]
+                happiness_factors = HappinessSystem.get_breakdown(selected_entity) if has_happiness else []
+                visible_factor_rows = min(
+                    max(1, len(happiness_factors)),
+                    AI_PROFILE_HAPPINESS_VISIBLE_ROWS,
+                )
+                activity_row_height = AI_PROFILE_ACTIVITY_ROW_HEIGHT
+                act_offset = (
+                    AI_PROFILE_DECEASED_ACTIVITY_OFFSET
+                    if not is_alive else AI_PROFILE_ACTIVITY_OFFSET
+                )
+                next_header_offset = act_offset + AI_PROFILE_ACTIVITY_HEADER_OFFSET
+                next_start_offset = next_header_offset + activity_row_height
+                bar_start_offset = (
+                    next_start_offset + len(next_rows) * activity_row_height
+                    + AI_PROFILE_NEED_SECTION_GAP
+                )
+                bar_count = 5 + int(hasattr(selected_entity, "faith"))
+                info_y1_offset = (
+                    bar_start_offset + bar_count * AI_PROFILE_NEED_ROW_HEIGHT
+                    + AI_PROFILE_INFO_SECTION_GAP
+                )
+                info_y2_offset = info_y1_offset + AI_PROFILE_NEED_ROW_HEIGHT
+                happiness_panel_offset = info_y2_offset + AI_PROFILE_FACTOR_SECTION_GAP
+                happiness_panel_height = (
+                    AI_PROFILE_FACTOR_PANEL_HEADER_HEIGHT
+                    + visible_factor_rows * activity_row_height
+                )
+                ch = (
+                    happiness_panel_offset + happiness_panel_height
+                    + AI_PROFILE_PANEL_BOTTOM_PADDING
+                    if has_happiness else info_y2_offset + 28
+                )
+                cw = min(AI_PROFILE_CARD_WIDTH, max(1, screen.get_width() - 24))
                 cx = max(12, min(screen.get_width() - cw - 12, esx - cw // 2))
                 cy = esy - ch - 16
                 if cy < 50:
@@ -1934,9 +1999,6 @@ def main():
                 screen.blit(card_surf, (cx, cy))
 
                 # Living / Deceased / Survival Countdown Status Badge
-                is_alive = getattr(selected_entity, "is_alive", True)
-                h_timer = getattr(selected_entity, "hunger_death_timer", None)
-                t_timer = getattr(selected_entity, "thirst_death_timer", None)
                 if not is_alive:
                     reason = getattr(selected_entity, "death_reason", "Starvation")
                     st_txt = font_badge.render(f"[DECEASED: {reason}]", True, (239, 68, 68))
@@ -2001,17 +2063,49 @@ def main():
                     screen.blit(font_hud.render(f"Household: {household_name}", True, (56, 189, 248)), (cx + 14, cy + 34))
                     act_y = cy + 54
 
-                # Row 3: Current Activity / Job (Dynamic, Specific Description)
+                # Current and upcoming activity details
                 job_name = getattr(selected_entity, "job", "Worker")
                 if not is_alive:
                     task_name = "DECEASED"
                 else:
-                    raw_act = getattr(selected_entity, "current_activity", None) or getattr(selected_entity, "task", None) or getattr(selected_entity, "state", "IDLE")
-                    task_name = str(raw_act).replace("_", " ").title()
-                screen.blit(font_body.render(f"Profession: {job_name}  |  Activity: {task_name}", True, (226, 232, 240)), (cx + 14, act_y))
+                    raw_act = (
+                        getattr(selected_entity, "current_activity", None)
+                        or getattr(selected_entity, "activity", None)
+                        or getattr(selected_entity, "task", None)
+                        or getattr(selected_entity, "state", "IDLE")
+                    )
+                    task_name = str(raw_act).replace("_", " ").title() if raw_act == getattr(selected_entity, "task", None) else str(raw_act)
+                screen.blit(font_body.render(f"Profession: {job_name}", True, (226, 232, 240)), (cx + 14, act_y))
+                current_activity_y = act_y + 14
+                current_activity_rect = pygame.Rect(cx + 14, current_activity_y, cw - 28, font_body.get_height())
+                old_clip = screen.get_clip()
+                screen.set_clip(current_activity_rect)
+                screen.blit(
+                    font_body.render(f"Current Activity: {task_name}", True, (226, 232, 240)),
+                    (current_activity_rect.x, current_activity_rect.y),
+                )
+                screen.set_clip(old_clip)
+
+                next_header_y = cy + next_header_offset
+                screen.blit(
+                    font_badge.render("Next Activities:", True, (56, 189, 248)),
+                    (cx + 14, next_header_y),
+                )
+                next_row_rect = pygame.Rect(
+                    cx + 14, cy + next_start_offset, cw - 28,
+                    len(next_rows) * activity_row_height,
+                )
+                old_clip = screen.get_clip()
+                screen.set_clip(next_row_rect)
+                for index, activity in enumerate(next_rows):
+                    screen.blit(
+                        font_badge.render(f"- {activity}", True, (203, 213, 225)),
+                        (next_row_rect.x, next_row_rect.y + index * activity_row_height),
+                    )
+                screen.set_clip(old_clip)
 
                 # Happiness is the first need meter on the profile card.
-                bar_y1 = act_y + 19
+                bar_y1 = cy + bar_start_offset
                 if hasattr(selected_entity, "happiness"):
                     happiness_val = max(
                         HAPPINESS_MIN_VALUE,
@@ -2034,7 +2128,7 @@ def main():
                     screen.blit(font_badge.render(happiness_band.get("label", "Happy"), True, happiness_color), (cx + 226, bar_y1))
 
                 # Sleep follows happiness, then bodily needs and faith.
-                bar_y2 = bar_y1 + 17
+                bar_y2 = bar_y1 + AI_PROFILE_NEED_ROW_HEIGHT
                 if hasattr(selected_entity, "sleep_need"):
                     sleep_val = max(SLEEP_MIN_VALUE, min(SLEEP_MAX_VALUE, float(selected_entity.sleep_need)))
                     sleep_status = getattr(selected_entity, "sleep_status", "rested")
@@ -2050,7 +2144,7 @@ def main():
                     screen.blit(font_badge.render(f"{int(sleep_val)}% {sleep_status.replace('_', ' ').title()}", True, sleep_color), (cx + 226, bar_y2))
 
                 # Hunger, thirst, toilet, and faith follow the sleep bar.
-                bar_y3 = bar_y2 + 17
+                bar_y3 = bar_y2 + AI_PROFILE_NEED_ROW_HEIGHT
                 h_val = max(0.0, min(100.0, getattr(selected_entity, "hunger", 100.0)))
                 screen.blit(font_badge.render("Hunger:", True, (241, 245, 249)), (cx + 14, bar_y3))
                 h_bg = pygame.Rect(cx + 68, bar_y3, 150, 14)
@@ -2065,7 +2159,7 @@ def main():
                 screen.blit(font_badge.render(h_str, True, h_color), (cx + 226, bar_y3))
 
                 # Row 5: Thirst Bar
-                bar_y4 = bar_y3 + 17
+                bar_y4 = bar_y3 + AI_PROFILE_NEED_ROW_HEIGHT
                 t_val = max(0.0, min(100.0, getattr(selected_entity, "thirst", 100.0)))
                 screen.blit(font_badge.render("Thirst:", True, (241, 245, 249)), (cx + 14, bar_y4))
                 t_bg = pygame.Rect(cx + 68, bar_y4, 150, 14)
@@ -2080,7 +2174,7 @@ def main():
                 screen.blit(font_badge.render(t_str, True, t_color), (cx + 226, bar_y4))
 
                 # Row 6: Need Toilet Bar
-                bar_y5 = bar_y4 + 17
+                bar_y5 = bar_y4 + AI_PROFILE_NEED_ROW_HEIGHT
                 tl_val = max(0.0, min(100.0, getattr(selected_entity, "toilet", getattr(selected_entity, "need_toilet", 100.0))))
                 screen.blit(font_badge.render("Toilet:", True, (241, 245, 249)), (cx + 14, bar_y5))
                 tl_bg = pygame.Rect(cx + 68, bar_y5, 150, 14)
@@ -2093,9 +2187,9 @@ def main():
                 screen.blit(font_badge.render(f"{int(tl_val)}%", True, (255, 255, 255)), (cx + 226, bar_y5))
 
                 # Faith meter is individual and does not decay continuously like bodily needs.
-                info_y1 = bar_y5 + 19
+                info_y1 = bar_y5 + AI_PROFILE_NEED_ROW_HEIGHT + AI_PROFILE_INFO_SECTION_GAP
                 if hasattr(selected_entity, "faith"):
-                    bar_y6 = bar_y5 + 17
+                    bar_y6 = bar_y5 + AI_PROFILE_NEED_ROW_HEIGHT
                     faith_val = max(0.0, min(100.0, selected_entity.faith))
                     screen.blit(font_badge.render("Faith:", True, (241, 245, 249)), (cx + 14, bar_y6))
                     faith_bg = pygame.Rect(cx + 68, bar_y6, 150, 14)
@@ -2106,7 +2200,7 @@ def main():
                         pygame.draw.rect(screen, faith_color, (cx + 68, bar_y6, faith_fill, 14), border_radius=4)
                     pygame.draw.rect(screen, (71, 85, 105), faith_bg, width=1, border_radius=4)
                     screen.blit(font_badge.render(f"{int(faith_val)}%", True, (255, 255, 255)), (cx + 226, bar_y6))
-                    info_y1 = bar_y6 + 19
+                    info_y1 = bar_y6 + AI_PROFILE_NEED_ROW_HEIGHT + AI_PROFILE_INFO_SECTION_GAP
                 inv_items = []
                 for it, c in getattr(selected_entity, "inventory", {}).items():
                     if c > 0:
@@ -2122,12 +2216,81 @@ def main():
                 screen.blit(font_badge.render(f"Inventory: {inv_summary[:40]}", True, (148, 163, 184)), (cx + 14, info_y1))
 
                 # Row 8: Bed / Tool info
-                info_y2 = info_y1 + 17
+                info_y2 = info_y1 + AI_PROFILE_NEED_ROW_HEIGHT
                 assigned_bed = getattr(selected_entity, "assigned_bed_id", None)
                 bed_str = f"Bed: {assigned_bed}" if assigned_bed else "Bed: Floor"
                 tool_str = f"Tool: {getattr(selected_entity, 'active_tool', None) or 'None'}"
                 screen.blit(font_badge.render(f"{bed_str}  •  {tool_str}", True, (100, 116, 139)), (cx + 14, info_y2))
 
+                if has_happiness:
+                    happiness_panel = pygame.Rect(
+                        cx + 14, cy + happiness_panel_offset, cw - 28,
+                        happiness_panel_height,
+                    )
+                    entity_happiness_rect.update(happiness_panel)
+                    pygame.draw.rect(screen, (24, 34, 52), happiness_panel, border_radius=6)
+                    pygame.draw.rect(screen, (51, 65, 85), happiness_panel, width=1, border_radius=6)
+
+                    max_scroll = max(0, len(happiness_factors) - visible_factor_rows)
+                    selected_entity_happiness_scroll = min(
+                        max(0, selected_entity_happiness_scroll), max_scroll
+                    )
+                    first_factor = selected_entity_happiness_scroll
+                    last_factor = min(
+                        len(happiness_factors),
+                        first_factor + visible_factor_rows,
+                    )
+                    if happiness_factors:
+                        panel_title = (
+                            f"Happiness factors {first_factor + 1}-{last_factor} "
+                            f"of {len(happiness_factors)} (scroll)"
+                        )
+                    else:
+                        panel_title = "Happiness factors"
+                    screen.blit(
+                        font_badge.render(panel_title, True, (56, 189, 248)),
+                        (happiness_panel.x + 8, happiness_panel.y + 5),
+                    )
+
+                    if not happiness_factors:
+                        screen.blit(
+                            font_badge.render("No active happiness modifiers", True, (148, 163, 184)),
+                            (
+                                happiness_panel.x + 8,
+                                happiness_panel.y + AI_PROFILE_FACTOR_PANEL_HEADER_HEIGHT,
+                            ),
+                        )
+                    else:
+                        factor_clip = pygame.Rect(
+                            happiness_panel.x + 8,
+                            happiness_panel.y + AI_PROFILE_FACTOR_PANEL_HEADER_HEIGHT,
+                            happiness_panel.width - 16,
+                            happiness_panel.height - AI_PROFILE_FACTOR_PANEL_HEADER_HEIGHT,
+                        )
+                        old_clip = screen.get_clip()
+                        screen.set_clip(factor_clip)
+                        for row, factor in enumerate(happiness_factors[first_factor:last_factor]):
+                            amount = float(factor.get("amount", 0.0))
+                            label = str(factor.get("label", "Happiness factor"))
+                            color = (74, 222, 128) if amount >= 0 else (248, 113, 113)
+                            row_y = factor_clip.y + row * activity_row_height
+                            label_surface = font_badge.render(label, True, (226, 232, 240))
+                            value_surface = font_badge.render(f"{amount:+g}", True, color)
+                            label_clip = pygame.Rect(
+                                factor_clip.x, row_y,
+                                factor_clip.width - value_surface.get_width() - 8,
+                                activity_row_height,
+                            )
+                            screen.set_clip(label_clip)
+                            screen.blit(label_surface, (factor_clip.x, row_y))
+                            screen.set_clip(factor_clip)
+                            screen.blit(
+                                value_surface,
+                                (factor_clip.right - value_surface.get_width(), row_y),
+                            )
+                        screen.set_clip(old_clip)
+                else:
+                    entity_happiness_rect.update(0, 0, 0, 0)
 
             # 8. Clock & Calendar HUD (Top Left)
             day_cycle.draw_hud(screen, villager_manager)

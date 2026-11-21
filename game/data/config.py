@@ -87,6 +87,11 @@ PATH_ROUTE_WAYPOINT_RADIUS = 3
 COLOR_PATH_ROUTE = COLOR_PATH_TARGET_RING
 COLOR_PATH_ROUTE_FAILED = (239, 68, 68)
 PATH_WAYPOINT_TOLERANCE = 14.0           # Waypoint arrival threshold
+PATH_DIAGONAL_STEP_COST = 1.4142135623730951
+PATH_NEIGHBOR_OFFSETS = (
+    (1, 0), (-1, 0), (0, 1), (0, -1),
+    (1, 1), (1, -1), (-1, 1), (-1, -1),
+)
 NAVIGATION_RETRY_INTERVAL = 0.5          # Seconds before retrying an unreachable destination
 NAVIGATION_BLOCKED_TILE_TIMEOUT = 8.0    # Seconds to avoid a tile that stopped an actor
 NAVIGATION_BLOCKED_PROBE_DISTANCE = 48.0 # Distance ahead used to identify a blocked tile
@@ -336,26 +341,150 @@ SCHEDULE_TYPES = {
     }
 }
 
-# Task states that represent needs or rest, rather than unfinished work.
-# Any other active task is allowed to finish before the schedule changes activity.
-SCHEDULE_NON_WORK_TASKS = frozenset({
-    "IDLE", "DECEASED", "SEEKING_FOOD", "SEEKING_WATER", "SEEKING_TOILET",
-    "RECOVER_DEATH_ITEMS", "SLEEPING", "ZONKED_SLEEP", "LEISURE", "STROLLING",
-    "LEADING_PRAYER", "ATTENDING_PRAYER", "PRAYING", "PREACHING",
-    "RETURNING_TITHES_HOME",
-    "WAITING_FOR_CARPENTER_COMMISSION",
-    "CONFESSION_QUEUED", "WAITING_FOR_CONFESSION", "CONFESSION_RETRIEVE_COINS",
-    "CONFESSION_TRAVEL_TO_PRIEST", "GOING_TO_CONFESSOR",
-    "GOING_TO_CONFESSION_BOX", "CONFESSING",
-    "HEARING_CONFESSION",
-}) | frozenset({
-    "GOING_TO_TAX_OFFICE",
-    "STATIONED_AT_TAX_OFFICE",
-    "VISITING_HOUSEHOLD_FOR_TAX",
-    "WAITING_FOR_HOUSEHOLD_TAX",
-    "RETURNING_TAX_TO_TREASURY",
+# Task states are paused outside these schedule slots and resumed when the slot
+# returns. Prefixes are kept separate so task families stay data-driven.
+SCHEDULE_ACTIVITY_TASKS = {
+    "WORK": frozenset({
+        "BUYING_JOB_TOOLS_RETRIEVE_COINS", "BUYING_JOB_TOOLS_TRAVEL_TO_MARKET",
+        "BUYING_JOB_TOOLS_RETURN_HOME", "MISSING_TOOL", "RETURNING_TOOLS",
+        "EQUIPPING_JOB_TOOLS", "TILLING", "FETCHING_WATER", "WATERING",
+        "HARVESTING", "HAULING_HOME", "PREACHING", "RETURNING_TITHES_HOME",
+        "CARRYING_CORPSE", "DIGGING_GRAVE", "BURYING_GRAVE", "FETCHING_CORPSE",
+        "GRAVEDIGGER_BURIAL_PAYMENT_RETRIEVE", "WAITING_FOR_BURIAL_PAYMENT",
+        "GOING_TO_TAX_OFFICE", "STATIONED_AT_TAX_OFFICE",
+        "VISITING_HOUSEHOLD_FOR_TAX", "WAITING_FOR_HOUSEHOLD_TAX",
+        "RETURNING_TAX_TO_TREASURY", "PAYING_SOCAGE_TAX",
+        "WAITING_FOR_CARPENTER_COMMISSION", "CARPENTER_CONSTRUCTING",
+        "CARPENTER_COLLECTING_MATERIALS", "CARPENTER_DELIVERING_MATERIALS",
+        "CARPENTER_REPAIRING",
+    }),
+    "LEISURE": frozenset({
+        "SEEKING_FOOD", "SEEKING_WATER", "SEEKING_TOILET",
+        "RECOVER_DEATH_ITEMS", "BUYING_FOOD_RETRIEVE_COINS",
+        "BUYING_FOOD_RETRIEVE_GROUND_COINS", "BUYING_FOOD_TRAVEL_TO_MARKET",
+        "BUYING_FOOD_HAULING_HOME", "FETCHING_FURNITURE",
+        "FETCHING_DROPPED_FURNITURE", "HAULING_FURNITURE",
+        "HAULING_DROPPED_FURNITURE", "FETCHING_POSSESSION",
+        "HAULING_POSSESSION_HOME", "HAULING_HOUSEHOLD_WATER",
+        "COLLECTING_HOUSEHOLD_WATER", "BURIAL_PAYMENT_RETRIEVE",
+        "BURIAL_PAYMENT_TRAVEL", "CONFESSION_QUEUED",
+        "WAITING_FOR_CONFESSION", "CONFESSION_RETRIEVE_COINS",
+        "CONFESSION_TRAVEL_TO_PRIEST", "GOING_TO_CONFESSOR",
+        "GOING_TO_CONFESSION_BOX", "CONFESSING", "HEARING_CONFESSION",
+        "DEPOSITING_UNUSED_ITEMS",
+    }),
+    "SLEEP": frozenset({"SLEEPING", "DEPOSITING_UNUSED_ITEMS"}),
+    "PRAYER": frozenset({"LEADING_PRAYER", "ATTENDING_PRAYER", "PRAYING"}),
+}
+SCHEDULE_ACTIVITY_TASK_PREFIXES = (
+    ("CARPENTER_FEE_", "LEISURE"),
+    ("CARPENTER_RESTOCK_", "WORK"),
+    ("CARPENTER_", "WORK"),
+    ("GRAVEDIGGER_RESTOCK_", "WORK"),
+    ("HAULING_STALL_", "LEISURE"),
+)
+ARTISAN_JOB_IDS = ("Carpenter", "Blacksmith", "Baker")
+SCHEDULE_ACTIVITY_STRICT_TASK_PREFIXES = tuple(
+    f"{job.upper()}_" for job in ARTISAN_JOB_IDS
+)
+SCHEDULE_ACTIVITY_STRICT_TASK_PREFIX_EXEMPTIONS = ("CARPENTER_FEE_",)
+SCHEDULE_ACTIVITY_NEUTRAL_TASKS = frozenset({
+    "IDLE", "DECEASED", "LEISURE", "STROLLING", "ZONKED_SLEEP",
 })
+SCHEDULE_ACTIVITY_CANCEL_ON_BOUNDARY = frozenset({
+    "SLEEPING", "LEADING_PRAYER", "ATTENDING_PRAYER", "PRAYING",
+    "CONFESSION_QUEUED", "WAITING_FOR_CONFESSION",
+    "CONFESSION_RETRIEVE_COINS", "CONFESSION_TRAVEL_TO_PRIEST",
+    "GOING_TO_CONFESSOR", "GOING_TO_CONFESSION_BOX", "CONFESSING",
+    "HEARING_CONFESSION",
+})
+SCHEDULE_ACTIVITY_STRICT_TASKS = frozenset({
+    "GOING_TO_TAX_OFFICE", "STATIONED_AT_TAX_OFFICE",
+    "VISITING_HOUSEHOLD_FOR_TAX", "WAITING_FOR_HOUSEHOLD_TAX",
+    "RETURNING_TAX_TO_TREASURY",
+    "WAITING_FOR_CARPENTER_COMMISSION",
+})
+SCHEDULE_ACTIVITY_TASK_STATE_FIELDS = (
+    "current_work_tile", "tilling_timer", "watering_timer", "well_draw_timer",
+    "has_water", "water_day", "water_charges", "carrying_crop",
+    "carrying_res", "carrying_amount", "water_collect_amount",
+)
+
+# Kept for older callers; scheduling now uses SCHEDULE_ACTIVITY_TASKS.
+SCHEDULE_NON_WORK_TASKS = frozenset(
+    task
+    for group, tasks in SCHEDULE_ACTIVITY_TASKS.items()
+    if group != "WORK"
+    for task in tasks
+) | SCHEDULE_ACTIVITY_NEUTRAL_TASKS
 FREE_TIME_SCHEDULE_ACTIVITIES = frozenset({"LEISURE", "ANY"})
+AI_ACTIVITY_PREVIEW_MAX_NEXT = 5
+AI_PROFILE_HAPPINESS_VISIBLE_ROWS = 5
+AI_PROFILE_ACTIVITY_ROW_HEIGHT = 14
+AI_PROFILE_NEED_ROW_HEIGHT = 17
+AI_PROFILE_CARD_WIDTH = 380
+AI_PROFILE_ACTIVITY_OFFSET = 54
+AI_PROFILE_DECEASED_ACTIVITY_OFFSET = 68
+AI_PROFILE_ACTIVITY_HEADER_OFFSET = 30
+AI_PROFILE_NEED_SECTION_GAP = 5
+AI_PROFILE_INFO_SECTION_GAP = 2
+AI_PROFILE_FACTOR_SECTION_GAP = 18
+AI_PROFILE_FACTOR_PANEL_HEADER_HEIGHT = 22
+AI_PROFILE_PANEL_BOTTOM_PADDING = 10
+AI_ACTIVITY_NEXT_STEPS = {
+    "SEEKING_FOOD": ("Eat available food or arrange a market purchase",),
+    "BUYING_FOOD_RETRIEVE_COINS": (
+        "Travel to the market", "Purchase food", "Return home and eat",
+    ),
+    "BUYING_FOOD_RETRIEVE_GROUND_COINS": (
+        "Collect household coins", "Travel to the market", "Purchase food",
+        "Return home and eat",
+    ),
+    "BUYING_FOOD_TRAVEL_TO_MARKET": (
+        "Purchase food", "Return home and eat",
+    ),
+    "BUYING_FOOD_HAULING_HOME": ("Store food and eat",),
+    "SEEKING_WATER": ("Collect or drink water",),
+    "FETCHING_WATER": ("Drink collected water",),
+    "SEEKING_TOILET": ("Use the toilet", "Release the toilet reservation"),
+    "FETCHING_POSSESSION": ("Carry items home", "Store household items"),
+    "HAULING_POSSESSION_HOME": ("Store household items",),
+    "COLLECTING_HOUSEHOLD_WATER": ("Carry water home", "Store household water"),
+    "HAULING_HOUSEHOLD_WATER": ("Store household water",),
+    "FETCHING_FURNITURE": ("Carry furniture home", "Install furniture"),
+    "FETCHING_DROPPED_FURNITURE": ("Carry furniture home", "Install furniture"),
+    "HAULING_FURNITURE": ("Install furniture",),
+    "HAULING_DROPPED_FURNITURE": ("Install furniture",),
+    "RECOVER_DEATH_ITEMS": ("Return recovered items to household storage",),
+    "SLEEPING": ("Continue sleeping until rested",),
+    "ZONKED_SLEEP": ("Continue sleeping until the wake threshold",),
+    "EQUIPPING_JOB_TOOLS": ("Travel to the workplace", "Perform the assigned job"),
+    "TILLING": ("Water or harvest eligible crops",),
+    "WATERING": ("Continue farming or return to other work",),
+    "HARVESTING": ("Carry the harvest home", "Store the harvest"),
+    "HAULING_HOME": ("Store the harvest",),
+    "CARPENTER_RESTOCK_RETRIEVE_COINS": (
+        "Travel to the market", "Buy materials", "Carry materials to storage",
+        "Resume Carpenter work",
+    ),
+    "CARPENTER_RESTOCK_TRAVEL_TO_MARKET": (
+        "Buy materials", "Carry materials to storage", "Resume Carpenter work",
+    ),
+    "CARPENTER_RESTOCK_HAULING_HOME": (
+        "Store materials", "Resume Carpenter work",
+    ),
+    "CARPENTER_COLLECTING_MATERIALS": ("Deliver materials", "Continue construction or repair"),
+    "CARPENTER_DELIVERING_MATERIALS": ("Continue construction or repair",),
+    "CARPENTER_CONSTRUCTING": ("Continue construction",),
+    "CARPENTER_REPAIRING": ("Continue repair",),
+    "CONFESSION_QUEUED": ("Wait for the Priest", "Approach the Priest", "Confess"),
+    "WAITING_FOR_CONFESSION": ("Approach the Priest when called", "Confess"),
+    "CONFESSION_RETRIEVE_COINS": ("Travel to the Priest", "Confess"),
+    "CONFESSION_TRAVEL_TO_PRIEST": ("Meet the Priest", "Confess"),
+    "GOING_TO_CONFESSOR": ("Meet the Priest", "Confess"),
+    "GOING_TO_CONFESSION_BOX": ("Confess with the Priest",),
+    "CONFESSING": ("Complete confession",),
+}
 MARKET_SALES_REPORT_PERIOD_DAYS = 10
 CARPENTER_INSUFFICIENT_LANDLORD_COIN_MESSAGES = (
     "The treasury does not hold enough coin for this commission, my Lord.",
@@ -1074,15 +1203,15 @@ CROP_TYPES = {
         "name": "Potato",
         "icon": "🥔",
         "wip": False,
-        "desc": "Hearty staple tuber crop. Produces 2-5 potatoes per tile every 10 days.",
+        "desc": "Hearty staple tuber crop. Each tile yields 2 potatoes 80% of the time, 4 potatoes 15% of the time, and 5 potatoes 5% of the time every 10 days.",
         "growth_days": 10.0,
         "sprout_day": 2.0,
         "leaf_day": 4.0,
         "harvest_day": 10.0,
         "yield_distribution": [
-            {"amount": 2, "weight": 0.60},
-            {"amount": 4, "weight": 0.30},
-            {"amount": 5, "weight": 0.10},
+            {"amount": 2, "weight": 0.80},
+            {"amount": 4, "weight": 0.15},
+            {"amount": 5, "weight": 0.05},
         ],
         "yield_per_tile": 2,
         "yield": 2
@@ -1213,6 +1342,8 @@ DAILY_FOOD_REQUIREMENT = 1             # 1 food per day per living individual
 DAILY_WATER_REQUIREMENT = 1            # 1 water per day per living individual
 AI_NEED_FOOD_RESTORE = 100.0           # Need restored when consuming food
 AI_NEED_WATER_RESTORE = 100.0          # Need restored when drinking water
+AI_NEED_SEEK_COOLDOWN_SECONDS = 4.0
+AI_NEED_PURCHASE_WAIT_COOLDOWN_SECONDS = 3.0
 HOUSEHOLD_WATER_MAX_COLLECTORS = 2     # Maximum concurrent household members hauling water
 AI_NEED_FAITH_MAX = 100.0
 AI_NEED_FAITH_DAILY_DECAY_MIN = 10.0
@@ -1224,7 +1355,6 @@ AI_NEED_FAITH_PRAYER_RESTORE_MIN = 10.0
 AI_NEED_FAITH_PRAYER_RESTORE_MAX = 20.0
 CONFESSION_DURATION_SECONDS = 5.0
 CONFESSION_BUBBLE_DURATION_SECONDS = 5.0
-CONFESSION_MAX_WAIT_HOURS = 2.0
 
 # Individual happiness modifiers and their performance effects.
 # Conditions are evaluated by HappinessSystem; this data owns all tuning values.
@@ -1276,10 +1406,10 @@ SLEEP_INITIAL_VALUE = 100.0
 SLEEP_MIN_VALUE = 0.0
 SLEEP_MAX_VALUE = 100.0
 SLEEP_FULL_RECOVERY_INGAME_HOURS = 8.0
-SLEEP_WAKE_DRAIN_INGAME_HOURS = 16.0
+SLEEP_WAKE_DRAIN_INGAME_HOURS = 20.0
 SLEEP_NO_BED_RECOVERY_DURATION_MULTIPLIER = 1.5
 SLEEP_BED_ARRIVAL_DISTANCE = 12.0
-SLEEP_FORCED_WAKE_THRESHOLD = 30.0
+SLEEP_FORCED_WAKE_THRESHOLD = 10.0
 SLEEP_ANY_REST_THRESHOLD = 30.0
 SLEEP_ANY_WAKE_THRESHOLD = 70.0
 SLEEP_STATUS_BANDS = (
@@ -1328,7 +1458,6 @@ SOCAGE_TAX_HAPPINESS_TIERS = ((1, 10, -5), (11, 20, -20), (21, 30, -30),
 CHURCH_TAX_HAPPINESS_TIERS_COPPER = ((1, 1, -5), (2, 19, -10),
                                      (20, 99, -20), (100, None, -50))
 NO_CHURCH_TAX_HAPPINESS_BONUS = 10
-SOCAGE_TAX_MAX_WAIT_HOURS = 2.0
 TAX_COLLECTOR_STATION_ARRIVAL_DISTANCE = 20.0
 SOCAGE_TAX_GREETING_LINES = ("Pay your taxes, please.", "The Crown's due is collected today.",
                              "I am here for the household socage.")

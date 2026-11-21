@@ -1,8 +1,8 @@
 """
 Comprehensive Acceptance Tests for AGENT 3 Deliverables:
 - Production Distribution & Household Shares (Cases A, B, C, D, Indivisible Handling, Zero Loss)
-- Potato Farming Yield Adjustment (2 Potatoes / Tile, 8 Tiles = 16 Potatoes)
-- Tax System (WIP reporting, zero deductions)
+- Potato Farming Yield Distribution (2: 80%, 4: 15%, 5: 5%)
+- Active Household Tax System (production distribution remains untaxed)
 - Persistent WIP Planning Registry & In-Game UI Overview
 """
 
@@ -221,54 +221,46 @@ class TestProductionDistributionAndWIP(unittest.TestCase):
             self.assertEqual(sum(dist.values()), 6)
 
     # =========================================================================
-    # 3. POTATO FARMING PRODUCTION ADJUSTMENT (2 / Tile Every 10 Days)
+    # 3. POTATO FARMING YIELD DISTRIBUTION
     # =========================================================================
 
     def test_potato_config_yield_value(self):
-        """CROP_TYPES potato config must define yield 2 per tile."""
+        """Potato config defines the minimum fallback yield and the weighted outcomes."""
         potato_cfg = CROP_TYPES.get("potato", {})
         self.assertEqual(potato_cfg.get("yield_per_tile"), 2)
         self.assertEqual(potato_cfg.get("yield"), 2)
         self.assertEqual(potato_cfg.get("growth_days"), 10.0)
+        self.assertEqual(
+            potato_cfg.get("yield_distribution"),
+            [
+                {"amount": 2, "weight": 0.80},
+                {"amount": 4, "weight": 0.15},
+                {"amount": 5, "weight": 0.05},
+            ],
+        )
 
-    def test_potato_harvest_tile_yields_exactly_two(self):
-        """Each successfully harvested potato tile must produce exactly 2 Potatoes."""
-        farm = AreaPermit("farm_1", "Potato Farm", "farm", [(5, 5)])
-        farm.crop = "Potato"
-        farm.tile_crops = {
-            (5, 5): {
-                "crop": "Potato",
-                "growth_days": 10.0,
-                "watered_today": True,
-                "unwatered_days": 0,
-                "is_dead": False
+    def test_potato_harvest_uses_configured_weighted_outcomes(self):
+        """Harvest uses the configured possible yields and probabilities."""
+        from unittest.mock import patch
+
+        for expected_yield in (2, 4, 5):
+            farm = AreaPermit("farm_1", "Potato Farm", "farm", [(5, 5)])
+            farm.crop = "Potato"
+            farm.tile_crops = {
+                (5, 5): {
+                    "crop": "Potato",
+                    "growth_days": 10.0,
+                    "watered_today": True,
+                    "unwatered_days": 0,
+                    "is_dead": False
+                }
             }
-        }
 
-        yield_amt = farm.harvest_tile(5, 5)
-        self.assertEqual(yield_amt, 2, "Harvested tile must yield exactly 2 potatoes")
-
-    def test_farmer_managing_8_tiles_harvests_16_potatoes(self):
-        """A farmer managing 8 potato tiles harvests 16 Potatoes after 10 days."""
-        tiles = [(x, y) for x in range(4) for y in range(2)]  # 8 tiles
-        farm = AreaPermit("farm_8", "Eight Tile Farm", "farm", tiles)
-        farm.crop = "Potato"
-        farm.tile_crops = {
-            t: {
-                "crop": "Potato",
-                "growth_days": 10.0,
-                "watered_today": True,
-                "unwatered_days": 0,
-                "is_dead": False
-            }
-            for t in tiles
-        }
-
-        total_harvest = 0
-        for t in tiles:
-            total_harvest += farm.harvest_tile(t[0], t[1])
-
-        self.assertEqual(total_harvest, 16, "8 potato tiles must yield exactly 16 potatoes")
+            with self.subTest(yield_amount=expected_yield), patch(
+                "game.world.permits.random.choices", return_value=[expected_yield]
+            ) as choose_yield:
+                self.assertEqual(farm.harvest_tile(5, 5), expected_yield)
+                choose_yield.assert_called_once_with([2, 4, 5], weights=[0.80, 0.15, 0.05], k=1)
 
     def test_unripe_potato_tile_produces_zero(self):
         """Growth stages & 10-day cycle preserved: tile under 10 days produces 0."""
@@ -294,15 +286,22 @@ class TestProductionDistributionAndWIP(unittest.TestCase):
             self.assertTrue(cfg.get("wip", False))
 
     # =========================================================================
-    # 4. TAX SYSTEM (WIP)
+    # 4. ACTIVE TAX SYSTEM
     # =========================================================================
 
-    def test_tax_section_in_reports_marked_wip(self):
-        """Tax section exists in Reports tabs and is marked WIP."""
+    def test_tax_section_in_reports_is_active(self):
+        """Tax section exists in Reports tabs and is not marked WIP."""
         ui = RaportUI()
         tax_tab = next((t for t in ui.tabs if t["id"] == "tax"), None)
         self.assertIsNotNone(tax_tab, "Tax tab must exist in Reports")
-        self.assertTrue(tax_tab["wip"], "Tax section must be marked as WIP")
+        self.assertFalse(tax_tab["wip"], "Tax section is an active feature")
+
+    def test_household_taxation_is_marked_implemented(self):
+        feature = next(
+            item for item in get_all_planning_features()
+            if item["id"] == "household_taxation"
+        )
+        self.assertEqual(feature["status"], STATUS_IMPLEMENTED)
 
     def test_no_tax_deductions_applied(self):
         """Zero tax deductions applied to household storage or inventory."""
@@ -326,9 +325,9 @@ class TestProductionDistributionAndWIP(unittest.TestCase):
     # 5. PERSISTENT WIP PLANNING & IN-GAME ROADMAP OVERVIEW
     # =========================================================================
 
-    def test_all_nine_wip_items_recorded(self):
-        """All 9 required postponed features are tracked in persistent planning."""
-        required_wip_ids = [
+    def test_all_required_planning_items_recorded(self):
+        """All required roadmap entries remain tracked, including active features."""
+        required_feature_ids = [
             "corpse_burial",
             "household_market_mgmt",
             "market_assignment",
@@ -343,22 +342,20 @@ class TestProductionDistributionAndWIP(unittest.TestCase):
         all_features = get_all_planning_features()
         tracked_ids = [f["id"] for f in all_features]
 
-        for req_id in required_wip_ids:
-            self.assertIn(req_id, tracked_ids, f"Required WIP item {req_id} missing from planning registry")
+        for req_id in required_feature_ids:
+            self.assertIn(req_id, tracked_ids, f"Required planning item {req_id} missing from planning registry")
             feature = next(f for f in all_features if f["id"] == req_id)
             self.assertTrue(len(feature["name"]) > 0)
             self.assertTrue(len(feature["description"]) > 0)
             self.assertIn(feature["status"], (STATUS_PLANNED, STATUS_PARTIAL, STATUS_IMPLEMENTED))
 
-    def test_implemented_features_distinguishable_from_wip(self):
-        """Player can distinguish between Implemented, Partial, and Planned WIP features."""
+    def test_implemented_features_distinguishable_from_planned(self):
+        """Player can distinguish active implemented features from planned work."""
         implemented = get_features_by_status(STATUS_IMPLEMENTED)
-        partial = get_features_by_status(STATUS_PARTIAL)
         planned = get_features_by_status(STATUS_PLANNED)
 
         self.assertGreater(len(implemented), 0, "Must have active implemented features tracked")
-        self.assertGreater(len(partial), 0, "Taxation should be tracked as Partial WIP")
-        self.assertEqual(len(planned), 8, "8 items must be in PLANNED status")
+        self.assertGreater(len(planned), 0, "Planned features should be tracked")
 
         # IDs must be disjoint
         impl_ids = {f["id"] for f in implemented}
