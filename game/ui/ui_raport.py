@@ -223,9 +223,6 @@ class RaportUI:
         self.public_commission_btn_rects = {}
         self.selected_public_commission = None
         self.cancel_demolition_btn_rects = {}
-        self.workplace_popup_item = None      # (kind, item_id) awaiting base choice
-        self.workplace_popup_btn_rects = {}   # {"permit": Rect, "structure": Rect}
-        self.workplace_popup_bg_rect = None
 
         self.modal_w = RAPORT_MODAL_WIDTH
         self.modal_h = RAPORT_MODAL_HEIGHT
@@ -336,9 +333,6 @@ class RaportUI:
         self.job_search_text = ""
         self.job_search_active = False
         self.job_search_rect = None
-        self.workplace_popup_item = None
-        self.workplace_popup_btn_rects = {}
-        self.workplace_popup_bg_rect = None
 
     def open_household_directly(self, family_id):
         """Contextual View: Opens Town Ledger directly to the specified family's View Family screen"""
@@ -431,100 +425,6 @@ class RaportUI:
             except Exception:
                 pass
         return stock
-
-    def _workplace_bases_for_item(self, kind, item_id):
-        """Workplace base kinds ('permit'/'structure') a placeable item provides."""
-        bases = set()
-        for job_cfg in DEDICATED_JOBS.values():
-            if kind == "permit" and job_cfg.get("workplace_permit") == item_id:
-                bases.add("permit")
-            elif kind == "building" and job_cfg.get("workplace_building_type") == item_id:
-                bases.add("structure")
-            elif kind == "furniture" and job_cfg.get("workplace_furniture_type") == item_id:
-                bases.add("structure")
-        return bases
-
-    def _workplace_item_name(self, kind, item_id):
-        if kind == "permit":
-            return PERMIT_TYPES.get(item_id, {}).get("name", str(item_id).replace("_", " ").title())
-        if kind == "building":
-            return BUILDING_TYPES.get(item_id, {}).get("name", str(item_id).replace("_", " ").title())
-        return FURNITURE_TYPES.get(item_id, {}).get("name", str(item_id).replace("_", " ").title())
-
-    def _workplace_item_start_action(self, kind, item_id, permit_manager):
-        """Runs the same placement state transition as a direct item click."""
-        if kind == "permit":
-            self.placing_permit_type = item_id
-            self.selected_building_type = None
-            self.is_open = False
-            return f"start_placing_permit_{item_id}"
-        if kind == "building":
-            b_cfg = BUILDING_TYPES.get(item_id, {})
-            has_permit = (not b_cfg.get("allowed_permits")
-                          or any(permit_manager.has_permit_type(p_type)
-                                 for p_type in b_cfg.get("allowed_permits", ())))
-            if has_permit:
-                self.selected_building_type = item_id
-                self.selected_furniture_type = None
-                self.placing_permit_type = None
-                self.show_structures_menu = False
-                self.is_open = False
-                return f"start_drag_building_{item_id}"
-            return f"need_permit_{item_id}"
-        self.selected_furniture_type = item_id
-        self.selected_building_type = None
-        self.placing_permit_type = None
-        self.show_furniture_menu = False
-        self.is_open = False
-        return f"start_place_furniture_{item_id}"
-
-    def _draw_workplace_base_popup(self, surface, mx, mouse_pos):
-        """Small 2-option chooser: Permit vs Structure workplace base."""
-        if self.workplace_popup_item is None:
-            return
-        kind, item_id = self.workplace_popup_item
-        bases = self._workplace_bases_for_item(kind, item_id)
-        if not bases:
-            self.workplace_popup_item = None
-            return
-        self._init_fonts()
-
-        screen_h = surface.get_size()[1]
-        my = (screen_h - self.modal_h) // 2
-        pop_w, pop_h = 380, 168
-        pop_x = mx + (self.modal_w - pop_w) // 2
-        pop_y = my + (self.modal_h - pop_h) // 2
-        self.workplace_popup_bg_rect = pygame.Rect(pop_x, pop_y, pop_w, pop_h)
-        pygame.draw.rect(surface, (15, 23, 42, 250), self.workplace_popup_bg_rect, border_radius=10)
-        pygame.draw.rect(surface, (59, 130, 246), self.workplace_popup_bg_rect, width=2, border_radius=10)
-
-        name = self._workplace_item_name(kind, item_id)
-        title = self.font_sub.render(f"{name} — Workplace", True, (241, 245, 249))
-        surface.blit(title, (pop_x + 16, pop_y + 14))
-        sub = self.font_body.render("Choose the workplace base type:", True, (148, 163, 184))
-        surface.blit(sub, (pop_x + 16, pop_y + 38))
-
-        self.workplace_popup_btn_rects = {}
-        btn_w, btn_h, gap = 160, 44, 16
-        start_x = pop_x + (pop_w - (btn_w * 2 + gap)) // 2
-        btn_y = pop_y + pop_h - btn_h - 16
-        options = [
-            ("permit", "PERMIT", "Zoned permit workplace", (74, 222, 128)),
-            ("structure", "STRUCTURE", "Building / furniture", (96, 165, 250)),
-        ]
-        for idx, (base, label, desc, col) in enumerate(options):
-            rect = pygame.Rect(start_x + idx * (btn_w + gap), btn_y, btn_w, btn_h)
-            self.workplace_popup_btn_rects[base] = rect
-            enabled = base in bases
-            hov = enabled and rect.collidepoint(mouse_pos)
-            bg = col if hov else ((30, 41, 59) if not enabled else tuple(min(255, c + 30) for c in col))
-            pygame.draw.rect(surface, bg, rect, border_radius=6)
-            pygame.draw.rect(surface, col if enabled else (71, 85, 105), rect, width=1, border_radius=6)
-            lbl_col = (255, 255, 255) if enabled else (100, 116, 139)
-            t1 = self.font_btn.render(label, True, lbl_col)
-            surface.blit(t1, (rect.centerx - t1.get_width() // 2, rect.y + 8))
-            t2 = self.font_badge.render(desc if enabled else "Not supported", True, lbl_col)
-            surface.blit(t2, (rect.centerx - t2.get_width() // 2, rect.y + 26))
 
     def is_text_input_active(self):
         """Mengembalikan True jika player sedang mengetik di input/text field dalam UI Raport"""
@@ -785,22 +685,7 @@ class RaportUI:
                 self.selected_schedule_job_id = None
                 self.selected_building_owner = None
                 self.building_scroll_y = 0
-                self.workplace_popup_item = None
                 return f"switch_tab_{i}"
-
-        # Workplace base chooser popup (Permit vs Structure) — topmost capture
-        if self.workplace_popup_item is not None:
-            kind, item_id = self.workplace_popup_item
-            for base, rect in list(self.workplace_popup_btn_rects.items()):
-                if rect and rect.collidepoint(mouse_pos):
-                    if base in self._workplace_bases_for_item(kind, item_id):
-                        self.workplace_popup_item = None
-                        return self._workplace_item_start_action(kind, item_id, permit_manager)
-                    return None
-            if self.workplace_popup_bg_rect and self.workplace_popup_bg_rect.collidepoint(mouse_pos):
-                return None
-            self.workplace_popup_item = None
-            return None
 
         # 4. Tab 0: Building Management
         if self.active_tab == 0:
@@ -867,9 +752,6 @@ class RaportUI:
             # Check Building Construction buttons (from category view or quick build)
             for b_type, rect in list(self.building_select_rects.items()):
                 if rect.collidepoint(mouse_pos):
-                    if self._workplace_bases_for_item("building", b_type):
-                        self.workplace_popup_item = ("building", b_type)
-                        return None
                     b_cfg = BUILDING_TYPES.get(b_type, {})
                     has_permit = permit_manager.has_permit_type(b_type)
                     if has_permit:
@@ -885,9 +767,6 @@ class RaportUI:
             # Check Furniture Placement buttons
             for f_type, rect in list(self.furniture_select_rects.items()):
                 if rect.collidepoint(mouse_pos):
-                    if self._workplace_bases_for_item("furniture", f_type):
-                        self.workplace_popup_item = ("furniture", f_type)
-                        return None
                     self.selected_furniture_type = f_type
                     self.selected_building_type = None
                     self.placing_permit_type = None
@@ -994,9 +873,6 @@ class RaportUI:
 
             for p_type, btn_rect in self.permit_btn_rects.items():
                 if btn_rect.collidepoint(mouse_pos):
-                    if self._workplace_bases_for_item("permit", p_type):
-                        self.workplace_popup_item = ("permit", p_type)
-                        return None
                     self.placing_permit_type = p_type
                     self.selected_building_type = None
                     self.is_open = False
@@ -1976,8 +1852,6 @@ class RaportUI:
                     lbl = self.font_btn.render(lbl_txt, True, (255, 255, 255))
                     surface.blit(lbl, (item_btn.centerx - lbl.get_width() // 2, item_btn.centery - lbl.get_height() // 2))
 
-            self._draw_workplace_base_popup(surface, mx, m_pos)
-
     def _draw_permit_row(self, surface, p, mx, y_cur, empty_areas):
         """Helper to render a single permit row with all interactive controls (Agent 2)"""
         is_empty = p in empty_areas
@@ -2453,8 +2327,6 @@ class RaportUI:
                 surface.blit(b_txt, (btn_r.x + (btn_r.w - b_txt.get_width()) // 2, btn_r.y + 5))
 
                 crop_y += 46
-
-        self._draw_workplace_base_popup(surface, mx, pygame.mouse.get_pos())
 
     def _draw_priority_tab(self, surface, mx, cy, servant_manager):
         """RimWorld-Style Work Priorities Grid (1=High, 4=Low, -=Off)"""
