@@ -54,10 +54,8 @@ class TestUIGrantModalResponsive(unittest.TestCase):
 
         footer_top = self.ui.grant_submit_btn_rect.top - 14  # top of footer bar
         
-        # Check all registered row controls: minus, plus, max, qty boxes
-        all_row_rects = list(self.ui.grant_dec_btn_rects.values()) + \
-                        list(self.ui.grant_inc_btn_rects.values()) + \
-                        list(self.ui.grant_max_btn_rects.values()) + \
+        # Check all registered row controls: qty boxes and max buttons
+        all_row_rects = list(self.ui.grant_max_btn_rects.values()) + \
                         list(self.ui.grant_item_qty_rects.values())
 
         for r in all_row_rects:
@@ -75,10 +73,10 @@ class TestUIGrantModalResponsive(unittest.TestCase):
         vp = self.ui.grant_viewport_rect
         self.assertIsNotNone(vp)
 
-        for it_type, r in self.ui.grant_dec_btn_rects.items():
-            self.assertTrue(vp.collidepoint(r.center), f"Minus button for {it_type} center is outside viewport!")
-        for it_type, r in self.ui.grant_inc_btn_rects.items():
-            self.assertTrue(vp.collidepoint(r.center), f"Plus button for {it_type} center is outside viewport!")
+        for it_type, r in self.ui.grant_item_qty_rects.items():
+            self.assertTrue(vp.collidepoint(r.center), f"Qty box for {it_type} center is outside viewport!")
+        for it_type, r in self.ui.grant_max_btn_rects.items():
+            self.assertTrue(vp.collidepoint(r.center), f"Max button for {it_type} center is outside viewport!")
 
     def test_04_mousewheel_scrolling_and_clamping(self):
         """4. Long lists remain accessible through mouse wheel scrolling and clamping."""

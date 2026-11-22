@@ -37,8 +37,19 @@ class ChurchSystem:
         self.church_walkable_cache = {}         # permit_id -> (layout signature, walkable tiles)
         self.church_permit_by_manager = {}      # manager id -> (permit list signature, church permit)
         self.priest_by_villager_manager = {}    # manager id -> (priest object or None, cache valid)
+        # *** ESTABLISHED FEATURE — DO NOT REMOVE/REVERT ***
+        # WARNING (FPS-critical, user-verified): has_church_building() is
+        # evaluated per villager per frame during prayer routines. Without
+        # this cache it loops every church permit x every building x
+        # tile-overlap check each call, which caused a massive frame spike
+        # when the congregation exits prayer simultaneously (user confirmed
+        # the fix: 30+ AI leaving church stays smooth). The signature only
+        # changes when the permit/building collections themselves change, so
+        # the result stays correct. DO NOT remove this cache or call
+        # overlaps_building() per-villager.
+        self.church_building_cache = None        # (signature, has_building)
         self.configured_tax = {"Gold": 0, "Silver": 0, "Copper": 1}
-        self.tax_enabled = True
+        self.tax_enabled = False
 
     @classmethod
     def get_instance(cls):
@@ -70,6 +81,29 @@ class ChurchSystem:
         if not permit_manager:
             return []
         return [p for p in getattr(permit_manager, "permits", []) if getattr(p, "permit_type", "") == "church"]
+
+    @classmethod
+    def has_church_building(cls, permit_manager, building_manager):
+        """True only when a physical structure overlaps a church permit (permit alone does not count).
+
+        *** ESTABLISHED — DO NOT REMOVE ***
+        PERF: result is cached per permit/building collection signature — see
+        the church_building_cache warning in __init__. This runs per villager
+        per frame during prayer; do not bypass the cache."""
+        buildings = getattr(building_manager, "buildings", []) if building_manager else []
+        all_permits = getattr(permit_manager, "permits", []) if permit_manager else []
+        permits = [p for p in all_permits if getattr(p, "permit_type", "") == "church"]
+        signature = (id(all_permits), len(all_permits), id(buildings), len(buildings))
+        inst = cls.get_instance()
+        cached = getattr(inst, "church_building_cache", None)
+        if cached and cached[0] == signature:
+            return cached[1]
+        result = any(
+            permit.overlaps_building(b)
+            for permit in permits for b in buildings
+        )
+        inst.church_building_cache = (signature, result)
+        return result
 
     @classmethod
     def get_assigned_priest(cls, permit_manager, villager_manager):
@@ -227,7 +261,7 @@ class ChurchSystem:
 
     @classmethod
     def is_tax_enabled(cls):
-        return bool(getattr(cls.get_instance(), "tax_enabled", True))
+        return bool(getattr(cls.get_instance(), "tax_enabled", False))
 
     @classmethod
     def get_tax_settings(cls, church_permit=None):

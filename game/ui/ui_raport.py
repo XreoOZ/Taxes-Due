@@ -31,6 +31,7 @@ from game.config import (
     COST_PER_BLOCK_WOOD,
     COST_PER_BLOCK_STONE,
     TILE_SIZE,
+    ROAD_TYPES,
     RAPORT_MODAL_WIDTH,
     RAPORT_MODAL_HEIGHT,
     DEMOLITION_REFUND_RATIO,
@@ -56,6 +57,7 @@ from game.systems.household_inventory import (
 from game.systems.wealth_system import VillageWealthSystem
 from game.systems.schedule import UNIVERSAL_SCHEDULE_ID
 from game.ui.item_icons import draw_item_icon
+from game.ui.number_input import NumberInputState
 
 GRANTABLE_ITEMS = [
     {"type": "Hoe", "name": "Hoe"},
@@ -79,6 +81,7 @@ class RaportUI:
         self.show_furniture_menu = False
         self.selected_building_type = None
         self.selected_furniture_type = None
+        self.selected_road_type = None
         self.placing_permit_type = None
 
         # Inspection & Focused entity tracking
@@ -98,7 +101,7 @@ class RaportUI:
             {"id": "schedule", "title": "Schedule", "wip": False, "hidden": True},
             {"id": "villagers", "title": "Household", "wip": False},
             {"id": "workers", "title": "Jobs", "wip": False},
-            {"id": "production", "title": "Production", "wip": False},
+            {"id": "immigrant", "title": "Immigrant", "wip": False},
             {"id": "tax", "title": "Taxes", "wip": False},
             {"id": "planning", "title": "Roadmap", "wip": True},
         ]
@@ -113,6 +116,8 @@ class RaportUI:
         self.furniture_move_btn_rects = {}
         self.furniture_uninstall_btn_rects = {}
         self.furniture_destroy_btn_rects = {}
+        self.road_select_rects = {}
+        self.destroy_mode_btn_rect = None
         self.moving_furniture = None
         self.destroying_furniture_id = None
 
@@ -132,10 +137,6 @@ class RaportUI:
         # Schedule State
         self.selected_schedule_job_id = None
         self.selected_schedule_brush = "WORK"
-        self.prayer_start_dec_rect = None
-        self.prayer_start_inc_rect = None
-        self.prayer_end_dec_rect = None
-        self.prayer_end_inc_rect = None
         self.schedule_job_select_btn_rects = {}
         self.schedule_brush_btn_rects = {}
         self.schedule_hour_cell_rects = {}
@@ -148,24 +149,15 @@ class RaportUI:
 
         # Church Tax State
         self.church_tax = {"Gold": 0, "Silver": 0, "Copper": 1}
-        self.church_tax_g_dec_rect = None
-        self.church_tax_g_inc_rect = None
-        self.church_tax_s_dec_rect = None
-        self.church_tax_s_inc_rect = None
-        self.church_tax_c_dec_rect = None
-        self.church_tax_c_inc_rect = None
         self.church_tax_enabled_rect = None
         self.socage_tax_enabled_rect = None
-        self.socage_tax_dec_rect = None
-        self.socage_tax_inc_rect = None
         self.socage_tax_input_rect = None
         self.socage_tax_input_active = False
         self.socage_tax_input_text = ""
         self.socage_tax_input_replace = False
-        self.priest_inc_btn_rect = None
-        self.priest_dec_btn_rect = None
-        self.job_inc_btn_rects = {}
-        self.job_dec_btn_rects = {}
+        # Typable number fields (replaces +/- steppers)
+        self.num_input = NumberInputState()
+        self.num_fields = {}
         self.jobs_scroll_y = 0
         self.jobs_max_scroll = 0
         self.jobs_viewport_rect = None
@@ -195,8 +187,6 @@ class RaportUI:
         self.grant_submit_btn_rect = None
         self.grant_confirm_btn_rect = None
         self.grant_cancel_btn_rect = None
-        self.grant_dec_btn_rects = {}
-        self.grant_inc_btn_rects = {}
         self.grant_max_btn_rects = {}
         self.grant_item_qty_rects = {}
         self.active_grant_input_item = None
@@ -237,6 +227,7 @@ class RaportUI:
         self.selected_family_id = None
         self.show_assign_permit_picker = False
         self.add_family_cheat_btn_rect = None
+        self.cheats_active = False
         self.back_to_families_btn_rect = None
         self.view_family_btn_rects = []
         self.family_possession_btn_rects = []
@@ -270,8 +261,6 @@ class RaportUI:
         self.priority_cell_rects = {}  # (servant_id, work_id) -> Rect
 
         # Area Permits Worker Assignment Controls
-        self.worker_dec_btn_rects = {}
-        self.worker_inc_btn_rects = {}
         self.worker_auto_btn_rects = {}
 
         # Workers / Jobs Tab Controls
@@ -282,9 +271,8 @@ class RaportUI:
         self.auto_sort_all_btn_rect = None
         self.job_select_btn_rects = {}
         self.job_workstation_btn_rects = {}
-        self.workplace_delta_btn_rects = {}
-        self.workplace_max_btn_rects = {}
         self.workplace_crop_btn_rects = {}
+        self.workplace_plant_btn_rects = {}
         self.job_schedule_btn_rects = {}
         self.worker_assign_btn_rects = {}
         self.worker_unassign_btn_rects = {}
@@ -382,6 +370,19 @@ class RaportUI:
         self.job_search_text = ""
         self.job_search_active = False
 
+    def open_immigrant_tab(self):
+        """Contextual View: Opens Town Ledger directly to the Immigrant tab
+        (used when the player clicks a Notice Board)."""
+        self.is_open = True
+        self.active_tab = 6  # Tab Immigrant
+        self.selected_building_category = None
+        self.selected_permit_category = None
+        self.show_build_menu = False
+        self.selected_family_id = None
+        self.selected_job_id = None
+        self.selected_workstation_job_id = None
+        self.selected_schedule_job_id = None
+
     def open_building_directly(self, building):
         """Contextual View: Opens Town Ledger directly to the specified building in its category view"""
         if building:
@@ -443,7 +444,8 @@ class RaportUI:
     def is_text_input_active(self):
         """Mengembalikan True jika player sedang mengetik di input/text field dalam UI Raport"""
         return bool(self.is_open and (
-            (self.show_grant_dialog and self.active_grant_input_item is not None)
+            self.num_input.active
+            or (self.show_grant_dialog and self.active_grant_input_item is not None)
             or (self.active_tab == 7 and self.socage_tax_input_active)
             or (self.active_tab == 5 and self.job_search_active)
         ))
@@ -453,6 +455,150 @@ class RaportUI:
         if text and text.isdigit():
             from game.systems.taxation_system import TaxationSystem
             TaxationSystem.set_socage_percent(int(text))
+
+    # ---------------------------------------------------------
+    # Typable number fields (replaces +/- steppers)
+    # ---------------------------------------------------------
+    def _num_field_station(self, fld, permit_manager, furniture_manager, building_manager):
+        """Resolve a workplace field's (kind, obj) station tuple."""
+        from game.systems.workplace_system import get_job_workplaces
+        job_id, skey = fld["payload"]
+        workplaces = get_job_workplaces(job_id, permit_manager, furniture_manager, building_manager)
+        return next((w for w in workplaces if self._workplace_key(w) == skey), None)
+
+    def _num_field_value(self, fld, permit_manager, villager_manager,
+                         schedule_manager, furniture_manager, building_manager):
+        """Current committed value shown inside a number field."""
+        kind = fld["kind"]
+        pl = fld.get("payload")
+        if kind == "permit_max":
+            p = next((x for x in getattr(permit_manager, "permits", []) if x.id == pl), None)
+            if p is None:
+                return 0
+            cur = getattr(p, "max_workers", None)
+            if cur is None:
+                cur = 1 if p.permit_type == "church" else 2
+            return int(cur)
+        if kind in ("prayer_start", "prayer_end"):
+            if not schedule_manager:
+                return 0
+            s, e = schedule_manager.get_prayer_hours()
+            return int(s if kind == "prayer_start" else e)
+        if kind == "workplace_workers":
+            ws = self._num_field_station(fld, permit_manager, furniture_manager, building_manager)
+            if ws is None:
+                return 0
+            from game.systems.workplace_system import workplace_job_workers
+            return len(workplace_job_workers(ws, pl[0], villager_manager))
+        if kind == "workplace_max":
+            ws = self._num_field_station(fld, permit_manager, furniture_manager, building_manager)
+            if ws is not None and ws[0] == "permit":
+                return int(getattr(ws[1], "max_workers", 0))
+            return 0
+        if kind == "workplace_quota":
+            ws = self._num_field_station(fld, permit_manager, furniture_manager, building_manager)
+            if ws is not None and ws[0] == "furniture":
+                return int(getattr(ws[1], "station_quota_daily", 0) or 0)
+            return 0
+        if kind == "church_tax":
+            return int(self.church_tax.get(pl, 0))
+        if kind == "immigrant_reward":
+            from game.systems.immigration_system import get_immigration_system
+            return get_immigration_system().reward_for(pl)
+        return 0
+
+    def _apply_num_field(self, fld, val, building_manager, permit_manager,
+                         villager_manager, schedule_manager, furniture_manager):
+        """Write a committed number back to its underlying setting."""
+        kind = fld["kind"]
+        pl = fld.get("payload")
+        if kind == "permit_max":
+            p = next((x for x in getattr(permit_manager, "permits", []) if x.id == pl), None)
+            if p is None:
+                return
+            cur = getattr(p, "max_workers", 1 if p.permit_type == "church" else 2)
+            while cur > val:
+                permit_manager.change_max_workers(pl, -1, villager_manager, furniture_manager=furniture_manager)
+                cur -= 1
+            while cur < val:
+                permit_manager.change_max_workers(pl, 1, villager_manager, furniture_manager=furniture_manager)
+                cur += 1
+        elif kind == "prayer_start":
+            if not schedule_manager:
+                return
+            s, e = schedule_manager.get_prayer_hours()
+            schedule_manager.set_prayer_time(max(0, min(val, e - 1)), e)
+        elif kind == "prayer_end":
+            if not schedule_manager:
+                return
+            s, e = schedule_manager.get_prayer_hours()
+            schedule_manager.set_prayer_time(s, min(24, max(val, s + 1)))
+        elif kind == "workplace_workers":
+            ws = self._num_field_station(fld, permit_manager, furniture_manager, building_manager)
+            if ws is None or not villager_manager:
+                return
+            from game.systems.workplace_system import (
+                change_workplace_workers, workplace_job_workers,
+            )
+            job_id = pl[0]
+            cur = len(workplace_job_workers(ws, job_id, villager_manager))
+            while cur < val:
+                if not change_workplace_workers(job_id, ws, 1, permit_manager,
+                                                furniture_manager, villager_manager, building_manager):
+                    break
+                cur += 1
+            while cur > val:
+                if not change_workplace_workers(job_id, ws, -1, permit_manager,
+                                                furniture_manager, villager_manager, building_manager):
+                    break
+                cur -= 1
+        elif kind == "workplace_max":
+            ws = self._num_field_station(fld, permit_manager, furniture_manager, building_manager)
+            if ws is not None and ws[0] == "permit":
+                p = ws[1]
+                cur = int(getattr(p, "max_workers", 0))
+                permit_manager.change_max_workers(
+                    p.id, val - cur, villager_manager,
+                    furniture_manager=furniture_manager, auto_assign=False)
+        elif kind == "workplace_quota":
+            ws = self._num_field_station(fld, permit_manager, furniture_manager, building_manager)
+            if ws is not None and ws[0] == "furniture":
+                ws[1].station_quota_daily = val
+        elif kind == "church_tax":
+            if isinstance(self.church_tax, dict):
+                self.church_tax[pl] = val
+                from game.systems.church_system import ChurchSystem
+                ChurchSystem.set_tax_settings(
+                    self.church_tax.get("Gold", 0),
+                    self.church_tax.get("Silver", 0),
+                    self.church_tax.get("Copper", 0), permit_manager)
+        elif kind == "immigrant_reward":
+            from game.systems.immigration_system import get_immigration_system
+            get_immigration_system().set_reward(pl, val)
+
+    def _commit_num_field(self, building_manager, permit_manager,
+                          villager_manager, schedule_manager, furniture_manager):
+        key = self.num_input.active_key
+        fld = self.num_fields.get(key)
+        val = self.num_input.value()
+        self.num_input.cancel()
+        if fld is None or val is None:
+            return
+        val = max(int(fld.get("min", 0)), min(int(fld.get("max", 999999)), val))
+        self._apply_num_field(fld, val, building_manager, permit_manager,
+                              villager_manager, schedule_manager, furniture_manager)
+
+    def _draw_num_input(self, surface, key, rect, display_value):
+        """Draw a typable number box; registers nothing (done by caller)."""
+        active = (self.num_input.active_key == key)
+        bg = (15, 23, 42) if not active else (30, 58, 138)
+        border = (250, 204, 21) if active else (71, 85, 105)
+        pygame.draw.rect(surface, bg, rect, border_radius=4)
+        pygame.draw.rect(surface, border, rect, width=2 if active else 1, border_radius=4)
+        txt = (self.num_input.text + "_") if active else str(display_value)
+        t = self.font_badge.render(txt, True, (255, 255, 255))
+        surface.blit(t, (rect.centerx - t.get_width() // 2,
+                         rect.centery - t.get_height() // 2))
 
     def toggle(self):
         if self.is_open:
@@ -468,6 +614,18 @@ class RaportUI:
         sm = stockpile_manager or self.cached_stockpile_manager
 
         if event.type == pygame.KEYDOWN:
+            if self.is_open and self.num_input.active:
+                if self.num_input.active_key not in self.num_fields:
+                    self.num_input.cancel()
+                else:
+                    res = self.num_input.handle_keydown(event)
+                    if res == "commit":
+                        self._commit_num_field(
+                            building_manager, permit_manager, villager_manager,
+                            schedule_manager, furniture_manager)
+                    elif res == "cancel":
+                        self.num_input.cancel()
+                    return "num_input_edit"
             if self.is_open and self.active_tab == 7 and self.socage_tax_input_active:
                 if event.key == pygame.K_BACKSPACE:
                     self.socage_tax_input_text = self.socage_tax_input_text[:-1]
@@ -643,17 +801,6 @@ class RaportUI:
             # 5. Controls inside Viewport
             if self.grant_viewport_rect and self.grant_viewport_rect.collidepoint(mouse_pos):
                 stock = self.get_landlord_stock(sm, resources)
-                for it_type, rect in list(self.grant_dec_btn_rects.items()):
-                    if rect.collidepoint(mouse_pos):
-                        self.grant_amounts[it_type] = max(0, self.grant_amounts.get(it_type, 0) - 1)
-                        return f"grant_dec_{it_type}"
-
-                for it_type, rect in list(self.grant_inc_btn_rects.items()):
-                    if rect.collidepoint(mouse_pos):
-                        avail = stock.get(it_type, 0)
-                        self.grant_amounts[it_type] = min(avail, self.grant_amounts.get(it_type, 0) + 1)
-                        return f"grant_inc_{it_type}"
-
                 for it_type, rect in list(self.grant_max_btn_rects.items()):
                     if rect.collidepoint(mouse_pos):
                         avail = stock.get(it_type, 0)
@@ -672,6 +819,28 @@ class RaportUI:
                 return "modal_blocked"
 
             return "modal_blocked"
+
+        # Typable number fields: focus on click, commit on outside click
+        if not (self.show_grant_dialog or self.show_grant_confirm
+                or self.crop_picker_permit_id or self.show_wealth_detail_dialog
+                or self.show_household_possession or self.selected_member_inventory_id
+                or self.show_assign_permit_picker):
+            hit_key = None
+            for fkey, fld in self.num_fields.items():
+                if fld["rect"].collidepoint(mouse_pos):
+                    hit_key = fkey
+                    break
+            if self.num_input.active and hit_key != self.num_input.active_key:
+                self._commit_num_field(
+                    building_manager, permit_manager, villager_manager,
+                    schedule_manager, furniture_manager)
+            if hit_key is not None:
+                self.num_input.focus(
+                    hit_key,
+                    self._num_field_value(
+                        self.num_fields[hit_key], permit_manager, villager_manager,
+                        schedule_manager, furniture_manager, building_manager))
+                return "num_input_focus"
 
         # 2. Close Button (X)
         if self.close_btn_rect and self.close_btn_rect.collidepoint(mouse_pos):
@@ -745,6 +914,9 @@ class RaportUI:
                         self.selected_building_category = cat_id
                         self.building_scroll_y = 0
                         return f"select_building_category_{cat_id}"
+                if self.destroy_mode_btn_rect and self.destroy_mode_btn_rect.collidepoint(mouse_pos):
+                    self.is_open = False
+                    return "start_destroy_mode"
 
             # Check Market Profile buttons
             for b, rect in list(getattr(self, "market_profile_btn_rects", {}).items()):
@@ -772,7 +944,7 @@ class RaportUI:
             for s, rect in list(self.cancel_construction_btn_rects.items()):
                 if rect.collidepoint(mouse_pos):
                     servants = servant_manager.servants if servant_manager else None
-                    building_manager.cancel_construction(s, resources=resources, stockpile_manager=stockpile_manager, all_servants=servants)
+                    building_manager.cancel_construction(s, resources=resources, stockpile_manager=stockpile_manager, all_servants=servants, furniture_manager=furniture_manager)
                     self.cancel_construction_btn_rects.clear()
                     return "cancel_construction"
 
@@ -798,6 +970,17 @@ class RaportUI:
                         return f"start_drag_building_{b_type}"
                     else:
                         return f"need_permit_{b_type}"
+
+            # Check Road type buttons (Public Structure > Road)
+            for r_id, rect in list(getattr(self, "road_select_rects", {}).items()):
+                if rect.collidepoint(mouse_pos):
+                    self.selected_road_type = r_id
+                    self.selected_building_type = None
+                    self.selected_furniture_type = None
+                    self.placing_permit_type = None
+                    self.show_structures_menu = False
+                    self.is_open = False
+                    return "start_place_road"
 
             # Check Furniture Placement buttons
             for f_type, rect in list(self.furniture_select_rects.items()):
@@ -849,17 +1032,7 @@ class RaportUI:
                     self.open_household_directly(fid)
                     return f"open_household_{fid}"
 
-            # Worker count +/- and Auto buttons
-            for pid, rect in list(self.worker_dec_btn_rects.items()):
-                if rect.collidepoint(mouse_pos):
-                    permit_manager.change_max_workers(pid, -1, villager_manager, furniture_manager=furniture_manager)
-                    return f"dec_worker_{pid}"
-
-            for pid, rect in list(self.worker_inc_btn_rects.items()):
-                if rect.collidepoint(mouse_pos):
-                    permit_manager.change_max_workers(pid, 1, villager_manager, furniture_manager=furniture_manager)
-                    return f"inc_worker_{pid}"
-
+            # Auto buttons (worker caps are typable number fields now)
             for pid, rect in list(self.worker_auto_btn_rects.items()):
                 if rect.collidepoint(mouse_pos):
                     if villager_manager:
@@ -913,25 +1086,6 @@ class RaportUI:
                         self.selected_schedule_job_id = None
                         return "back_to_schedule_jobs"
 
-                    if self.prayer_start_dec_rect and self.prayer_start_dec_rect.collidepoint(mouse_pos):
-                        s, e = schedule_manager.get_prayer_hours()
-                        schedule_manager.set_prayer_time(max(0, s - 1), e)
-                        return "prayer_start_dec"
-                    if self.prayer_start_inc_rect and self.prayer_start_inc_rect.collidepoint(mouse_pos):
-                        s, e = schedule_manager.get_prayer_hours()
-                        if s + 1 < e:
-                            schedule_manager.set_prayer_time(s + 1, e)
-                        return "prayer_start_inc"
-                    if self.prayer_end_dec_rect and self.prayer_end_dec_rect.collidepoint(mouse_pos):
-                        s, e = schedule_manager.get_prayer_hours()
-                        if e - 1 > s:
-                            schedule_manager.set_prayer_time(s, e - 1)
-                        return "prayer_end_dec"
-                    if self.prayer_end_inc_rect and self.prayer_end_inc_rect.collidepoint(mouse_pos):
-                        s, e = schedule_manager.get_prayer_hours()
-                        schedule_manager.set_prayer_time(s, min(24, e + 1))
-                        return "prayer_end_inc"
-
                     for brush_type, rect in self.schedule_brush_btn_rects.items():
                         if rect.collidepoint(mouse_pos):
                             self.selected_schedule_brush = brush_type
@@ -961,7 +1115,7 @@ class RaportUI:
             if villager_manager:
                 # View 1: Family Directory
                 if self.selected_family_id is None:
-                    if self.add_family_cheat_btn_rect and self.add_family_cheat_btn_rect.collidepoint(mouse_pos):
+                    if self.cheats_active and self.add_family_cheat_btn_rect and self.add_family_cheat_btn_rect.collidepoint(mouse_pos):
                         villager_manager.generate_random_family()
                         return "add_family_cheat"
 
@@ -1118,25 +1272,6 @@ class RaportUI:
                     return "back_to_jobs"
 
                 if schedule_manager:
-                    if self.prayer_start_dec_rect and self.prayer_start_dec_rect.collidepoint(mouse_pos):
-                        s, e = schedule_manager.get_prayer_hours()
-                        schedule_manager.set_prayer_time(max(0, s - 1), e)
-                        return "prayer_start_dec"
-                    if self.prayer_start_inc_rect and self.prayer_start_inc_rect.collidepoint(mouse_pos):
-                        s, e = schedule_manager.get_prayer_hours()
-                        if s + 1 < e:
-                            schedule_manager.set_prayer_time(s + 1, e)
-                        return "prayer_start_inc"
-                    if self.prayer_end_dec_rect and self.prayer_end_dec_rect.collidepoint(mouse_pos):
-                        s, e = schedule_manager.get_prayer_hours()
-                        if e - 1 > s:
-                            schedule_manager.set_prayer_time(s, e - 1)
-                        return "prayer_end_dec"
-                    if self.prayer_end_inc_rect and self.prayer_end_inc_rect.collidepoint(mouse_pos):
-                        s, e = schedule_manager.get_prayer_hours()
-                        schedule_manager.set_prayer_time(s, min(24, e + 1))
-                        return "prayer_end_inc"
-
                     for brush_type, rect in self.schedule_brush_btn_rects.items():
                         if rect.collidepoint(mouse_pos):
                             self.selected_schedule_brush = brush_type
@@ -1228,27 +1363,6 @@ class RaportUI:
                         self.selected_workstation_job_id = None
                         self.highlight_workplace_key = None
                         return "back_to_workstations"
-                    for key, rect in list(self.workplace_delta_btn_rects.items()):
-                        if rect.collidepoint(mouse_pos):
-                            job_id, station_key, delta = key
-                            from game.systems.workplace_system import get_job_workplaces, change_workplace_workers
-                            workplaces = get_job_workplaces(job_id, permit_manager, furniture_manager, building_manager)
-                            station = next((ws for ws in workplaces if self._workplace_key(ws) == station_key), None)
-                            if station and villager_manager:
-                                change_workplace_workers(job_id, station, delta, permit_manager, furniture_manager, villager_manager, building_manager)
-                            return f"workplace_worker_{delta}_{job_id}"
-                    for key, rect in list(self.workplace_max_btn_rects.items()):
-                        if rect.collidepoint(mouse_pos):
-                            job_id, station_key, delta = key
-                            from game.systems.workplace_system import get_job_workplaces
-                            workplaces = get_job_workplaces(job_id, permit_manager, furniture_manager, building_manager)
-                            station = next((ws for ws in workplaces if self._workplace_key(ws) == station_key), None)
-                            if station is not None and station[0] == "permit":
-                                permit_manager.change_max_workers(
-                                    station[1].id, delta, villager_manager,
-                                    furniture_manager=furniture_manager, auto_assign=False,
-                                )
-                            return f"workplace_max_{delta}_{job_id}"
                     for key, rect in list(self.workplace_crop_btn_rects.items()):
                         if rect.collidepoint(mouse_pos):
                             job_id, station_key = key
@@ -1258,6 +1372,16 @@ class RaportUI:
                             if station is not None and station[0] == "permit":
                                 self.crop_picker_permit_id = station[1].id
                             return f"workplace_crop_{job_id}"
+                    for key, rect in list(self.workplace_plant_btn_rects.items()):
+                        if rect.collidepoint(mouse_pos):
+                            job_id, station_key = key
+                            from game.systems.workplace_system import get_job_workplaces
+                            workplaces = get_job_workplaces(job_id, permit_manager, furniture_manager, building_manager)
+                            station = next((ws for ws in workplaces if self._workplace_key(ws) == station_key), None)
+                            if station is not None and station[0] == "furniture":
+                                obj = station[1]
+                                obj.plant_tree_enabled = not bool(getattr(obj, "plant_tree_enabled", False))
+                            return f"workplace_plant_{job_id}"
                 if self.universal_schedule_btn_rect and self.universal_schedule_btn_rect.collidepoint(mouse_pos):
                     if schedule_manager:
                         schedule_manager.activate_universal_schedule()
@@ -1284,6 +1408,34 @@ class RaportUI:
                         self.selected_schedule_job_id = job_id
                         return f"edit_schedule_{job_id}"
 
+        # 8.4. Tab 6: Immigration (Notice Board)
+        elif self.active_tab == 6:
+            from game.systems.immigration_system import (
+                get_immigration_system, STATE_TRAVELING, STATE_WAITING,
+            )
+            imm = get_immigration_system()
+            boards = imm.notice_boards(furniture_manager)
+            board_id = boards[0].id if boards else None
+
+            if board_id and getattr(self, "immigrant_post_btn_rect", None) \
+                    and self.immigrant_post_btn_rect.collidepoint(mouse_pos):
+                imm.post(board_id)
+                return "immigration_post"
+            if board_id and getattr(self, "immigrant_cancel_btn_rect", None) \
+                    and self.immigrant_cancel_btn_rect.collidepoint(mouse_pos):
+                imm.cancel_post(board_id)
+                return "immigration_cancel"
+            for hh_id, (a_rect, r_rect) in getattr(self, "immigrant_action_btns", {}).items():
+                hh = imm.find_household(hh_id)
+                if hh is None or hh["state"] not in (STATE_TRAVELING, STATE_WAITING):
+                    continue
+                if a_rect and a_rect.collidepoint(mouse_pos):
+                    imm.accept(hh_id, villager_manager, servant_manager)
+                    return f"immigration_accept_{hh_id}"
+                if r_rect and r_rect.collidepoint(mouse_pos):
+                    imm.reject(hh_id)
+                    return f"immigration_reject_{hh_id}"
+
         # 8.5. Tab 7: Taxation & Tithes
         elif self.active_tab == 7:
             if self.show_wealth_detail_dialog:
@@ -1307,44 +1459,11 @@ class RaportUI:
             if self.socage_tax_enabled_rect and self.socage_tax_enabled_rect.collidepoint(mouse_pos):
                 TaxationSystem.set_socage_enabled(not TaxationSystem.is_socage_enabled())
                 return "toggle_socage_tax"
-            if self.socage_tax_dec_rect and self.socage_tax_dec_rect.collidepoint(mouse_pos):
-                from game.data.config import SOCAGE_TAX_QUICK_STEP
-                TaxationSystem.set_socage_percent(TaxationSystem.get_socage_percent() - SOCAGE_TAX_QUICK_STEP)
-                return "socage_tax_percent_dec"
-            if self.socage_tax_inc_rect and self.socage_tax_inc_rect.collidepoint(mouse_pos):
-                from game.data.config import SOCAGE_TAX_QUICK_STEP
-                TaxationSystem.set_socage_percent(TaxationSystem.get_socage_percent() + SOCAGE_TAX_QUICK_STEP)
-                return "socage_tax_percent_inc"
             if self.socage_tax_input_rect and self.socage_tax_input_rect.collidepoint(mouse_pos):
                 self.socage_tax_input_active = True
                 self.socage_tax_input_text = str(TaxationSystem.get_socage_percent())
                 self.socage_tax_input_replace = True
                 return "socage_tax_input_focus"
-
-            if self.church_tax_g_dec_rect and self.church_tax_g_dec_rect.collidepoint(mouse_pos):
-                self.church_tax["Gold"] = max(0, self.church_tax.get("Gold", 0) - 1)
-                ChurchSystem.set_tax_settings(self.church_tax["Gold"], self.church_tax["Silver"], self.church_tax["Copper"], permit_manager)
-                return "church_tax_gold_dec"
-            if self.church_tax_g_inc_rect and self.church_tax_g_inc_rect.collidepoint(mouse_pos):
-                self.church_tax["Gold"] = self.church_tax.get("Gold", 0) + 1
-                ChurchSystem.set_tax_settings(self.church_tax["Gold"], self.church_tax["Silver"], self.church_tax["Copper"], permit_manager)
-                return "church_tax_gold_inc"
-            if self.church_tax_s_dec_rect and self.church_tax_s_dec_rect.collidepoint(mouse_pos):
-                self.church_tax["Silver"] = max(0, self.church_tax.get("Silver", 0) - 1)
-                ChurchSystem.set_tax_settings(self.church_tax["Gold"], self.church_tax["Silver"], self.church_tax["Copper"], permit_manager)
-                return "church_tax_silver_dec"
-            if self.church_tax_s_inc_rect and self.church_tax_s_inc_rect.collidepoint(mouse_pos):
-                self.church_tax["Silver"] = self.church_tax.get("Silver", 0) + 1
-                ChurchSystem.set_tax_settings(self.church_tax["Gold"], self.church_tax["Silver"], self.church_tax["Copper"], permit_manager)
-                return "church_tax_silver_inc"
-            if self.church_tax_c_dec_rect and self.church_tax_c_dec_rect.collidepoint(mouse_pos):
-                self.church_tax["Copper"] = max(0, self.church_tax.get("Copper", 0) - 1)
-                ChurchSystem.set_tax_settings(self.church_tax["Gold"], self.church_tax["Silver"], self.church_tax["Copper"], permit_manager)
-                return "church_tax_copper_dec"
-            if self.church_tax_c_inc_rect and self.church_tax_c_inc_rect.collidepoint(mouse_pos):
-                self.church_tax["Copper"] = self.church_tax.get("Copper", 0) + 1
-                ChurchSystem.set_tax_settings(self.church_tax["Gold"], self.church_tax["Silver"], self.church_tax["Copper"], permit_manager)
-                return "church_tax_copper_inc"
 
         # 9. Tab 8: Planning & Roadmap Tab
         elif self.active_tab == 8:
@@ -1453,6 +1572,7 @@ class RaportUI:
         pygame.draw.line(surface, COLOR_MODAL_BORDER, (mx + 20, tab_y + tab_h + 8), (mx + self.modal_w - 20, tab_y + tab_h + 8))
 
         content_y = tab_y + tab_h + 16
+        self.num_fields = {}
         if self.active_tab == 0:
             self._draw_building_tab(surface, mx, content_y, building_manager, permit_manager, resources, furniture_manager=furniture_manager, villager_manager=villager_manager)
         elif self.active_tab == 1:
@@ -1469,7 +1589,7 @@ class RaportUI:
             else:
                 self._draw_workers_tab(surface, mx, content_y, villager_manager, permit_manager, furniture_manager, schedule_manager=schedule_manager, building_manager=building_manager)
         elif self.active_tab == 6:
-            self._draw_production_tab(surface, mx, content_y, villager_manager, permit_manager, furniture_manager=furniture_manager, stockpile_manager=stockpile_manager, production_system=production_system)
+            self._draw_immigrant_tab(surface, mx, content_y, villager_manager, permit_manager, furniture_manager=furniture_manager, day_cycle=day_cycle)
         elif self.active_tab == 7:
             self._draw_tax_tab(surface, mx, content_y, villager_manager, permit_manager, furniture_manager=furniture_manager, production_system=production_system, resources=resources, building_manager=building_manager, stockpile_manager=stockpile_manager, day_cycle=day_cycle)
         elif self.active_tab == 8:
@@ -1493,6 +1613,8 @@ class RaportUI:
         self.market_profile_btn_rects.clear()
         self.building_select_rects = {}
         self.furniture_select_rects = {}
+        self.road_select_rects = {}
+        self.destroy_mode_btn_rect = None
         self.furniture_move_btn_rects = {}
         self.furniture_uninstall_btn_rects = {}
         self.furniture_destroy_btn_rects = {}
@@ -1502,6 +1624,16 @@ class RaportUI:
             surface.blit(b_title, (mx + 24, cy))
             sub_txt = self.font_body.render("View a household's assets directly, or open a separate Structure or Furniture list below.", True, COLOR_TEXT_MUTED)
             surface.blit(sub_txt, (mx + 28, cy + 22))
+
+            # Destroy Mode entry: mark multiple objects on the map, then confirm once.
+            self.destroy_mode_btn_rect = pygame.Rect(mx + self.modal_w - 190, cy + 16, 166, 30)
+            d_hov = self.destroy_mode_btn_rect.collidepoint(m_pos)
+            pygame.draw.rect(surface, (220, 38, 38) if d_hov else (153, 27, 27),
+                             self.destroy_mode_btn_rect, border_radius=6)
+            pygame.draw.rect(surface, (248, 113, 113), self.destroy_mode_btn_rect, width=1, border_radius=6)
+            d_lbl = self.font_badge.render("Destroy Mode", True, (255, 255, 255))
+            surface.blit(d_lbl, (self.destroy_mode_btn_rect.centerx - d_lbl.get_width() // 2,
+                                 self.destroy_mode_btn_rect.centery - d_lbl.get_height() // 2))
 
             families = getattr(villager_manager, "families", []) if villager_manager else []
             owner_rows = [(str(family.id), f"The {family.surname} Household") for family in families]
@@ -1855,6 +1987,8 @@ class RaportUI:
                 grid_items.extend(("furniture", f_id) for f_id in f_keys)
             if current_cat.get("kind") != "furniture":
                 grid_items.extend(("building", b_id) for b_id in cat_types)
+            if current_cat.get("kind") == "public":
+                grid_items.extend(("road", r_id) for r_id in current_cat.get("road_types", ()))
 
             if grid_items:
                 avail_w = self.modal_w - 48
@@ -1871,6 +2005,12 @@ class RaportUI:
                         pygame.draw.rect(surface, b_col, item_btn, border_radius=6)
                         lbl_txt = (f"+ Place {f_cfg['name']}" if f_cfg.get("instant_place")
                                    else f"+ Order {f_cfg['name']}")
+                    elif item_kind == "road":
+                        r_cfg = ROAD_TYPES[item_id]
+                        self.road_select_rects[item_id] = item_btn
+                        b_col = (180, 83, 9) if hov else (120, 53, 15)
+                        pygame.draw.rect(surface, b_col, item_btn, border_radius=6)
+                        lbl_txt = f"+ {r_cfg['name']}"
                     else:
                         b_cfg = BUILDING_TYPES.get(item_id, {})
                         has_permit = (not b_cfg.get("allowed_permits")
@@ -1953,23 +2093,18 @@ class RaportUI:
 
             w_count = len(getattr(p, 'assigned_workers', set()))
             w_max = getattr(p, 'max_workers', 2)
-            cnt_str = f"{w_count}/{w_max} Workers"
+            cnt_str = f"{w_count} Workers"
             cnt_surf = self.font_badge.render(cnt_str, True, (241, 245, 249))
             surface.blit(cnt_surf, (right_cursor - cnt_surf.get_width() - 4, y_cur + 3))
             right_cursor -= (cnt_surf.get_width() + 8)
 
-            inc_btn = pygame.Rect(right_cursor - 20, y_cur - 1, 18, 22)
-            self.worker_inc_btn_rects[p.id] = inc_btn
-            inc_hov = inc_btn.collidepoint(pygame.mouse.get_pos())
-            pygame.draw.rect(surface, (37, 99, 235) if inc_hov else (30, 58, 138), inc_btn, border_radius=3)
-            surface.blit(self.font_badge.render("+", True, (255, 255, 255)), (inc_btn.x + 5, inc_btn.y + 3))
-            right_cursor -= 24
-
-            dec_btn = pygame.Rect(right_cursor - 20, y_cur - 1, 18, 22)
-            self.worker_dec_btn_rects[p.id] = dec_btn
-            dec_hov = dec_btn.collidepoint(pygame.mouse.get_pos())
-            pygame.draw.rect(surface, (71, 85, 105) if dec_hov else (51, 65, 85), dec_btn, border_radius=3)
-            surface.blit(self.font_badge.render("-", True, (255, 255, 255)), (dec_btn.x + 6, dec_btn.y + 3))
+            cap_key = ("num", "permit_max", p.id)
+            cap_rect = pygame.Rect(right_cursor - 36, y_cur - 1, 36, 22)
+            self.num_fields[cap_key] = {"rect": cap_rect, "kind": "permit_max",
+                                        "payload": p.id, "min": 0, "max": 99}
+            surface.blit(self.font_badge.render("Max:", True, COLOR_TEXT_MUTED),
+                         (cap_rect.x - 32, y_cur + 3))
+            self._draw_num_input(surface, cap_key, cap_rect, w_max)
 
         elif p.permit_type in ("church", "cemetery"):
             p_workers = getattr(p, "assigned_workers", [])
@@ -2003,26 +2138,19 @@ class RaportUI:
             surface.blit(edit_lbl, (edit_btn.x + (edit_btn.w - edit_lbl.get_width()) // 2, edit_btn.y + 4))
             right_cursor -= 68
 
-            # Worker Controls: [+] {count/max} Workers [-]
-            inc_btn = pygame.Rect(right_cursor - 20, y_cur - 1, 18, 22)
-            self.worker_inc_btn_rects[p.id] = inc_btn
-            inc_hov = inc_btn.collidepoint(pygame.mouse.get_pos())
-            btn_col = (168, 85, 247) if p.permit_type == "church" else (37, 99, 235)
-            btn_bg = (126, 34, 206) if p.permit_type == "church" else (30, 58, 138)
-            pygame.draw.rect(surface, btn_col if inc_hov else btn_bg, inc_btn, border_radius=3)
-            surface.blit(self.font_badge.render("+", True, (255, 255, 255)), (inc_btn.x + 5, inc_btn.y + 3))
-            right_cursor -= 24
-
-            cnt_str = f"{w_count}/{w_max} Workers"
+            # Worker cap input (typable)
+            cnt_str = f"{w_count} Workers"
             cnt_surf = self.font_badge.render(cnt_str, True, (241, 245, 249))
             surface.blit(cnt_surf, (right_cursor - cnt_surf.get_width() - 4, y_cur + 3))
             right_cursor -= (cnt_surf.get_width() + 8)
 
-            dec_btn = pygame.Rect(right_cursor - 20, y_cur - 1, 18, 22)
-            self.worker_dec_btn_rects[p.id] = dec_btn
-            dec_hov = dec_btn.collidepoint(pygame.mouse.get_pos())
-            pygame.draw.rect(surface, (71, 85, 105) if dec_hov else (51, 65, 85), dec_btn, border_radius=3)
-            surface.blit(self.font_badge.render("-", True, (255, 255, 255)), (dec_btn.x + 6, dec_btn.y + 3))
+            cap_key = ("num", "permit_max", p.id)
+            cap_rect = pygame.Rect(right_cursor - 36, y_cur - 1, 36, 22)
+            self.num_fields[cap_key] = {"rect": cap_rect, "kind": "permit_max",
+                                        "payload": p.id, "min": 0, "max": 99}
+            surface.blit(self.font_badge.render("Max:", True, COLOR_TEXT_MUTED),
+                         (cap_rect.x - 32, y_cur + 3))
+            self._draw_num_input(surface, cap_key, cap_rect, w_max)
 
         else:
             txt = f"• {prefix}{p.name} [{len(p.tiles)} tiles {p.permit_type.capitalize()}] — {status_str}"
@@ -2075,8 +2203,6 @@ class RaportUI:
         self.delete_permit_btn_rects = {}
         self.edit_permit_btn_rects = {}
         self.open_plant_btn_rects = {}
-        self.worker_dec_btn_rects = {}
-        self.worker_inc_btn_rects = {}
         self.worker_auto_btn_rects = {}
         self.permit_btn_rects = {}
 
@@ -2501,10 +2627,6 @@ class RaportUI:
             bx += 104
 
         # 3. Prayer Time Contiguous Block Adjustment Banner (universal schedule)
-        self.prayer_start_dec_rect = None
-        self.prayer_start_inc_rect = None
-        self.prayer_end_dec_rect = None
-        self.prayer_end_inc_rect = None
         if schedule_manager:
             p_s, p_e = schedule_manager.get_prayer_hours()
             pr_banner = pygame.Rect(mx + 24, tool_y + 44, self.modal_w - 48, 36)
@@ -2514,31 +2636,27 @@ class RaportUI:
             pr_head = self.font_badge.render("⛪ DECREED PRAYER TIME BLOCK (ALL GUILDS ATTEND):", True, (216, 180, 254))
             surface.blit(pr_head, (pr_banner.x + 12, pr_banner.y + 10))
 
-            # Start Hour [-] {p_s}:00 [+]
+            # Start Hour typable input
             ctrl_x = pr_banner.right - 280
             surface.blit(self.font_badge.render("Start:", True, COLOR_TEXT_MUTED), (ctrl_x, pr_banner.y + 10))
-            self.prayer_start_dec_rect = pygame.Rect(ctrl_x + 40, pr_banner.y + 6, 22, 24)
-            pygame.draw.rect(surface, (51, 65, 85), self.prayer_start_dec_rect, border_radius=3)
-            surface.blit(self.font_badge.render("-", True, (255, 255, 255)), (self.prayer_start_dec_rect.x + 7, self.prayer_start_dec_rect.y + 4))
+            s_key = ("num", "prayer_start", 0)
+            s_rect = pygame.Rect(ctrl_x + 42, pr_banner.y + 6, 34, 24)
+            self.num_fields[s_key] = {"rect": s_rect, "kind": "prayer_start",
+                                      "min": 0, "max": 23}
+            self._draw_num_input(surface, s_key, s_rect, f"{p_s:02d}")
+            surface.blit(self.font_badge.render(":00", True, COLOR_TEXT_MUTED),
+                         (s_rect.right + 4, pr_banner.y + 8))
 
-            surface.blit(self.font_sub.render(f"{p_s:02d}:00", True, (250, 204, 21)), (ctrl_x + 68, pr_banner.y + 8))
-
-            self.prayer_start_inc_rect = pygame.Rect(ctrl_x + 115, pr_banner.y + 6, 22, 24)
-            pygame.draw.rect(surface, (51, 65, 85), self.prayer_start_inc_rect, border_radius=3)
-            surface.blit(self.font_badge.render("+", True, (255, 255, 255)), (self.prayer_start_inc_rect.x + 6, self.prayer_start_inc_rect.y + 4))
-
-            # End Hour [-] {p_e}:00 [+]
-            end_ctrl_x = ctrl_x + 150
+            # End Hour typable input
+            end_ctrl_x = ctrl_x + 110
             surface.blit(self.font_badge.render("End:", True, COLOR_TEXT_MUTED), (end_ctrl_x, pr_banner.y + 10))
-            self.prayer_end_dec_rect = pygame.Rect(end_ctrl_x + 35, pr_banner.y + 6, 22, 24)
-            pygame.draw.rect(surface, (51, 65, 85), self.prayer_end_dec_rect, border_radius=3)
-            surface.blit(self.font_badge.render("-", True, (255, 255, 255)), (self.prayer_end_dec_rect.x + 7, self.prayer_end_dec_rect.y + 4))
-
-            surface.blit(self.font_sub.render(f"{p_e:02d}:00", True, (250, 204, 21)), (end_ctrl_x + 63, pr_banner.y + 8))
-
-            self.prayer_end_inc_rect = pygame.Rect(end_ctrl_x + 110, pr_banner.y + 6, 22, 24)
-            pygame.draw.rect(surface, (51, 65, 85), self.prayer_end_inc_rect, border_radius=3)
-            surface.blit(self.font_badge.render("+", True, (255, 255, 255)), (self.prayer_end_inc_rect.x + 6, self.prayer_end_inc_rect.y + 4))
+            e_key = ("num", "prayer_end", 0)
+            e_rect = pygame.Rect(end_ctrl_x + 37, pr_banner.y + 6, 34, 24)
+            self.num_fields[e_key] = {"rect": e_rect, "kind": "prayer_end",
+                                      "min": 1, "max": 24}
+            self._draw_num_input(surface, e_key, e_rect, f"{p_e:02d}")
+            surface.blit(self.font_badge.render(":00", True, COLOR_TEXT_MUTED),
+                         (e_rect.right + 4, pr_banner.y + 8))
 
             grid_y = pr_banner.bottom + 12
         else:
@@ -2628,17 +2746,20 @@ class RaportUI:
             title = self.font_sub.render(f" Town Census & Family Directory ({total_villagers} Settlers | {len(families)} Families)", True, COLOR_TEXT_TITLE)
             surface.blit(title, (mx + 24, cy))
 
-            # Button: [+ Add Family (Cheat)]
-            btn_w = 175
-            btn_h = 30
-            self.add_family_cheat_btn_rect = pygame.Rect(mx + self.modal_w - btn_w - 24, cy - 4, btn_w, btn_h)
-            btn_hover = self.add_family_cheat_btn_rect.collidepoint(mouse_pos)
-            btn_col = (126, 34, 206) if btn_hover else (107, 33, 168)
+            # Button: [+ Add Family (Cheat)] — only visible when cheats unlocked via ESC menu
+            if self.cheats_active:
+                btn_w = 175
+                btn_h = 30
+                self.add_family_cheat_btn_rect = pygame.Rect(mx + self.modal_w - btn_w - 24, cy - 4, btn_w, btn_h)
+                btn_hover = self.add_family_cheat_btn_rect.collidepoint(mouse_pos)
+                btn_col = (126, 34, 206) if btn_hover else (107, 33, 168)
 
-            pygame.draw.rect(surface, btn_col, self.add_family_cheat_btn_rect, border_radius=6)
-            pygame.draw.rect(surface, (192, 132, 252), self.add_family_cheat_btn_rect, width=1, border_radius=6)
-            b_txt = self.font_badge.render("+ Add Family (Cheat)", True, (255, 255, 255))
-            surface.blit(b_txt, (self.add_family_cheat_btn_rect.centerx - b_txt.get_width() // 2, self.add_family_cheat_btn_rect.centery - b_txt.get_height() // 2))
+                pygame.draw.rect(surface, btn_col, self.add_family_cheat_btn_rect, border_radius=6)
+                pygame.draw.rect(surface, (192, 132, 252), self.add_family_cheat_btn_rect, width=1, border_radius=6)
+                b_txt = self.font_badge.render("+ Add Family (Cheat)", True, (255, 255, 255))
+                surface.blit(b_txt, (self.add_family_cheat_btn_rect.centerx - b_txt.get_width() // 2, self.add_family_cheat_btn_rect.centery - b_txt.get_height() // 2))
+            else:
+                self.add_family_cheat_btn_rect = None
 
             sub = self.font_body.render("Settlers migrate in family clans (1–3 generations). Landlord grants Housing Deeds to each family:", True, COLOR_TEXT_MUTED)
             surface.blit(sub, (mx + 24, cy + 22))
@@ -2654,7 +2775,10 @@ class RaportUI:
                 pygame.draw.rect(surface, (51, 65, 85), empty_card, width=1, border_radius=8)
 
                 msg1 = self.font_body.render("• No settler families residing on your estate yet.", True, COLOR_TEXT_MUTED)
-                msg2 = self.font_body.render("Click [+ Add Family (Cheat)] above to welcome a new immigrant family to your land!", True, (56, 189, 248))
+                if self.cheats_active:
+                    msg2 = self.font_body.render("Click [+ Add Family (Cheat)] above to welcome a new immigrant family to your land!", True, (56, 189, 248))
+                else:
+                    msg2 = self.font_body.render("Families arrive via the Notice Board Immigrant tab, or unlock cheats via ESC menu.", True, COLOR_TEXT_MUTED)
                 surface.blit(msg1, (empty_card.x + 20, empty_card.y + 18))
                 surface.blit(msg2, (empty_card.x + 20, empty_card.y + 42))
 
@@ -3292,9 +3416,8 @@ class RaportUI:
         workplaces = get_job_workplaces(job_id, permit_manager, furniture_manager, building_manager)
         y = cy + 40
         bottom = (surface.get_height() + self.modal_h) // 2 - 14
-        self.workplace_delta_btn_rects = {}
-        self.workplace_max_btn_rects = {}
         self.workplace_crop_btn_rects = {}
+        self.workplace_plant_btn_rects = {}
         self.jobs_viewport_rect = pygame.Rect(mx + 16, y, self.modal_w - 32, max(0, bottom - y))
         old_clip = surface.get_clip()
         surface.set_clip(self.jobs_viewport_rect)
@@ -3303,7 +3426,12 @@ class RaportUI:
             surface.blit(msg, (mx + 32, y + 12))
         for kind, obj in workplaces:
             is_permit = kind == "permit"
-            card_h = 84 if is_permit else 54
+            obj_cfg = getattr(obj, "type_cfg", {}) if not is_permit else {}
+            is_station = (kind == "furniture"
+                          and (obj_cfg.get("station_inventory_items")
+                               or obj_cfg.get("station_inventory_mine_bound")))
+            is_farm_permit = is_permit and getattr(obj, "permit_type", "") == "farm"
+            card_h = (104 if is_farm_permit else 84) if is_permit else (118 if is_station else 54)
             card = pygame.Rect(mx + 24, y, self.modal_w - 48, card_h)
             pygame.draw.rect(surface, (24, 34, 52), card, border_radius=7)
             pygame.draw.rect(surface, (51, 65, 85), card, width=1, border_radius=7)
@@ -3318,36 +3446,24 @@ class RaportUI:
             detail_txt = f"{len(station_workers)} workers" if station_cap is None else f"{len(station_workers)} / {station_cap} workers"
             detail = self.font_body.render(detail_txt, True, COLOR_TEXT_MUTED)
             surface.blit(detail, (card.x + 14, card.y + 29))
-            control_x = card.right - 134
-            for delta, x in ((-1, control_x), (1, control_x + 100)):
-                rect = pygame.Rect(x, card.y + 14, 28, 26)
-                self.workplace_delta_btn_rects[(job_id, self._workplace_key((kind, obj)), delta)] = rect
-                hover = rect.collidepoint(mouse_pos)
-                color = (71, 85, 105) if delta < 0 else job_cfg.get("color", (34, 197, 94))
-                if hover:
-                    color = tuple(min(255, c + 28) for c in color)
-                pygame.draw.rect(surface, color, rect, border_radius=4)
-                t = self.font_sub.render("-" if delta < 0 else "+", True, (255, 255, 255))
-                surface.blit(t, (rect.centerx - t.get_width() // 2, rect.centery - t.get_height() // 2))
+            wk_key = ("num", "workplace_workers", (job_id, station_key))
+            wk_rect = pygame.Rect(card.right - 48, card.y + 14, 38, 26)
+            self.num_fields[wk_key] = {"rect": wk_rect, "kind": "workplace_workers",
+                                       "payload": (job_id, station_key),
+                                       "min": 0, "max": station_cap if station_cap is not None else 99}
+            self._draw_num_input(surface, wk_key, wk_rect, len(station_workers))
 
             if is_permit:
-                # Row 2: manual worker cap stepper + crop selector (farms)
+                # Row 2: typable worker cap + crop selector (farms)
                 row2_y = card.y + 50
                 max_lbl = self.font_badge.render("Max:", True, COLOR_TEXT_MUTED)
                 surface.blit(max_lbl, (card.x + 14, row2_y + 4))
                 cur_max = int(getattr(obj, "max_workers", 2))
-                max_txt = self.font_sub.render(str(cur_max), True, (241, 245, 249))
-                surface.blit(max_txt, (card.x + 58, row2_y + 2))
-                for delta, x in ((-1, card.x + 84), (1, card.x + 118)):
-                    rect = pygame.Rect(x, row2_y, 30, 24)
-                    self.workplace_max_btn_rects[(job_id, self._workplace_key((kind, obj)), delta)] = rect
-                    hover = rect.collidepoint(mouse_pos)
-                    color = (71, 85, 105) if delta < 0 else (37, 99, 235)
-                    if hover:
-                        color = tuple(min(255, c + 28) for c in color)
-                    pygame.draw.rect(surface, color, rect, border_radius=4)
-                    t = self.font_sub.render("-" if delta < 0 else "+", True, (255, 255, 255))
-                    surface.blit(t, (rect.centerx - t.get_width() // 2, rect.centery - t.get_height() // 2))
+                max_key = ("num", "workplace_max", (job_id, station_key))
+                max_rect = pygame.Rect(card.x + 52, row2_y - 2, 36, 26)
+                self.num_fields[max_key] = {"rect": max_rect, "kind": "workplace_max",
+                                            "payload": (job_id, station_key), "min": 0, "max": 99}
+                self._draw_num_input(surface, max_key, max_rect, cur_max)
 
                 if getattr(obj, "permit_type", "") == "farm":
                     crop_name = getattr(obj, "crop", None) or "No crop"
@@ -3360,6 +3476,72 @@ class RaportUI:
                     pygame.draw.rect(surface, (74, 222, 128), crop_btn, width=1, border_radius=5)
                     cb_txt = self.font_badge.render("Select", True, (255, 255, 255))
                     surface.blit(cb_txt, (crop_btn.centerx - cb_txt.get_width() // 2, crop_btn.centery - cb_txt.get_height() // 2))
+
+                    # Row 3: household output shares for this specific lot
+                    # (moved here from the old Production tab).
+                    row3_y = card.y + 76
+                    from game.systems.production_distribution import ProductionDistributionSystem
+                    ps = ProductionDistributionSystem.get_instance()
+                    assigned_w = list(getattr(obj, "assigned_workers", []) or [])
+                    counts, total_w = ps.get_participating_household_counts(assigned_w, villager_manager)
+                    shares = ps.calculate_shares(assigned_w, villager_manager)
+                    if total_w > 0 and shares:
+                        parts = []
+                        for h_id, ratio in shares.items():
+                            fam = villager_manager.get_family_by_id(h_id) if villager_manager else None
+                            fam_name = f"The {fam.surname} Family" if fam else h_id
+                            parts.append(f"{fam_name}: {counts.get(h_id, 0)}w ({ratio * 100:.0f}%)")
+                        share_txt = self.font_badge.render("Shares: " + " | ".join(parts), True, (34, 197, 94))
+                    else:
+                        share_txt = self.font_badge.render("Shares: no workers assigned", True, COLOR_TEXT_MUTED)
+                    surface.blit(share_txt, (card.x + 14, row3_y + 2))
+
+            if is_station:
+                from game.world.natural_resources import (
+                    NaturalResourceManager, get_natural_resources,
+                )
+                station_key = self._workplace_key((kind, obj))
+                # Row 2: typable daily quota (0 = unlimited)
+                row2_y = card.y + 50
+                quota_lbl = self.font_badge.render("Quota/day (0=∞):", True, COLOR_TEXT_MUTED)
+                surface.blit(quota_lbl, (card.x + 14, row2_y + 4))
+                quota_val = int(getattr(obj, "station_quota_daily", 0) or 0)
+                quota_key = ("num", "workplace_quota", (job_id, station_key))
+                quota_rect = pygame.Rect(card.x + 140, row2_y - 2, 40, 26)
+                self.num_fields[quota_key] = {"rect": quota_rect, "kind": "workplace_quota",
+                                              "payload": (job_id, station_key), "min": 0, "max": 99999}
+                self._draw_num_input(surface, quota_key, quota_rect,
+                                     quota_val if quota_val > 0 else "∞")
+
+                # Row 3: Plant-a-Tree toggle (woodsman) or mine info (miner)
+                row3_y = card.y + 78
+                if obj.furniture_type == "woodsman_lodge":
+                    plant_on = bool(getattr(obj, "plant_tree_enabled", False))
+                    plant_lbl = self.font_badge.render("Plant a Tree:", True, COLOR_TEXT_MUTED)
+                    surface.blit(plant_lbl, (card.x + 14, row3_y + 4))
+                    plant_btn = pygame.Rect(card.x + 118, row3_y - 2, 76, 24)
+                    self.workplace_plant_btn_rects[(job_id, station_key)] = plant_btn
+                    ph = plant_btn.collidepoint(mouse_pos)
+                    pygame.draw.rect(surface, (22, 101, 52) if (plant_on or ph) else (51, 65, 85), plant_btn, border_radius=5)
+                    pygame.draw.rect(surface, (74, 222, 128) if plant_on else (100, 116, 139), plant_btn, width=1, border_radius=5)
+                    pt = self.font_badge.render("ON" if plant_on else "OFF", True, (255, 255, 255))
+                    surface.blit(pt, (plant_btn.centerx - pt.get_width() // 2, plant_btn.centery - pt.get_height() // 2))
+                elif obj.furniture_type == "miner_workstation":
+                    nr = get_natural_resources()
+                    mine = next((m for m in nr.mines if m.get("id") == getattr(obj, "bound_mine_id", None)), None)
+                    if mine is not None:
+                        tier_name = NaturalResourceManager.mine_tier_name(mine)
+                        lo, hi = NaturalResourceManager.mine_yield_range(mine)
+                        info = self.font_badge.render(
+                            f"{mine['kind']} · {tier_name} ({lo}-{hi}/hr)", True, COLOR_TEXT_MUTED)
+                        surface.blit(info, (card.x + 14, row3_y + 4))
+
+                # Row 4: workstation stock (unlimited, filtered)
+                row4_y = card.y + 102
+                stock_parts = [f"{amt}x {item}" for item, amt in sorted(obj.inventory.items()) if amt > 0]
+                stock_txt = "Stock: " + (", ".join(stock_parts) if stock_parts else "empty")
+                stock_lbl = self.font_badge.render(stock_txt, True, (251, 191, 36))
+                surface.blit(stock_lbl, (card.x + 14, row4_y + 2))
             y += card_h + 8
         surface.set_clip(old_clip)
         self._draw_crop_picker_popup(surface, mx, cy, permit_manager)
@@ -3444,10 +3626,6 @@ class RaportUI:
             self.job_select_btn_rects = {}
             self.job_workstation_btn_rects = {}
             self.job_schedule_btn_rects = {}
-            self.job_inc_btn_rects = {}
-            self.job_dec_btn_rects = {}
-            self.priest_inc_btn_rect = None
-            self.priest_dec_btn_rect = None
 
             all_vils = villager_manager.get_all_villagers() if villager_manager else []
 
@@ -3572,11 +3750,6 @@ class RaportUI:
 
             stat_txt = f"Total: {len(job_vils)} Workers   |   Assigned: {len(assigned_vils)}   |   Unassigned / Idle: {unassigned_count}"
             surface.blit(self.font_sub.render(stat_txt, True, (56, 189, 248)), (banner_rect.x + 14, banner_rect.y + 8))
-
-            self.job_dec_btn_rects = {}
-            self.job_inc_btn_rects = {}
-            self.priest_dec_btn_rect = None
-            self.priest_inc_btn_rect = None
 
             y_cur = banner_y + 40
             self.worker_assign_btn_rects = {}
@@ -3721,8 +3894,6 @@ class RaportUI:
         content_margin_right = 16 if has_scrollbar else 4
         item_row_w = viewport_rect.w - 8 - content_margin_right
 
-        self.grant_dec_btn_rects.clear()
-        self.grant_inc_btn_rects.clear()
         self.grant_max_btn_rects.clear()
         self.grant_item_qty_rects.clear()
 
@@ -3758,21 +3929,11 @@ class RaportUI:
             stk_s = self.font_body.render(f"In Storage: {avail}", True, stk_color)
             surface.blit(stk_s, (row_rect.x + 180, cur_row_y + 13))
 
-            # Controls: [-] [ QTY ] [+] [Max]
+            # Controls: [ QTY ] [Max]  (quantity is typed directly)
             ctrl_rx = row_rect.right - 240
-            
-            # Minus button
-            minus_r = pygame.Rect(ctrl_rx, cur_row_y + 8, 30, 28)
-            if viewport_rect.collidepoint(minus_r.center):
-                self.grant_dec_btn_rects[it_type] = minus_r
-            m_hov = minus_r.collidepoint(mouse_pos) if viewport_rect.collidepoint(mouse_pos) else False
-            pygame.draw.rect(surface, (51, 65, 85) if m_hov else (30, 41, 59), minus_r, border_radius=4)
-            pygame.draw.rect(surface, (96, 165, 250), minus_r, width=1, border_radius=4)
-            m_txt = self.font_sub.render("-", True, (255, 255, 255))
-            surface.blit(m_txt, (minus_r.centerx - m_txt.get_width() // 2, minus_r.centery - m_txt.get_height() // 2))
 
             # Quantity Display / Input box
-            qty_r = pygame.Rect(ctrl_rx + 36, cur_row_y + 8, 60, 28)
+            qty_r = pygame.Rect(ctrl_rx, cur_row_y + 8, 126, 28)
             if viewport_rect.collidepoint(qty_r.center):
                 self.grant_item_qty_rects[it_type] = qty_r
             is_active_input = (self.active_grant_input_item == it_type)
@@ -3785,16 +3946,6 @@ class RaportUI:
             q_color = (250, 204, 21) if qty > 0 else (148, 163, 184)
             q_txt = self.font_sub.render(disp_txt, True, q_color)
             surface.blit(q_txt, (qty_r.centerx - q_txt.get_width() // 2, qty_r.centery - q_txt.get_height() // 2))
-
-            # Plus button
-            plus_r = pygame.Rect(ctrl_rx + 102, cur_row_y + 8, 30, 28)
-            if viewport_rect.collidepoint(plus_r.center):
-                self.grant_inc_btn_rects[it_type] = plus_r
-            p_hov = plus_r.collidepoint(mouse_pos) if viewport_rect.collidepoint(mouse_pos) else False
-            pygame.draw.rect(surface, (51, 65, 85) if p_hov else (30, 41, 59), plus_r, border_radius=4)
-            pygame.draw.rect(surface, (96, 165, 250), plus_r, width=1, border_radius=4)
-            p_txt = self.font_sub.render("+", True, (255, 255, 255))
-            surface.blit(p_txt, (plus_r.centerx - p_txt.get_width() // 2, plus_r.centery - p_txt.get_height() // 2))
 
             # Max button
             max_r = pygame.Rect(ctrl_rx + 138, cur_row_y + 8, 52, 28)
@@ -3934,121 +4085,128 @@ class RaportUI:
         no_s = self.font_sub.render("Cancel", True, (241, 245, 249))
         surface.blit(no_s, (self.grant_cancel_btn_rect.centerx - no_s.get_width() // 2, self.grant_cancel_btn_rect.centery - no_s.get_height() // 2))
 
-    def _draw_production_tab(self, surface, mx, cy, villager_manager, permit_manager, furniture_manager=None, stockpile_manager=None, production_system=None):
-        """Household Production & Harvest Distribution Overview"""
-        mouse_pos = pygame.mouse.get_pos()
-        ps = production_system or ProductionDistributionSystem.get_instance()
+    def _draw_immigrant_tab(self, surface, mx, cy, villager_manager, permit_manager, furniture_manager=None, day_cycle=None):
+        """Immigration — Notice Board posting & waiting household queue.
 
-        # Title & Subtitle
-        title = self.font_title.render("HOUSEHOLD PRODUCTION & HARVEST DISTRIBUTION", True, COLOR_TEXT_TITLE)
+        The landlord posts a notice (reward gold per household), immigrant
+        households physically arrive at the board and queue, and the landlord
+        accepts (they join the census, reward paid via Lord Treasury grant) or
+        rejects (they leave). Households unattended for a full day leave alone.
+        """
+        from game.systems.immigration_system import (
+            get_immigration_system, STATE_TRAVELING, STATE_WAITING,
+        )
+        imm = get_immigration_system()
+        mouse_pos = pygame.mouse.get_pos()
+        self.immigrant_post_btn_rect = None
+        self.immigrant_cancel_btn_rect = None
+        self.immigrant_action_btns = {}
+
+        title = self.font_title.render("IMMIGRATION — NOTICE BOARD", True, COLOR_TEXT_TITLE)
         surface.blit(title, (mx + 24, cy - 4))
 
-        formula_txt = "Distribution Formula: Household Share = Participating Household Workers / Total Participating Workers"
-        surface.blit(self.font_body.render(formula_txt, True, (56, 189, 248)), (mx + 24, cy + 22))
+        boards = imm.notice_boards(furniture_manager)
+        if not boards:
+            msg = self.font_body.render(
+                "No Notice Board placed. Build one via Buildings > Public Structure "
+                "(Wood x10, ~1h carpenter build, max 1 per village).", True, COLOR_TEXT_MUTED)
+            surface.blit(msg, (mx + 24, cy + 34))
+            return
 
-        # Top 3 KPI Cards
-        card_w = (self.modal_w - 48 - 16) // 3
-        card_h = 52
+        board = boards[0]
+        board_name = getattr(board, "name", None) or getattr(board, "type_cfg", {}).get("name", "Notice Board")
+        posted = imm.is_posted(board.id)
+        reward = imm.reward_for(board.id)
+        queued = [h for h in imm.pending
+                  if h["board_id"] == board.id and h["state"] in (STATE_TRAVELING, STATE_WAITING)]
 
-        farm_permits = [p for p in permit_manager.permits if p.permit_type == "farm"] if permit_manager else []
-        total_farm_workers = sum(len(getattr(p, "assigned_workers", [])) for p in farm_permits)
+        y_cur = cy + 30
+        # --- Posting status card ---
+        card = pygame.Rect(mx + 24, y_cur, self.modal_w - 48, 66)
+        pygame.draw.rect(surface, (24, 34, 52), card, border_radius=7)
+        pygame.draw.rect(surface, (51, 65, 85), card, width=1, border_radius=7)
 
-        all_families = villager_manager.families if villager_manager else []
-        total_potatoes_distributed = 0
-        for f in all_families:
-            p_sum = ps.get_household_production_summary(f.id)
-            total_potatoes_distributed += p_sum["total_produced"].get("Potato", 0)
+        status_col = (34, 197, 94) if posted else (245, 158, 11)
+        status_txt = "POSTED — immigrants may arrive each day (30% chance)" if posted \
+            else "NOT POSTED — no immigrants will come"
+        surface.blit(self.font_sub.render(f"{board_name}: {status_txt}", True, status_col),
+                     (card.x + 14, card.y + 10))
+        surface.blit(self.font_body.render(
+            "Reward per household (gold, paid on Accept):", True, COLOR_TEXT_MUTED),
+            (card.x + 14, card.y + 30))
 
-        kpis = [
-            ("Cultivated Farm Lots", f"{len(farm_permits)} Active Farms", (34, 197, 94)),
-            ("Participating Farmers", f"{total_farm_workers} Settlers Assigned", (56, 189, 248)),
-            ("Total Crop Output Distributed", f"{total_potatoes_distributed} Potatoes", (245, 158, 11))
-        ]
+        rew_key = ("num", "immigrant_reward", board.id)
+        rew_rect = pygame.Rect(card.x + 252, card.y + 26, 52, 26)
+        self.num_fields[rew_key] = {"rect": rew_rect, "kind": "immigrant_reward",
+                                    "payload": board.id, "min": 0, "max": 999}
+        self._draw_num_input(surface, rew_key, rew_rect, reward)
 
-        for k_idx, (k_label, k_val, k_col) in enumerate(kpis):
-            kx = mx + 24 + k_idx * (card_w + 8)
-            kr = pygame.Rect(kx, cy + 44, card_w, card_h)
-            pygame.draw.rect(surface, (24, 34, 52), kr, border_radius=6)
-            pygame.draw.rect(surface, (51, 65, 85), kr, width=1, border_radius=6)
-            surface.blit(self.font_badge.render(k_label, True, COLOR_TEXT_MUTED), (kr.x + 12, kr.y + 8))
-            surface.blit(self.font_sub.render(k_val, True, k_col), (kr.x + 12, kr.y + 24))
+        # Post / Cancel button
+        btn_w, btn_h = 110, 26
+        if posted:
+            btn_rect = pygame.Rect(card.right - btn_w - 14, card.y + 20, btn_w, btn_h)
+            self.immigrant_cancel_btn_rect = btn_rect
+            hov = btn_rect.collidepoint(mouse_pos)
+            pygame.draw.rect(surface, (127, 29, 29) if hov else (153, 27, 27), btn_rect, border_radius=6)
+            bt = self.font_badge.render("Cancel Post", True, (255, 255, 255))
+        else:
+            btn_rect = pygame.Rect(card.right - btn_w - 14, card.y + 20, btn_w, btn_h)
+            self.immigrant_post_btn_rect = btn_rect
+            hov = btn_rect.collidepoint(mouse_pos)
+            pygame.draw.rect(surface, (22, 101, 52) if hov else (20, 83, 45), btn_rect, border_radius=6)
+            bt = self.font_badge.render("Post Notice", True, (255, 255, 255))
+        pygame.draw.rect(surface, (100, 116, 139), btn_rect, width=1, border_radius=6)
+        surface.blit(bt, (btn_rect.centerx - bt.get_width() // 2, btn_rect.centery - bt.get_height() // 2))
+        y_cur += card.height + 16
 
-        # Section 1: Active Production Sites & Household Shares
-        y_cur = cy + 104
-        surface.blit(self.font_sub.render("Active Production Sites & Participating Household Shares:", True, (241, 245, 249)), (mx + 24, y_cur))
+        # --- Waiting queue ---
+        surface.blit(self.font_sub.render(
+            f"Waiting Immigrant Households ({len(queued)}):", True, (241, 245, 249)),
+            (mx + 24, y_cur))
         y_cur += 22
 
-        if not farm_permits:
-            empty_r = pygame.Rect(mx + 24, y_cur, self.modal_w - 48, 54)
+        if not queued:
+            empty_r = pygame.Rect(mx + 24, y_cur, self.modal_w - 48, 44)
             pygame.draw.rect(surface, (24, 34, 52), empty_r, border_radius=6)
-            surface.blit(self.font_body.render("• No farm lots issued yet. Issue Farm Permits in Permits tab to assign workers.", True, COLOR_TEXT_MUTED), (empty_r.x + 16, empty_r.y + 18))
-            y_cur += 64
+            hint = "Post a notice — households that arrive will queue here for your review."
+            surface.blit(self.font_body.render(hint, True, COLOR_TEXT_MUTED),
+                         (empty_r.x + 16, empty_r.y + 14))
+            y_cur += 54
         else:
-            for p in farm_permits[:3]:
-                lot_r = pygame.Rect(mx + 24, y_cur, self.modal_w - 48, 48)
-                pygame.draw.rect(surface, (24, 34, 52), lot_r, border_radius=6)
-                pygame.draw.rect(surface, (51, 65, 85), lot_r, width=1, border_radius=6)
+            day_num = getattr(day_cycle, "day_number", 1) if day_cycle else 1
+            for hh in queued:
+                fam = hh["family"]
+                hh_card = pygame.Rect(mx + 24, y_cur, self.modal_w - 48, 52)
+                pygame.draw.rect(surface, (24, 34, 52), hh_card, border_radius=7)
+                pygame.draw.rect(surface, (51, 65, 85), hh_card, width=1, border_radius=7)
 
-                assigned_w = getattr(p, "assigned_workers", [])
-                counts, total_w = ps.get_participating_household_counts(assigned_w, villager_manager)
-                shares = ps.calculate_shares(assigned_w, villager_manager)
+                state_txt = "Arrived" if hh["state"] == STATE_WAITING else "On the way"
+                arrived_day = int(hh.get("arrival_day") or day_num)
+                members = [m for m in fam.members if getattr(m, "is_alive", True)]
+                size_txt = f"{len(members)} member(s)"
+                surface.blit(self.font_sub.render(
+                    f"The {fam.surname} Family — {size_txt} — {state_txt} (Day {arrived_day})",
+                    True, (241, 245, 249)), (hh_card.x + 14, hh_card.y + 8))
+                surface.blit(self.font_body.render(
+                    f"Reward on accept: {hh.get('reward_gold', reward)} gold  ·  "
+                    "Homeless until a household deed is issued.",
+                    True, COLOR_TEXT_MUTED), (hh_card.x + 14, hh_card.y + 27))
 
-                crop_type = getattr(p, "crop", "Potato") or "Potato"
-                yield_txt = "2-5 Potatoes / tile every 10 days" if crop_type == "Potato" else "Standard Yield"
-                surface.blit(self.font_sub.render(f"🌾 {p.name} ({len(p.tiles)} tiles) — Crop: {crop_type} ({yield_txt})", True, (241, 245, 249)), (lot_r.x + 12, lot_r.y + 6))
-
-                if total_w > 0:
-                    shares_str_parts = []
-                    for h_id, share_ratio in shares.items():
-                        fam_name = h_id
-                        if villager_manager:
-                            f = villager_manager.get_family_by_id(h_id)
-                            if f:
-                                fam_name = f"The {f.surname} Family"
-                        shares_str_parts.append(f"{fam_name}: {counts[h_id]} worker(s) ({share_ratio * 100:.1f}%)")
-                    share_desc = "Shares: " + " | ".join(shares_str_parts)
-                    share_col = (34, 197, 94)
-                else:
-                    share_desc = "No workers currently assigned to this lot."
-                    share_col = (245, 158, 11)
-
-                surface.blit(self.font_body.render(share_desc, True, share_col), (lot_r.x + 12, lot_r.y + 26))
-                y_cur += 54
-
-        # Section 2: Household Income & Storage Deposits Roster
-        surface.blit(self.font_sub.render("Household Income & Storage Balance (Private Household Property):", True, (241, 245, 249)), (mx + 24, y_cur))
-        y_cur += 22
-
-        if not all_families:
-            none_r = pygame.Rect(mx + 24, y_cur, self.modal_w - 48, 44)
-            pygame.draw.rect(surface, (24, 34, 52), none_r, border_radius=6)
-            surface.blit(self.font_body.render("• No households registered in census.", True, COLOR_TEXT_MUTED), (none_r.x + 16, none_r.y + 14))
-        else:
-            for f in all_families[:4]:
-                fam_r = pygame.Rect(mx + 24, y_cur, self.modal_w - 48, 36)
-                pygame.draw.rect(surface, (15, 23, 42), fam_r, border_radius=6)
-                pygame.draw.rect(surface, (51, 65, 85), fam_r, width=1, border_radius=6)
-
-                surface.blit(self.font_sub.render(f"The {f.surname} Family", True, (241, 245, 249)), (fam_r.x + 12, fam_r.y + 8))
-
-                f_workers = [m for m in f.members if any(m.id in getattr(p, "assigned_workers", []) for p in farm_permits)]
-                w_str = f"Active Farmers: {len(f_workers)}"
-                surface.blit(self.font_body.render(w_str, True, (56, 189, 248)), (fam_r.x + 200, fam_r.y + 9))
-
-                p_sum = ps.get_household_production_summary(f.id)
-                pot_harvested = p_sum["total_produced"].get("Potato", 0)
-                harvest_str = f"Gross Harvest Income: x{pot_harvested} Potatoes"
-                surface.blit(self.font_body.render(harvest_str, True, (34, 197, 94)), (fam_r.x + 360, fam_r.y + 9))
-
-                chest_stock = 0
-                if furniture_manager:
-                    c = furniture_manager.get_storage_for_family(f.id)
-                    if c:
-                        chest_stock = c.inventory.get("Potato", 0)
-                chest_str = f"In Household Chest: x{chest_stock}"
-                surface.blit(self.font_body.render(chest_str, True, (245, 158, 11)), (fam_r.x + 620, fam_r.y + 9))
-
-                y_cur += 40
+                a_rect = pygame.Rect(hh_card.right - 190, hh_card.y + 12, 80, 26)
+                r_rect = pygame.Rect(hh_card.right - 100, hh_card.y + 12, 80, 26)
+                self.immigrant_action_btns[hh["id"]] = (a_rect, r_rect)
+                for rect, label, bg, border in (
+                    (a_rect, "Accept", (22, 101, 52), (74, 222, 128)),
+                    (r_rect, "Reject", (127, 29, 29), (248, 113, 113)),
+                ):
+                    hov = rect.collidepoint(mouse_pos)
+                    pygame.draw.rect(surface, tuple(min(255, c + 20) for c in bg) if hov else bg,
+                                     rect, border_radius=6)
+                    pygame.draw.rect(surface, border, rect, width=1, border_radius=6)
+                    bt = self.font_badge.render(label, True, (255, 255, 255))
+                    surface.blit(bt, (rect.centerx - bt.get_width() // 2,
+                                      rect.centery - bt.get_height() // 2))
+                y_cur += hh_card.height + 8
 
     def _draw_tax_tab(self, surface, mx, cy, villager_manager, permit_manager, furniture_manager=None, production_system=None, resources=None, building_manager=None, stockpile_manager=None, day_cycle=None):
         """Tax System UI, Church Tithes & Village Wealth Distribution (AGENT 2)"""
@@ -4077,44 +4235,22 @@ class RaportUI:
         surface.blit(self.font_badge.render("ON" if church_enabled else "OFF", True, (255, 255, 255)),
                      (self.church_tax_enabled_rect.centerx - 10, self.church_tax_enabled_rect.y + 5))
 
-        # Denomination controls: Gold, Silver, Copper
+        # Denomination controls: Gold, Silver, Copper (typable inputs)
         tx_ctrl_x = church_card.x + 14
         btn_ty = church_card.y + 58
-
-        # Gold
-        surface.blit(self.font_badge.render("Gold:", True, (250, 204, 21)), (tx_ctrl_x, btn_ty + 3))
-        self.church_tax_g_dec_rect = pygame.Rect(tx_ctrl_x + 36, btn_ty, 20, 22)
-        self.church_tax_g_inc_rect = pygame.Rect(tx_ctrl_x + 76, btn_ty, 20, 22)
-        pygame.draw.rect(surface, (51, 65, 85), self.church_tax_g_dec_rect, border_radius=3)
-        surface.blit(self.font_badge.render("-", True, (255, 255, 255)), (self.church_tax_g_dec_rect.x + 7, self.church_tax_g_dec_rect.y + 3))
-        g_val_s = self.font_sub.render(str(self.church_tax.get("Gold", 0)), True, (250, 204, 21))
-        surface.blit(g_val_s, (tx_ctrl_x + 60, btn_ty + 2))
-        pygame.draw.rect(surface, (51, 65, 85), self.church_tax_g_inc_rect, border_radius=3)
-        surface.blit(self.font_badge.render("+", True, (255, 255, 255)), (self.church_tax_g_inc_rect.x + 6, self.church_tax_g_inc_rect.y + 3))
-
-        # Silver
-        s_ctrl_x = tx_ctrl_x + 106
-        surface.blit(self.font_badge.render("Silver:", True, (203, 213, 225)), (s_ctrl_x, btn_ty + 3))
-        self.church_tax_s_dec_rect = pygame.Rect(s_ctrl_x + 38, btn_ty, 20, 22)
-        self.church_tax_s_inc_rect = pygame.Rect(s_ctrl_x + 78, btn_ty, 20, 22)
-        pygame.draw.rect(surface, (51, 65, 85), self.church_tax_s_dec_rect, border_radius=3)
-        surface.blit(self.font_badge.render("-", True, (255, 255, 255)), (self.church_tax_s_dec_rect.x + 7, self.church_tax_s_dec_rect.y + 3))
-        s_val_s = self.font_sub.render(str(self.church_tax.get("Silver", 0)), True, (203, 213, 225))
-        surface.blit(s_val_s, (s_ctrl_x + 62, btn_ty + 2))
-        pygame.draw.rect(surface, (51, 65, 85), self.church_tax_s_inc_rect, border_radius=3)
-        surface.blit(self.font_badge.render("+", True, (255, 255, 255)), (self.church_tax_s_inc_rect.x + 6, self.church_tax_s_inc_rect.y + 3))
-
-        # Copper
-        c_ctrl_x = s_ctrl_x + 110
-        surface.blit(self.font_badge.render("Copper:", True, (217, 119, 6)), (c_ctrl_x, btn_ty + 3))
-        self.church_tax_c_dec_rect = pygame.Rect(c_ctrl_x + 48, btn_ty, 20, 22)
-        self.church_tax_c_inc_rect = pygame.Rect(c_ctrl_x + 88, btn_ty, 20, 22)
-        pygame.draw.rect(surface, (51, 65, 85), self.church_tax_c_dec_rect, border_radius=3)
-        surface.blit(self.font_badge.render("-", True, (255, 255, 255)), (self.church_tax_c_dec_rect.x + 7, self.church_tax_c_dec_rect.y + 3))
-        c_val_s = self.font_sub.render(str(self.church_tax.get("Copper", 1)), True, (217, 119, 6))
-        surface.blit(c_val_s, (c_ctrl_x + 72, btn_ty + 2))
-        pygame.draw.rect(surface, (51, 65, 85), self.church_tax_c_inc_rect, border_radius=3)
-        surface.blit(self.font_badge.render("+", True, (255, 255, 255)), (self.church_tax_c_inc_rect.x + 6, self.church_tax_c_inc_rect.y + 3))
+        denom_specs = (
+            ("Gold", (250, 204, 21), tx_ctrl_x, 0),
+            ("Silver", (203, 213, 225), tx_ctrl_x + 96, 0),
+            ("Copper", (217, 119, 6), tx_ctrl_x + 196, 1),
+        )
+        for denom, col, dx, default_val in denom_specs:
+            surface.blit(self.font_badge.render(f"{denom}:", True, col), (dx, btn_ty + 3))
+            d_key = ("num", "church_tax", denom)
+            d_rect = pygame.Rect(dx + 44, btn_ty - 2, 40, 26)
+            self.num_fields[d_key] = {"rect": d_rect, "kind": "church_tax",
+                                      "payload": denom, "min": 0, "max": 9999}
+            self._draw_num_input(surface, d_key, d_rect,
+                                 self.church_tax.get(denom, default_val))
         church_tier_text = "Church happiness: " + " | ".join(
             f"{lower}–{upper if upper is not None else '∞'}c −{abs(penalty)}"
             for lower, upper, penalty in CHURCH_TAX_HAPPINESS_TIERS_COPPER
@@ -4134,7 +4270,7 @@ class RaportUI:
 
         from game.systems.taxation_system import TaxationSystem
         from game.systems.currency import from_copper
-        from game.data.config import SOCAGE_TAX_INTERVAL_DAYS, SOCAGE_TAX_QUICK_STEP, SOCAGE_TAX_HAPPINESS_TIERS
+        from game.data.config import SOCAGE_TAX_INTERVAL_DAYS, SOCAGE_TAX_HAPPINESS_TIERS
         current_day = int(getattr(day_cycle, "day_number", 1)) if day_cycle else 1
         next_day = TaxationSystem.next_collection_day(current_day, villager_manager)
         tax_report = TaxationSystem.get_socage_tax_report(current_day)
@@ -4159,15 +4295,7 @@ class RaportUI:
         surface.blit(socage_toggle, (self.socage_tax_enabled_rect.centerx - socage_toggle.get_width() // 2,
                                      self.socage_tax_enabled_rect.centery - socage_toggle.get_height() // 2))
         rate_x = socage_card.right - 306
-        self.socage_tax_dec_rect = pygame.Rect(rate_x + 48, socage_card.y + 48, 34, 22)
-        self.socage_tax_input_rect = pygame.Rect(rate_x + 88, socage_card.y + 48, 58, 22)
-        self.socage_tax_inc_rect = pygame.Rect(rate_x + 152, socage_card.y + 48, 34, 22)
-        for rect, sign in ((self.socage_tax_dec_rect, f"-{SOCAGE_TAX_QUICK_STEP}"),
-                           (self.socage_tax_inc_rect, f"+{SOCAGE_TAX_QUICK_STEP}")):
-            pygame.draw.rect(surface, (51, 65, 85), rect, border_radius=3)
-            sign_s = self.font_badge.render(sign, True, (255, 255, 255))
-            surface.blit(sign_s, (rect.centerx - sign_s.get_width() // 2,
-                                  rect.centery - sign_s.get_height() // 2))
+        self.socage_tax_input_rect = pygame.Rect(rate_x + 48, socage_card.y + 48, 140, 22)
         pygame.draw.rect(surface, (15, 23, 42), self.socage_tax_input_rect, border_radius=3)
         input_border = (56, 189, 248) if self.socage_tax_input_active else (71, 85, 105)
         pygame.draw.rect(surface, input_border, self.socage_tax_input_rect, width=1, border_radius=3)

@@ -5,6 +5,7 @@ import pygame
 from game.config import (
     TILE_SIZE,
     BUILDING_TYPES,
+    BUILDING_WALL_THICKNESS,
     DEFAULT_ITEM_PRICES,
     MARKET_DEFAULT_HOUSEHOLD_SALE_PERCENT,
     DOORWAY_QUEUE_LATERAL_OFFSET,
@@ -54,7 +55,7 @@ class Building:
             self.assigned_family_id = None
             self.item_allocations = {}
             self.auto_pricing = False
-        self.wall_thickness = 10
+        self.wall_thickness = BUILDING_WALL_THICKNESS
         self._cached_oriented_walls = None
         self._cached_wall_rects = None
         self._cached_tile_size = None

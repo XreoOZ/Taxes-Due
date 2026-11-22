@@ -47,9 +47,11 @@ from game.data.config import (
     MAP_OVERLAY_ZOOM_MIN,
     MAP_OVERLAY_ZOOM_MAX,
     MAP_OVERLAY_ZOOM_STEP,
+    MINE_SIZE_TILES,
     COLOR_WATER_DEEP,
 )
 from game.world.island import get_terrain
+from game.world.natural_resources import get_natural_resources
 
 
 class MapOverlay:
@@ -325,10 +327,26 @@ class MapOverlay:
         terrain = get_terrain()
         if terrain is not None:
             pygame.draw.rect(surface, COLOR_WATER_DEEP, cr)
-            self._draw_island_mask(surface, terrain, player, cr, scale, ox, oy)
+            self._blit_aligned_mask(
+                surface, terrain.get_mask_surface(),
+                terrain.mask_origin_tiles, terrain.mask_sample,
+                player, cr, scale, ox, oy)
+            # Forest biome tint, aligned to the same mask geometry.
+            if self.layers.get("forest", True):
+                nr = get_natural_resources()
+                forest_mask = nr.get_forest_mask_surface() if nr else None
+                if forest_mask is not None:
+                    self._blit_aligned_mask(
+                        surface, forest_mask,
+                        terrain.mask_origin_tiles, terrain.mask_sample,
+                        player, cr, scale, ox, oy)
 
         # Grid
         self._draw_grid(surface, cr, player, scale, ox, oy)
+
+        # Natural resources (island only)
+        if self.layers.get("mines", True):
+            self._draw_mines(surface, player, cr, scale, ox, oy)
 
         # Layers
         if self.layers.get("permits", True):
@@ -347,20 +365,19 @@ class MapOverlay:
 
         surface.set_clip(old_clip)
 
-    def _draw_island_mask(self, surface, terrain, player, cr, scale, ox, oy):
-        """Blit the island land/water mask using the map transform.
+    def _blit_aligned_mask(self, surface, mask, origin_tiles, sample,
+                           player, cr, scale, ox, oy):
+        """Blit a tile-aligned mask surface using the map transform.
 
         Only the visible slice is scaled per frame. Scaling the whole island
         bbox (which grows to tens of thousands of px when zoomed in) caused
         severe zoom-stutter; a screen-sized slice keeps the cost bounded.
         """
-        mask = terrain.get_mask_surface()
-        sample = terrain.mask_sample
         tiles_w = mask.get_width() * sample
         tiles_h = mask.get_height() * sample
         world_w = tiles_w * TILE_SIZE
         world_h = tiles_h * TILE_SIZE
-        min_gx, min_gy = terrain.mask_origin_tiles
+        min_gx, min_gy = origin_tiles
         wx0 = min_gx * TILE_SIZE
         wy0 = min_gy * TILE_SIZE
 
@@ -398,6 +415,35 @@ class MapOverlay:
         sub = mask.subsurface(pygame.Rect(sx0, sy0, sx1 - sx0, sy1 - sy0))
         scaled = pygame.transform.scale(sub, (dw, dh))
         surface.blit(scaled, (int(dx), int(dy)))
+
+    def _draw_mines(self, surface, player, cr, scale, ox, oy):
+        """5x5 mine deposits as rock patches, shaded by yield tier."""
+        nr = get_natural_resources()
+        if nr is None or not nr.mines:
+            return
+        tier_colors = {
+            1: (100, 116, 139), 2: (90, 105, 120), 3: (71, 85, 105),
+            4: (120, 90, 70), 5: (150, 110, 60),
+        }
+        for mine in nr.mines:
+            ax, ay = mine["anchor"]
+            wx = ax * TILE_SIZE
+            wy = ay * TILE_SIZE
+            ww = MINE_SIZE_TILES * TILE_SIZE
+            wh = MINE_SIZE_TILES * TILE_SIZE
+            x1, y1 = self._world_to_map(wx, wy, player, cr, scale, ox, oy)
+            x2, y2 = self._world_to_map(wx + ww, wy + wh, player, cr, scale, ox, oy)
+            rect = pygame.Rect(min(x1, x2), min(y1, y2),
+                               max(1, abs(x2 - x1)), max(1, abs(y2 - y1)))
+            if not cr.collidepoint(rect.center):
+                continue
+            fill = tier_colors.get(int(mine.get("tier", 3)), (71, 85, 105))
+            pygame.draw.rect(surface, fill, rect)
+            pygame.draw.rect(surface, (30, 41, 59), rect, width=1)
+            # Small pick-head dot at the center when zoomed in enough.
+            if rect.width >= MAP_OVERLAY_ICON_MIN_PX * 2:
+                pygame.draw.circle(surface, (203, 213, 225), rect.center,
+                                   max(1, rect.width // 5))
 
     def _draw_grid(self, surface, cr, player, scale, ox, oy):
         """Draw subtle grid lines at tile boundaries."""

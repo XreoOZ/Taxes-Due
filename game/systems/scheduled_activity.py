@@ -57,7 +57,7 @@ class ScheduledActivitySystem:
             if field not in state:
                 continue
             value = state[field]
-            if field == "current_work_tile" and isinstance(value, list):
+            if field in ("current_work_tile", "station_target_tile") and isinstance(value, list):
                 value = tuple(value)
             setattr(villager, field, value)
 

@@ -53,6 +53,9 @@ from game.config import (
     TILE_OCCUPANCY_TIMEOUT,
     TILE_STEP_RESERVATION_TIMEOUT,
     NARROW_PASSAGE_WAIT_DISTANCE,
+    SERVANT_STUCK_TELEPORT_THRESHOLD,
+    SERVANT_TELEPORT_SEARCH_RADIUS_TILES,
+    SERVANT_MAX_TELEPORTS_PER_TARGET,
 )
 from game.data.config import MARKET_TRADEABLE_ITEMS, MARKET_CURRENCY_DENOMINATIONS
 from game.systems.ai_simulation_scheduler import AISimulationScheduler
@@ -118,12 +121,30 @@ class Servant:
         self.target_restock_dest = None
         self.target_restock_res = None
         self.target_restock_amount = 0
+
+        # Lord's Purchase Order targets: buy household stall goods with
+        # Lord Treasury coins, haul to landlord storage, return change.
+        self.target_buy_order = None
+        self.target_buy_market = None
+        self.target_buy_treasury = None
+        self.target_buy_fetch_pos = None
+        self.target_buy_market_pos = None
+        self.target_buy_drop_pos = None
+        self.target_buy_drop_tile = None
+        self.target_buy_chunk = 0
+        self.target_buy_total = 0
+        self.buy_wallet = {}
         self.carpenter_commission_order_id = None
         self.carpenter_commission_carpenter_id = None
         self.carpenter_commission_fee_copper = 0
         self.carpenter_commission_remaining_copper = 0
         self.carpenter_commission_storage_tile = None
         self.carpenter_commission_treasury_id = None
+
+        # Dead-artisan commission refund: recover coins from the deceased
+        # artisan's household funds, return them to the Lord Treasury.
+        self.carpenter_refund_from_family = None
+        self.carpenter_refund_amount = 0
 
         # Carried items (Max 5 items)
         self.carried_res = None
@@ -159,6 +180,7 @@ class Servant:
         self.stuck_timer = 0.0
         self.hard_stuck_timer = 0.0
         self.collision_bypass_timer = 0.0
+        self.consecutive_stuck_recoveries = 0
         self.stuck_blocked_tiles = {}
         self.route_state = ROUTE_STATE_NONE
         self.route_request_timer = 0.0
@@ -363,6 +385,7 @@ class Servant:
                     order["commission_paid"] = True
                     order["paid_by_id"] = "landlord"
                     order["paid_amount_copper"] = fee
+                    CarpenterSystem._ensure_paid_seq(order, furniture_manager, building_manager)
                     from game.systems.market_sales_report import MarketSalesReportSystem
                     MarketSalesReportSystem.record_household_income(
                         villager_manager, getattr(carpenter, "family_id", None),
@@ -384,6 +407,87 @@ class Servant:
                 self.carpenter_commission_storage_tile = None
                 self.carpenter_commission_treasury_id = None
                 self.state = "IDLE"
+            return
+
+        if self.state in ("COMMISSION_REFUND_COLLECT", "COMMISSION_REFUND_DELIVER"):
+            from game.systems.carpenter_system import CarpenterSystem
+            from game.systems.lord_treasury import LordTreasurySystem
+            from game.systems.currency import (
+                compact_currency_wallet, normalize_wallet, to_copper,
+            )
+
+            if self.state == "COMMISSION_REFUND_COLLECT":
+                amount = max(0, int(getattr(self, "carpenter_refund_amount", 0) or 0))
+                if to_copper(normalize_wallet(self.inventory)) >= amount:
+                    self.state = "COMMISSION_REFUND_DELIVER"
+                    self.say("Coins recovered; returning them to the Treasury, my Lord.", duration=2.5)
+                    return
+                # 1) Deceased artisan's household chest.
+                src_chest = (furniture_manager.get_storage_for_family(self.carpenter_refund_from_family)
+                             if furniture_manager else None)
+                if src_chest is not None and to_copper(normalize_wallet(src_chest.inventory)) > 0:
+                    approach_x, approach_y = src_chest.get_approach_point(
+                        self.x, self.y, worker_id=self.id, all_entities=all_entities,
+                        tile_size=TILE_SIZE, bm=building_manager,
+                    )
+                    arrived = self._move_towards(
+                        approach_x, approach_y, dt, arrival_dist=LOOSE_ITEM_ARRIVAL_DIST,
+                        all_servants=all_servants, player=player,
+                        building_manager=building_manager, all_entities=all_entities,
+                        furniture_manager=furniture_manager,
+                        interaction_target=src_chest,
+                    )
+                    if arrived:
+                        take = min(amount - to_copper(normalize_wallet(self.inventory)),
+                                   to_copper(normalize_wallet(src_chest.inventory)))
+                        CarpenterSystem._move_exact_value(src_chest.inventory, self.inventory, take)
+                        compact_currency_wallet(self.inventory)
+                    return
+                # 2) Abstract household wallets, then 3) Treasury backstop.
+                remaining = amount - to_copper(normalize_wallet(self.inventory))
+                for wallet in CarpenterSystem._family_abstract_wallets(
+                        self.carpenter_refund_from_family, villager_manager):
+                    remaining = amount - to_copper(normalize_wallet(self.inventory))
+                    if remaining <= 0:
+                        break
+                    take = min(remaining, to_copper(normalize_wallet(wallet)))
+                    if take > 0:
+                        CarpenterSystem._move_exact_value(wallet, self.inventory, take)
+                remaining = amount - to_copper(normalize_wallet(self.inventory))
+                if remaining > 0:
+                    treasury_value = LordTreasurySystem.value(furniture_manager)
+                    take = min(remaining, treasury_value)
+                    if take > 0:
+                        LordTreasurySystem.withdraw_covering(furniture_manager, self.inventory, take)
+                self.state = "COMMISSION_REFUND_DELIVER"
+                self.say("Coins recovered; returning them to the Treasury, my Lord.", duration=2.5)
+                return
+
+            # COMMISSION_REFUND_DELIVER: walk to the Treasury Chest and deposit.
+            treasury = LordTreasurySystem.get_chest(furniture_manager)
+            if not treasury:
+                self.carpenter_refund_from_family = None
+                self.carpenter_refund_amount = 0
+                self.state = "IDLE"
+                return
+            approach_x, approach_y = treasury.get_approach_point(
+                self.x, self.y, worker_id=self.id, all_entities=all_entities,
+                tile_size=TILE_SIZE, bm=building_manager,
+            )
+            arrived = self._move_towards(
+                approach_x, approach_y, dt, arrival_dist=LOOSE_ITEM_ARRIVAL_DIST,
+                all_servants=all_servants, player=player,
+                building_manager=building_manager, all_entities=all_entities,
+                furniture_manager=furniture_manager,
+                interaction_target=treasury,
+            )
+            if arrived:
+                LordTreasurySystem.deposit_all(furniture_manager, self.inventory)
+                compact_currency_wallet(self.inventory)
+                self.carpenter_refund_from_family = None
+                self.carpenter_refund_amount = 0
+                self.state = "IDLE"
+                self.say("Refund returned to the Treasury, my Lord.", duration=2.5)
             return
 
         pending_demo = building_manager.get_pending_demolition()
@@ -447,8 +551,14 @@ class Servant:
             if self.target_storage_pos:
                 tx, ty = self.target_storage_pos
                 if self._move_towards(tx, ty, dt, arrival_dist=24, all_servants=all_servants, player=player, building_manager=building_manager, all_entities=all_entities, furniture_manager=furniture_manager, exclusive_target=False):
-                    needed_at_site = (self.target_site.required_cost[self.target_res] - 
-                                     self.target_site.delivered_cost[self.target_res])
+                    site = self.target_site
+                    other_reserved = site.reserved_cost.get(self.target_res, 0) - getattr(self, "target_site_reserved", 0)
+                    needed_at_site = max(
+                        0,
+                        site.required_cost[self.target_res]
+                        - site.delivered_cost[self.target_res]
+                        - max(0, other_reserved),
+                    )
 
                     storage_stack = getattr(self, "target_storage_stack", None)
                     if not storage_stack or storage_stack not in stockpile_manager.stacks or storage_stack.amount <= 0:
@@ -496,7 +606,11 @@ class Servant:
             wx, wy = self._get_site_work_pos(self.target_site, all_servants)
             if self._move_towards(wx, wy, dt, arrival_dist=24, all_servants=all_servants, player=player, building_manager=building_manager, all_entities=all_entities, furniture_manager=furniture_manager, exclusive_target=False):
                 # Deposit carried resource into construction site
-                self.target_site.deposit_resource(self.carried_res, self.carried_amount)
+                site = self.target_site
+                if getattr(self, "target_site_reserved", 0) > 0:
+                    site.release_resource(self.carried_res, self.target_site_reserved)
+                    self.target_site_reserved = 0
+                site.deposit_resource(self.carried_res, self.carried_amount)
                 self.carried_res = None
                 self.carried_amount = 0
                 reg = GlobalPathRegistry.get_instance()
@@ -811,6 +925,148 @@ class Servant:
                 self.repath_cooldown = 0.0
                 self._reset_task()
 
+        # -------------------------------------------------------------
+        # LORD'S PURCHASE ORDER: BUY -> MARKET -> LANDLORD STORAGE -> TREASURY CHANGE
+        # -------------------------------------------------------------
+        elif self.state == "BUY_FETCH":
+            chest = self.target_buy_treasury
+            if chest is None or not getattr(chest, "inventory", None):
+                if self.target_buy_order:
+                    self.target_buy_order["in_transit"] = max(0, self.target_buy_order.get("in_transit", 0) - self.target_buy_chunk)
+                self._reset_task()
+                return
+            all_vils = villager_manager.get_all_villagers() if villager_manager else []
+            all_ents = list(all_servants or []) + all_vils
+            if self._move_towards(self.target_buy_fetch_pos[0], self.target_buy_fetch_pos[1], dt, arrival_dist=24, all_servants=all_servants, player=player, building_manager=building_manager, all_entities=all_ents, furniture_manager=furniture_manager, exclusive_target=False):
+                from game.systems.lord_treasury import LordTreasurySystem
+                ok, _msg = LordTreasurySystem.withdraw_covering(
+                    furniture_manager, self.buy_wallet, self.target_buy_total)
+                if not ok:
+                    if self.target_buy_order:
+                        self.target_buy_order["in_transit"] = max(0, self.target_buy_order.get("in_transit", 0) - self.target_buy_chunk)
+                    self._reset_task()
+                    return
+                self.state = "BUY_GO_MARKET"
+                self.say("Collected coins for market purchase, Lord!", duration=2.0)
+
+        elif self.state == "BUY_GO_MARKET":
+            mkt = self.target_buy_market
+            order = self.target_buy_order
+            if mkt is None or order is None or not getattr(mkt, "inventory", None):
+                self.state = "BUY_RETURN"
+                return
+            all_vils = villager_manager.get_all_villagers() if villager_manager else []
+            all_ents = list(all_servants or []) + all_vils
+            if self._move_towards(self.target_buy_market_pos[0], self.target_buy_market_pos[1], dt, arrival_dist=32, all_servants=all_servants, player=player, building_manager=building_manager, all_entities=all_ents, furniture_manager=furniture_manager, exclusive_target=False):
+                from game.systems.market_service import MarketService
+                from game.systems.currency import (
+                    calculate_payment_and_change, execute_currency_transfer,
+                )
+                item_name = order["item_name"]
+                stock = max(0, int(mkt.inventory.get(item_name, 0)))
+                qty = min(self.target_buy_chunk, stock)
+                if qty <= 0:
+                    # Stall sold out meanwhile -> refund coins at treasury.
+                    self.state = "BUY_RETURN"
+                    return
+                price = MarketService.get_item_price(item_name, mkt)
+                if price <= 0:
+                    self.state = "BUY_RETURN"
+                    return
+                total = price * qty
+                mkt_curr = getattr(mkt, "currency", None)
+                if not isinstance(mkt_curr, dict):
+                    mkt_curr = {"Copper": 0, "Silver": 0, "Gold": 0}
+                    mkt.currency = mkt_curr
+                ok, payment, change, _msg = calculate_payment_and_change(self.buy_wallet, total, mkt_curr)
+                if not ok:
+                    self.state = "BUY_RETURN"
+                    return
+                transfer_ok, _sw, _rw, _tmsg = execute_currency_transfer(
+                    self.buy_wallet, mkt_curr, payment, change)
+                if not transfer_ok:
+                    self.state = "BUY_RETURN"
+                    return
+                mkt.inventory[item_name] -= qty
+                if mkt.inventory[item_name] <= 0:
+                    del mkt.inventory[item_name]
+                from game.systems.market_pricing import MarketPricingSystem
+                MarketPricingSystem.update_market_prices(mkt)
+                from game.systems.market_sales_report import MarketSalesReportSystem
+                MarketSalesReportSystem.record_sale(mkt, item_name, qty, price)
+
+                order["fulfilled"] = order.get("fulfilled", 0) + qty
+                order["in_transit"] = max(0, order.get("in_transit", 0) - self.target_buy_chunk)
+                self.carried_res = item_name
+                self.carried_amount = qty
+                self.target_buy_chunk = qty
+                self.state = "BUY_DELIVER"
+                self.say(f"Purchased {qty}x {item_name} for the Lord!", duration=2.0)
+
+        elif self.state == "BUY_DELIVER":
+            if not self.target_buy_drop_pos or not self.target_buy_drop_tile:
+                self.state = "BUY_RETURN"
+                return
+            all_vils = villager_manager.get_all_villagers() if villager_manager else []
+            all_ents = list(all_servants or []) + all_vils
+            if self._move_towards(self.target_buy_drop_pos[0], self.target_buy_drop_pos[1], dt, arrival_dist=24, all_servants=all_servants, player=player, building_manager=building_manager, all_entities=all_ents, furniture_manager=furniture_manager, exclusive_target=False):
+                gx, gy = self.target_buy_drop_tile
+                stockpile_manager.drop_resource(
+                    self.carried_res, self.carried_amount, gx, gy,
+                    owner_type="landlord", owner_id=None)
+                stockpile_manager.refresh_stacks(resources, permit_manager)
+                self.say(f"Stored {self.carried_amount}x {self.carried_res} for the Lord!", duration=2.0)
+                self.carried_res = None
+                self.carried_amount = 0
+                self.state = "BUY_RETURN"
+
+        elif self.state == "BUY_RETURN":
+            chest = self.target_buy_treasury
+            if chest is None or not getattr(chest, "inventory", None):
+                self._refund_buy_wallet_fallback(stockpile_manager, resources, permit_manager)
+                self._finish_buy_order(servant_manager)
+                return
+            all_vils = villager_manager.get_all_villagers() if villager_manager else []
+            all_ents = list(all_servants or []) + all_vils
+            dest = self.target_buy_fetch_pos
+            if self._move_towards(dest[0], dest[1], dt, arrival_dist=24, all_servants=all_servants, player=player, building_manager=building_manager, all_entities=all_ents, furniture_manager=furniture_manager, exclusive_target=False):
+                from game.systems.lord_treasury import LordTreasurySystem
+                LordTreasurySystem.deposit_all(furniture_manager, self.buy_wallet)
+                self.buy_wallet = {}
+                self._finish_buy_order(servant_manager)
+
+    def _refund_buy_wallet_fallback(self, stockpile_manager, resources=None, permit_manager=None):
+        """Treasury chest missing mid-order: drop carried coins as a
+        landlord-owned stack at the servant's tile so value is never voided."""
+        if not self.buy_wallet or stockpile_manager is None:
+            self.buy_wallet = {}
+            return
+        gx = int(math.floor(self.x / TILE_SIZE))
+        gy = int(math.floor(self.y / TILE_SIZE))
+        for denom, amt in list(self.buy_wallet.items()):
+            if amt > 0:
+                stockpile_manager.drop_resource(
+                    denom, int(amt), gx, gy, owner_type="landlord", owner_id=None)
+        self.buy_wallet = {}
+        stockpile_manager.refresh_stacks(resources, permit_manager)
+
+    def _finish_buy_order(self, servant_manager):
+        order = self.target_buy_order
+        if order is not None and servant_manager is not None:
+            if order.get("fulfilled", 0) >= order.get("quantity", 0):
+                if order in getattr(servant_manager, "buy_orders", []):
+                    servant_manager.buy_orders.remove(order)
+        reg = GlobalPathRegistry.get_instance()
+        reg.release_reservation(self.id)
+        self.current_path = []
+        self.path_index = 0
+        self.path_target = None
+        self.path_target_tile = None
+        self.is_waiting_for_path = False
+        self.wait_timer = 0.0
+        self.repath_cooldown = 0.0
+        self._reset_task()
+
     def _is_matching_grant_item(self, stack_res_type, requested_item):
         """Generic matching between landlord stockpile stack and requested grant item."""
         if not stack_res_type or not requested_item:
@@ -843,9 +1099,12 @@ class Servant:
                     item_type = order["item_type"]
                     fam_id = order["family_id"]
 
-                    # Determine family destination (shared by all sources)
-                    dest_pos = None
-                    if furniture_manager:
+                    # Determine family destination (shared by all sources).
+                    # Orders may carry an explicit "dest_pos" override (e.g.
+                    # immigration rewards paid to a homeless household standing
+                    # at the Notice Board, which has no chest/permit yet).
+                    dest_pos = order.get("dest_pos")
+                    if not dest_pos and furniture_manager:
                         chest = furniture_manager.get_storage_for_family(fam_id, building_manager=building_manager, villager_manager=villager_manager, permit_manager=permit_manager)
                         if chest:
                             dest_pos = chest.get_world_pos(TILE_SIZE)
@@ -994,6 +1253,74 @@ class Servant:
                         self.say(f"Fetching {amt_to_take} {item_type} for Market restock, Sire!")
                         return True
 
+        # Lord's Purchase Order: buy household stall goods into landlord storage.
+        # Coins come from the Lord Treasury; the stall's selling price (set by
+        # the household's auto-pricing/manual price) is paid into market.currency,
+        # which the household later collects as earnings. Change returns to treasury.
+        if servant_manager and getattr(servant_manager, "buy_orders", None) and furniture_manager:
+            from game.systems.lord_treasury import LordTreasurySystem
+            from game.systems.market_service import MarketService
+            treasury_chest = LordTreasurySystem.get_chest(furniture_manager)
+            if treasury_chest is not None:
+                for order in list(servant_manager.buy_orders):
+                    mkt = order.get("market")
+                    if mkt is None or mkt not in getattr(building_manager, "buildings", []):
+                        servant_manager.buy_orders.remove(order)
+                        continue
+                    remaining = order.get("quantity", 0) - order.get("fulfilled", 0) - order.get("in_transit", 0)
+                    if remaining <= 0:
+                        if order.get("fulfilled", 0) >= order.get("quantity", 0):
+                            servant_manager.buy_orders.remove(order)
+                        continue
+                    item_name = order["item_name"]
+                    stock = max(0, int(getattr(mkt, "inventory", {}).get(item_name, 0)))
+                    chunk = min(SERVANT_CARRY_CAPACITY, remaining, stock)
+                    if chunk <= 0:
+                        continue
+                    price = MarketService.get_item_price(item_name, mkt)
+                    if price <= 0:
+                        continue
+                    total = price * chunk
+                    if LordTreasurySystem.value(furniture_manager) < total:
+                        continue  # treasury can't cover this trip yet
+
+                    order["in_transit"] = order.get("in_transit", 0) + chunk
+
+                    # Positions: treasury chest -> market approach -> drop tile in front of chest.
+                    tx, ty = treasury_chest.get_world_pos(TILE_SIZE)
+                    bw = max(1, int(getattr(treasury_chest, "footprint_dimensions", (1, 1))[0]))
+                    bh = max(1, int(getattr(treasury_chest, "footprint_dimensions", (1, 1))[1]))
+                    drop_gx = treasury_chest.grid_x + bw // 2
+                    drop_gy = treasury_chest.grid_y + bh + 1
+                    drop_pos = ((drop_gx + 0.5) * TILE_SIZE, (drop_gy + 0.5) * TILE_SIZE)
+                    market_pos = mkt.get_approach_point(
+                        self.x, self.y, self.id, tile_size=TILE_SIZE, bm=building_manager) \
+                        if hasattr(mkt, "get_approach_point") else mkt.get_world_pos(TILE_SIZE)
+
+                    # Clear old path & reservation before switching task
+                    reg = GlobalPathRegistry.get_instance()
+                    reg.release_reservation(self.id)
+                    self.current_path = []
+                    self.path_index = 0
+                    self.path_target = None
+                    self.path_target_tile = None
+                    self.is_waiting_for_path = False
+                    self.wait_timer = 0.0
+                    self.repath_cooldown = 0.0
+
+                    self.target_buy_order = order
+                    self.target_buy_market = mkt
+                    self.target_buy_treasury = treasury_chest
+                    self.target_buy_fetch_pos = (tx, ty)
+                    self.target_buy_market_pos = market_pos
+                    self.target_buy_drop_pos = drop_pos
+                    self.target_buy_drop_tile = (drop_gx, drop_gy)
+                    self.target_buy_chunk = chunk
+                    self.target_buy_total = total
+                    self.state = "BUY_FETCH"
+                    self.say(f"Fetching coins to buy {chunk}x {item_name}, Lord!", duration=2.0)
+                    return True
+
         # Hauling Designated Landlord / Unassigned Furniture
         if furniture_manager:
             for f in furniture_manager.furnitures:
@@ -1134,6 +1461,7 @@ class Servant:
         if reserved > 0:
             actual_res = storage_stack.reserve(reserved) if hasattr(storage_stack, "reserve") else reserved
             self.target_res = needed_res
+            self.target_site_reserved = reserved
             self.target_storage_stack = storage_stack
             self.target_storage_reserved = actual_res
 
@@ -1165,11 +1493,15 @@ class Servant:
         self.say(f"Lord! We lack {needed_res} for the construction!")
 
     def _reset_task(self):
-        if self.target_site and self.target_res and self.state == "FETCHING":
-            if self.target_res in self.target_site.reserved_cost:
-                self.target_site.reserved_cost[self.target_res] = max(
-                    0, self.target_site.reserved_cost[self.target_res] - SERVANT_CARRY_CAPACITY
-                )
+        # *** ESTABLISHED — DO NOT REGRESS ***
+        # Release the servant's OWN recorded reservation (target_site_reserved),
+        # for both FETCHING and HAULING. Using a fixed SERVANT_CARRY_CAPACITY or
+        # only handling FETCHING leaks reserved_cost -> blueprint never completes.
+        if (self.target_site and self.target_res
+                and self.state in ("FETCHING", "HAULING")
+                and getattr(self, "target_site_reserved", 0) > 0):
+            self.target_site.release_resource(self.target_res, self.target_site_reserved)
+        self.target_site_reserved = 0
         if getattr(self, "target_storage_stack", None) and getattr(self, "target_storage_reserved", 0) > 0:
             if hasattr(self.target_storage_stack, "release_reservation"):
                 self.target_storage_stack.release_reservation(self.target_storage_reserved)
@@ -1195,6 +1527,22 @@ class Servant:
         self.target_restock_res = None
         self.target_restock_amount = 0
 
+        # Refund buy order in_transit count. NOTE: self.buy_wallet is intentionally
+        # NOT cleared here — coins already fetched from the treasury stay on the
+        # servant and are deposited on the next BUY_RETURN (or reused), so fetched
+        # value is never silently voided by an abort.
+        if self.target_buy_order:
+            self.target_buy_order["in_transit"] = max(0, self.target_buy_order.get("in_transit", 0) - self.target_buy_chunk)
+        self.target_buy_order = None
+        self.target_buy_market = None
+        self.target_buy_treasury = None
+        self.target_buy_fetch_pos = None
+        self.target_buy_market_pos = None
+        self.target_buy_drop_pos = None
+        self.target_buy_drop_tile = None
+        self.target_buy_chunk = 0
+        self.target_buy_total = 0
+
         # Release any path reservation and reset route state
         reg = GlobalPathRegistry.get_instance()
         reg.release_reservation(self.id)
@@ -1205,6 +1553,7 @@ class Servant:
         self.is_waiting_for_path = False
         self.wait_timer = 0.0
         self.repath_cooldown = 0.0
+        self.consecutive_stuck_recoveries = 0
 
         self.state = "IDLE"
         self.target_site = None
@@ -1222,6 +1571,11 @@ class Servant:
         self.target_grant_res = None
         self.target_grant_amount = 0
         self.target_grant_treasury = None
+        # Commission refund errand cleanup: any coins already collected stay
+        # in self.inventory (same convention as commission/buy wallets —
+        # physical coins the servant holds are never voided).
+        self.carpenter_refund_from_family = None
+        self.carpenter_refund_amount = 0
         self.nav_target = None
         self.door_waypoints = []
 
@@ -1342,7 +1696,15 @@ class Servant:
         self.route_state = ROUTE_STATE_ACTIVE
         self.is_waiting_for_path = False
 
-        move_dist = min(self.speed * dt, dist_to_wp)
+        terrain_mult = 1.0
+        try:
+            from game.world.natural_resources import get_natural_resources
+            from game.world.roads import get_roads
+            terrain_mult = (get_natural_resources().speed_factor_at(self.x, self.y, TILE_SIZE)
+                            * get_roads().speed_factor_at(self.x, self.y, TILE_SIZE))
+        except Exception:
+            pass
+        move_dist = min(self.speed * terrain_mult * dt, dist_to_wp)
         dir_x = wp_dx / dist_to_wp
         dir_y = wp_dy / dist_to_wp
         vx = dir_x * move_dist
@@ -1407,7 +1769,14 @@ class Servant:
         actual_dist = math.hypot(self.x - old_x, self.y - old_y)
         if actual_dist < (move_dist * 0.15) and dist_to_wp > tol:
             self.stuck_timer += dt
-            if self.stuck_timer >= 0.5:
+            # *** ESTABLISHED — DO NOT REGRESS ***
+            # Servants share the villager stuck tolerance (2.0s). The old 0.5s
+            # threshold made servants abandon tight 1-tile corridors that
+            # villagers grind through — causing try/cancel/retry loops.
+            # Combined with the anti-softlock teleport below, a servant must
+            # never permanently fail to reach its destination: the Landlord
+            # cannot act without servants.
+            if self.stuck_timer >= 2.0:
                 cur_gx = int(math.floor(self.x / TILE_SIZE))
                 cur_gy = int(math.floor(self.y / TILE_SIZE))
                 blocked_gx = int(math.floor((self.x + dir_x * NAVIGATION_BLOCKED_PROBE_DISTANCE) / TILE_SIZE))
@@ -1416,17 +1785,117 @@ class Servant:
                     self.stuck_blocked_tiles = {}
                 self.stuck_blocked_tiles[(blocked_gx, blocked_gy)] = time.time() + NAVIGATION_BLOCKED_TILE_TIMEOUT
                 self.stuck_timer = 0.0
+                # ESTABLISHED ANTI-SOFTLOCK: the Landlord cannot act without
+                # servants, so a servant that keeps failing to reach its target
+                # must never soft-lock forever. After SERVANT_STUCK_TELEPORT_THRESHOLD
+                # consecutive stuck recoveries it teleports to the nearest
+                # walkable tile around its destination and repaths the last mile.
+                self.consecutive_stuck_recoveries = getattr(self, "consecutive_stuck_recoveries", 0) + 1
+                teleported = (
+                    self.consecutive_stuck_recoveries >= SERVANT_STUCK_TELEPORT_THRESHOLD
+                    and self.path_target is not None
+                    and self._teleport_near_target(building_manager, furniture_manager)
+                )
+                if teleported:
+                    self.say("Pardon the abrupt movement, my Lord!", duration=2.0)
+                elif (self.consecutive_stuck_recoveries >= SERVANT_STUCK_TELEPORT_THRESHOLD
+                      and self.path_target is not None
+                      and getattr(self, "task_teleport_count", 0) >= SERVANT_MAX_TELEPORTS_PER_TARGET):
+                    # *** ESTABLISHED — DO NOT REGRESS ***
+                    # Destination unreachable after repeated teleports: abandon
+                    # the task. Removing this re-enables infinite A->B->A bounce
+                    # loops on unreachable targets (user-reported bug).
+                    self._reset_task()
+                    return False
                 self.current_path = []
                 self.path_index = 0
-                self.path_target = None
+                if not teleported:
+                    self.path_target = None
         else:
             self.stuck_timer = max(0.0, self.stuck_timer - dt * 2.0)
+            self.consecutive_stuck_recoveries = 0
 
         if vx != 0 or vy != 0:
             self.facing_angle = math.atan2(vy, vx)
             self.walk_cycle += dt * 10.0
 
         return False
+
+    def _teleport_near_target(self, building_manager, furniture_manager):
+        """Anti-softlock teleport: relocate to the nearest walkable tile around the current path target."""
+        if self.path_target is None:
+            return False
+        tx, ty = self.path_target
+        tgt_gx = int(math.floor(tx / TILE_SIZE))
+        tgt_gy = int(math.floor(ty / TILE_SIZE))
+        radius = max(1, int(SERVANT_TELEPORT_SEARCH_RADIUS_TILES))
+        best = None
+        best_dist = float("inf")
+        for dy in range(-radius, radius + 1):
+            for dx in range(-radius, radius + 1):
+                gx, gy = tgt_gx + dx, tgt_gy + dy
+                wx = (gx + 0.5) * TILE_SIZE
+                wy = (gy + 0.5) * TILE_SIZE
+                d = math.hypot(wx - tx, wy - ty)
+                if d >= best_dist:
+                    continue
+                if not self._is_tile_walkable_for_teleport(gx, gy, building_manager, furniture_manager):
+                    continue
+                best = (wx, wy)
+                best_dist = d
+        if best is None:
+            return False
+        tgt_key = (tgt_gx, tgt_gy)
+        if getattr(self, "_teleport_target_key", None) != tgt_key:
+            self._teleport_target_key = tgt_key
+            self.task_teleport_count = 0
+        self.task_teleport_count = getattr(self, "task_teleport_count", 0) + 1
+        if self.task_teleport_count > SERVANT_MAX_TELEPORTS_PER_TARGET:
+            return False
+        self.x, self.y = best
+        self.current_path = []
+        self.path_index = 0
+        self.path_target = None
+        self.stuck_timer = 0.0
+        self.consecutive_stuck_recoveries = 0
+        return True
+
+    @staticmethod
+    def _is_tile_walkable_for_teleport(gx, gy, building_manager, furniture_manager):
+        """Walkable = land, not a solid/doorless building tile, not furniture-occupied."""
+        from game.world.island import is_land_tile
+        if not is_land_tile(gx, gy):
+            return False
+        if building_manager:
+            b = building_manager.get_building_at(gx, gy)
+            if b and (getattr(b, "is_solid", False)
+                      or getattr(b, "building_type", "") == "well"
+                      or not getattr(b, "door_pos", None)):
+                return False
+        if furniture_manager and hasattr(furniture_manager, "get_occupied_tiles"):
+            if (gx, gy) in furniture_manager.get_occupied_tiles():
+                return False
+        # Reject tiles with no traversable exit — e.g. courtyards fully enclosed
+        # by concave building shapes (U/L footprints). Teleporting there traps
+        # the servant: every neighbour is a walled building tile.
+        # *** ESTABLISHED — DO NOT REGRESS *** removing this check re-enables
+        # infinite teleport loops inside concave buildings.
+        if building_manager:
+            pf = getattr(building_manager, "pathfinder", None)
+            if pf is not None:
+                escapes = False
+                for ddx, ddy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+                    try:
+                        if pf.can_traverse_edge(gx, gy, gx + ddx, gy + ddy,
+                                                building_manager, furniture_manager):
+                            escapes = True
+                            break
+                    except Exception:
+                        escapes = True
+                        break
+                if not escapes:
+                    return False
+        return True
 
     def _get_site_work_pos(self, site, all_servants=None):
         """Mendapatkan posisi kerja terdistribusi di sekeliling perimeter site/bangunan agar servant tidak bertumpuk"""
@@ -1443,6 +1912,17 @@ class Servant:
         sw = (getattr(site, "tiles_w", 2) * TILE_SIZE) / 2.0 + 20.0
         sh = (getattr(site, "tiles_h", 2) * TILE_SIZE) / 2.0 + 20.0
         return cx + math.cos(ang) * sw, cy + math.sin(ang) * sh
+
+    def activity_progress(self):
+        """0..1 completion of the current timed activity, or None when not working."""
+        if getattr(self, "is_moving", False):
+            return None
+        state = getattr(self, "state", "")
+        if state == "BUILDING" and getattr(self, "target_site", None) is not None:
+            return self.target_site.progress_fraction()
+        if state == "DEMOLISHING" and getattr(self, "target_demolition", None) is not None:
+            return self.target_demolition.progress_fraction()
+        return None
 
     def draw(self, surface, camera, font_bubble, render_position=None):
         render_x, render_y = render_position or (self.x, self.y)
@@ -1513,6 +1993,19 @@ class Servant:
             if strike_swing < -0.3:
                 pygame.draw.circle(surface, (253, 224, 71), (end_x, end_y), max(1, int(2 * camera.zoom)))
 
+        # 4.9. Activity progress bar (timed work indicator above the head)
+        prog = self.activity_progress()
+        if prog is not None:
+            bar_w = max(18, int(30 * camera.zoom))
+            bar_h = max(3, int(4 * camera.zoom))
+            carry_offset = int(14 * camera.zoom) if (self.carried_res and self.carried_amount > 0) else 0
+            bar_x = sx - bar_w // 2
+            bar_y = char_y - r - bar_h - 4 - carry_offset
+            pygame.draw.rect(surface, (15, 23, 42, 200), (bar_x - 1, bar_y - 1, bar_w + 2, bar_h + 2), border_radius=2)
+            fill_w = int(bar_w * prog)
+            if fill_w > 0:
+                pygame.draw.rect(surface, (34, 197, 94), (bar_x, bar_y, fill_w, bar_h), border_radius=2)
+
         # 5. Speech Bubble (Pesan kepada Landlord)
         if self.speech_text and font_bubble:
             cache_key = (id(font_bubble), self.speech_text)
@@ -1547,6 +2040,7 @@ class ServantManager:
         self.servants = []
         self.grant_orders = []
         self.restock_orders = []
+        self.buy_orders = []
         self.font_bubble = None
         self.ai_updates_since_profile = 0
 
@@ -1600,6 +2094,32 @@ class ServantManager:
             "delivered": 0
         }
         self.restock_orders.append(order)
+        return order
+
+    def add_buy_order(self, market_building, item_name, quantity):
+        """Registers a Lord purchase order: a servant fetches coins from the
+        Lord Treasury, buys `quantity` of `item_name` at the market stall,
+        hauls it to landlord storage, and returns the change to the treasury.
+        Only valid for stalls assigned to a household (the household earns
+        the coins sitting in market.currency)."""
+        if not market_building or quantity <= 0:
+            return None
+        if not getattr(market_building, "assigned_family_id", None):
+            return None
+        if not hasattr(market_building, "inventory") or not isinstance(market_building.inventory, dict):
+            return None
+        stock = max(0, int(market_building.inventory.get(item_name, 0)))
+        if stock <= 0:
+            return None
+        order = {
+            "id": f"buy_{int(time.time()*1000)}_{len(self.buy_orders)}",
+            "market": market_building,
+            "item_name": item_name,
+            "quantity": int(quantity),
+            "fulfilled": 0,
+            "in_transit": 0,
+        }
+        self.buy_orders.append(order)
         return order
 
     def get_in_transit_for_market(self, market_building, item_type=None):

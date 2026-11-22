@@ -73,6 +73,17 @@ class IslandTerrain:
         self.max_gx = ISLAND_RADIUS_X_TILES + 80
         self.min_gy = -ISLAND_RADIUS_Y_TILES - 80
         self.max_gy = ISLAND_RADIUS_Y_TILES + 80
+        # *** ESTABLISHED FEATURE — DO NOT REMOVE/REVERT ***
+        # WARNING (FPS-critical, user-verified): land_value() runs hypot +
+        # atan2 + harmonics + value noise per call. is_land() is invoked twice
+        # per A* edge inside Pathfinder.can_traverse_edge, so uncached calls
+        # cost ~130ms per failed pathfind — when the whole village repaths at
+        # once (e.g. prayer exit) this dropped FPS to ~1. With this cache the
+        # user verified 30+ AI exiting church prayer simultaneously stays
+        # smooth. Terrain is static per IslandTerrain instance, so memoizing
+        # per tile is safe. DO NOT remove this cache, DO NOT bypass it with
+        # direct land_value() calls in hot paths (pathfinding/movement).
+        self._land_cache = {}
         self._mask_surface = None
         # Pre-build the map mask now (~0.1s) so the first map open doesn't hitch.
         self.get_mask_surface()
@@ -102,9 +113,18 @@ class IslandTerrain:
         return d + self._edge_offset(gx, gy) - 1.0
 
     def is_land(self, gx, gy):
+        # *** ESTABLISHED — DO NOT REMOVE ***
+        # PERF: this memoized result is load-bearing for FPS — see the
+        # _land_cache warning in __init__. Never replace this lookup with
+        # land_value().
         if gx < self.min_gx or gx > self.max_gx or gy < self.min_gy or gy > self.max_gy:
             return False
-        return self.land_value(gx, gy) < 0.0
+        key = (gx, gy)
+        cached = self._land_cache.get(key)
+        if cached is None:
+            cached = self.land_value(gx, gy) < 0.0
+            self._land_cache[key] = cached
+        return cached
 
     def is_beach(self, gx, gy):
         if not self.is_land(gx, gy):
@@ -146,12 +166,9 @@ class IslandTerrain:
         d = h(ix + 1, iy + 1)
         return a + (b - a) * fx + (c - a) * fy + (a - b - c + d) * fx * fy
 
-    def _mask_array(self, w, h, sample):
-        """RGB array (h, w, 3) of the island mask."""
+    def land_value_array(self, gx, gy):
+        """Vectorized land_value(): <0 inland, ~0 coast, >0 water (numpy)."""
         np = _np
-        xs = self.min_gx + np.arange(w, dtype=np.float64) * sample + sample // 2
-        ys = self.min_gy + np.arange(h, dtype=np.float64) * sample + sample // 2
-        gx, gy = np.meshgrid(xs, ys)
         nx = gx / ISLAND_RADIUS_X_TILES
         ny = gy / ISLAND_RADIUS_Y_TILES
         d = np.hypot(nx, ny)
@@ -163,7 +180,15 @@ class IslandTerrain:
             gx * self._noise_freq * 0.02, gy * self._noise_freq * 0.02,
             self._noise_seed,
         )
-        lv = d + edge + self._noise_amp * (noise - 0.5) * 2.0 - 1.0
+        return d + edge + self._noise_amp * (noise - 0.5) * 2.0 - 1.0
+
+    def _mask_array(self, w, h, sample):
+        """RGB array (h, w, 3) of the island mask."""
+        np = _np
+        xs = self.min_gx + np.arange(w, dtype=np.float64) * sample + sample // 2
+        ys = self.min_gy + np.arange(h, dtype=np.float64) * sample + sample // 2
+        gx, gy = np.meshgrid(xs, ys)
+        lv = self.land_value_array(gx, gy)
 
         land = lv < 0.0
         beach = land & (lv > -ISLAND_BEACH_WIDTH)

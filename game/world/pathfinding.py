@@ -155,16 +155,22 @@ class Pathfinder:
         if bm:
             all_walls = bm.get_all_wall_rects(tile_size)
             if all_walls:
-                # Abaikan benturan jika segmen berada tepat di koridor celah kusen pintu bangunan
-                is_door_transit = any(
-                    getattr(b, "door_pos", None)
-                    and (
-                        (math.hypot(x1 - b.get_door_world_outside(tile_size)[0], y1 - b.get_door_world_outside(tile_size)[1]) <= PATH_WAYPOINT_TOLERANCE
-                         and math.hypot(x2 - b.get_door_world_inside(tile_size)[0], y2 - b.get_door_world_inside(tile_size)[1]) <= PATH_WAYPOINT_TOLERANCE)
-                        or (math.hypot(x1 - b.get_door_world_inside(tile_size)[0], y1 - b.get_door_world_inside(tile_size)[1]) <= PATH_WAYPOINT_TOLERANCE
-                            and math.hypot(x2 - b.get_door_world_outside(tile_size)[0], y2 - b.get_door_world_outside(tile_size)[1]) <= PATH_WAYPOINT_TOLERANCE)
-                    )
+                # Abaikan benturan jika segmen berada tepat di koridor celah kusen pintu bangunan.
+                # *** ESTABLISHED — DO NOT REMOVE ***
+                # PERF: door transit pairs are cached per navigation revision —
+                # this check runs for every smoothing candidate of every path.
+                get_pairs = getattr(bm, "get_door_transit_pairs", None)
+                transit_pairs = get_pairs(tile_size) if callable(get_pairs) else [
+                    (b.get_door_world_outside(tile_size), b.get_door_world_inside(tile_size))
                     for b in getattr(bm, "buildings", [])
+                    if getattr(b, "door_pos", None)
+                ]
+                is_door_transit = any(
+                    (math.hypot(x1 - d_out[0], y1 - d_out[1]) <= PATH_WAYPOINT_TOLERANCE
+                     and math.hypot(x2 - d_in[0], y2 - d_in[1]) <= PATH_WAYPOINT_TOLERANCE)
+                    or (math.hypot(x1 - d_in[0], y1 - d_in[1]) <= PATH_WAYPOINT_TOLERANCE
+                        and math.hypot(x2 - d_out[0], y2 - d_out[1]) <= PATH_WAYPOINT_TOLERANCE)
+                    for d_out, d_in in transit_pairs
                 )
                 if not is_door_transit:
                     for wr in all_walls:
@@ -295,7 +301,10 @@ class Pathfinder:
 
         # Pastikan target_tile dan start_tile tidak diblokir oleh rute sendiri
         filtered_avoid = set(avoid_tiles) if avoid_tiles else set()
+        furn_signature = ()
         if furniture_manager and hasattr(furniture_manager, "get_occupied_tiles"):
+            furniture_manager.get_occupied_tiles()  # ensure occupancy cache is fresh
+            furn_signature = getattr(furniture_manager, "_occupied_signature", ())
             furn_tiles = furniture_manager.get_occupied_tiles(exclude_tile=target_tile)
             filtered_avoid.update(furn_tiles)
 
@@ -304,11 +313,21 @@ class Pathfinder:
         if start_tile in filtered_avoid:
             filtered_avoid.remove(start_tile)
 
+        # *** ESTABLISHED — DO NOT REMOVE ***
+        # PERF: the furniture occupancy is fully described by its precomputed
+        # _occupied_signature (rebuilt once per furniture change) plus this
+        # actor's own avoid tiles — re-sorting hundreds of furniture tiles
+        # into the cache key on every find_path call was a measurable cost at
+        # village scale (part of the user-verified prayer-exit FPS fix). The
+        # exact start position (sx, sy) is intentionally NOT in the key: the
+        # returned route never contains it (first waypoint is dropped), so
+        # actors sharing a start tile legitimately share the cached route.
         cache_key = (
             id(bm), getattr(bm, "_navigation_revision", 0),
             id(furniture_manager), getattr(furniture_manager, "_navigation_revision", 0),
-            tile_size, start_tile, (sx, sy), target_tile, (tx, ty),
-            tuple(sorted(filtered_avoid)),
+            tile_size, start_tile, target_tile, (tx, ty),
+            furn_signature,
+            tuple(sorted(avoid_tiles)) if avoid_tiles else (),
         )
         cached_route = self._route_cache.get(cache_key)
         if cached_route is not None:

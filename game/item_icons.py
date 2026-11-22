@@ -173,6 +173,36 @@ def draw_item_icon(surface, item_name, cx, cy, size=12):
         pygame.draw.polygon(surface, (100, 116, 139), blade, 1)
         pygame.draw.line(surface, (241, 245, 249), (cx + 5, cy - 4), (cx + size - 2, cy - size + 2), 1)
 
+    # Field & mining tools: haft + perpendicular steel head (axe/pick/sledge) or forward blade (spade).
+    elif "felling axe" in name_low or name_low == "axe" or "hatchet" in name_low:
+        hx, hy = cx + size - 4, cy - size + 4
+        pygame.draw.line(surface, (139, 90, 43), (cx - size + 2, cy + size - 2), (hx, hy), 2)
+        # Head bar across the haft + wedge blade on the forward end
+        pygame.draw.line(surface, (100, 116, 139), (hx - 4, hy - 4), (hx + 4, hy + 4), 4)
+        pygame.draw.polygon(surface, (203, 213, 225), [(hx + 2, hy + 2), (hx + 7, hy + 7), (hx + 4, hy + 5)])
+        pygame.draw.line(surface, (226, 232, 240), (hx + 3, hy + 3), (hx + 6, hy + 6), 1)
+    elif "pickaxe" in name_low or "pick axe" in name_low:
+        hx, hy = cx + size - 4, cy - size + 4
+        pygame.draw.line(surface, (139, 90, 43), (cx - size + 2, cy + size - 2), (hx, hy), 2)
+        # Double-pointed head: straight bar across the haft with tapered tips
+        pygame.draw.line(surface, (100, 116, 139), (hx - 5, hy - 5), (hx + 5, hy + 5), 4)
+        pygame.draw.line(surface, (203, 213, 225), (hx - 4, hy - 4), (hx + 4, hy + 4), 2)
+        pygame.draw.circle(surface, (139, 90, 43), (hx, hy), 2)
+    elif "sledge" in name_low or "sledgehammer" in name_low:
+        hx, hy = cx + size - 4, cy - size + 4
+        pygame.draw.line(surface, (139, 90, 43), (cx - size + 2, cy + size - 2), (hx, hy), 2)
+        # Wide double-face head
+        pygame.draw.line(surface, (71, 85, 105), (hx - 5, hy - 5), (hx + 5, hy + 5), 5)
+        pygame.draw.line(surface, (148, 163, 184), (hx - 4, hy - 4), (hx - 1, hy - 1), 1)
+        pygame.draw.line(surface, (148, 163, 184), (hx + 4, hy + 4), (hx + 1, hy + 1), 1)
+    elif "spade" in name_low:
+        hx, hy = cx + size - 4, cy - size + 4
+        pygame.draw.line(surface, (139, 90, 43), (cx - size + 2, cy + size - 2), (hx, hy), 2)
+        # Flat steel blade pointing forward along the haft
+        pygame.draw.polygon(surface, (203, 213, 225), [(hx - 2, hy + 2), (hx + 2, hy - 2), (hx + 6, hy - 5)])
+        pygame.draw.line(surface, (100, 116, 139), (hx - 2, hy + 2), (hx + 6, hy - 5), 1)
+        pygame.draw.line(surface, (226, 232, 240), (hx + 1, hy - 2), (hx + 4, hy - 4), 1)
+
     # 16. GENERIC / FALLBACK: Supplies Crate
     else:
         bx = max(5, int(size * 0.75))

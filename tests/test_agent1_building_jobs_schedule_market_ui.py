@@ -260,10 +260,18 @@ class TestAgent1BuildingJobsScheduleMarketUI(unittest.TestCase):
         self.assertEqual(sell_p, 12)
         self.assertEqual(buy_p, 6)
 
-        # Price adjustment in coin denominations (Gold +100, Silver +10, Copper +1)
-        modal.price_s_inc_btns["Potato"] = pygame.Rect(100, 100, 16, 16)
-        ev_inc = pygame.event.Event(pygame.MOUSEBUTTONDOWN, {"button": 1, "pos": (105, 105)})
-        modal.handle_event(ev_inc)
+        # Manual price entry via the typable PRICE field
+        price_key = ("num", "price", "Potato")
+        self.assertIn(price_key, modal.num_fields)
+        field_rect = modal.num_fields[price_key]["rect"]
+        ev_click = pygame.event.Event(
+            pygame.MOUSEBUTTONDOWN, {"button": 1, "pos": field_rect.center})
+        modal.handle_event(ev_click)
+        for ch in "22":
+            modal.handle_event(pygame.event.Event(
+                pygame.KEYDOWN, {"key": pygame.K_2, "unicode": ch}))
+        modal.handle_event(pygame.event.Event(
+            pygame.KEYDOWN, {"key": pygame.K_RETURN, "unicode": ""}))
         self.assertEqual(market.prices["Potato"], 22)
 
     def test_08_activity_description_reflects_actual_current_behavior(self):

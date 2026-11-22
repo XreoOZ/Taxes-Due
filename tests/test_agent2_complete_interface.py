@@ -150,14 +150,33 @@ def test_market_modal_denomination_pricing():
     assert modal.is_open is True
     assert m.prices["Potato"] == 12
 
-    # Fake click on gold inc button (+100 copper)
-    class FakeEvent:
+    # Draw once so the typable PRICE field registers its rect, then type 112
+    surf = pygame.Surface((1280, 720))
+    modal.draw(surf)
+    price_key = ("num", "price", "Potato")
+    assert price_key in modal.num_fields
+    field_rect = modal.num_fields[price_key]["rect"]
+
+    class FakeClick:
         type = pygame.MOUSEBUTTONDOWN
         button = 1
-        pos = (100, 100)
+        pos = field_rect.center
 
-    modal.price_g_inc_btns["Potato"] = pygame.Rect(95, 95, 10, 10)
-    modal.handle_event(FakeEvent())
+    modal.handle_event(FakeClick())
+    assert modal.num_input.active
+    for ch in "112":
+        class FakeKey:
+            type = pygame.KEYDOWN
+            key = pygame.K_1 if ch == "1" else (pygame.K_2 if ch == "2" else pygame.K_0)
+            unicode = ch
+        modal.handle_event(FakeKey())
+
+    class FakeEnter:
+        type = pygame.KEYDOWN
+        key = pygame.K_RETURN
+        unicode = ""
+
+    modal.handle_event(FakeEnter())
     assert m.prices["Potato"] == 112
 
 if __name__ == "__main__":

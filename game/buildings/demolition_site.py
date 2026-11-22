@@ -37,6 +37,9 @@ class DemolitionSite:
     def is_complete(self):
         return self.progress >= self.duration
 
+    def progress_fraction(self):
+        return min(1.0, self.progress / self.duration) if self.duration > 0 else 0.0
+
     def get_center_world(self, tile_size):
         return self.building.get_center_world(tile_size)
 

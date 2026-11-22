@@ -102,6 +102,11 @@ class HappinessSystem:
                 amount=float(rule["amount"]) * in_game_hours,
                 accumulate=True,
             )
+            cap = rule.get("max_amount")
+            if cap is not None:
+                effect = villager.happiness_effects.get("leisure_per_hour")
+                if effect:
+                    effect["amount"] = min(float(effect["amount"]), float(cap))
 
     @classmethod
     def record_bereavement(cls, deceased, family, day_number):
@@ -202,6 +207,14 @@ class HappinessSystem:
         job = getattr(villager, "job", "Unassigned")
         if not job or job in ("Unassigned", "Unemployed"):
             add_factor("Unassigned / unemployed", HAPPINESS_MODIFIERS["unemployed"]["amount"])
+
+        faith = float(getattr(villager, "faith", 100.0))
+        faith_empty_rule = HAPPINESS_MODIFIERS["faith_empty"]
+        faith_low_rule = HAPPINESS_MODIFIERS["faith_low"]
+        if faith <= float(faith_empty_rule["threshold"]):
+            add_factor(faith_empty_rule["label"], faith_empty_rule["amount"])
+        elif faith <= float(faith_low_rule["threshold"]):
+            add_factor(faith_low_rule["label"], faith_low_rule["amount"])
 
         from game.systems.taxation_system import TaxationSystem
         church_effect = TaxationSystem.church_happiness_effect()

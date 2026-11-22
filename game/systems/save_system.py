@@ -45,6 +45,7 @@ def get_all_slots_meta():
 
 def serialize_game_state(day_cycle, resources, player, permit_manager, building_manager, stockpile_manager, furniture_manager, villager_manager, servant_manager, schedule_manager):
     """Gathers all dynamic game state into a clean JSON-serializable dictionary"""
+    from game.systems.immigration_system import get_immigration_system
     # 1. Day Cycle
     day_data = {
         "day_number": day_cycle.day_number,
@@ -206,7 +207,12 @@ def serialize_game_state(day_cycle, resources, player, permit_manager, building_
             "currency": dict(getattr(f, "currency", {})),
             "break_check_day": getattr(f, "break_check_day", 1),
             "break_check_hour": getattr(f, "break_check_hour", 0.0),
-            "break_checked_today": getattr(f, "break_checked_today", False)
+            "break_checked_today": getattr(f, "break_checked_today", False),
+            "station_quota_daily": getattr(f, "station_quota_daily", 0),
+            "station_quota_today": getattr(f, "station_quota_today", 0),
+            "station_quota_day": getattr(f, "station_quota_day", -1),
+            "plant_tree_enabled": getattr(f, "plant_tree_enabled", False),
+            "bound_mine_id": getattr(f, "bound_mine_id", None)
         })
 
     # 7. Villagers & Families
@@ -246,6 +252,7 @@ def serialize_game_state(day_cycle, resources, player, permit_manager, building_
                     "carrying_furniture_id": getattr(m.carrying_furniture, "id", None) if getattr(m, "carrying_furniture", None) else None,
                     "watering_timer": getattr(m, "watering_timer", 0.0),
                     "tilling_timer": getattr(m, "tilling_timer", 0.0),
+                    "station_carry": dict(getattr(m, "station_carry", {}) or {}),
                     "hunger": getattr(m, "hunger", 100.0),
                     "thirst": getattr(m, "thirst", 100.0),
                     "need_toilet": getattr(m, "need_toilet", 100.0),
@@ -348,10 +355,14 @@ def serialize_game_state(day_cycle, resources, player, permit_manager, building_
     from game.systems.taxation_system import TaxationSystem
     taxation_state = TaxationSystem.to_dict()
     from game.world.island import world_type, get_seed
+    from game.world.natural_resources import get_natural_resources
+    from game.world.roads import get_roads
 
     return {
         "timestamp": time.strftime("%Y-%m-%d %H:%M"),
         "world": {"type": world_type(), "seed": get_seed()},
+        "natural_resources": get_natural_resources().serialize_overrides(),
+        "roads": get_roads().serialize(),
         "day_number": day_cycle.day_number,
         "time_str": day_data["time_str"],
         "population": total_pop,
@@ -371,6 +382,7 @@ def serialize_game_state(day_cycle, resources, player, permit_manager, building_
         "burial_commissions": burial_commissions,
         "confession_state": confession_state,
         "taxation_state": taxation_state,
+        "immigration": get_immigration_system().serialize(),
     }
 
 def save_to_slot(slot_id, day_cycle, resources, player, permit_manager, building_manager, stockpile_manager, furniture_manager, villager_manager, servant_manager, schedule_manager):
@@ -428,6 +440,10 @@ def deserialize_game_state(data, day_cycle, resources, player, permit_manager, b
     # 0. World terrain (island seed / infinite) — must be active before entities load
     world_data = data.get("world") or {}
     set_world(world_data.get("type", "infinite"), seed=world_data.get("seed"))
+    from game.world.natural_resources import get_natural_resources
+    nr = get_natural_resources()
+    nr.generate(world_data.get("seed"))
+    nr.apply_overrides(data.get("natural_resources") or {})
 
     # 1. Day Cycle - set day length index FIRST so time_seconds is not re-scaled incorrectly
     dc_data = data.get("day_cycle", {})
@@ -592,6 +608,11 @@ def deserialize_game_state(data, day_cycle, resources, player, permit_manager, b
         f.break_check_day = f_d.get("break_check_day", data.get("day_number", 1))
         f.break_check_hour = f_d.get("break_check_hour", random.uniform(0, 24))
         f.break_checked_today = f_d.get("break_checked_today", False)
+        f.station_quota_daily = f_d.get("station_quota_daily", 0)
+        f.station_quota_today = f_d.get("station_quota_today", 0)
+        f.station_quota_day = f_d.get("station_quota_day", -1)
+        f.plant_tree_enabled = f_d.get("plant_tree_enabled", False)
+        f.bound_mine_id = f_d.get("bound_mine_id", None)
         furniture_manager.furnitures.append(f)
     if hasattr(furniture_manager, "invalidate_cache"):
         furniture_manager.invalidate_cache()
@@ -633,6 +654,7 @@ def deserialize_game_state(data, day_cycle, resources, player, permit_manager, b
             v.assigned_bed_id = m_d.get("assigned_bed_id", None)
             v.watering_timer = m_d.get("watering_timer", 0.0)
             v.tilling_timer = m_d.get("tilling_timer", 0.0)
+            v.station_carry = dict(m_d.get("station_carry", {}) or {})
             v.hunger = float(m_d.get("hunger", 100.0))
             v.thirst = float(m_d.get("thirst", 100.0))
             v.need_toilet = float(m_d.get("need_toilet", 100.0))
@@ -755,6 +777,25 @@ def deserialize_game_state(data, day_cycle, resources, player, permit_manager, b
                     s.carried_amount = 0
                     s.target_site = None
                     s.target_stack = None
+                    s.target_buy_order = None
+                    s.target_buy_market = None
+                    s.target_buy_treasury = None
+                    s.target_buy_fetch_pos = None
+                    s.target_buy_market_pos = None
+                    s.target_buy_drop_pos = None
+                    s.target_buy_drop_tile = None
+                    s.target_buy_chunk = 0
+                    s.target_buy_total = 0
+
+                # Buy orders are transient (like grant/restock orders), but a
+                # servant mid-purchase may still hold treasury coins in
+                # buy_wallet — return them so fetched value is never stranded.
+                if getattr(s, "buy_wallet", None):
+                    try:
+                        from game.systems.lord_treasury import LordTreasurySystem
+                        LordTreasurySystem.deposit_all(furniture_manager, s.buy_wallet)
+                    except Exception:
+                        pass
 
     # 10. Schedules
     if schedule_manager and "schedules" in data:
@@ -797,8 +838,28 @@ def deserialize_game_state(data, day_cycle, resources, player, permit_manager, b
     if hasattr(furniture_manager, "invalidate_cache"):
         furniture_manager.invalidate_cache()
 
+    # 12.5 Roads + forest re-occupancy: the biome regenerates unsuppressed,
+    # so every placed structure/road must re-claim its tiles.
+    from game.world.roads import get_roads
+    roads = get_roads()
+    roads.load(data.get("roads"))
+    occupied = set(roads.tiles.keys())
+    for b in building_manager.buildings:
+        occupied |= set(getattr(b, "tiles", ()))
+    for s in building_manager.construction_sites:
+        occupied |= set(getattr(s, "tiles", ()))
+    for d in building_manager.demolition_sites:
+        occupied |= set(getattr(d, "tiles", ()))
+    for f in furniture_manager.furnitures:
+        if not f.is_dropped and f.stored_in_id is None:
+            occupied |= furniture_manager._furniture_tiles(f)
+    nr.occupy_tiles(occupied)
+
     from game.world.pathfinding import GlobalPathRegistry
     GlobalPathRegistry.get_instance().reset()
+
+    from game.systems.immigration_system import get_immigration_system
+    get_immigration_system().deserialize(data.get("immigration") or {}, villager_manager)
 
     from game.systems.wealth_system import VillageWealthSystem
     VillageWealthSystem.mark_dirty()

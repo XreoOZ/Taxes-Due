@@ -87,7 +87,22 @@ SERVANT_COUNT = 2
 SERVANT_RADIUS = 20
 SERVANT_SPEED = 220.0
 SERVANT_CARRY_CAPACITY = 50
+# ESTABLISHED: the Landlord cannot act without servants, so a servant that
+# keeps failing to reach its target must never soft-lock forever. After this
+# many consecutive stuck recoveries the servant teleports to the nearest
+# walkable tile around its destination (see servants.py stuck recovery).
+SERVANT_STUCK_TELEPORT_THRESHOLD = 3
+SERVANT_TELEPORT_SEARCH_RADIUS_TILES = 10
+# Max anti-softlock teleports allowed per destination tile. Beyond this the
+# servant abandons the task instead of bouncing between tiles forever.
+SERVANT_MAX_TELEPORTS_PER_TARGET = 2
 BUILD_DURATION_SECONDS = 5.0
+# Collision thickness of building perimeter walls. Kept slim so 1-tile-wide
+# interior corridors (concave footprints like U-shapes) remain passable for
+# the player (radius 24 needs ~48px of free width inside a 64px tile).
+# *** ESTABLISHED — DO NOT REGRESS *** Raising this above ~8 re-blocks
+# 1-tile corridors for the player; lowering it lets entities clip wall edges.
+BUILDING_WALL_THICKNESS = 6
 DEMOLISH_DURATION_SECONDS = 5.0
 DEMOLITION_REFUND_RATIO = 0.5  # 50% resource refund when demolishing buildings
 ENTITY_AVOIDANCE_RADIUS = 56.0
@@ -177,8 +192,11 @@ DEFAULT_PLOT_MAX_WORKERS = 2
 # Farm plots use a manually configurable worker cap (set via Jobs > Workstations > Farmer).
 
 # Farming Task Durations & Dispersion Settings (Config-Driven, Zero Hardcode)
-WATERING_DURATION_INGAME_HOURS = 20.0 / 60.0  # 20 in-game minutes per tile
-TILLING_DURATION_INGAME_HOURS = 1.0           # 1 in-game hour per tile
+# Farm task durations per tile, in in-game hours.
+# *** ESTABLISHED — user-requested 30 in-game minutes each ***
+WATERING_DURATION_INGAME_HOURS = 0.5  # 30 in-game minutes per tile
+TILLING_DURATION_INGAME_HOURS = 0.5   # 30 in-game minutes per tile
+FARM_TILE_DISPERSION_ENABLED = False           # False = farmers sweep tiles nearest-first in order; True = spread workers apart
 FARM_TILE_PROXIMITY_PENALTY_ADJACENT = 3000.0  # Heavy penalty for tiles adjacent to other active workers (< 1.5 grid units)
 FARM_TILE_PROXIMITY_PENALTY_NEAR = 1500.0      # Penalty for tiles within 2.5 grid units
 FARM_TILE_ARRIVAL_DIST = 20.0                  # Arrival radius inside target work tile
@@ -187,10 +205,70 @@ TOOL_STOW_ARRIVAL_DIST = 36.0                  # Arrival distance to household c
 LOOSE_ITEM_ARRIVAL_DIST = 24.0                 # Arrival distance for gathering loose items
 CHEST_INTERACTION_RADIUS = 36.0                # Interaction distance with household chest
 CARPENTER_BUILD_DURATION_INGAME_HOURS = 1.0
+
+# =====================================================================
+# Natural Resources: Forest & Mines (Island world only)
+# =====================================================================
+# Values = trees per 10x10 forest-tile region (i.e. percent occupancy).
+# *** ESTABLISHED — DO NOT REGRESS *** the old 3-40 range made forests look
+# empty (measured 6-18% occupancy); ~10-95 gives visible woodland. The biome
+# MASK coverage is controlled separately by FOREST_BIOME_* noise settings.
+FOREST_DENSITY_TIERS = {
+    1: {"name": "Scarce", "min": 10, "max": 16},
+    2: {"name": "Sparse", "min": 20, "max": 32},
+    3: {"name": "Moderate", "min": 38, "max": 55},
+    4: {"name": "Dense", "min": 60, "max": 78},
+    5: {"name": "Abundant", "min": 80, "max": 95},
+}
+FOREST_DENSITY_SAMPLE_AREA = 10          # density measured per NxN tile area
+# Forest biome: seeded value-noise coverage across the whole island landmass
+# (organic shapes like the coastline, not round blobs). Threshold is lowered
+# per island forest tier to grow/shrink total coverage.
+FOREST_BIOME_NOISE_FREQ = 0.018          # noise spatial frequency (lower = larger forests)
+FOREST_BIOME_OCTAVE2_FREQ_MULT = 2.3     # second octave adds organic edges
+FOREST_BIOME_OCTAVE2_WEIGHT = 0.35       # blend weight of the detail octave
+FOREST_BIOME_THRESHOLD_BASE = 0.62       # Scarce coverage cutoff on [0,1] noise
+FOREST_BIOME_THRESHOLD_STEP = 0.055      # threshold drop per tier (-> more forest)
+FOREST_BIOME_MINE_CLEARING_TILES = 2     # no-forest margin around each mine footprint
+FOREST_MAP_COLOR = (21, 128, 61)         # biome tint on the world map overlay
+FOREST_TREE_CHUNK_TILES = 16             # spatial bucket size for tree rendering
+FOREST_MOVE_SPEED_FACTOR = 0.7           # -30% movement speed on forest tiles
+TREE_GROWTH_DAYS = 10.0                  # in-game days for a planted tree to mature
+WOODSMAN_CUT_INGAME_HOURS = 0.5          # 30 in-game minutes per tree
+WOODSMAN_PLANT_INGAME_HOURS = 0.25       # 15 in-game minutes per replant
+TREE_WOOD_YIELD_MIN = 1
+TREE_WOOD_YIELD_MAX = 3
+WOODSMAN_WORKSTATION_TILES = 4           # Woodsman Lodge footprint (square)
+WORKSTATION_MAX_WORKERS = 5
+WORKSTATION_DEFAULT_QUOTA_DAILY = 0      # 0 = unlimited daily output quota
+WORKSTATION_QUOTA_STEP = 10
+
+# Stone/ore mines: 5x5 pre-generated deposits scattered on the island.
+MINE_SIZE_TILES = 5
+MINE_SPAWN_COUNT_MIN = 10
+MINE_SPAWN_COUNT_MAX = 14
+MINE_SPAWN_GUARANTEE_TYPE = "Stone Mine"
+MINE_SPAWN_GUARANTEE_DIST_MIN_TILES = 50  # nearest guaranteed mine distance band
+MINE_SPAWN_GUARANTEE_DIST_MAX_TILES = 100
+# Yield per in-game hour by tier (unlimited deposits; tier = speed only).
+MINE_YIELD_PER_INGAME_HOUR = {
+    1: {"name": "Scarce", "min": 1, "max": 3},
+    2: {"name": "Low", "min": 2, "max": 4},
+    3: {"name": "Normal", "min": 3, "max": 5},
+    4: {"name": "Rich", "min": 4, "max": 7},
+    5: {"name": "Abundant", "min": 6, "max": 10},
+}
+MINE_TYPE_TABLE = {
+    "Stone Mine": {"output_item": "Stone", "weight": 1},
+}
 CARPENTER_DEFAULT_LIVING_HOUSEHOLD_SIZE = 1
 FURNITURE_DAILY_BREAK_CHANCE = 0.05
 CARPENTER_REPAIR_FOOD_DAYS = 3
 CARPENTER_REPAIR_MATERIALS = {"Wood": 2}
+# Commission queue: seconds before a failed payment claim may be retried.
+COMMISSION_CLAIM_RETRY_SECONDS = 20.0
+# Orders carry "artisan_job"; missing value falls back to this job id.
+DEFAULT_COMMISSION_ARTISAN_JOB = "Carpenter"
 CARPENTER_TOOL_SWING_SPEED = 7.0
 CARPENTER_TOOL_SWING_ANGLE = 0.55
 FURNITURE_CLAIM_BED_SEARCH_RADIUS = 8.5        # Max tile distance to infer chest household ownership from beds
@@ -211,6 +289,56 @@ VILLAGER_FEMALE_NAMES = [
 ]
 # Fresh-game starter household size (randomized composition each new game).
 STARTER_FAMILY_SIZE = 5
+
+# New-game starter presets ("difficulty" select after map choice).
+# enabled=False entries render as WIP and cannot be picked.
+STARTER_PRESETS = [
+    {
+        "id": "nepo_baby",
+        "label": "Nepo Baby : Easy Start",
+        "desc": "A supplied household, stocked landlord storage, a ready timber hall, and a market.",
+        "enabled": True,
+        "wip": False,
+        "family_size": 5,
+        "permit_padding": 0,
+        "house": {"building_type": "wooden_structure", "width": 6, "height": 3},
+        "market": {"building_type": "market", "width": 3, "height": 2},
+        "landlord_storage": True,
+        "storage_permit_width": 6,
+        "storage_permit_height": 6,
+        "storage_chest_inside_house": True,
+        "carpenter_workbench": True,
+        "treasury_items": {"Gold": 10},
+        "storage_items": {
+            "Potato": 100,
+            "Wood": 500,
+            "Stone": 500,
+            "Hoe": 3,
+            "Sickle": 3,
+            "Watering_Can": 3,
+            "Saw": 1,
+            "Adze": 1,
+            "Felling_Axe": 1,
+            "Spade": 1,
+            "Pickaxe": 1,
+            "Sledgehammer": 1,
+        },
+    },
+    {
+        "id": "trailblazer",
+        "label": "Trailblazer : Hard Start",
+        "desc": "Work in progress — a harsher founding scenario.",
+        "enabled": False,
+        "wip": True,
+        "family_size": None,
+        "permit_padding": 2,
+        "house": None,
+        "market": None,
+        "landlord_storage": False,
+        "carpenter_workbench": False,
+        "storage_items": {},
+    },
+]
 DEDICATED_JOBS = {
     "Unassigned": {
         "id": "Unassigned",
@@ -315,6 +443,26 @@ DEDICATED_JOBS = {
         "required_tools": ["Hoe"],
         "material_stock_target": {"Wood": 5, "Stone": 5},
         "materials_per_grave": {"Wood": 1, "Stone": 1}
+    },
+    "Woodsman": {
+        "id": "Woodsman",
+        "name": "Woodsman",
+        "title": "Woodsman",
+        "color": (22, 101, 52),
+        "wip": False,
+        "workplace_furniture_type": "woodsman_lodge",
+        "desc": "Fells the nearest mature trees in the forest and replants them when the lodge is set to Plant a Tree.",
+        "required_tools": ["Felling_Axe", "Spade"]
+    },
+    "Miner": {
+        "id": "Miner",
+        "name": "Miner",
+        "title": "Miner",
+        "color": (71, 85, 105),
+        "wip": False,
+        "workplace_furniture_type": "miner_workstation",
+        "desc": "Extracts ore at the mine a Miner Workstation is built upon (Stone, Copper, Gold, ...).",
+        "required_tools": ["Pickaxe", "Sledgehammer"]
     }
 }
 
@@ -382,6 +530,7 @@ SCHEDULE_ACTIVITY_TASKS = {
         "CARPENTER_REPAIRING",
         "CARPENTER_FEE_RETRIEVE", "CARPENTER_FEE_TRAVEL",
         "CARPENTER_FEE_LANDLORD_RETRIEVE",
+        "STATION_LEFTOVER_FETCH", "STATION_LEFTOVER_DELIVER",
     }),
     "LEISURE": frozenset({
         "SEEKING_FOOD", "SEEKING_WATER", "SEEKING_TOILET",
@@ -397,6 +546,7 @@ SCHEDULE_ACTIVITY_TASKS = {
         "CONFESSION_TRAVEL_TO_PRIEST", "GOING_TO_CONFESSOR",
         "GOING_TO_CONFESSION_BOX", "CONFESSING", "HEARING_CONFESSION",
         "DEPOSITING_UNUSED_ITEMS",
+        "STATION_LEFTOVER_FETCH", "STATION_LEFTOVER_DELIVER",
     }),
     "SLEEP": frozenset({"SLEEPING", "DEPOSITING_UNUSED_ITEMS"}),
     "PRAYER": frozenset({"LEADING_PRAYER", "ATTENDING_PRAYER", "PRAYING"}),
@@ -433,6 +583,7 @@ SCHEDULE_ACTIVITY_TASK_STATE_FIELDS = (
     "current_work_tile", "tilling_timer", "watering_timer", "well_draw_timer",
     "has_water", "water_day", "water_charges", "carrying_crop",
     "carrying_res", "carrying_amount", "water_collect_amount",
+    "station_work_timer", "station_target_tile", "station_phase", "station_carry",
 )
 
 # Kept for older callers; scheduling now uses SCHEDULE_ACTIVITY_TASKS.
@@ -509,6 +660,7 @@ AI_ACTIVITY_NEXT_STEPS = {
     "GOING_TO_CONFESSOR": ("Meet the Priest", "Confess"),
     "GOING_TO_CONFESSION_BOX": ("Confess with the Priest",),
     "CONFESSING": ("Complete confession",),
+    "COMMISSION_REFUND_COLLECT": ("Collect the refund", "Deliver it to the household"),
 }
 MARKET_SALES_REPORT_PERIOD_DAYS = 10
 CARPENTER_INSUFFICIENT_LANDLORD_COIN_MESSAGES = (
@@ -578,6 +730,10 @@ DEFAULT_ITEM_PRICES = {
     "Watering_Can": 8,
     "Saw": 12,
     "Adze": 10,
+    "Felling_Axe": 15,
+    "Spade": 8,
+    "Pickaxe": 14,
+    "Sledgehammer": 10,
 }
 
 # Only goods with implemented storage and market behavior are listed here.
@@ -592,6 +748,10 @@ MARKET_TRADEABLE_ITEMS = {
     "Watering_Can": "Watering_Can",
     "Saw": "Saw",
     "Adze": "Adze",
+    "Felling_Axe": "Felling_Axe",
+    "Spade": "Spade",
+    "Pickaxe": "Pickaxe",
+    "Sledgehammer": "Sledgehammer",
 }
 MARKET_CURRENCY_DENOMINATIONS = ("Gold", "Silver", "Copper")
 MARKET_DEFAULT_HOUSEHOLD_SALE_PERCENT = 20
@@ -646,6 +806,10 @@ ITEM_CATEGORIES = {
     "Rolling_Pin": "TOOL",
     "Peel": "TOOL",
     "Fishing_Rod": "TOOL",
+    "Felling_Axe": "TOOL",
+    "Spade": "TOOL",
+    "Pickaxe": "TOOL",
+    "Sledgehammer": "TOOL",
 
     # RESOURCES
     "Wood": "RESOURCE",
@@ -653,6 +817,8 @@ ITEM_CATEGORIES = {
     "Timber": "RESOURCE",
     "Carved Stone": "RESOURCE",
     "Linen Cloth": "RESOURCE",
+    "Copper Ore": "RESOURCE",
+    "Gold Ore": "RESOURCE",
 
     # CURRENCY
     "Copper": "CURRENCY",
@@ -716,6 +882,12 @@ RESOURCE_COLORS = {
     "Copper Coin": (184, 115, 51),
     "Silver Coin": (203, 213, 225),
     "Gold Coin": (250, 204, 21),
+    "Felling_Axe": (101, 67, 33),
+    "Spade": (146, 64, 14),
+    "Pickaxe": (100, 116, 139),
+    "Sledgehammer": (71, 85, 105),
+    "Copper Ore": (194, 96, 40),
+    "Gold Ore": (234, 179, 8),
 }
 
 TOOL_TYPES = {
@@ -788,6 +960,34 @@ TOOL_TYPES = {
         "icon": "🎣",
         "color": (14, 165, 233),
         "desc": "Flexible ash-wood rod with line and hook for catching fish."
+    },
+    "Felling_Axe": {
+        "id": "Felling_Axe",
+        "name": "Felling Axe",
+        "icon": "🪓",
+        "color": (101, 67, 33),
+        "desc": "Heavy two-handed axe for felling mature forest trees."
+    },
+    "Spade": {
+        "id": "Spade",
+        "name": "Spade",
+        "icon": "⛏",
+        "color": (146, 64, 14),
+        "desc": "Flat-bladed spade for replanting saplings on forest tiles."
+    },
+    "Pickaxe": {
+        "id": "Pickaxe",
+        "name": "Pickaxe",
+        "icon": "⛏",
+        "color": (100, 116, 139),
+        "desc": "Iron-headed pick for breaking ore out of mine walls."
+    },
+    "Sledgehammer": {
+        "id": "Sledgehammer",
+        "name": "Sledgehammer",
+        "icon": "🔨",
+        "color": (71, 85, 105),
+        "desc": "Two-handed sledge carried by miners as part of the trade kit."
     }
 }
 
@@ -828,6 +1028,11 @@ RAPORT_MODAL_WIDTH = 860
 RAPORT_MODAL_HEIGHT = 500
 SETTINGS_MODAL_WIDTH = 640
 SETTINGS_MODAL_HEIGHT = 440
+
+# Cheat Mode (ESC → Active Cheat → password)
+CHEAT_PASSWORD = "bahlilkontol123"
+CHEAT_MODAL_WIDTH = 560
+CHEAT_MODAL_HEIGHT = 320
 
 # Game Speed & Simulation Settings
 SPEED_LEVELS = [
@@ -890,7 +1095,9 @@ DEFAULT_DAY_LENGTH_INDEX = 1  # 20 minutes default (1200.0 seconds)
 DEFAULT_DAY_LENGTH_SECONDS = DAY_LENGTH_OPTIONS[DEFAULT_DAY_LENGTH_INDEX]["seconds"]
 HOURS_PER_DAY = 24.0
 MINUTES_PER_HOUR = 60
-STARTING_HOUR = 8.0
+# Day 1 starts at 05:00 (dawn). *** ESTABLISHED — user-requested *** only
+# affects NEW games; existing saves keep their stored clock.
+STARTING_HOUR = 5.0
 NIGHT_START_HOUR = 20
 NIGHT_END_HOUR = 5
 DAY_CYCLE_LIGHTING = {
@@ -1079,6 +1286,39 @@ BUILDING_TYPES["house"] = BUILDING_TYPES["wooden_structure"]
 BUILDING_TYPES["storage"] = BUILDING_TYPES["wooden_structure"]
 BUILDING_TYPES["manor"] = BUILDING_TYPES["stone_structure"]
 
+# Roads: instant-paint public tile layer. cost = resources per tile,
+# speed_multiplier applies to every mover standing on the tile.
+ROAD_TYPES = {
+    "dirt_road": {
+        "id": "dirt_road",
+        "name": "Dirt Road",
+        "desc": "Packed earth path. +5% walk speed.",
+        "color": (146, 104, 58),
+        "rut_color": (120, 84, 44),
+        "speed_multiplier": 1.05,
+        "cost": {"Wood": 1},
+    },
+    "stone_road": {
+        "id": "stone_road",
+        "name": "Stone Road",
+        "desc": "Paved flagstones. +10% walk speed.",
+        "color": (120, 130, 145),
+        "rut_color": (96, 105, 120),
+        "speed_multiplier": 1.10,
+        "cost": {"Stone": 1},
+    },
+    "luxury_road": {
+        "id": "luxury_road",
+        "name": "Luxury Road",
+        "desc": "Fine paved boulevard. +15% walk speed.",
+        "color": (203, 213, 225),
+        "rut_color": (160, 170, 185),
+        "speed_multiplier": 1.15,
+        "cost": {"Stone": 5},
+    },
+}
+ROAD_PLACEMENT_BLOCKED = True   # roads cannot overlap buildings/furniture/stockpiles
+
 def get_building_categories():
     """
     Returns the top-level Building menu categories from asset configuration.
@@ -1126,6 +1366,7 @@ def get_building_categories():
             "kind": "public",
             "building_types": public_building_types,
             "furniture_types": public_furniture_types,
+            "road_types": list(ROAD_TYPES.keys()),
         },
     }
     categories["furniture"] = {
@@ -1361,8 +1602,94 @@ FURNITURE_TYPES = {
         "color_lid": (112, 85, 48),
         "color_clasp": (250, 204, 21),
         "color_trim": (203, 213, 225)
+    },
+    "woodsman_lodge": {
+        "id": "woodsman_lodge",
+        "name": "Woodsman Lodge",
+        "category_id": "workplace",
+        "desc": "Outdoor logging lodge where Woodsmen store felling tools and stockpile Wood. Place on open ground.",
+        "capacity": 0,
+        "materials": {},
+        "width_tiles": 4,
+        "height_tiles": 4,
+        "max_workers": 5,
+        "household_owned": False,
+        "placement_anywhere": True,
+        "instant_place": True,
+        "maintainable": False,
+        "station_inventory_items": ["Wood"],
+        "color_frame": (101, 67, 33),
+        "color_roof": (22, 101, 52),
+        "color_door": (146, 64, 14)
+    },
+    "miner_workstation": {
+        "id": "miner_workstation",
+        "name": "Miner Workstation",
+        "category_id": "workplace",
+        "desc": "5x5 mine-head workstation. Must be placed exactly on top of a generated mine deposit.",
+        "capacity": 0,
+        "materials": {},
+        "width_tiles": 5,
+        "height_tiles": 5,
+        "max_workers": 5,
+        "household_owned": False,
+        "placement_anywhere": True,
+        "instant_place": True,
+        "maintainable": False,
+        "rotatable": False,
+        "station_inventory_mine_bound": True,
+        "color_frame": (71, 85, 105),
+        "color_roof": (51, 65, 85),
+        "color_rock": (100, 116, 139)
+    },
+    # *** ESTABLISHED — DO NOT REGRESS ***
+    # Notice Board attracts immigrant households. UNIQUE: max 1 per village
+    # (enforced by add_furniture). public_structure + carpenter_commissionable
+    # so only a carpenter can build it (1h). household_owned False — it belongs
+    # to the village, not a family. Clicking it opens Town Ledger > Immigrant.
+    "notice_board": {
+        "id": "notice_board",
+        "name": "Notice Board",
+        "category_id": "public_structure",
+        "public_structure": True,
+        "maintainable": True,
+        "desc": "A public bulletin board. Post immigration notices to attract settler households.",
+        "capacity": 0,
+        "materials": {"Wood": 10},
+        "width_tiles": 2,
+        "height_tiles": 1,
+        "household_owned": False,
+        "placement_anywhere": True,
+        "unique": True,
+        "rotatable": True,
+        "carpenter_commissionable": True,
+        "color_frame": (101, 67, 33),
+        "color_panel": (146, 96, 48),
+        "color_paper": (241, 245, 249),
+        "color_pin": (220, 38, 38)
     }
 }
+
+# =====================================================================
+# Immigration / Notice Board System
+# =====================================================================
+# Each day with an active posting there is a flat chance that immigrant
+# households arrive; on success 1..MAX households spawn at random times.
+IMMIGRATION_DAILY_SPAWN_CHANCE = 0.3
+IMMIGRATION_MIN_HOUSEHOLDS_PER_DAY = 1
+IMMIGRATION_MAX_HOUSEHOLDS_PER_DAY = 3
+IMMIGRATION_MIN_HOUSEHOLD_SIZE = 2
+IMMIGRATION_MAX_HOUSEHOLD_SIZE = 6
+# Households waiting at the board leave on their own after this many
+# full in-game days unattended (rejected, or player never opened the menu).
+IMMIGRATION_PATIENCE_DAYS = 1.0
+IMMIGRATION_SPAWN_DISTANCE_TILES = 45
+IMMIGRATION_DESPAWN_DISTANCE_TILES = 60
+IMMIGRATION_QUEUE_SLOTS_PER_ROW = 4
+IMMIGRATION_QUEUE_SLOT_SPACING = 34   # px between queue slots
+IMMIGRATION_QUEUE_ROW_SPACING = 1.2   # tiles between queue rows
+IMMIGRATION_MEMBER_JITTER = 10        # px scatter around a member's slot point
+IMMIGRATION_DEFAULT_REWARD_GOLD = 1   # gold coins per household, paid on Accept
 
 # Furniture is represented by the same movable world-item entity after removal.
 for _furniture_config in FURNITURE_TYPES.values():
@@ -1430,7 +1757,10 @@ HAPPINESS_MODIFIERS = {
     "ate_varied_food": {"label": "Ate varied food", "amount": 5.0, "duration_days": 1, "food_variety_required": 2},
     "needs_comfortable": {"label": "Hunger, thirst and toilet satisfied", "amount": 5.0, "duration_days": 1, "threshold": 50.0},
     "usable_bed": {"label": "Usable bed", "amount": 5.0, "persistent": True},
-    "leisure_per_hour": {"label": "Leisure time", "amount": 3.0, "duration_days": 1},
+    # Leisure happiness: +3 per in-game hour, hard cap +20, lasts 1 day.
+# *** ESTABLISHED — DO NOT REGRESS *** removing max_amount lets leisure
+# happiness stack unbounded (user-requested cap).
+"leisure_per_hour": {"label": "Leisure time", "amount": 3.0, "duration_days": 1, "max_amount": 20.0},
     "prayer_completed": {"label": "Prayer completed", "amount": 5.0, "duration_days": 1},
     "confession_completed": {"label": "Confession completed", "amount": 5.0, "duration_days": 1},
     "gold_coin": {"label": "Personal gold coins", "amount_per_coin": 1.0},
@@ -1441,7 +1771,11 @@ HAPPINESS_MODIFIERS = {
     "no_bed": {"label": "No usable bed", "amount": -5.0, "persistent": True},
     "purchase_unaffordable": {"label": "Could not afford a needed purchase", "amount": -10.0, "duration_days": 1},
     "unemployed": {"label": "Unassigned / unemployed", "amount": -20.0, "persistent": True},
+    # Faith consequences: <=20% faith -> -20 unhappiness; at 0% -> -30 total.
+    "faith_low": {"label": "Faith below 20%", "amount": -20.0, "threshold": 20.0},
+    "faith_empty": {"label": "Faith at 0%", "amount": -30.0, "threshold": 0.0},
     "bereavement": {"label": "Family member died", "amount": -50.0, "duration_days": 5},
+    "no_church_building": {"label": "No church building", "amount": -30.0, "duration_days": 3},
     "sleep_fatigue": {"label": "Sleep deprivation", "duration_days": 1},
 }
 HAPPINESS_NEED_LABELS = {"hunger": "Hunger", "thirst": "Thirst", "toilet": "Toilet"}
@@ -1495,7 +1829,7 @@ COLOR_CORPSE_OUTLINE = (51, 65, 85)
 # Church, Priest, Cemetery, Gravedigger & Toilet Systems (Agent 3)
 # =====================================================================
 DEFAULT_CHURCH_TAX = {"Gold": 0, "Silver": 0, "Copper": 1}  # 1 Copper per household per day default
-DEFAULT_SOCAGE_TAX_ENABLED = True
+DEFAULT_SOCAGE_TAX_ENABLED = False
 DEFAULT_SOCAGE_TAX_PERCENT = 10
 SOCAGE_TAX_QUICK_STEP = 10
 SOCAGE_TAX_INTERVAL_DAYS = 10
@@ -1579,6 +1913,8 @@ MAP_OVERLAY_LAYERS = {
     "permits": "Permits",
     "structures": "Structures",
     "furniture": "Furniture",
+    "forest": "Forest",
+    "mines": "Mines",
     "ai": "AI",
     "resources": "Resources",
 }

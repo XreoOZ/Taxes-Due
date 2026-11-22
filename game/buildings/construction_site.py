@@ -8,6 +8,7 @@ from game.config import (
     BUILD_DURATION_SECONDS,
     COST_PER_BLOCK_WOOD,
     COST_PER_BLOCK_STONE,
+    DEFAULT_COMMISSION_ARTISAN_JOB,
 )
 from game.permits import get_exterior_edges_for_tile
 
@@ -29,6 +30,7 @@ class ConstructionSite:
                 "payer_family_id": None,
                 "payer_id": None,
                 "carpenter_id": None,
+                "artisan_job": DEFAULT_COMMISSION_ARTISAN_JOB,
                 "commission_paid": False,
             }
 
@@ -116,6 +118,13 @@ class ConstructionSite:
             duration = max(1.0, float(order.get("build_duration_seconds", duration)))
         return self.build_progress >= duration
 
+    def progress_fraction(self):
+        duration = BUILD_DURATION_SECONDS
+        order = getattr(self, "construction_order", None)
+        if order and order.get("order_type") == "PUBLIC_BUILD":
+            duration = max(1.0, float(order.get("build_duration_seconds", duration)))
+        return min(1.0, self.build_progress / duration) if duration > 0 else 0.0
+
     def overlaps_tiles(self, tiles):
         return bool(self.tiles & tiles)
 
@@ -133,8 +142,17 @@ class ConstructionSite:
         self.reserved_cost[res] += actual
         return actual
 
-    def deposit_resource(self, res, amount):
+    # *** ESTABLISHED — DO NOT REGRESS ***
+    # Reservation accounting contract: reserve_resource() returns the ACTUAL
+    # amount reserved; callers MUST release exactly that amount via
+    # release_resource() (never a fixed capacity) or reserved_cost leaks and
+    # get_needed_resource() returns None forever -> blueprint stalls mid-build.
+    # deposit_resource() only counts delivered material; it must NOT touch
+    # reserved_cost (carpenters never reserve, servants release explicitly).
+    def release_resource(self, res, amount):
         self.reserved_cost[res] = max(0, self.reserved_cost[res] - amount)
+
+    def deposit_resource(self, res, amount):
         self.delivered_cost[res] += amount
 
     def get_center_world(self, tile_size):

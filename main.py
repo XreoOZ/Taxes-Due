@@ -66,6 +66,7 @@ from game.config import (
     WORLD_TYPE_OPTIONS,
     ISLAND_SEED_MIN,
     ISLAND_SEED_MAX,
+    ROAD_TYPES,
 )
 from game.world.island import set_world
 from game.camera import Camera
@@ -82,6 +83,7 @@ from game.furniture import FurnitureManager
 from game.ui_raport import RaportUI
 from game.ui.market_modal import MarketProfileModal
 from game.ui.add_item_modal import AddItemModal
+from game.ui.cheat_modal import CheatModal
 from game.ui.carpenter_catalog_modal import CarpenterCatalogModal
 from game.ui.path_debug_overlay import PathDebugOverlay
 from game.ui.map_overlay import MapOverlay
@@ -178,6 +180,7 @@ def main():
     raport_ui = RaportUI()
     market_modal = MarketProfileModal()
     add_item_modal = AddItemModal()
+    cheat_modal = CheatModal()
     carpenter_catalog_modal = CarpenterCatalogModal()
     path_debug_overlay = PathDebugOverlay(enabled=True)
     map_overlay = MapOverlay()
@@ -221,6 +224,15 @@ def main():
     selected_entity = None
     selected_entity_happiness_scroll = 0
 
+    # Road painting mode (Public Structure > Road): drag-paint tiles, confirm pays cost.
+    planning_road_type = None
+    planning_road_tiles = set()
+    road_drag_start = None
+
+    # Destroy mode: click objects to mark them, DONE -> confirm -> execute.
+    destroy_marks = []          # [("building"|"site"|"road", obj_or_tile), ...]
+    destroy_confirm = None      # pending confirmed-destroy payload while popup open
+
     furn_menu_rect = pygame.Rect(0, 0, 270, 140)
     btn_furn_move_rect = pygame.Rect(0, 0, 112, 30)
     btn_furn_destroy_rect = pygame.Rect(0, 0, 112, 30)
@@ -238,6 +250,10 @@ def main():
     wp_ws_btn_rect = pygame.Rect(0, 0, 0, 0)
     wp_close_btn_rect = pygame.Rect(0, 0, 0, 0)
 
+    # Natural-resource mine info popup shown when clicking a generated mine.
+    mine_popup = None  # {"mine": dict, "pos": (x, y)}
+    mine_popup_rect = pygame.Rect(0, 0, 0, 0)
+
     entity_card_rect = pygame.Rect(0, 0, 310, 180)
     entity_happiness_rect = pygame.Rect(0, 0, 0, 0)
     btn_entity_close_rect = pygame.Rect(0, 0, 22, 22)
@@ -246,12 +262,15 @@ def main():
     btn_add_item_cheat_rect = pygame.Rect(0, 0, PATH_TOGGLE_BTN_WIDTH, PATH_TOGGLE_BTN_HEIGHT)
     cheat_notice = ""
     cheat_notice_timer = 0.0
+    cheats_active = False
 
-    def start_fresh_game(day_length_index=None, world_map_index=None):
+    def start_fresh_game(day_length_index=None, world_map_index=None, starter_index=None):
         nonlocal player, resources, building_manager, permit_manager, stockpile_manager
         nonlocal servant_manager, villager_manager, furniture_manager, day_cycle, schedule_manager
         nonlocal planning_mode, planning_permit_type, planning_building_type, planning_furniture_type
         nonlocal planning_building_rotation, planning_furniture_rotation
+        nonlocal planning_road_type, planning_road_tiles, road_drag_start
+        nonlocal destroy_marks, destroy_confirm
         nonlocal session_planned_furniture, selected_planned_furniture
         nonlocal editing_permit_id, original_permit_tiles, selected_furniture, moving_furniture, selected_entity
 
@@ -259,6 +278,10 @@ def main():
         map_option = WORLD_TYPE_OPTIONS[world_map_index] if world_map_index is not None else WORLD_TYPE_OPTIONS[0]
         world_seed = random.randint(ISLAND_SEED_MIN, ISLAND_SEED_MAX) if map_option["id"] == "island" else None
         set_world(map_option["id"], seed=world_seed)
+        from game.world.natural_resources import get_natural_resources
+        get_natural_resources().generate(world_seed)
+        from game.world.roads import get_roads
+        get_roads().reset()
 
         from game.systems.cemetery_system import CemeterySystem
         cemetery_system = CemeterySystem.get_instance()
@@ -282,7 +305,6 @@ def main():
         stockpile_manager = StockpileManager()
         servant_manager = ServantManager()
         villager_manager = VillagerManager()
-        villager_manager.generate_starter_family()
         furniture_manager = FurnitureManager()
         furniture_manager.set_managers(
             building_manager=building_manager, permit_manager=permit_manager,
@@ -292,6 +314,21 @@ def main():
             permit_manager, villager_manager, building_manager,
             preferred_tile=LORD_TREASURY_START_TILE,
         )
+        # Starter preset (Nepo Baby etc.) materializes family, permits,
+        # buildings, furniture, stocked storage yard, and treasury coins.
+        # Without one, the world starts empty with just the default family.
+        starter_applied = False
+        if starter_index is not None:
+            from game.data.config import STARTER_PRESETS
+            from game.systems.starter_preset import StarterPresetSystem
+            if 0 <= int(starter_index) < len(STARTER_PRESETS):
+                starter_applied = StarterPresetSystem.apply(
+                    STARTER_PRESETS[int(starter_index)]["id"],
+                    villager_manager, furniture_manager,
+                    building_manager, permit_manager,
+                    stockpile_manager=stockpile_manager)
+        if not starter_applied:
+            villager_manager.generate_starter_family()
         day_cycle = DayCycleSystem()
         if day_length_index is not None:
             day_cycle.set_day_length_index(day_length_index)
@@ -299,12 +336,14 @@ def main():
         raport_ui.close()
         market_modal.close()
         add_item_modal.close()
+        cheat_modal.close()
         settings_modal.close()
         save_modal.close()
         planning_mode = "NONE"
         planning_permit_type = None
         planning_building_type = None
         planning_furniture_type = None
+        planning_road_type = None
         planning_building_rotation = 0
         planning_furniture_rotation = 0
         session_planned_furniture.clear()
@@ -314,6 +353,10 @@ def main():
         moving_furniture = None
         carpenter_catalog_modal.close()
         original_permit_tiles.clear()
+        planning_road_tiles.clear()
+        road_drag_start = None
+        destroy_marks.clear()
+        destroy_confirm = None
 
     start_fresh_game()
 
@@ -321,6 +364,9 @@ def main():
     btn_confirm_rect = pygame.Rect(0, 0, 150, 36)
     btn_clear_rect = pygame.Rect(0, 0, 90, 36)
     btn_cancel_rect = pygame.Rect(0, 0, 110, 36)
+    btn_done_rect = pygame.Rect(0, 0, 110, 36)
+    destroy_yes_rect = pygame.Rect(0, 0, 110, 36)
+    destroy_no_rect = pygame.Rect(0, 0, 110, 36)
     btn_door_mode_rect = pygame.Rect(0, 0, 130, 36)
 
     running = True
@@ -334,7 +380,7 @@ def main():
         real_dt = min(clock.tick(FPS) / 1000.0, 0.1)
         profile_frame_start = perf_counter() if profile_enabled else 0.0
         game_dt = speed_controller.get_game_dt(real_dt)
-        if current_state == STATE_PLAYING and (settings_modal.is_open or save_modal.is_open):
+        if current_state == STATE_PLAYING and (settings_modal.is_open or save_modal.is_open or cheat_modal.is_open):
             game_dt = 0.0
 
         # Refresh fisik item di stockpile setiap frame
@@ -387,7 +433,9 @@ def main():
                     parts = action.split("_")
                     day_idx = int(parts[2])
                     map_idx = int(parts[3]) if len(parts) > 3 else 0
-                    start_fresh_game(day_length_index=day_idx, world_map_index=map_idx)
+                    starter_idx = int(parts[4]) if len(parts) > 4 else None
+                    start_fresh_game(day_length_index=day_idx, world_map_index=map_idx,
+                                     starter_index=starter_idx)
                     current_state = STATE_PLAYING
                 elif action == "play":
                     start_fresh_game()
@@ -416,6 +464,7 @@ def main():
                                 raport_ui.close()
                                 market_modal.close()
                                 add_item_modal.close()
+                                cheat_modal.close()
                                 clean_resources_dictionary(resources)
                                 planning_mode = "NONE"
                                 session_planned_furniture.clear()
@@ -486,7 +535,7 @@ def main():
 
                 any_modal_open = (
                     raport_ui.is_open or settings_modal.is_open or save_modal.is_open
-                    or market_modal.is_open or add_item_modal.is_open
+                    or market_modal.is_open or add_item_modal.is_open or cheat_modal.is_open
                 )
                 if not any_modal_open:
                     speed_action = speed_controller.handle_event(event)
@@ -496,7 +545,7 @@ def main():
                 if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                     if not any_modal_open and path_debug_overlay.handle_event(event):
                         continue
-                    if not any_modal_open and btn_add_item_cheat_rect.collidepoint(event.pos):
+                    if not any_modal_open and cheats_active and btn_add_item_cheat_rect.collidepoint(event.pos):
                         tgt = selected_furniture if (selected_furniture and getattr(selected_furniture, "furniture_type", "") == "household_storage") else None
                         add_item_modal.open(target_storage=tgt)
                         continue
@@ -771,9 +820,10 @@ def main():
                         target_permit = permit_manager.get_permit_at(tx, ty)
                         b_at = building_manager.get_building_at(tx, ty)
                         inside = b_at is not None and not getattr(b_at, "is_solid", False) and getattr(b_at, "building_type", "") != "well" and (tx, ty) != getattr(b_at, "door_pos", None)
+                        is_door_tile = b_at is not None and getattr(b_at, "door_pos", None) == (tx, ty)
                         allowed = f_cfg.get("allowed_permits")
                         permit_allowed = f_cfg.get("placement_anywhere") or not allowed or (target_permit is not None and target_permit.permit_type in allowed)
-                        footprint_context.append(((f_cfg.get("placement_anywhere") or target_permit is not None or inside) and permit_allowed,
+                        footprint_context.append(((f_cfg.get("placement_anywhere") or target_permit is not None or inside) and permit_allowed and not is_door_tile,
                                                  furniture_manager.get_furniture_at(tx, ty) is not None))
                     planned_tiles = set()
                     for pf in session_planned_furniture:
@@ -783,6 +833,9 @@ def main():
                             p_w, p_h = p_h, p_w
                         planned_tiles.update((pf["gx"] + dx, pf["gy"] + dy) for dx in range(p_w) for dy in range(p_h))
                     is_valid_place = all(valid and not occupied for valid, occupied in footprint_context) and not (footprint & planned_tiles)
+                    if planning_furniture_type == "miner_workstation" and is_valid_place:
+                        from game.world.natural_resources import get_natural_resources
+                        is_valid_place = get_natural_resources().mine_for_footprint(footprint) is not None
 
                     is_valid_build = bool(session_planned_furniture)
 
@@ -913,6 +966,150 @@ def main():
                                 moving_furniture = None
 
                 # -------------------------------------------------------------
+                # 3.7. ROAD PAINTING MODE (instant tile layer, pay per tile)
+                # -------------------------------------------------------------
+                elif planning_mode == "ROAD":
+                    from game.world.roads import get_roads
+                    from game.world.island import is_land_tile
+                    from game.world.natural_resources import get_natural_resources
+                    roads = get_roads()
+                    nr = get_natural_resources()
+                    r_cfg = ROAD_TYPES.get(planning_road_type, ROAD_TYPES["dirt_road"])
+
+                    def road_tile_valid(tx, ty):
+                        if not is_land_tile(tx, ty):
+                            return False
+                        if (tx, ty) in planning_road_tiles or (tx, ty) in roads.tiles:
+                            return False
+                        if building_manager.get_building_at(tx, ty):
+                            return False
+                        if building_manager.get_site_at(tx, ty):
+                            return False
+                        if furniture_manager.get_furniture_at(tx, ty):
+                            return False
+                        if stockpile_manager.get_stack_at(tx, ty):
+                            return False
+                        if nr.get_mine_at(tx, ty):
+                            return False
+                        return True
+
+                    if event.type == pygame.KEYDOWN:
+                        if event.key == pygame.K_ESCAPE:
+                            planning_mode = "NONE"
+                            planning_road_tiles.clear()
+                            road_drag_start = None
+                        elif event.key == pygame.K_RETURN:
+                            new_tiles = {t for t in planning_road_tiles if road_tile_valid(*t)}
+                            cost = {}
+                            for _ in new_tiles:
+                                for res, amt in r_cfg["cost"].items():
+                                    cost[res] = cost.get(res, 0) + amt
+                            if new_tiles and all(resources.get(r, 0) >= a for r, a in cost.items()):
+                                for r, a in cost.items():
+                                    resources[r] -= a
+                                roads.set_tiles(new_tiles, planning_road_type)
+                                planning_mode = "NONE"
+                                planning_road_tiles.clear()
+                    elif event.type == pygame.MOUSEMOTION:
+                        if road_drag_start and event.buttons[0]:
+                            planning_road_tiles.add((m_gx, m_gy))
+                    elif event.type == pygame.MOUSEBUTTONDOWN:
+                        if btn_confirm_rect.collidepoint(event.pos):
+                            new_tiles = {t for t in planning_road_tiles if road_tile_valid(*t)}
+                            cost = {}
+                            for _ in new_tiles:
+                                for res, amt in r_cfg["cost"].items():
+                                    cost[res] = cost.get(res, 0) + amt
+                            if new_tiles and all(resources.get(r, 0) >= a for r, a in cost.items()):
+                                for r, a in cost.items():
+                                    resources[r] -= a
+                                roads.set_tiles(new_tiles, planning_road_type)
+                                planning_mode = "NONE"
+                                planning_road_tiles.clear()
+                                road_drag_start = None
+                        elif btn_clear_rect.collidepoint(event.pos):
+                            planning_road_tiles.clear()
+                        elif btn_cancel_rect.collidepoint(event.pos):
+                            planning_mode = "NONE"
+                            planning_road_tiles.clear()
+                            road_drag_start = None
+                        elif event.button == 1:
+                            road_drag_start = (m_gx, m_gy)
+                            planning_road_tiles.add((m_gx, m_gy))
+                        elif event.button == 3:
+                            planning_road_tiles.discard((m_gx, m_gy))
+                            road_drag_start = None
+
+                # -------------------------------------------------------------
+                # 3.8. DESTROY MODE — mark objects, DONE -> confirm -> execute
+                # -------------------------------------------------------------
+                elif planning_mode == "DESTROY":
+                    from game.world.roads import get_roads
+                    roads = get_roads()
+
+                    def destroy_hit(tx, ty):
+                        """Topmost destroyable object at tile, or None."""
+                        site = building_manager.get_site_at(tx, ty)
+                        if site is not None:
+                            return ("site", site)
+                        if building_manager.get_demolition_at(tx, ty) is not None:
+                            return None  # already being demolished
+                        b = building_manager.get_building_at(tx, ty)
+                        if b is not None:
+                            return ("building", b)
+                        if roads.road_type_at(tx, ty) is not None:
+                            return ("road", (tx, ty))
+                        return None
+
+                    def destroy_same(mark, hit):
+                        if mark[0] != hit[0]:
+                            return False
+                        if mark[0] == "road":
+                            return mark[1] == hit[1]
+                        return mark[1] is hit[1]
+
+                    if destroy_confirm is not None:
+                        # Confirm popup: YES executes all marks, NO keeps marking.
+                        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                            if destroy_yes_rect.collidepoint(event.pos):
+                                for kind, obj in destroy_confirm["marks"]:
+                                    if kind == "site":
+                                        building_manager.cancel_construction(
+                                            obj, resources=resources,
+                                            stockpile_manager=stockpile_manager,
+                                            all_servants=servant_manager.servants,
+                                            furniture_manager=furniture_manager)
+                                    elif kind == "building":
+                                        building_manager.start_demolition(obj)
+                                    elif kind == "road":
+                                        roads.remove_tiles([obj])
+                                destroy_confirm = None
+                                destroy_marks.clear()
+                                planning_mode = "NONE"
+                            elif destroy_no_rect.collidepoint(event.pos):
+                                destroy_confirm = None
+                    elif event.type == pygame.KEYDOWN:
+                        if event.key == pygame.K_ESCAPE:
+                            planning_mode = "NONE"
+                            destroy_marks.clear()
+                        elif event.key == pygame.K_RETURN and destroy_marks:
+                            destroy_confirm = {"marks": list(destroy_marks)}
+                    elif event.type == pygame.MOUSEBUTTONDOWN:
+                        if btn_done_rect.collidepoint(event.pos) and destroy_marks:
+                            destroy_confirm = {"marks": list(destroy_marks)}
+                        elif btn_cancel_rect.collidepoint(event.pos):
+                            planning_mode = "NONE"
+                            destroy_marks.clear()
+                        elif event.button == 1:
+                            hit = destroy_hit(m_gx, m_gy)
+                            if hit is not None:
+                                existing = next((m for m in destroy_marks if destroy_same(m, hit)), None)
+                                if existing is not None:
+                                    destroy_marks.remove(existing)
+                                else:
+                                    destroy_marks.append(hit)
+
+                # -------------------------------------------------------------
                 # 4. RAPORT MODAL OPEN
                 # -------------------------------------------------------------
                 elif raport_ui.is_open:
@@ -946,6 +1143,16 @@ def main():
                             raport_ui.selected_furniture_type = None
                             session_planned_furniture.clear()
                             selected_planned_furniture = None
+                        elif raport_ui.selected_road_type is not None:
+                            planning_mode = "ROAD"
+                            planning_road_type = raport_ui.selected_road_type
+                            raport_ui.selected_road_type = None
+                            planning_road_tiles.clear()
+                            road_drag_start = None
+                        elif action == "start_destroy_mode":
+                            planning_mode = "DESTROY"
+                            destroy_marks.clear()
+                            destroy_confirm = None
                         elif raport_ui.placing_permit_type is not None:
                             planning_mode = "PERMIT"
                             planning_permit_type = raport_ui.placing_permit_type
@@ -995,12 +1202,33 @@ def main():
                         cheat_notice_timer = 4.0
 
                 # -------------------------------------------------------------
+                # 4.7. CHEAT MODAL (ESC menu → Active Cheat → password)
+                # -------------------------------------------------------------
+                elif cheat_modal.is_open:
+                    c_action = cheat_modal.handle_event(event, cheats_active=cheats_active)
+                    if c_action == "activate_cheats":
+                        cheats_active = True
+                    elif c_action == "deactivate_cheats":
+                        cheats_active = False
+                    elif c_action == "unpause_game":
+                        continue
+                    elif c_action == "open_save_modal":
+                        save_modal.open(mode="SAVE")
+                        continue
+                    elif c_action == "open_load_modal":
+                        save_modal.open(mode="LOAD")
+                        continue
+                    elif c_action == "return_to_main_menu":
+                        current_state = STATE_MENU
+                        continue
+
+                # -------------------------------------------------------------
                 # 5. NORMAL GAMEPLAY
                 # -------------------------------------------------------------
                 else:
                     if event.type == pygame.KEYDOWN:
                         if event.key == pygame.K_ESCAPE:
-                            settings_modal.open(is_ingame=True)
+                            cheat_modal.open()
                         elif event.key == pygame.K_r:
                             if not raport_ui.is_text_input_active():
                                 raport_ui.open()
@@ -1034,6 +1262,16 @@ def main():
                             raport_ui.selected_furniture_type = None
                             session_planned_furniture.clear()
                             selected_planned_furniture = None
+                        elif raport_ui.selected_road_type is not None:
+                            planning_mode = "ROAD"
+                            planning_road_type = raport_ui.selected_road_type
+                            raport_ui.selected_road_type = None
+                            planning_road_tiles.clear()
+                            road_drag_start = None
+                        elif action == "start_destroy_mode":
+                            planning_mode = "DESTROY"
+                            destroy_marks.clear()
+                            destroy_confirm = None
                         elif raport_ui.placing_permit_type is not None:
                             planning_mode = "PERMIT"
                             planning_permit_type = raport_ui.placing_permit_type
@@ -1063,6 +1301,11 @@ def main():
                                 permit_drag_start = None
                                 permit_erase_start = None
                         elif not raport_ui.is_open:
+                            # 0A-1. Mine info popup — klik di luar/close
+                            if mine_popup is not None:
+                                if not mine_popup_rect.collidepoint(event.pos):
+                                    mine_popup = None
+
                             # 0A0. Workplace popup (Permit/Structure + Workstation) — klik di luar/close
                             if workplace_popup is not None:
                                 kind = workplace_popup["kind"]
@@ -1145,6 +1388,12 @@ def main():
                                 selected_entity = None
                                 carpenter_catalog_modal.open(clicked_f)
                                 continue
+                            # Notice Board opens the Town Ledger Immigrant tab.
+                            if clicked_f and clicked_f.furniture_type == "notice_board":
+                                selected_furniture = clicked_f
+                                selected_entity = None
+                                raport_ui.open_immigrant_tab()
+                                continue
 
                             # 0A3. Cek apakah pemain mengklik entitas AI di peta (Villager / Servant)
                             clicked_ai = None
@@ -1215,6 +1464,16 @@ def main():
                                             free_servant.state = "FETCH_RESOURCE"
                                             free_servant.target_stack = clicked_stack
                                             free_servant.say(f"Hauling {clicked_stack.resource_type} to storage, Sire!", duration=2.5)
+                                continue
+
+                            # 0D. Cek apakah pemain mengklik mine hasil generate (natural resources)
+                            from game.world.natural_resources import get_natural_resources
+                            clicked_mine = get_natural_resources().get_mine_at(m_gx, m_gy)
+                            if clicked_mine is not None:
+                                selected_furniture = None
+                                selected_entity = None
+                                workplace_popup = None
+                                mine_popup = {"mine": clicked_mine, "pos": event.pos}
                                 continue
 
                             # 1. Cek apakah pemain mengklik bangunan fisik di peta
@@ -1306,7 +1565,8 @@ def main():
             # Substep physics/entities so high speed multiplier (Fast 2x, Very Fast 4x) never tunnels through walls
             MAX_PHYSICS_SUB_DT = 0.02  # Maximum 20ms per physics integration step
             sub_time = game_dt
-            is_modal_open = raport_ui.is_open or settings_modal.is_open or save_modal.is_open or market_modal.is_open or add_item_modal.is_open
+            is_modal_open = raport_ui.is_open or settings_modal.is_open or save_modal.is_open or market_modal.is_open or add_item_modal.is_open or cheat_modal.is_open
+            raport_ui.cheats_active = cheats_active
             keys = pygame.key.get_pressed() if not is_modal_open else None
 
             profile_simulation_start = perf_counter() if profile_enabled else 0.0
@@ -1335,10 +1595,32 @@ def main():
             if profile_enabled:
                 profile_simulation_ms += (perf_counter() - profile_simulation_start) * 1000.0
 
+            # Dead/reassigned artisans: dissolve their commission queues and
+            # spawn refund errands for PAID orders.
+            if furniture_manager is not None and villager_manager is not None:
+                from game.systems.carpenter_system import CarpenterSystem
+                CarpenterSystem.sweep_dead_commission_orders(
+                    building_manager, furniture_manager, villager_manager,
+                    servant_manager=servant_manager, stockpile_manager=stockpile_manager,
+                    day_cycle=day_cycle)
+
+            # Immigration: pending households travel/wait/leave at the Notice Board.
+            if furniture_manager is not None and villager_manager is not None:
+                from game.systems.immigration_system import get_immigration_system
+                _imm_ents = villager_manager.get_all_villagers() + servant_manager.servants
+                get_immigration_system().update(
+                    game_dt, day_cycle, furniture_manager, villager_manager,
+                    servant_manager=servant_manager, building_manager=building_manager,
+                    player=player, all_entities=_imm_ents)
+
             camera.follow(player)
 
             # 1. World & Ground
             world.draw(screen, camera)
+            from game.world.natural_resources import get_natural_resources
+            get_natural_resources().draw(screen, camera, TILE_SIZE)
+            from game.world.roads import get_roads
+            get_roads().draw(screen, camera, TILE_SIZE)
 
             # 2. Area Permits (Fixed, Permanent Boundaries)
             permit_manager.draw(screen, camera, TILE_SIZE, building_manager)
@@ -1355,6 +1637,8 @@ def main():
             # 5. Characters (Villagers, Servants & Player)
             villager_manager.draw(screen, camera)
             servant_manager.draw(screen, camera)
+            from game.systems.immigration_system import get_immigration_system
+            get_immigration_system().draw(screen, camera, TILE_SIZE)
             player.draw(screen, camera)
 
             # 6. Ambient Day & Night Lighting Overlay
@@ -1735,14 +2019,21 @@ def main():
                     target_permit = permit_manager.get_permit_at(tx, ty)
                     b_at = building_manager.get_building_at(tx, ty)
                     inside = b_at is not None and not getattr(b_at, "is_solid", False) and getattr(b_at, "building_type", "") != "well" and (tx, ty) != getattr(b_at, "door_pos", None)
+                    is_door_tile = b_at is not None and getattr(b_at, "door_pos", None) == (tx, ty)
                     allowed = f_cfg.get("allowed_permits")
                     permit_allowed = f_cfg.get("placement_anywhere") or not allowed or (target_permit is not None and target_permit.permit_type in allowed)
-                    valid_cells.append(((f_cfg.get("placement_anywhere") or target_permit is not None or inside) and permit_allowed,
+                    valid_cells.append(((f_cfg.get("placement_anywhere") or target_permit is not None or inside) and permit_allowed and not is_door_tile,
                                         furniture_manager.get_furniture_at(tx, ty) is not None))
                 is_occupied_planned = bool(footprint & planned_coords)
                 is_occupied_existing = any(occupied for _, occupied in valid_cells)
                 is_valid_location = all(valid for valid, _ in valid_cells)
                 is_valid_place = all(valid and not occupied for valid, occupied in valid_cells) and not is_occupied_planned
+                mine_match = None
+                if planning_furniture_type == "miner_workstation" and is_valid_place:
+                    from game.world.natural_resources import get_natural_resources
+                    mine_match = get_natural_resources().mine_for_footprint(footprint)
+                    is_valid_place = mine_match is not None
+                    is_valid_location = is_valid_location and mine_match is not None
 
                 if not is_occupied_planned:
                     f_surf = pygame.Surface((scaled_t * fw, scaled_t * fh), pygame.SRCALPHA)
@@ -1782,6 +2073,9 @@ def main():
                 if is_occupied_planned:
                     stat_msg = "Planned furniture selected! (Right-Click or Del to remove from session)"
                     stat_col = (250, 204, 21)
+                elif planning_furniture_type == "miner_workstation" and mine_match is None:
+                    stat_msg = "Cannot place: Miner workstation must be placed exactly on a generated mine (5x5)!"
+                    stat_col = (239, 68, 68)
                 elif not is_valid_location:
                     stat_msg = "Cannot place: Must be placed inside an issued Permit lot or tenant house!"
                     stat_col = (239, 68, 68)
@@ -1881,6 +2175,184 @@ def main():
                 btn_cancel_rect.y = bar_y + 25
                 pygame.draw.rect(screen, (220, 38, 38), btn_cancel_rect, border_radius=6)
                 screen.blit(font_btn.render("CANCEL", True, (255, 255, 255)), (btn_cancel_rect.x + 28, btn_cancel_rect.y + 8))
+
+            # -------------------------------------------------------------
+            # 7.6b. OVERLAYS: ROAD PAINTING MODE
+            # -------------------------------------------------------------
+            elif planning_mode == "ROAD":
+                from game.world.roads import get_roads
+                from game.world.island import is_land_tile
+                from game.world.natural_resources import get_natural_resources
+                roads = get_roads()
+                r_cfg = ROAD_TYPES.get(planning_road_type, ROAD_TYPES["dirt_road"])
+                scaled_t = int(TILE_SIZE * camera.zoom)
+
+                def road_tile_valid_draw(tx, ty):
+                    if not is_land_tile(tx, ty):
+                        return False
+                    if (tx, ty) in planning_road_tiles or (tx, ty) in roads.tiles:
+                        return False
+                    if building_manager.get_building_at(tx, ty):
+                        return False
+                    if building_manager.get_site_at(tx, ty):
+                        return False
+                    if furniture_manager.get_furniture_at(tx, ty):
+                        return False
+                    if stockpile_manager.get_stack_at(tx, ty):
+                        return False
+                    if get_natural_resources().get_mine_at(tx, ty):
+                        return False
+                    return True
+
+                # Painted tiles
+                for (gx, ty) in planning_road_tiles:
+                    sx, sy = camera.world_to_screen(gx * TILE_SIZE, ty * TILE_SIZE)
+                    valid = road_tile_valid_draw(gx, ty)
+                    t_surf = pygame.Surface((scaled_t, scaled_t), pygame.SRCALPHA)
+                    t_surf.fill((r_cfg["color"] + (150,)) if valid else (239, 68, 68, 110))
+                    screen.blit(t_surf, (sx, sy))
+                    pygame.draw.rect(screen, (255, 255, 255) if valid else (239, 68, 68),
+                                     (sx, sy, scaled_t, scaled_t), width=1)
+
+                # Hover cursor tile
+                sx, sy = camera.world_to_screen(m_gx * TILE_SIZE, m_gy * TILE_SIZE)
+                hover_valid = road_tile_valid_draw(m_gx, m_gy)
+                h_surf = pygame.Surface((scaled_t, scaled_t), pygame.SRCALPHA)
+                h_col = r_cfg["color"] if hover_valid else (239, 68, 68)
+                h_surf.fill(h_col + (90,))
+                screen.blit(h_surf, (sx, sy))
+                pygame.draw.rect(screen, (255, 255, 255) if hover_valid else (239, 68, 68),
+                                 (sx, sy, scaled_t, scaled_t), width=2)
+
+                # Bottom bar: cost summary + confirm
+                new_count = sum(1 for t in planning_road_tiles if road_tile_valid_draw(*t))
+                cost = {}
+                for _ in range(new_count):
+                    for res, amt in r_cfg["cost"].items():
+                        cost[res] = cost.get(res, 0) + amt
+                cost_str = ", ".join(f"{a} {r}" for r, a in cost.items()) or "free"
+                can_afford = all(resources.get(r, 0) >= a for r, a in cost.items())
+
+                bar_w = 700
+                bar_h = 92
+                bar_x = (screen.get_width() - bar_w) // 2
+                bar_y = screen.get_height() - bar_h - 14
+                bar_surf = pygame.Surface((bar_w, bar_h), pygame.SRCALPHA)
+                pygame.draw.rect(bar_surf, (15, 23, 42, 245), (0, 0, bar_w, bar_h), border_radius=10)
+                pygame.draw.rect(bar_surf, (180, 83, 9), (0, 0, bar_w, bar_h), width=2, border_radius=10)
+                screen.blit(bar_surf, (bar_x, bar_y))
+
+                screen.blit(font_card.render(
+                    f"Road: {r_cfg['name']} | {r_cfg['desc']} | Drag to paint ({new_count} new tiles)",
+                    True, (250, 204, 21)), (bar_x + 16, bar_y + 10))
+                stat_col = (34, 197, 94) if (new_count > 0 and can_afford) else (239, 68, 68)
+                screen.blit(font_hud.render(
+                    f"Cost: {cost_str} total | L-drag paint, R-click unpaint, Enter/Click confirm",
+                    True, stat_col), (bar_x + 16, bar_y + 34))
+
+                btn_y = bar_y + 56
+                btn_confirm_rect.x = bar_x + 16
+                btn_confirm_rect.y = btn_y
+                btn_clear_rect.x = bar_x + 180
+                btn_clear_rect.y = btn_y
+                btn_cancel_rect.x = bar_x + 280
+                btn_cancel_rect.y = btn_y
+                c_col = (16, 185, 129) if (new_count > 0 and can_afford) else (71, 85, 105)
+                pygame.draw.rect(screen, c_col, btn_confirm_rect, border_radius=6)
+                screen.blit(font_btn.render("BUILD", True, (255, 255, 255)),
+                            (btn_confirm_rect.x + 46, btn_confirm_rect.y + 8))
+                pygame.draw.rect(screen, (71, 85, 105), btn_clear_rect, border_radius=6)
+                screen.blit(font_btn.render("CLEAR", True, (255, 255, 255)),
+                            (btn_clear_rect.x + 22, btn_clear_rect.y + 8))
+                pygame.draw.rect(screen, (220, 38, 38), btn_cancel_rect, border_radius=6)
+                screen.blit(font_btn.render("CANCEL", True, (255, 255, 255)),
+                            (btn_cancel_rect.x + 24, btn_cancel_rect.y + 8))
+
+            # -------------------------------------------------------------
+            # 7.6c. OVERLAYS: DESTROY MODE (mark objects -> DONE -> confirm)
+            # -------------------------------------------------------------
+            elif planning_mode == "DESTROY":
+                scaled_t = int(TILE_SIZE * camera.zoom)
+
+                def mark_tiles(mark):
+                    kind, obj = mark
+                    if kind == "road":
+                        return {obj}
+                    return set(getattr(obj, "tiles", ()))
+
+                # Red highlight on every marked object's tiles
+                for mark in destroy_marks:
+                    for (gx, ty) in mark_tiles(mark):
+                        sx, sy = camera.world_to_screen(gx * TILE_SIZE, ty * TILE_SIZE)
+                        t_surf = pygame.Surface((scaled_t, scaled_t), pygame.SRCALPHA)
+                        t_surf.fill((220, 38, 38, 90))
+                        screen.blit(t_surf, (sx, sy))
+                        pygame.draw.rect(screen, (239, 68, 68),
+                                         (sx, sy, scaled_t, scaled_t), width=1)
+
+                # Hover highlight
+                sx, sy = camera.world_to_screen(m_gx * TILE_SIZE, m_gy * TILE_SIZE)
+                h_surf = pygame.Surface((scaled_t, scaled_t), pygame.SRCALPHA)
+                h_surf.fill((250, 204, 21, 70))
+                screen.blit(h_surf, (sx, sy))
+                pygame.draw.rect(screen, (250, 204, 21),
+                                 (sx, sy, scaled_t, scaled_t), width=1)
+
+                # Bottom bar
+                bar_w = 640
+                bar_h = 86
+                bar_x = (screen.get_width() - bar_w) // 2
+                bar_y = screen.get_height() - bar_h - 14
+                bar_surf = pygame.Surface((bar_w, bar_h), pygame.SRCALPHA)
+                pygame.draw.rect(bar_surf, (15, 23, 42, 245), (0, 0, bar_w, bar_h), border_radius=10)
+                pygame.draw.rect(bar_surf, (220, 38, 38), (0, 0, bar_w, bar_h), width=2, border_radius=10)
+                screen.blit(bar_surf, (bar_x, bar_y))
+
+                screen.blit(font_card.render(
+                    f"Destroy Mode — {len(destroy_marks)} marked | Click objects to mark/unmark",
+                    True, (248, 113, 113)), (bar_x + 16, bar_y + 10))
+                screen.blit(font_hud.render(
+                    "Buildings -> demolition (50% refund) | Sites -> cancel (materials refunded) | Roads -> gone, no refund",
+                    True, (148, 163, 184)),
+                    (bar_x + 16, bar_y + 34))
+
+                btn_y = bar_y + 46
+                btn_done_rect.x = bar_x + 16
+                btn_done_rect.y = btn_y
+                btn_cancel_rect.x = bar_x + 140
+                btn_cancel_rect.y = btn_y
+                done_col = (220, 38, 38) if destroy_marks else (71, 85, 105)
+                pygame.draw.rect(screen, done_col, btn_done_rect, border_radius=6)
+                screen.blit(font_btn.render(f"DONE ({len(destroy_marks)})", True, (255, 255, 255)),
+                            (btn_done_rect.x + 14, btn_done_rect.y + 8))
+                pygame.draw.rect(screen, (71, 85, 105), btn_cancel_rect, border_radius=6)
+                screen.blit(font_btn.render("CANCEL", True, (255, 255, 255)),
+                            (btn_cancel_rect.x + 24, btn_cancel_rect.y + 8))
+
+                # Confirm popup
+                if destroy_confirm is not None:
+                    n = len(destroy_confirm["marks"])
+                    pw, ph = 380, 150
+                    px = (screen.get_width() - pw) // 2
+                    py = (screen.get_height() - ph) // 2
+                    p_surf = pygame.Surface((pw, ph), pygame.SRCALPHA)
+                    pygame.draw.rect(p_surf, (15, 23, 42, 250), (0, 0, pw, ph), border_radius=10)
+                    pygame.draw.rect(p_surf, (220, 38, 38), (0, 0, pw, ph), width=2, border_radius=10)
+                    screen.blit(p_surf, (px, py))
+                    q_txt = font_card.render(f"Destroy {n} marked object(s)?", True, (255, 255, 255))
+                    screen.blit(q_txt, (px + (pw - q_txt.get_width()) // 2, py + 22))
+                    s_txt = font_hud.render("This cannot be undone.", True, (203, 213, 225))
+                    screen.blit(s_txt, (px + (pw - s_txt.get_width()) // 2, py + 52))
+                    destroy_yes_rect.x = px + pw // 2 - 125
+                    destroy_yes_rect.y = py + ph - 52
+                    destroy_no_rect.x = px + pw // 2 + 15
+                    destroy_no_rect.y = py + ph - 52
+                    pygame.draw.rect(screen, (220, 38, 38), destroy_yes_rect, border_radius=6)
+                    screen.blit(font_btn.render("YES, DESTROY", True, (255, 255, 255)),
+                                (destroy_yes_rect.x + 12, destroy_yes_rect.y + 8))
+                    pygame.draw.rect(screen, (71, 85, 105), destroy_no_rect, border_radius=6)
+                    screen.blit(font_btn.render("NO", True, (255, 255, 255)),
+                                (destroy_no_rect.x + 32, destroy_no_rect.y + 8))
 
             # -------------------------------------------------------------
             # 7.7. OVERLAYS: SELECTED FURNITURE CONTEXT MENU / ACTION POPUP
@@ -2087,6 +2559,30 @@ def main():
                 wp_base_btn_rect.x = -9999
                 wp_ws_btn_rect.x = -9999
                 wp_close_btn_rect.x = -9999
+
+            # -------------------------------------------------------------
+            # 7.76. MINE INFO POPUP (natural resources)
+            # -------------------------------------------------------------
+            if mine_popup is not None and planning_mode == "NONE" and not raport_ui.is_open:
+                from game.world.natural_resources import NaturalResourceManager
+                mine = mine_popup["mine"]
+                ox, oy = mine_popup.get("pos", m_pos)
+                pw, ph = 240, 92
+                px = min(max(8, ox - pw // 2), screen.get_width() - pw - 8)
+                py = min(max(8, oy - ph - 14), screen.get_height() - ph - 8)
+                mine_popup_rect.update(px, py, pw, ph)
+                pygame.draw.rect(screen, (24, 24, 30), mine_popup_rect, border_radius=8)
+                pygame.draw.rect(screen, (80, 80, 95), mine_popup_rect, width=1, border_radius=8)
+
+                kind_label = str(mine.get("kind", "Mine")).replace("_", " ").title()
+                screen.blit(font_badge.render(kind_label, True, (220, 220, 230)), (px + 12, py + 8))
+                tier_name = NaturalResourceManager.mine_tier_name(mine)
+                lo, hi = NaturalResourceManager.mine_yield_range(mine)
+                screen.blit(font_badge.render(f"Tier: {tier_name}", True, (251, 191, 36)), (px + 12, py + 28))
+                screen.blit(font_body.render(f"Yield: {lo}-{hi} per hour", True, (203, 213, 225)), (px + 12, py + 48))
+                screen.blit(font_body.render("Unlimited deposit", True, (148, 163, 184)), (px + 12, py + 68))
+            else:
+                mine_popup_rect.x = -9999
 
             # -------------------------------------------------------------
             # 7.8. OVERLAYS: SELECTED INDIVIDUAL AI PROFILE POPUP (Agent 1)
@@ -2458,26 +2954,27 @@ def main():
             resource_hud.draw(screen, resources, weekday=day_cycle.get_weekday_name(),
                               furniture_manager=furniture_manager)
 
-            # 10.5. Add Item Cheat Button (below Resources HUD)
+            # 10.5. Add Item Cheat Button (below Resources HUD; requires ESC-menu cheat unlock)
             screen_w = screen.get_width()
             res_card_h = (resource_hud.header_height + 7 * resource_hud.row_height
                           + resource_hud.padding)
             btn_add_item_cheat_rect.x = screen_w - PATH_TOGGLE_BTN_WIDTH - resource_hud.margin
             btn_add_item_cheat_rect.y = resource_hud.margin + res_card_h + 10
-            m_pos = pygame.mouse.get_pos()
-            cheat_hover = btn_add_item_cheat_rect.collidepoint(m_pos)
-            cheat_bg = (180, 83, 9) if cheat_hover else (120, 53, 15)
-            pygame.draw.rect(screen, cheat_bg, btn_add_item_cheat_rect, border_radius=6)
-            pygame.draw.rect(screen, (245, 158, 11), btn_add_item_cheat_rect, width=1, border_radius=6)
-            cheat_txt = font_btn.render("Add Item", True, (255, 255, 255))
-            screen.blit(cheat_txt, cheat_txt.get_rect(center=btn_add_item_cheat_rect.center))
-            path_debug_overlay.draw_toggle(screen, btn_add_item_cheat_rect, font_btn)
+            if cheats_active:
+                m_pos = pygame.mouse.get_pos()
+                cheat_hover = btn_add_item_cheat_rect.collidepoint(m_pos)
+                cheat_bg = (180, 83, 9) if cheat_hover else (120, 53, 15)
+                pygame.draw.rect(screen, cheat_bg, btn_add_item_cheat_rect, border_radius=6)
+                pygame.draw.rect(screen, (245, 158, 11), btn_add_item_cheat_rect, width=1, border_radius=6)
+                cheat_txt = font_btn.render("Add Item", True, (255, 255, 255))
+                screen.blit(cheat_txt, cheat_txt.get_rect(center=btn_add_item_cheat_rect.center))
+                path_debug_overlay.draw_toggle(screen, btn_add_item_cheat_rect, font_btn)
 
-            if cheat_notice_timer > 0.0:
-                cheat_notice_timer = max(0.0, cheat_notice_timer - game_dt)
-                not_surf = font_badge.render(cheat_notice, True, (250, 204, 21))
-                not_rect = not_surf.get_rect(right=screen_w - resource_hud.margin, top=btn_add_item_cheat_rect.bottom + 6)
-                screen.blit(not_surf, not_rect)
+                if cheat_notice_timer > 0.0:
+                    cheat_notice_timer = max(0.0, cheat_notice_timer - game_dt)
+                    not_surf = font_badge.render(cheat_notice, True, (250, 204, 21))
+                    not_rect = not_surf.get_rect(right=screen_w - resource_hud.margin, top=btn_add_item_cheat_rect.bottom + 6)
+                    screen.blit(not_surf, not_rect)
 
             # 11. Left Raport Button & Modal
             raport_ui.draw(screen, building_manager, permit_manager, resources, servant_manager, villager_manager, schedule_manager=schedule_manager, day_cycle=day_cycle, furniture_manager=furniture_manager, stockpile_manager=stockpile_manager, production_system=production_system)
@@ -2487,6 +2984,9 @@ def main():
 
             # 11.6. Add Item Cheat Modal Dialog (AGENT 2)
             add_item_modal.draw(screen, permit_manager, stockpile_manager)
+
+            # 11.7. ESC Cheat Menu Modal
+            cheat_modal.draw(screen, cheats_active=cheats_active)
 
             # 12. Speed Control HUD (Bottom Right)
             speed_controller.draw(screen)

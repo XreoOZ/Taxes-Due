@@ -1,7 +1,13 @@
 {
-  "timestamp": "2026-11-21 17:10",
+  "timestamp": "2026-11-22 23:16",
+  "world": {
+    "type": "infinite",
+    "seed": null
+  },
+  "natural_resources": {},
+  "roads": [],
   "day_number": 1,
-  "time_str": "08:00",
+  "time_str": "05:00",
   "population": 3,
   "resources": {
     "Wood": 100,
@@ -10,9 +16,9 @@
   },
   "day_cycle": {
     "day_number": 1,
-    "time_seconds": 400.0,
+    "time_seconds": 250.0,
     "day_length_index": 1,
-    "time_str": "08:00"
+    "time_str": "05:00"
   },
   "player": {
     "x": 0.0,
@@ -176,7 +182,15 @@
       "carrier_id": null,
       "condition": 1.0,
       "inventory": {},
-      "currency": {}
+      "currency": {},
+      "break_check_day": 1,
+      "break_check_hour": 7.637395406982705,
+      "break_checked_today": false,
+      "station_quota_daily": 0,
+      "station_quota_today": 0,
+      "station_quota_day": -1,
+      "plant_tree_enabled": false,
+      "bound_mine_id": null
     }
   ],
   "families": [
@@ -218,6 +232,7 @@
           "carrying_furniture_id": null,
           "watering_timer": 0.0,
           "tilling_timer": 0.0,
+          "station_carry": {},
           "hunger": 100.0,
           "thirst": 100.0,
           "need_toilet": 100.0,
@@ -603,6 +618,58 @@
         "LEISURE",
         "SLEEP",
         "SLEEP"
+      ],
+      "Woodsman": [
+        "SLEEP",
+        "SLEEP",
+        "SLEEP",
+        "SLEEP",
+        "SLEEP",
+        "SLEEP",
+        "LEISURE",
+        "LEISURE",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "LEISURE",
+        "LEISURE",
+        "LEISURE",
+        "LEISURE",
+        "SLEEP",
+        "SLEEP"
+      ],
+      "Miner": [
+        "SLEEP",
+        "SLEEP",
+        "SLEEP",
+        "SLEEP",
+        "SLEEP",
+        "SLEEP",
+        "LEISURE",
+        "LEISURE",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "LEISURE",
+        "LEISURE",
+        "LEISURE",
+        "LEISURE",
+        "SLEEP",
+        "SLEEP"
       ]
     }
   },
@@ -613,7 +680,7 @@
     "active": {}
   },
   "taxation_state": {
-    "church_enabled": true,
+    "church_enabled": false,
     "church_tax": {
       "Gold": 0,
       "Silver": 0,
@@ -621,9 +688,14 @@
     },
     "church_tax_paid_households_today": [],
     "church_tax_last_day": 1,
-    "socage_enabled": true,
+    "socage_enabled": false,
     "socage_percent": 10,
     "socage_report_period": null,
     "socage_report_collected_copper": 0
+  },
+  "immigration": {
+    "postings": {},
+    "pending": [],
+    "counter": 0
   }
 }

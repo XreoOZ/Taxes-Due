@@ -33,6 +33,19 @@ class BuildingManager:
         self._tile_to_building = {}
         self._all_wall_rects_cache = {}
         self._navigation_revision = 0
+        # *** ESTABLISHED — DO NOT REMOVE ***
+        # PERF: flattened door anchor points (center/outside/inside) cached per
+        # navigation revision so is_near_any_door() — called for every living
+        # villager every frame — does not recompute door geometry per building.
+        # Invalidated in rebuild_tile_cache().
+        self._door_anchors_cache = None
+        self._door_anchors_key = None
+        # *** ESTABLISHED — DO NOT REMOVE ***
+        # PERF: (outside, inside) door world-point pairs used by segment
+        # validation in Pathfinder.is_segment_clear; cached per navigation
+        # revision like _door_anchors_cache. Invalidated in rebuild_tile_cache().
+        self._door_transit_pairs = None
+        self._door_transit_key = None
 
     def rebuild_tile_cache(self):
         """Membangun pemetaan spasial O(1) dari petak (gx, gy) ke objek Building (Demolition sites are not solid)"""
@@ -43,6 +56,10 @@ class BuildingManager:
         self._tile_to_building = tb
         self._all_wall_rects_cache.clear()
         self._navigation_revision += 1
+        self._door_anchors_cache = None
+        self._door_anchors_key = None
+        self._door_transit_pairs = None
+        self._door_transit_key = None
 
     @property
     def pathfinder(self):
@@ -108,6 +125,8 @@ class BuildingManager:
 
         site = ConstructionSite(building_type, tiles, door_pos, door_side, rotation=rotation)
         self.construction_sites.append(site)
+        from game.world.natural_resources import get_natural_resources
+        get_natural_resources().occupy_tiles(tiles)
         return True
 
     def update(self, dt):
@@ -201,7 +220,7 @@ class BuildingManager:
                 return demo
         return None
 
-    def cancel_construction(self, site, resources=None, stockpile_manager=None, all_servants=None):
+    def cancel_construction(self, site, resources=None, stockpile_manager=None, all_servants=None, furniture_manager=None):
         """
         Membatalkan proyek pembangunan bangunan (Blueprint atau sedang berjalan).
         - Mengembalikan material yang sudah diantar ke site.
@@ -211,8 +230,19 @@ class BuildingManager:
         if site not in self.construction_sites:
             return False
 
+        # Carpenter-delivered materials go back to the paying household/treasury;
+        # only the non-carpenter portion falls back to the generic pools.
+        carpenter_delivered = {}
+        order = getattr(site, "construction_order", None)
+        if order and order.get("status") != "COMPLETE":
+            from game.systems.carpenter_system import CarpenterSystem
+            carpenter_delivered = CarpenterSystem.refund_order_materials(
+                order, site, furniture_manager, stockpile_manager,
+            )
+
         # 1. Refund material yang sudah diantar ke site
         for res, amt in getattr(site, "delivered_cost", {}).items():
+            amt = max(0, int(amt) - int(carpenter_delivered.get(res, 0)))
             if amt > 0:
                 if resources is not None and res in resources:
                     resources[res] += amt
@@ -233,6 +263,8 @@ class BuildingManager:
 
         # 3. Hapus site dari daftar konstruksi aktif
         self.construction_sites.remove(site)
+        from game.world.natural_resources import get_natural_resources
+        get_natural_resources().release_tiles(getattr(site, "tiles", ()))
 
         # 4. Bebaskan servant/pekerja yang sedang ditugaskan ke site ini
         if all_servants:
@@ -361,6 +393,10 @@ class BuildingManager:
                 or b.is_in_door_threshold(new_x, new_y, tile_size, radius=radius)
                 or b.crosses_doorway(ref_x, ref_y, new_x, new_y, tile_size, radius=radius)
             )
+            # NOTE: was_inside is per-BUILDING, not per-wall. On concave
+            # footprints an entity can be inside the footprint yet stand on the
+            # courtyard side of an interior-facing wall — the per-wall distance
+            # bounds below are what keep that case from teleporting entities.
             was_inside = b.occupies_tile(int(math.floor(ref_x / tile_size)), int(math.floor(ref_y / tile_size)))
 
             for wr, side in b.get_oriented_walls(tile_size):
@@ -389,7 +425,13 @@ class BuildingManager:
                 if side == "top":
                     if wr.left - radius < new_x < wr.right + radius:
                         if was_inside:
-                            if new_y < wr.bottom + radius:
+                            # *** ESTABLISHED — DO NOT REGRESS ***
+                            # The perpendicular bound (wr.top - radius < new_y)
+                            # is REQUIRED: on concave footprints (U/L shapes)
+                            # a courtyard-facing wall sits between two interior
+                            # regions, and an unbounded check teleports entities
+                            # ~2 tiles through the wall (measured 130px flings).
+                            if wr.top - radius < new_y < wr.bottom + radius:
                                 new_y = wr.bottom + radius
                         else:
                             if new_y > wr.top - radius and new_y < wr.bottom:
@@ -397,7 +439,8 @@ class BuildingManager:
                 elif side == "bottom":
                     if wr.left - radius < new_x < wr.right + radius:
                         if was_inside:
-                            if new_y > wr.top - radius:
+                            # *** ESTABLISHED — DO NOT REGRESS *** same as "top"
+                            if wr.top - radius < new_y < wr.bottom + radius:
                                 new_y = wr.top - radius
                         else:
                             if new_y < wr.bottom + radius and new_y > wr.top:
@@ -405,7 +448,8 @@ class BuildingManager:
                 elif side == "left":
                     if wr.top - radius < new_y < wr.bottom + radius:
                         if was_inside:
-                            if new_x < wr.right + radius:
+                            # *** ESTABLISHED — DO NOT REGRESS *** same as "top"
+                            if wr.left - radius < new_x < wr.right + radius:
                                 new_x = wr.right + radius
                         else:
                             if new_x > wr.left - radius and new_x < wr.right:
@@ -413,7 +457,8 @@ class BuildingManager:
                 elif side == "right":
                     if wr.top - radius < new_y < wr.bottom + radius:
                         if was_inside:
-                            if new_x > wr.left - radius:
+                            # *** ESTABLISHED — DO NOT REGRESS *** same as "top"
+                            if wr.left - radius < new_x < wr.right + radius:
                                 new_x = wr.left - radius
                         else:
                             if new_x < wr.right + radius and new_x > wr.left:
@@ -499,19 +544,54 @@ class BuildingManager:
                 return True
         return False
 
+    def _get_door_anchors(self, tile_size):
+        """Cached flat list of (x, y) door anchor points for proximity checks."""
+        key = (tile_size, self._navigation_revision, len(self.buildings))
+        if self._door_anchors_key != key:
+            anchors = []
+            for b in self.buildings:
+                if getattr(b, "door_pos", None):
+                    cx = (b.door_pos[0] + 0.5) * tile_size
+                    cy = (b.door_pos[1] + 0.5) * tile_size
+                    anchors.append((cx, cy))
+                    d_out = b.get_door_world_outside(tile_size)
+                    d_in = b.get_door_world_inside(tile_size)
+                    anchors.append(d_out)
+                    anchors.append(d_in)
+            self._door_anchors_cache = anchors
+            self._door_anchors_key = key
+        return self._door_anchors_cache
+
+    def get_door_transit_pairs(self, tile_size):
+        """Cached (outside, inside) world-point pairs for every door building."""
+        key = (tile_size, self._navigation_revision, len(self.buildings))
+        if self._door_transit_key != key:
+            pairs = [
+                (b.get_door_world_outside(tile_size), b.get_door_world_inside(tile_size))
+                for b in self.buildings
+                if getattr(b, "door_pos", None)
+            ]
+            self._door_transit_pairs = pairs
+            self._door_transit_key = key
+        return self._door_transit_pairs
+
     def is_near_any_door(self, x, y, min_dist=DOORWAY_IDLE_MIN_DISTANCE, tile_size=TILE_SIZE):
         """Mengecek apakah posisi (x, y) terlalu dekat dengan celah pintu atau koridor threshold pintu bangunan mana pun"""
-        for b in self.buildings:
-            if b.door_pos:
-                cx = (b.door_pos[0] + 0.5) * tile_size
-                cy = (b.door_pos[1] + 0.5) * tile_size
-                if math.hypot(x - cx, y - cy) < min_dist:
-                    return True
-                d_out = b.get_door_world_outside(tile_size)
-                d_in = b.get_door_world_inside(tile_size)
-                if math.hypot(x - d_out[0], y - d_out[1]) < (min_dist * 0.75) or \
-                   math.hypot(x - d_in[0], y - d_in[1]) < (min_dist * 0.75):
-                    return True
+        # *** ESTABLISHED — DO NOT REMOVE ***
+        # PERF: door anchors are cached per navigation revision — this runs for
+        # every living villager every frame, so keep it allocation-free.
+        anchors = self._get_door_anchors(tile_size)
+        near_center = min_dist
+        near_side = min_dist * 0.75
+        for i in range(0, len(anchors), 3):
+            cx, cy = anchors[i]
+            if math.hypot(x - cx, y - cy) < near_center:
+                return True
+            d_out = anchors[i + 1]
+            d_in = anchors[i + 2]
+            if math.hypot(x - d_out[0], y - d_out[1]) < near_side or \
+               math.hypot(x - d_in[0], y - d_in[1]) < near_side:
+                return True
         return False
 
     def start_demolition(self, building):
@@ -603,6 +683,8 @@ class BuildingManager:
         if site in self.demolition_sites:
             self.demolition_sites.remove(site)
             self.rebuild_tile_cache()
+        from game.world.natural_resources import get_natural_resources
+        get_natural_resources().release_tiles(getattr(site, "tiles", ()))
 
     def draw(self, surface, camera, tile_size):
         self._ensure_font()

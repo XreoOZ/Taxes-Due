@@ -47,8 +47,14 @@ class Player:
                 dx *= inv_mag
                 dy *= inv_mag
 
+            # Terrain factors: forest floor slows, roads speed up.
+            from game.world.natural_resources import get_natural_resources
+            from game.world.roads import get_roads
+            terrain_mult = (get_natural_resources().speed_factor_at(self.x, self.y, tile_size)
+                            * get_roads().speed_factor_at(self.x, self.y, tile_size))
+
             # Continuous collision micro-stepping: cegah tunneling menembus tembok saat dt besar / speed tinggi
-            total_dist = self.speed * dt
+            total_dist = self.speed * terrain_mult * dt
             max_step_dist = 6.0
             num_steps = max(1, math.ceil(total_dist / max_step_dist))
             sub_dt = dt / num_steps
@@ -56,8 +62,8 @@ class Player:
             from game.world.island import is_land_world
             for _ in range(num_steps):
                 old_step_x, old_step_y = self.x, self.y
-                self.x += dx * self.speed * sub_dt
-                self.y += dy * self.speed * sub_dt
+                self.x += dx * self.speed * terrain_mult * sub_dt
+                self.y += dy * self.speed * terrain_mult * sub_dt
 
                 # Island worlds: don't let the player walk onto water.
                 if not is_land_world(self.x, self.y, tile_size):

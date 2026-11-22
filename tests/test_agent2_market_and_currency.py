@@ -139,24 +139,37 @@ class TestAgent2MarketAndCurrency(unittest.TestCase):
 
         # Initial price is 3 Copper
         self.assertEqual(market.prices.get("Potato"), 3)
+        market.sale_items = ["Potato"]
 
         modal = MarketProfileModal()
         modal.open(market)
 
-        # Set price adjustment rects
-        modal.price_inc_btns["Potato"] = pygame.Rect(10, 10, 20, 20)
-        modal.price_dec_btns["Potato"] = pygame.Rect(30, 10, 20, 20)
+        # Draw once so the typable PRICE field registers its rect
+        surf = pygame.Surface((1280, 800))
+        modal.draw(surf, resources=self.resources, stockpile_manager=self.stockpile_manager)
+        price_key = ("num", "price", "Potato")
+        self.assertIn(price_key, modal.num_fields)
+        field_rect = modal.num_fields[price_key]["rect"]
 
-        # Simulate click [+1]
-        ev_plus = pygame.event.Event(pygame.MOUSEBUTTONDOWN, {"pos": (15, 15), "button": 1})
-        res_plus = modal.handle_event(ev_plus)
-        self.assertEqual(res_plus, "price_increased_Potato")
-        self.assertEqual(market.prices["Potato"], 4)
+        # Click the field to focus, type "7", commit with Enter
+        ev_click = pygame.event.Event(
+            pygame.MOUSEBUTTONDOWN, {"pos": field_rect.center, "button": 1})
+        modal.handle_event(ev_click)
+        self.assertTrue(modal.num_input.active)
+        for ch in "7":
+            modal.handle_event(pygame.event.Event(
+                pygame.KEYDOWN, {"key": pygame.K_7, "unicode": ch}))
+        modal.handle_event(pygame.event.Event(
+            pygame.KEYDOWN, {"key": pygame.K_RETURN, "unicode": ""}))
+        self.assertEqual(market.prices["Potato"], 7)
+        self.assertFalse(market.auto_pricing)
 
-        # Simulate click [-1] twice
-        ev_minus = pygame.event.Event(pygame.MOUSEBUTTONDOWN, {"pos": (35, 15), "button": 1})
-        modal.handle_event(ev_minus)
-        modal.handle_event(ev_minus)
+        # Type "2" and commit -> price drops to 2
+        modal.handle_event(ev_click)
+        modal.handle_event(pygame.event.Event(
+            pygame.KEYDOWN, {"key": pygame.K_2, "unicode": "2"}))
+        modal.handle_event(pygame.event.Event(
+            pygame.KEYDOWN, {"key": pygame.K_RETURN, "unicode": ""}))
         self.assertEqual(market.prices["Potato"], 2)
 
     def test_09_ai_purchases_use_latest_configured_price(self):

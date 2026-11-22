@@ -8,6 +8,7 @@ from game.config import (
     DEFAULT_DAY_LENGTH_INDEX,
     WORLD_TYPE_OPTIONS,
     DEFAULT_WORLD_TYPE_INDEX,
+    STARTER_PRESETS,
     COLOR_MODAL_BG,
     COLOR_MODAL_BORDER,
     COLOR_TEXT_TITLE,
@@ -48,6 +49,14 @@ class MainMenu:
         self.modal_map_start_btn_rect = None
         self.modal_map_cancel_btn_rect = None
 
+        # New Game Starter/Difficulty Modal State (shown after map type)
+        self.show_starter_modal = False
+        self.selected_starter_index = 0
+        self.pending_map_index = DEFAULT_WORLD_TYPE_INDEX
+        self.modal_starter_rects = []
+        self.modal_starter_start_btn_rect = None
+        self.modal_starter_cancel_btn_rect = None
+
         # Font lazily initialized
         self.title_font = None
         self.btn_font = None
@@ -80,6 +89,28 @@ class MainMenu:
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             mouse_pos = event.pos
 
+            # Jika New Game Starter modal sedang aktif
+            if self.show_starter_modal:
+                for i, rect in enumerate(self.modal_starter_rects):
+                    if rect.collidepoint(mouse_pos):
+                        if STARTER_PRESETS[i].get("enabled", True):
+                            self.selected_starter_index = i
+                        return None
+
+                if self.modal_starter_start_btn_rect and self.modal_starter_start_btn_rect.collidepoint(mouse_pos):
+                    preset = STARTER_PRESETS[self.selected_starter_index]
+                    if preset.get("enabled", True):
+                        self.show_starter_modal = False
+                        return f"start_game_{self.pending_day_index}_{self.pending_map_index}_{self.selected_starter_index}"
+                    return None
+
+                if self.modal_starter_cancel_btn_rect and self.modal_starter_cancel_btn_rect.collidepoint(mouse_pos):
+                    self.show_starter_modal = False
+                    self.show_map_modal = True
+                    return None
+
+                return None
+
             # Jika New Game Map Type modal sedang aktif
             if self.show_map_modal:
                 for i, rect in enumerate(self.modal_map_rects):
@@ -89,7 +120,9 @@ class MainMenu:
 
                 if self.modal_map_start_btn_rect and self.modal_map_start_btn_rect.collidepoint(mouse_pos):
                     self.show_map_modal = False
-                    return f"start_game_{self.pending_day_index}_{self.selected_map_index}"
+                    self.pending_map_index = self.selected_map_index
+                    self.show_starter_modal = True
+                    return None
 
                 if self.modal_map_cancel_btn_rect and self.modal_map_cancel_btn_rect.collidepoint(mouse_pos):
                     self.show_map_modal = False
@@ -348,3 +381,94 @@ class MainMenu:
             pygame.draw.rect(surface, (71, 85, 105), self.modal_map_cancel_btn_rect, width=1, border_radius=8)
             cn_txt = self.sub_font.render("✕ Back", True, (203, 213, 225))
             surface.blit(cn_txt, (self.modal_map_cancel_btn_rect.centerx - cn_txt.get_width() // 2, self.modal_map_cancel_btn_rect.centery - cn_txt.get_height() // 2))
+
+        # -----------------------------------------------------------------
+        # MODAL: Pilih Starter / Difficulty untuk Game Baru
+        # -----------------------------------------------------------------
+        if self.show_starter_modal:
+            dim_surf = pygame.Surface((screen_w, screen_h), pygame.SRCALPHA)
+            dim_surf.fill((0, 0, 0, 180))
+            surface.blit(dim_surf, (0, 0))
+
+            mw = 620
+            mh = 380
+            mx = (screen_w - mw) // 2
+            my = (screen_h - mh) // 2
+
+            modal_surf = pygame.Surface((mw, mh), pygame.SRCALPHA)
+            pygame.draw.rect(modal_surf, COLOR_MODAL_BG, (0, 0, mw, mh), border_radius=14)
+            pygame.draw.rect(modal_surf, (56, 189, 248), (0, 0, mw, mh), width=2, border_radius=14)
+            surface.blit(modal_surf, (mx, my))
+
+            t_surf = self.sub_font.render("⚔️ SELECT STARTER", True, COLOR_TEXT_TITLE)
+            surface.blit(t_surf, (mx + 28, my + 24))
+
+            sub_desc = self.body_font.render("Choose how your settlement begins:", True, COLOR_TEXT_MUTED)
+            surface.blit(sub_desc, (mx + 28, my + 54))
+
+            pygame.draw.line(surface, COLOR_MODAL_BORDER, (mx + 24, my + 82), (mx + mw - 24, my + 82))
+
+            self.modal_starter_rects = []
+            card_y = my + 98
+            for i, preset in enumerate(STARTER_PRESETS):
+                c_rect = pygame.Rect(mx + 28, card_y, mw - 56, 96)
+                self.modal_starter_rects.append(c_rect)
+
+                enabled = preset.get("enabled", True)
+                is_sel = enabled and (i == self.selected_starter_index)
+                c_hover = enabled and c_rect.collidepoint(mouse_pos)
+
+                if is_sel:
+                    c_bg = (16, 185, 129, 60)
+                    c_border = (16, 185, 129)
+                    dot_c = (52, 211, 153)
+                elif c_hover:
+                    c_bg = (30, 41, 59)
+                    c_border = (96, 165, 250)
+                    dot_c = (148, 163, 184)
+                else:
+                    c_bg = (20, 29, 45)
+                    c_border = (51, 65, 85)
+                    dot_c = (71, 85, 105)
+
+                pygame.draw.rect(surface, c_bg, c_rect, border_radius=8)
+                pygame.draw.rect(surface, c_border, c_rect, width=2 if is_sel else 1, border_radius=8)
+
+                r_cx = c_rect.x + 22
+                r_cy = c_rect.y + 30
+                pygame.draw.circle(surface, dot_c, (r_cx, r_cy), 8, width=0 if is_sel else 2)
+                if is_sel:
+                    pygame.draw.circle(surface, (255, 255, 255), (r_cx, r_cy), 3)
+
+                title_color = (255, 255, 255) if enabled else (100, 116, 139)
+                surface.blit(self.sub_font.render(preset["label"], True, title_color),
+                             (c_rect.x + 42, c_rect.y + 12))
+                desc_color = (148, 163, 184) if enabled else (71, 85, 105)
+                surface.blit(self.body_font.render(preset.get("desc", ""), True, desc_color),
+                             (c_rect.x + 42, c_rect.y + 40))
+
+                if preset.get("wip"):
+                    wip_txt = self.body_font.render("WIP", True, (245, 158, 11))
+                    surface.blit(wip_txt, (c_rect.right - wip_txt.get_width() - 14, c_rect.y + 12))
+
+                card_y += 108
+
+            btn_w = 190
+            btn_h = 42
+            by = my + mh - 58
+
+            self.modal_starter_start_btn_rect = pygame.Rect(mx + mw - btn_w - 28, by, btn_w, btn_h)
+            b_hover = self.modal_starter_start_btn_rect.collidepoint(mouse_pos)
+            start_enabled = STARTER_PRESETS[self.selected_starter_index].get("enabled", True)
+            pygame.draw.rect(surface, (16, 185, 129) if (b_hover and start_enabled) else ((5, 150, 105) if start_enabled else (51, 65, 85)),
+                             self.modal_starter_start_btn_rect, border_radius=8)
+            st_txt = self.sub_font.render("▶ Begin Settlement", True, (255, 255, 255) if start_enabled else (100, 116, 139))
+            surface.blit(st_txt, (self.modal_starter_start_btn_rect.centerx - st_txt.get_width() // 2, self.modal_starter_start_btn_rect.centery - st_txt.get_height() // 2))
+
+            cancel_w = 110
+            self.modal_starter_cancel_btn_rect = pygame.Rect(mx + 28, by, cancel_w, btn_h)
+            c_hover = self.modal_starter_cancel_btn_rect.collidepoint(mouse_pos)
+            pygame.draw.rect(surface, (51, 65, 85) if c_hover else (30, 41, 59), self.modal_starter_cancel_btn_rect, border_radius=8)
+            pygame.draw.rect(surface, (71, 85, 105), self.modal_starter_cancel_btn_rect, width=1, border_radius=8)
+            cn_txt = self.sub_font.render("✕ Back", True, (203, 213, 225))
+            surface.blit(cn_txt, (self.modal_starter_cancel_btn_rect.centerx - cn_txt.get_width() // 2, self.modal_starter_cancel_btn_rect.centery - cn_txt.get_height() // 2))

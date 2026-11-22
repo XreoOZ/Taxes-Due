@@ -36,6 +36,7 @@ from game.config import (
     AI_DECISION_TICK_INTERVAL_SECONDS,
     WATERING_DURATION_INGAME_HOURS,
     TILLING_DURATION_INGAME_HOURS,
+    FARM_TILE_DISPERSION_ENABLED,
     FARM_TILE_PROXIMITY_PENALTY_ADJACENT,
     FARM_TILE_PROXIMITY_PENALTY_NEAR,
     FARM_TILE_ARRIVAL_DIST,
@@ -79,6 +80,7 @@ from game.config import (
     COLOR_STATUS_DECEASED,
     COLOR_CORPSE_BODY,
     COLOR_CORPSE_OUTLINE,
+    RESOURCE_COLORS,
     CORPSE_CARRY_SPEED_RATIO,
     FREE_TIME_SCHEDULE_ACTIVITIES,
     is_food_item,
@@ -200,12 +202,19 @@ class Villager:
         self.well_draw_timer = 0.0
         self.current_work_tile = None
         self.active_tool = None  # None | "Hoe" | "Sickle" | "Watering_Can"
+        self._activity_total = 0.0  # total seconds for the current timed activity (progress bar)
         self.inventory = {}  # {item_name: count}
         self.assigned_bed_id = None
         self.carrying_furniture = None
         self.carrying_res = None
         self.carrying_amount = 0
         self.target_loose_stack = None
+
+        # Production station jobs (Woodsman / Miner)
+        self.station_work_timer = 0.0
+        self.station_target_tile = None
+        self.station_phase = None       # "cut" | "plant" for Woodsman
+        self.station_carry = {}         # leftover workstation stock en route to chest
 
         # Needs & Bodily Hygiene System (Agent 1)
         self.hunger = float(AI_NEED_MAX)
@@ -442,6 +451,21 @@ class Villager:
             return "Fetching allocated goods for market stall"
         elif task == "HAULING_STALL_GOODS_DELIVER":
             return "Hauling goods to market stall"
+        elif task == "STATION_WORK":
+            if self.job == "Woodsman":
+                phase = getattr(self, "station_phase", None)
+                return "Replanting a sapling" if phase == "plant" else "Felling trees with Felling Axe"
+            if self.job == "Miner":
+                return "Mining ore with Pickaxe"
+            return "Working at production station"
+        elif task == "STATION_DEPOSIT_STATION":
+            return "Depositing output into the workstation"
+        elif task == "STATION_DEPOSIT_CHEST":
+            return "Depositing output into the household chest"
+        elif task == "STATION_LEFTOVER_FETCH":
+            return "Fetching leftover workstation stock"
+        elif task == "STATION_LEFTOVER_DELIVER":
+            return "Delivering leftover stock to the household chest"
         elif task == "SLEEPING":
             if getattr(self, "assigned_bed_id", None):
                 return "Sleeping in Bed"
@@ -630,6 +654,17 @@ class Villager:
         # Release any path reservation
         reg = GlobalPathRegistry.get_instance()
         reg.release_reservation(self.id)
+
+        # Release production-station claims/state (forest tree claims etc.)
+        try:
+            from game.systems.station_jobs import StationJobSystem
+            carry = getattr(self, "station_carry", None) or {}
+            for item, amt in carry.items():
+                if amt > 0:
+                    self.inventory[item] = self.inventory.get(item, 0) + amt
+            StationJobSystem.reset_worker_state(self)
+        except Exception:
+            pass
 
         # Release work tile reservation if holding one
         self.current_work_tile = None
@@ -920,6 +955,19 @@ class Villager:
         if not candidate_tiles:
             return None
 
+        # *** ESTABLISHED — USER-CONFIRMED, DO NOT REGRESS ***
+        # Farmers sweep farm tiles nearest-first (end-to-end, no random
+        # skipping) — user verified this is the desired behavior.
+        # FARM_TILE_DISPERSION_ENABLED=False in config; the dispersed-selection
+        # code below is kept ONLY for optional re-enable and must not become
+        # the default again without user approval.
+        if not FARM_TILE_DISPERSION_ENABLED:
+            def nearest_score(t):
+                gx, gy = t
+                return (math.hypot((gx + 0.5) * TILE_SIZE - self.x, (gy + 0.5) * TILE_SIZE - self.y), gx, gy)
+            candidate_tiles.sort(key=nearest_score)
+            return candidate_tiles[0]
+
         wid_str = str(self.id)
         other_positions = set()
         for t, res in farm_permit.task_reservations.items():
@@ -989,6 +1037,11 @@ class Villager:
         job_cfg = DEDICATED_JOBS.get(new_job, {})
         self.title = job_cfg.get("title", new_job)
         self.needs_tool_reassessment = True
+        try:
+            from game.systems.station_jobs import StationJobSystem
+            StationJobSystem.reset_worker_state(self)
+        except Exception:
+            pass
 
         # Deposit irrelevant tools and collect missing tools if storage is accessible
         fm = getattr(self, "furniture_manager", None)
@@ -1447,13 +1500,25 @@ class Villager:
                 # Only statuses where the Carpenter can act count as work.
                 # PAYMENT_REQUESTED / PAYMENT_TRAVELING / LANDLORD_* mean he is
                 # just waiting on someone else, so he should do needs instead.
-                actionable = ("AWAITING_PAYMENT", "PAID", "BUILDING", "AWAITING_MATERIAL")
+                # AWAITING_MATERIAL is the same kind of wait: it only counts as
+                # work while the Carpenter can still progress it (materials on
+                # hand, or a market that can supply them for the payer). When
+                # the order is genuinely stuck waiting on materials, the
+                # carpenter gets normal free time — needs and leisure — instead
+                # of standing idle forever; he resumes the order automatically
+                # once materials become available.
+                actionable = ("AWAITING_PAYMENT", "PAID", "BUILDING")
                 has_order = any(
                     isinstance(getattr(s, "construction_order", None), dict)
                     and s.construction_order.get("status") in actionable
                     and str(s.construction_order.get("carpenter_id") or "") in ("", str(self.id))
                     for s in order_subjects
                 )
+                if not has_order:
+                    has_order = CarpenterSystem.material_order_progressable(
+                        self, order_subjects, furniture_manager, stockpile_manager,
+                        building_manager, villager_manager,
+                    )
                 _, totals = CarpenterSystem._materials_in_storage(self, furniture_manager, stockpile_manager)
                 targets = job_cfg.get("material_stock_target", {})
                 needs_stock = any(
@@ -1476,6 +1541,10 @@ class Villager:
                     isinstance(round_state, dict)
                     or TaxationSystem.next_collection_day(day_number, villager_manager) == day_number
                 )
+            elif self.job in ("Woodsman", "Miner") and furniture_manager:
+                from game.systems.station_jobs import StationJobSystem
+                no_work_available = not StationJobSystem.has_work(
+                    self, self.job, furniture_manager, day_cycle)
             else:
                 # Generic fallback for every other job (Priest, WIP jobs, and any
                 # future job): counts as having work only while actually executing
@@ -2067,6 +2136,7 @@ class Villager:
                 arrived = self._move_towards(approach_pt[0], approach_pt[1], dt, arrival_dist=24, all_entities=all_entities, player=player, building_manager=building_manager, furniture_manager=furniture_manager, exclusive_target=False, interaction_target=well)
                 if arrived:
                     self.well_draw_timer += dt
+                    self._activity_total = 0.5
                     if self.well_draw_timer >= 0.5:
                         self.thirst = min(AI_NEED_MAX, self.thirst + AI_NEED_WATER_RESTORE)
                         self.thirst_death_timer = None
@@ -2135,6 +2205,17 @@ class Villager:
         is_prayer = ChurchSystem.is_prayer_time(cur_hour, schedule_manager)
 
         if is_prayer:
+            from game.systems.happiness_system import HappinessSystem
+            # *** ESTABLISHED — USER-CONFIRMED, DO NOT REGRESS ***
+            # Praying without a physical church BUILDING (a bare church
+            # permit does not count) applies the "no_church_building"
+            # unhappiness (-30 for 3 days, refreshed once per prayer day via
+            # record_daily_event). has_church_building is cached — see the
+            # FPS warning in church_system.py; do not call it per-tile.
+            if not ChurchSystem.has_church_building(permit_manager, building_manager):
+                HappinessSystem.record_daily_event(
+                    self, "no_church_building", getattr(day_cycle, "day_number", 1)
+                )
             if self == priest_worker:
                 # 1. Travel to Church
                 # 2. Receive Church Tax from household representatives
@@ -2557,6 +2638,7 @@ class Villager:
                     arrived = self._move_towards(approach_pt[0], approach_pt[1], dt, arrival_dist=24, all_entities=all_entities, player=player, building_manager=building_manager, furniture_manager=furniture_manager, exclusive_target=False, interaction_target=well)
                     if arrived:
                         self.well_draw_timer += dt
+                        self._activity_total = 1.0
                         if self.well_draw_timer >= 1.0:
                             draw_amt = getattr(self, "water_collect_amount", 1) or 1
                             self.inventory["Water"] = self.inventory.get("Water", 0) + draw_amt
@@ -2984,6 +3066,7 @@ class Villager:
                                 if arrived:
                                     self.tilling_timer += dt
                                     tilling_target_time = one_in_game_hour * TILLING_DURATION_INGAME_HOURS
+                                    self._activity_total = tilling_target_time
                                     if self.tilling_timer >= tilling_target_time:
                                         cur_day = (day_cycle.day_number + (day_cycle.current_hour / 24.0)) if day_cycle else None
                                         assigned_farm.till_and_sow_tile(target_t[0], target_t[1], current_day=cur_day)
@@ -3057,6 +3140,7 @@ class Villager:
                                         self.is_waiting_for_path = False
                                         GlobalPathRegistry.get_instance().release_reservation(self.id)
                                         self.well_draw_timer += dt
+                                        self._activity_total = 0.6
                                         if self.well_draw_timer >= 0.6:
                                             self.has_water = True
                                             self.water_day = current_day
@@ -3094,6 +3178,7 @@ class Villager:
                                 arrived = self._move_towards(tx, ty, dt, arrival_dist=FARM_TILE_ARRIVAL_DIST, all_entities=all_entities, player=player, building_manager=building_manager, furniture_manager=furniture_manager, exclusive_target=True)
                                 if arrived:
                                     watering_target_time = one_in_game_hour * WATERING_DURATION_INGAME_HOURS
+                                    self._activity_total = watering_target_time
                                     self.watering_timer += dt
                                     if self.watering_timer >= watering_target_time:
                                         assigned_farm.water_tile(target_t[0], target_t[1])
@@ -3110,6 +3195,16 @@ class Villager:
                         self.current_work_tile = None
                         GlobalPathRegistry.get_instance().release_reservation(self.id)
                     self.active_tool = None
+
+            # Pekerjaan spesifik: Woodsman & Miner (production stations)
+            if self.job in ("Woodsman", "Miner"):
+                from game.systems.station_jobs import StationJobSystem
+                if StationJobSystem.update(
+                    self, dt, self.job, building_manager, furniture_manager,
+                    villager_manager, all_entities, player, day_cycle,
+                    stockpile_manager=stockpile_manager, permit_manager=permit_manager,
+                ):
+                    return
 
             # Pekerjaan spesifik: Penggali Kubur (Gravedigger) - AGENT 3
             if self.job == "Gravedigger":
@@ -3200,6 +3295,7 @@ class Villager:
                             return
                         self.gravedigger_materials_committed = True
                     one_hour = (day_cycle.day_length_seconds / 24.0) if day_cycle else 50.0
+                    self._activity_total = one_hour
                     self.gravedigger_timer += dt
                     grave_tile = getattr(self, "gravedigger_target_grave_tile", None)
                     if grave_tile and cemetery_p and hasattr(cemetery_p, "tile_graves"):
@@ -3216,6 +3312,7 @@ class Villager:
                 if self.task == "BURYING_GRAVE":
                     self.active_tool = "Hoe"
                     half_hour = ((day_cycle.day_length_seconds / 24.0) if day_cycle else 50.0) * 0.5
+                    self._activity_total = half_hour
                     self.gravedigger_timer += dt
                     grave_tile = getattr(self, "gravedigger_target_grave_tile", None)
                     if grave_tile and cemetery_p and hasattr(cemetery_p, "tile_graves"):
@@ -3389,6 +3486,20 @@ class Villager:
                       "BUYING_FOOD_TRAVEL_TO_MARKET", "BUYING_FOOD_HAULING_HOME", "COLLECTING_HOUSEHOLD_WATER",
                       "HAULING_HOUSEHOLD_WATER", "DEPOSITING_UNUSED_ITEMS")
         if self.task not in need_tasks:
+            # Station workers may clear leftover workstation stock during free
+            # time — strictly after needs are satisfied (checked inside).
+            if (self.job in ("Woodsman", "Miner") and furniture_manager
+                    and is_free_time_schedule):
+                from game.systems.station_jobs import StationJobSystem
+                if StationJobSystem.haul_leftovers_if_idle(
+                    self, dt, self.job, furniture_manager,
+                    all_entities, player, building_manager,
+                    stockpile_manager=stockpile_manager,
+                    permit_manager=permit_manager,
+                    villager_manager=villager_manager,
+                    day_cycle=day_cycle,
+                ):
+                    return
             self.task = "LEISURE" if sched_activity in ("LEISURE", "ANY") else "IDLE"
         self.active_tool = None
 
@@ -3688,6 +3799,13 @@ class Villager:
         self.is_waiting_for_path = False
 
         speed_mult = CORPSE_CARRY_SPEED_RATIO if getattr(self, "carrying_corpse_id", None) else 1.0
+        try:
+            from game.world.natural_resources import get_natural_resources
+            from game.world.roads import get_roads
+            speed_mult *= (get_natural_resources().speed_factor_at(self.x, self.y, TILE_SIZE)
+                           * get_roads().speed_factor_at(self.x, self.y, TILE_SIZE))
+        except Exception:
+            pass
         cur_speed = self.speed * speed_mult
         move_dist = min(cur_speed * dt, dist_to_wp)
         dir_x = wp_dx / dist_to_wp
@@ -3789,6 +3907,34 @@ class Villager:
 
         return False
 
+    # *** ESTABLISHED — DO NOT REGRESS ***
+    # Progress-bar contract: every timed activity tick site must set
+    # self._activity_total = <total seconds> alongside its timer, and
+    # activity_progress() maps task -> timer. New timed tasks need BOTH a
+    # timer assignment here AND an _activity_total write at the tick site,
+    # or the bar silently never shows.
+    def activity_progress(self):
+        """0..1 completion of the current timed activity, or None when idle/moving."""
+        if getattr(self, "is_moving", False):
+            return None
+        total = getattr(self, "_activity_total", 0.0)
+        if total <= 0:
+            return None
+        task = getattr(self, "task", "")
+        if task == "TILLING":
+            timer = getattr(self, "tilling_timer", 0.0)
+        elif task == "WATERING":
+            timer = getattr(self, "watering_timer", 0.0)
+        elif task in ("DIGGING_GRAVE", "BURYING_GRAVE"):
+            timer = getattr(self, "gravedigger_timer", 0.0)
+        elif task == "STATION_WORK":
+            timer = getattr(self, "station_work_timer", 0.0)
+        elif task in ("FETCHING_WATER", "COLLECTING_HOUSEHOLD_WATER", "SEEKING_WATER"):
+            timer = getattr(self, "well_draw_timer", 0.0)
+        else:
+            return None
+        return min(1.0, max(0.0, timer / total))
+
     def draw(self, surface, camera, font_bubble, render_position=None):
         render_x, render_y = render_position or (self.x, self.y)
         sx, sy = camera.world_to_screen(render_x, render_y)
@@ -3859,6 +4005,16 @@ class Villager:
         eye_r = max(2, int(4 * camera.zoom))
         pygame.draw.circle(surface, (255, 255, 255), (eye_x, eye_y), eye_r)
         pygame.draw.circle(surface, COLOR_VILLAGER_OUTLINE, (eye_x, eye_y), eye_r, 1)
+
+        # 3b. Carrying visual (goods above the head while hauling)
+        if getattr(self, "carrying_res", None) and getattr(self, "carrying_amount", 0) > 0:
+            box_w = max(8, int(14 * camera.zoom))
+            box_h = max(6, int(10 * camera.zoom))
+            carry_x = sx + int(math.cos(self.facing_angle) * (r * 0.8)) - box_w // 2
+            carry_y = char_y - r - box_h - 2
+            col = RESOURCE_COLORS.get(self.carrying_res, (200, 200, 200))
+            pygame.draw.rect(surface, col, (carry_x, carry_y, box_w, box_h), border_radius=2)
+            pygame.draw.rect(surface, (0, 0, 0), (carry_x, carry_y, box_w, box_h), width=1, border_radius=2)
 
         # 4. Alat Kerja yang Sedang Dipegang (Cangkul / Siraman / Sickle / Hammer)
         hand_dist = r * 0.85
@@ -4024,6 +4180,54 @@ class Villager:
                 pygame.draw.line(surface, (180, 120, 70), (hx, hy), (end_x, end_y), max(2, int(3 * camera.zoom)))
                 pygame.draw.rect(surface, (148, 163, 184), (end_x - head_w // 2, end_y - head_h // 2, head_w, head_h))
 
+        elif active_t in ("Felling_Axe", "Spade", "Pickaxe", "Sledgehammer"):
+            # Station job tools (woodsman/miner): haft + steel head, swing while working.
+            is_station_work = (self.task == "STATION_WORK" and not getattr(self, "is_moving", False))
+            phase = time.time() * 7.0
+            swing = math.sin(phase) * 0.55 if is_station_work else 0.0
+            tool_angle = self.facing_angle - 0.55 + swing
+            tool_len = max(9, int(15 * camera.zoom))
+            tool_end = (hx + int(math.cos(tool_angle) * tool_len),
+                        hy + int(math.sin(tool_angle) * tool_len))
+            shaft_w = max(2, int(3 * camera.zoom))
+            pygame.draw.line(surface, (125, 82, 44), (hx, hy), tool_end, shaft_w)
+
+            z = camera.zoom
+            ux, uy = math.cos(tool_angle + math.pi / 2.0), math.sin(tool_angle + math.pi / 2.0)
+            dx, dy = math.cos(tool_angle), math.sin(tool_angle)
+            steel = (203, 213, 225)
+            steel_dk = (100, 116, 139)
+
+            def _hp(across, along):
+                return (int(tool_end[0] + ux * across * z + dx * along * z),
+                        int(tool_end[1] + uy * across * z + dy * along * z))
+
+            if active_t == "Felling_Axe":
+                # Head bar across the haft + wedge blade on the forward end
+                pygame.draw.line(surface, steel_dk, _hp(-5, 0), _hp(5, 0), shaft_w)
+                pygame.draw.polygon(surface, steel, [_hp(3, -2), _hp(3, 2), _hp(8, 0)])
+                pygame.draw.line(surface, (226, 232, 240), _hp(3, -1), _hp(6, 0), 1)
+            elif active_t == "Pickaxe":
+                # Double-pointed head bar with centre collar
+                pygame.draw.line(surface, steel_dk, _hp(-6, 0), _hp(6, 0), shaft_w)
+                pygame.draw.line(surface, steel, _hp(-5, 0), _hp(5, 0), max(1, int(2 * camera.zoom)))
+                pygame.draw.circle(surface, (139, 90, 43), tool_end, max(1, int(2 * camera.zoom)))
+            elif active_t == "Sledgehammer":
+                # Wide double-face head
+                pygame.draw.line(surface, steel_dk, _hp(-6, 0), _hp(6, 0), max(3, int(5 * camera.zoom)))
+                pygame.draw.line(surface, (148, 163, 184), _hp(-5, 0), _hp(-1, 0), 1)
+                pygame.draw.line(surface, (148, 163, 184), _hp(5, 0), _hp(1, 0), 1)
+            else:  # Spade — flat blade pointing forward along the haft
+                pygame.draw.polygon(surface, steel, [_hp(-1, -3), _hp(-1, 3), _hp(7, 0)])
+                pygame.draw.line(surface, steel_dk, _hp(-1, -3), _hp(7, 0), 1)
+                pygame.draw.line(surface, (226, 232, 240), _hp(1, -2), _hp(5, 0), 1)
+
+            if is_station_work and abs(swing) > 0.45:
+                chip_x = tool_end[0] + int(dx * 4 * camera.zoom)
+                chip_y = tool_end[1] + int(dy * 4 * camera.zoom)
+                chip_col = (160, 105, 55) if active_t == "Felling_Axe" else (217, 149, 44)
+                pygame.draw.circle(surface, chip_col, (chip_x, chip_y), max(1, int(2 * camera.zoom)))
+
         # 5. Karung Hasil Panen Kentang jika sedang mengangkut (Hauling Crops)
         if getattr(self, "carrying_crop", 0) > 0:
             sack_dist = r * 0.95
@@ -4048,6 +4252,18 @@ class Villager:
                 pygame.draw.rect(surface, (59, 130, 246), (cx - fw // 2 + 2, cy - fh // 2 + 3, fw - 4, fh - 5))
             else:
                 pygame.draw.rect(surface, (234, 179, 8), (cx - 2, cy - 2, 4, 4))
+
+        # 5b. Activity progress bar (shows remaining timed work above the head)
+        prog = self.activity_progress()
+        if prog is not None:
+            bar_w = max(18, int(30 * camera.zoom))
+            bar_h = max(3, int(4 * camera.zoom))
+            bar_x = sx - bar_w // 2
+            bar_y = char_y - r - bar_h - 4
+            pygame.draw.rect(surface, (15, 23, 42, 200), (bar_x - 1, bar_y - 1, bar_w + 2, bar_h + 2), border_radius=2)
+            fill_w = int(bar_w * prog)
+            if fill_w > 0:
+                pygame.draw.rect(surface, (250, 204, 21), (bar_x, bar_y, fill_w, bar_h), border_radius=2)
 
         # 6. Speech Bubble
         if self.speech_text and font_bubble:

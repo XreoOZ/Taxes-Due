@@ -33,6 +33,12 @@ class Furniture:
         self.break_check_day = 1  # Day number for which break_check_hour is valid
         self.break_check_hour = random.uniform(0, 24)  # Random hour during day to check for break
         self.break_checked_today = False  # Prevent repeated rolls within the check window
+        # Production workstation state (Woodsman Lodge / Miner Workstation)
+        self.station_quota_daily = 0      # 0 = unlimited daily output quota
+        self.station_quota_today = 0      # output deposited today (resets daily)
+        self.station_quota_day = -1       # day_number the quota counter belongs to
+        self.plant_tree_enabled = False   # Woodsman Lodge "Plant a Tree" toggle
+        self.bound_mine_id = None         # Miner Workstation -> generated mine
 
     @property
     def name(self):
@@ -107,8 +113,27 @@ class Furniture:
     def total_stored(self):
         return sum(self.inventory.values())
 
+    def station_accepted_items(self):
+        """Items a production workstation inventory accepts, or None if unrestricted."""
+        cfg = self.type_cfg
+        if cfg.get("station_inventory_items"):
+            return set(cfg["station_inventory_items"])
+        if cfg.get("station_inventory_mine_bound"):
+            from game.world.natural_resources import (
+                NaturalResourceManager, get_natural_resources,
+            )
+            nr = get_natural_resources()
+            mine = next((m for m in nr.mines if m.get("id") == self.bound_mine_id), None)
+            if mine is None:
+                return set()
+            return {NaturalResourceManager.mine_output_item(mine)}
+        return None
+
     def store_item(self, item_name, amount):
         if amount <= 0:
+            return 0
+        accepted = self.station_accepted_items()
+        if accepted is not None and item_name not in accepted:
             return 0
         if self.furniture_type == "lord_treasury_chest":
             from game.systems.currency import canonical_denomination
@@ -229,7 +254,9 @@ class Furniture:
 
     def destroy(self, stockpile_manager=None, resources=None):
         """Menghancurkan furniture: keluarkan seluruh isi chest ke tanah dan kembalikan sebagian kayu"""
-        if self.furniture_type in ("household_storage", "lord_treasury_chest") and stockpile_manager:
+        dump_types = ("household_storage", "lord_treasury_chest",
+                      "woodsman_lodge", "miner_workstation")
+        if self.furniture_type in dump_types and stockpile_manager:
             for item_name, count in list(self.inventory.items()):
                 if count > 0:
                     owner_type = "villager" if self.family_id and self.furniture_type != "lord_treasury_chest" else "landlord"
@@ -477,6 +504,76 @@ class Furniture:
             pygame.draw.line(surface, trim, (cross_x - max(2, int(scaled_t * 0.06)), cross_y + max(2, int(scaled_t * 0.04))),
                              (cross_x + max(2, int(scaled_t * 0.06)), cross_y + max(2, int(scaled_t * 0.04))), max(1, int(camera.zoom * 2)))
 
+        elif self.furniture_type == "notice_board":
+            # Public signboard: two posts + wide plank with pinned notices.
+            frame = self.type_cfg.get("color_frame", (101, 67, 33))
+            panel = self.type_cfg.get("color_panel", (146, 96, 48))
+            paper = self.type_cfg.get("color_paper", (241, 245, 249))
+            pin = self.type_cfg.get("color_pin", (220, 38, 38))
+            post_w = max(2, int(scaled_t * 0.09))
+            post_h = int(scaled_h * 0.92)
+            post_y = sy + scaled_h - post_h
+            pygame.draw.rect(surface, frame, (sx + scaled_w * 0.14, post_y, post_w, post_h), border_radius=1)
+            pygame.draw.rect(surface, frame, (sx + scaled_w * 0.86 - post_w, post_y, post_w, post_h), border_radius=1)
+            board_rect = pygame.Rect(sx + scaled_w * 0.06, sy + scaled_h * 0.12,
+                                     scaled_w * 0.88, scaled_h * 0.66)
+            pygame.draw.rect(surface, (0, 0, 0, 70), board_rect.move(1, 2), border_radius=4)
+            pygame.draw.rect(surface, frame, board_rect, border_radius=4)
+            pygame.draw.rect(surface, panel, board_rect.inflate(-max(2, int(scaled_t * 0.08)),
+                                                                -max(2, int(scaled_t * 0.08))), border_radius=3)
+            # Pinned paper notices.
+            note_cols = [(paper, pin), ((230, 230, 230), (30, 41, 59)), (paper, (34, 197, 94))]
+            n_notes = 3
+            nw = max(4, int(board_rect.width * 0.2))
+            nh = max(4, int(board_rect.height * 0.55))
+            for i, (nc, pc) in enumerate(note_cols[:n_notes]):
+                nx = board_rect.centerx - (n_notes * (nw + 3)) / 2 + i * (nw + 3)
+                ny = board_rect.centery - nh / 2 + (i % 2) * 2
+                pygame.draw.rect(surface, nc, (nx, ny, nw, nh), border_radius=1)
+                pygame.draw.circle(surface, pc, (nx + nw / 2, ny + 2), max(1, int(scaled_t * 0.04)))
+
+        elif self.furniture_type in ("woodsman_lodge", "miner_workstation"):
+            # Production station: footprint-sized work pad with stock badge.
+            inset = max(3, int(scaled_t * 0.07))
+            pad = pygame.Rect(sx + inset, sy + inset,
+                              max(4, scaled_w - inset * 2), max(4, scaled_h - inset * 2))
+            frame_col = self.type_cfg.get("color_frame", (100, 116, 139))
+            panel_col = self.type_cfg.get("color_roof", (51, 65, 85))
+            pygame.draw.rect(surface, (0, 0, 0, 70), pad.move(2, 3), border_radius=6)
+            pygame.draw.rect(surface, frame_col, pad, border_radius=6)
+            pygame.draw.rect(surface, panel_col,
+                             pad.inflate(-max(4, int(scaled_t * 0.18)),
+                                         -max(4, int(scaled_t * 0.18))), border_radius=4)
+            pygame.draw.rect(surface, frame_col, pad, width=2, border_radius=6)
+
+            # Center emblem: tree for the lodge, pick head for the mine station.
+            cx, cy = pad.center
+            r = max(6, int(scaled_t * 0.22))
+            if self.furniture_type == "woodsman_lodge":
+                pygame.draw.rect(surface, (101, 67, 33),
+                                 (cx - max(1, r // 10), cy - r // 6,
+                                  max(2, r // 5), r), border_radius=1)
+                pygame.draw.circle(surface, (34, 197, 94), (cx, cy - r // 3), r)
+                pygame.draw.circle(surface, (21, 128, 61), (cx - r // 4, cy - r // 2), max(2, r // 3))
+            else:
+                pygame.draw.circle(surface, self.type_cfg.get("color_rock", (100, 116, 139)),
+                                   (cx, cy), r)
+                pygame.draw.circle(surface, (15, 23, 42), (cx, cy), r, max(1, int(camera.zoom * 2)))
+                pick = self.font.render("P", True, (255, 255, 255))
+                surface.blit(pick, (cx - pick.get_width() // 2, cy - pick.get_height() // 2))
+
+            # Stock badge (unlimited, filtered workstation inventory).
+            if self.total_stored > 0:
+                stock_parts = [f"{amt}x {item}" for item, amt in sorted(self.inventory.items()) if amt > 0]
+                inv_str = ", ".join(stock_parts) if stock_parts else f"x{self.total_stored}"
+                txt = self.font.render(inv_str, True, (255, 255, 255))
+                bw = txt.get_width() + 8
+                bh = txt.get_height() + 4
+                bx = sx + (scaled_w - bw) // 2
+                by = sy - bh - 2
+                pygame.draw.rect(surface, (15, 23, 42, 220), (bx, by, bw, bh), border_radius=4)
+                surface.blit(txt, (bx + 4, by + 2))
+
         # -------------------------------------------------------------
         # DROPPED ITEM INDICATOR (Bila kehilangan Lot)
         # -------------------------------------------------------------
@@ -497,6 +594,14 @@ class FurnitureManager:
         self._dirty = True
         self._navigation_revision = 0
         self._cached_occupied = set()
+        # *** ESTABLISHED — DO NOT REMOVE ***
+        # PERF: precomputed sorted-tile signature of _cached_occupied so the
+        # pathfinder can key its route cache in O(1) instead of re-sorting every
+        # occupied tile on every find_path call (hundreds of tiles x every AI
+        # repath = measurable frame cost at village scale — part of the
+        # user-verified prayer-exit FPS fix). Recomputed automatically whenever
+        # invalidate_cache() marks the occupancy dirty.
+        self._occupied_signature = ()
         self._cached_rects_by_tile_size = {}
         self._storage_cache = {}
         self._bed_cache = {}
@@ -592,6 +697,8 @@ class FurnitureManager:
                     for dx in range(width):
                         for dy in range(height):
                             self._cached_occupied.add((int(f.grid_x) + dx, int(f.grid_y) + dy))
+            # Sorted once per furniture change; reused by every path cache key.
+            self._occupied_signature = tuple(sorted(self._cached_occupied))
             self._dirty = False
 
         if not exclude_furniture_id and not exclude_tile:
@@ -656,6 +763,15 @@ class FurnitureManager:
             fw, fh = fh, fw
         target_tiles = {(int(gx) + dx, int(gy) + dy) for dx in range(fw) for dy in range(fh)}
         bm_for_placement = building_manager or self.building_manager
+        if bm_for_placement:
+            # *** ESTABLISHED — DO NOT REGRESS ***
+            # Furniture on a door tile seals the only entrance -> AI pathing
+            # deadlocks inside the building (teleport loops). The permit check
+            # below alone does NOT cover this because permits can overlap doors.
+            for tx, ty in target_tiles:
+                b_at = bm_for_placement.get_building_at(tx, ty)
+                if b_at and getattr(b_at, "door_pos", None) == (tx, ty):
+                    return None, f"{cfg.get('name', 'Furniture')} cannot be placed on a doorway."
         if cfg.get("placement_anywhere") and bm_for_placement and any(
             bm_for_placement.get_building_at(tx, ty) for tx, ty in target_tiles
         ):
@@ -723,6 +839,12 @@ class FurnitureManager:
         self.counter += 1
         f = Furniture(f_id, f_type, gx, gy, permit_id=p.id if p else None,
                       family_id=family_id, rotation=rotation)
+        if f_type == "miner_workstation":
+            from game.world.natural_resources import get_natural_resources
+            mine = get_natural_resources().mine_for_footprint(target_tiles)
+            if mine is None:
+                return None, "Miner Workstation must be placed exactly on top of a generated mine."
+            f.bound_mine_id = mine["id"]
         if cfg.get("instant_place"):
             f.construction_order = None
         else:
@@ -730,6 +852,8 @@ class FurnitureManager:
             f.construction_order = CarpenterSystem.create_order(f, bm, vm)
         self.furnitures.append(f)
         self.invalidate_cache()
+        from game.world.natural_resources import get_natural_resources
+        get_natural_resources().occupy_tiles(target_tiles)
 
         owner_txt = f" (Owned by Family {family_id})" if family_id else ""
         item_name = cfg.get("name", "Furniture")
@@ -785,12 +909,18 @@ class FurnitureManager:
             storage_id = getattr(town_chest, "id", None) if town_chest is not item else None
         if storage_id is None:
             return False, "No storage owned by this household is available."
+        # Blueprint/uninstalled items still occupy their tiles; dropped ground
+        # items do not — only release suppression the furniture actually held.
+        was_placed = not item.is_dropped
         item.stored_in_id = storage_id
         item.permit_id = None
         item.is_dropped = False
         item.designated_target = None
         item.carrier_id = None
         self.invalidate_cache()
+        if was_placed:
+            from game.world.natural_resources import get_natural_resources
+            get_natural_resources().release_tiles(self._furniture_tiles(item))
         return True, f"{item.name} stored."
 
     def update_permit_ownership(self, permit_id, family_id):
@@ -806,6 +936,7 @@ class FurnitureManager:
 
     def uninstall_furniture(self, furniture_id, stockpile_manager=None):
         furniture = self.get_furniture_by_id(furniture_id)
+        was_placed = furniture is not None and not furniture.is_dropped and furniture.stored_in_id is None
         if not furniture or not furniture.drop_to_ground(stockpile_manager):
             return False
         villager_manager = getattr(self, "villager_manager", None)
@@ -816,6 +947,9 @@ class FurnitureManager:
                 worker.set_job("Unassigned")
         furniture.assigned_workers = []
         self.invalidate_cache()
+        if was_placed:
+            from game.world.natural_resources import get_natural_resources
+            get_natural_resources().release_tiles(self._furniture_tiles(furniture))
         return True
 
     def get_lord_treasury_chest(self):
@@ -1025,8 +1159,15 @@ class FurnitureManager:
                             new_fam_id = other_f.family_id
                             break
 
+        was_placed = not f.is_dropped and f.stored_in_id is None
+        old_tiles = self._furniture_tiles(f)
         f.move_to(new_gx, new_gy, new_permit_id=p.id if p else None, new_family_id=new_fam_id)
         self.invalidate_cache()
+        from game.world.natural_resources import get_natural_resources
+        nr = get_natural_resources()
+        if was_placed:
+            nr.release_tiles(old_tiles)
+        nr.occupy_tiles(target_tiles)
         return True, "Furniture moved successfully!"
 
     def destroy_furniture(self, furniture_id, stockpile_manager=None, resources=None, villager_manager=None, servant_manager=None):
@@ -1046,10 +1187,19 @@ class FurnitureManager:
                     s.carrying_furniture = None
                     s.state = "IDLE"
 
+        order = getattr(f, "construction_order", None)
+        if order and order.get("status") != "COMPLETE":
+            from game.systems.carpenter_system import CarpenterSystem
+            CarpenterSystem.refund_order_materials(order, f, self, stockpile_manager)
+
         f.destroy(stockpile_manager=stockpile_manager, resources=resources)
+        was_placed = not f.is_dropped and f.stored_in_id is None
         if f in self.furnitures:
             self.furnitures.remove(f)
         self.invalidate_cache()
+        if was_placed:
+            from game.world.natural_resources import get_natural_resources
+            get_natural_resources().release_tiles(self._furniture_tiles(f))
         return True, "Furniture destroyed successfully!"
 
     def draw(self, surface, camera, tile_size):

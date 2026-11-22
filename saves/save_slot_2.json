@@ -1,22 +1,28 @@
 {
-  "timestamp": "2026-11-19 08:56",
+  "timestamp": "2026-11-22 22:20",
+  "world": {
+    "type": "island",
+    "seed": 65981
+  },
+  "natural_resources": {},
+  "roads": [],
   "day_number": 1,
-  "time_str": "08:01",
-  "population": 2,
+  "time_str": "05:11",
+  "population": 7,
   "resources": {
-    "Wood": 1000,
-    "Food": 1000,
-    "Stone": 1000,
-    "Water": 1000,
-    "Copper": 1000,
-    "Silver": 1000,
-    "Gold": 1000
+    "Wood": 0,
+    "Food": 0,
+    "Stone": 0,
+    "Water": 0,
+    "Copper": 0,
+    "Silver": 0,
+    "Gold": 0
   },
   "day_cycle": {
     "day_number": 1,
-    "time_seconds": 200.79199999999992,
+    "time_seconds": 129.66400000000027,
     "day_length_index": 0,
-    "time_str": "08:01"
+    "time_str": "05:11"
   },
   "player": {
     "x": 0.0,
@@ -25,40 +31,36 @@
   "permits": [
     {
       "id": "permit_1",
-      "name": "Starter Housing Lot",
+      "name": "Starter Housing",
       "permit_type": "housing",
       "tiles": [
         [
-          3,
-          4
-        ],
-        [
           4,
-          3
+          0
         ],
         [
           3,
-          7
+          -2
+        ],
+        [
+          3,
+          -1
         ],
         [
           5,
           4
         ],
         [
-          4,
-          6
-        ],
-        [
           5,
-          7
+          1
         ],
         [
           2,
           2
         ],
         [
-          2,
-          5
+          1,
+          0
         ],
         [
           7,
@@ -70,43 +72,59 @@
         ],
         [
           7,
-          7
+          1
         ],
         [
-          6,
-          5
+          -2,
+          -1
+        ],
+        [
+          -2,
+          -2
+        ],
+        [
+          -1,
+          -2
+        ],
+        [
+          -1,
+          -1
         ],
         [
           4,
           2
         ],
         [
-          4,
-          5
-        ],
-        [
           3,
-          3
-        ],
-        [
-          5,
-          6
-        ],
-        [
-          3,
-          6
+          0
         ],
         [
           5,
           3
+        ],
+        [
+          0,
+          -1
+        ],
+        [
+          0,
+          -2
         ],
         [
           2,
           4
         ],
         [
+          1,
+          2
+        ],
+        [
+          0,
+          4
+        ],
+        [
           2,
-          7
+          1
         ],
         [
           6,
@@ -117,12 +135,12 @@
           3
         ],
         [
-          6,
-          7
+          -2,
+          0
         ],
         [
-          7,
-          6
+          -1,
+          0
         ],
         [
           3,
@@ -130,11 +148,135 @@
         ],
         [
           4,
-          7
+          1
+        ],
+        [
+          0,
+          0
+        ],
+        [
+          1,
+          4
+        ],
+        [
+          2,
+          3
+        ],
+        [
+          6,
+          3
+        ],
+        [
+          -2,
+          2
+        ],
+        [
+          -1,
+          2
         ],
         [
           3,
-          5
+          4
+        ],
+        [
+          4,
+          3
+        ],
+        [
+          3,
+          1
+        ],
+        [
+          5,
+          -2
+        ],
+        [
+          5,
+          -1
+        ],
+        [
+          0,
+          2
+        ],
+        [
+          1,
+          3
+        ],
+        [
+          7,
+          -2
+        ],
+        [
+          7,
+          -1
+        ],
+        [
+          -2,
+          4
+        ],
+        [
+          -1,
+          4
+        ],
+        [
+          -2,
+          1
+        ],
+        [
+          -1,
+          1
+        ],
+        [
+          3,
+          3
+        ],
+        [
+          5,
+          0
+        ],
+        [
+          0,
+          1
+        ],
+        [
+          2,
+          -2
+        ],
+        [
+          2,
+          -1
+        ],
+        [
+          6,
+          1
+        ],
+        [
+          7,
+          0
+        ],
+        [
+          6,
+          -2
+        ],
+        [
+          6,
+          -1
+        ],
+        [
+          -2,
+          3
+        ],
+        [
+          -1,
+          3
+        ],
+        [
+          4,
+          -2
+        ],
+        [
+          4,
+          -1
         ],
         [
           5,
@@ -145,16 +287,24 @@
           4
         ],
         [
-          5,
-          5
+          1,
+          1
         ],
         [
-          2,
+          0,
           3
         ],
         [
           2,
-          6
+          0
+        ],
+        [
+          1,
+          -2
+        ],
+        [
+          1,
+          -1
         ],
         [
           7,
@@ -162,15 +312,7 @@
         ],
         [
           6,
-          6
-        ],
-        [
-          7,
-          5
-        ],
-        [
-          6,
-          3
+          0
         ]
       ],
       "max_workers": 2,
@@ -190,112 +332,180 @@
       "batches": [],
       "active_batch_id": null,
       "batch_counter": 0,
-      "current_day_time": 1.3346533333333332
+      "current_day_time": 1.2161066666666671
     },
     {
       "id": "permit_2",
-      "name": "Starter Storage Lot",
-      "permit_type": "storage",
+      "name": "Starter Market",
+      "permit_type": "market",
       "tiles": [
         [
-          3,
-          -5
+          -2,
+          8
         ],
         [
-          2,
-          -2
+          -1,
+          8
         ],
         [
-          4,
-          -6
+          -6,
+          4
         ],
         [
-          3,
-          -2
+          -5,
+          3
         ],
         [
-          5,
-          -5
+          -6,
+          7
         ],
         [
-          4,
-          -3
+          -5,
+          6
         ],
         [
-          6,
-          -5
+          -3,
+          3
         ],
         [
-          5,
-          -2
+          -3,
+          6
         ],
         [
-          6,
-          -2
+          -7,
+          5
         ],
         [
-          4,
-          -5
+          -4,
+          4
         ],
         [
-          2,
-          -4
+          -7,
+          8
         ],
         [
-          4,
-          -2
+          -4,
+          7
         ],
         [
-          3,
-          -4
+          -2,
+          4
         ],
         [
-          5,
-          -4
+          -1,
+          4
         ],
         [
-          6,
-          -4
+          -2,
+          7
         ],
         [
-          2,
-          -3
+          -1,
+          7
         ],
         [
-          3,
-          -3
+          -6,
+          6
         ],
         [
-          5,
-          -6
+          -5,
+          5
         ],
         [
-          4,
-          -4
+          -6,
+          3
         ],
         [
-          3,
-          -6
+          -5,
+          8
         ],
         [
-          2,
-          -6
+          -3,
+          5
         ],
         [
-          5,
-          -3
+          -3,
+          8
         ],
         [
-          6,
-          -6
+          -7,
+          4
         ],
         [
-          6,
-          -3
+          -7,
+          7
         ],
         [
-          2,
-          -5
+          -1,
+          5
+        ],
+        [
+          -4,
+          3
+        ],
+        [
+          -4,
+          6
+        ],
+        [
+          -2,
+          3
+        ],
+        [
+          -1,
+          3
+        ],
+        [
+          -2,
+          6
+        ],
+        [
+          -1,
+          6
+        ],
+        [
+          -5,
+          7
+        ],
+        [
+          -6,
+          5
+        ],
+        [
+          -3,
+          4
+        ],
+        [
+          -5,
+          4
+        ],
+        [
+          -6,
+          8
+        ],
+        [
+          -3,
+          7
+        ],
+        [
+          -7,
+          3
+        ],
+        [
+          -7,
+          6
+        ],
+        [
+          -4,
+          5
+        ],
+        [
+          -4,
+          8
+        ],
+        [
+          -2,
+          5
         ]
       ],
       "max_workers": 2,
@@ -315,156 +525,28 @@
       "batches": [],
       "active_batch_id": null,
       "batch_counter": 0,
-      "current_day_time": 1.3346533333333332
+      "current_day_time": 1.2161066666666671
     },
     {
       "id": "permit_3",
-      "name": "Starter Farm Lot",
-      "permit_type": "farm",
+      "name": "Starter Storage",
+      "permit_type": "storage",
       "tiles": [
         [
-          -5,
-          -3
-        ],
-        [
-          -6,
-          -5
-        ],
-        [
-          -5,
-          -6
-        ],
-        [
-          -6,
-          -2
-        ],
-        [
-          -6,
-          -1
-        ],
-        [
           -3,
           -3
-        ],
-        [
-          -3,
-          -6
-        ],
-        [
-          -4,
-          -5
-        ],
-        [
-          -4,
-          -2
-        ],
-        [
-          -4,
-          -1
-        ],
-        [
-          -2,
-          -5
-        ],
-        [
-          -1,
-          -5
-        ],
-        [
-          -2,
-          -2
-        ],
-        [
-          -2,
-          -1
-        ],
-        [
-          -1,
-          -2
-        ],
-        [
-          -1,
-          -1
-        ],
-        [
-          -6,
-          -3
-        ],
-        [
-          -5,
-          -4
-        ],
-        [
-          -6,
-          -6
-        ],
-        [
-          -3,
-          -4
-        ],
-        [
-          -4,
-          -3
-        ],
-        [
-          -4,
-          -6
-        ],
-        [
-          -2,
-          -3
-        ],
-        [
-          -1,
-          -3
-        ],
-        [
-          -2,
-          -6
-        ],
-        [
-          -1,
-          -6
-        ],
-        [
-          -5,
-          -5
-        ],
-        [
-          -5,
-          -1
-        ],
-        [
-          -5,
-          -2
-        ],
-        [
-          -6,
-          -4
-        ],
-        [
-          -3,
-          -5
         ],
         [
           -3,
           -2
         ],
         [
-          -3,
-          -1
-        ],
-        [
-          -1,
-          -4
-        ],
-        [
-          -4,
-          -4
+          -2,
+          -3
         ],
         [
           -2,
-          -4
+          -2
         ]
       ],
       "max_workers": 2,
@@ -484,391 +566,737 @@
       "batches": [],
       "active_batch_id": null,
       "batch_counter": 0,
-      "current_day_time": 1.3346533333333332
-    },
-    {
-      "id": "permit_4",
-      "name": "Landlord Private Grounds",
-      "permit_type": "landlord_private",
-      "tiles": [
-        [
-          -6,
-          4
-        ],
-        [
-          -5,
-          3
-        ],
-        [
-          -3,
-          9
-        ],
-        [
-          -3,
-          6
-        ],
-        [
-          -9,
-          2
-        ],
-        [
-          -9,
-          8
-        ],
-        [
-          -7,
-          5
-        ],
-        [
-          -4,
-          4
-        ],
-        [
-          -10,
-          3
-        ],
-        [
-          -6,
-          6
-        ],
-        [
-          -5,
-          5
-        ],
-        [
-          -6,
-          3
-        ],
-        [
-          -3,
-          2
-        ],
-        [
-          -3,
-          8
-        ],
-        [
-          -9,
-          4
-        ],
-        [
-          -8,
-          3
-        ],
-        [
-          -7,
-          7
-        ],
-        [
-          -8,
-          9
-        ],
-        [
-          -4,
-          3
-        ],
-        [
-          -10,
-          5
-        ],
-        [
-          -5,
-          7
-        ],
-        [
-          -6,
-          5
-        ],
-        [
-          -3,
-          4
-        ],
-        [
-          -5,
-          4
-        ],
-        [
-          -8,
-          5
-        ],
-        [
-          -9,
-          3
-        ],
-        [
-          -7,
-          9
-        ],
-        [
-          -7,
-          6
-        ],
-        [
-          -4,
-          5
-        ],
-        [
-          -10,
-          7
-        ],
-        [
-          -5,
-          9
-        ],
-        [
-          -6,
-          7
-        ],
-        [
-          -5,
-          6
-        ],
-        [
-          -3,
-          3
-        ],
-        [
-          -8,
-          7
-        ],
-        [
-          -9,
-          5
-        ],
-        [
-          -7,
-          2
-        ],
-        [
-          -8,
-          4
-        ],
-        [
-          -7,
-          8
-        ],
-        [
-          -4,
-          7
-        ],
-        [
-          -10,
-          9
-        ],
-        [
-          -10,
-          6
-        ],
-        [
-          -5,
-          2
-        ],
-        [
-          -6,
-          9
-        ],
-        [
-          -5,
-          8
-        ],
-        [
-          -3,
-          5
-        ],
-        [
-          -9,
-          7
-        ],
-        [
-          -7,
-          4
-        ],
-        [
-          -8,
-          6
-        ],
-        [
-          -4,
-          9
-        ],
-        [
-          -4,
-          6
-        ],
-        [
-          -10,
-          2
-        ],
-        [
-          -10,
-          8
-        ],
-        [
-          -6,
-          2
-        ],
-        [
-          -6,
-          8
-        ],
-        [
-          -3,
-          7
-        ],
-        [
-          -8,
-          2
-        ],
-        [
-          -9,
-          9
-        ],
-        [
-          -8,
-          8
-        ],
-        [
-          -9,
-          6
-        ],
-        [
-          -7,
-          3
-        ],
-        [
-          -4,
-          2
-        ],
-        [
-          -4,
-          8
-        ],
-        [
-          -10,
-          4
-        ]
-      ],
-      "max_workers": 2,
-      "assigned_workers": [],
-      "crop": null,
-      "growth_days": 0.0,
-      "watered_today": false,
-      "tile_crops": {},
-      "tile_graves": {},
-      "church_tax": {
-        "Gold": 0,
-        "Silver": 0,
-        "Copper": 1
-      },
-      "church_tax_paid_households": {},
-      "tax_paid_households_today": [],
-      "batches": [],
-      "active_batch_id": null,
-      "batch_counter": 0,
-      "current_day_time": 1.3346533333333332
+      "current_day_time": 1.2161066666666671
     }
   ],
-  "buildings": [],
+  "buildings": [
+    {
+      "building_type": "wooden_structure",
+      "tiles": [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          2
+        ],
+        [
+          4,
+          0
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          3,
+          1
+        ],
+        [
+          5,
+          1
+        ],
+        [
+          0,
+          2
+        ],
+        [
+          2,
+          2
+        ],
+        [
+          1,
+          0
+        ],
+        [
+          3,
+          2
+        ],
+        [
+          4,
+          1
+        ],
+        [
+          5,
+          2
+        ],
+        [
+          0,
+          0
+        ],
+        [
+          1,
+          1
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          4,
+          2
+        ],
+        [
+          3,
+          0
+        ],
+        [
+          5,
+          0
+        ]
+      ],
+      "door_pos": [
+        0,
+        2
+      ],
+      "door_side": "bottom",
+      "rotation": 0,
+      "condition": 1.0,
+      "construction_order": {},
+      "construction_progress": 0.0,
+      "assigned_workers": [],
+      "owner": "landlord",
+      "inventory": {},
+      "currency": {
+        "Copper": 0,
+        "Silver": 0,
+        "Gold": 0
+      },
+      "prices": {},
+      "assigned_family_id": null,
+      "assigned_household_id": null,
+      "item_allocations": {},
+      "sale_items": [],
+      "sales_report_period": null,
+      "sales_report_by_item": {},
+      "sales_report_last_day": 1,
+      "household_sale_percent": 20,
+      "household_sale_limits": {},
+      "stall_requested_qty": {},
+      "auto_pricing": false
+    },
+    {
+      "building_type": "market",
+      "tiles": [
+        [
+          -5,
+          6
+        ],
+        [
+          -4,
+          6
+        ],
+        [
+          -3,
+          6
+        ],
+        [
+          -5,
+          5
+        ],
+        [
+          -4,
+          5
+        ],
+        [
+          -3,
+          5
+        ]
+      ],
+      "door_pos": null,
+      "door_side": null,
+      "rotation": 0,
+      "condition": 1.0,
+      "construction_order": {},
+      "construction_progress": 0.0,
+      "assigned_workers": [],
+      "owner": "landlord",
+      "inventory": {},
+      "currency": {
+        "Copper": 0,
+        "Silver": 0,
+        "Gold": 0
+      },
+      "prices": {
+        "Potato": 3,
+        "Wood": 2,
+        "Stone": 3,
+        "Water": 2,
+        "Hoe": 8,
+        "Sickle": 6,
+        "Watering_Can": 8,
+        "Saw": 12,
+        "Adze": 10,
+        "Felling_Axe": 15,
+        "Spade": 8,
+        "Pickaxe": 14,
+        "Sledgehammer": 10
+      },
+      "assigned_family_id": null,
+      "assigned_household_id": null,
+      "item_allocations": {},
+      "sale_items": [],
+      "sales_report_period": null,
+      "sales_report_by_item": {},
+      "sales_report_last_day": 1,
+      "household_sale_percent": 20,
+      "household_sale_limits": {},
+      "stall_requested_qty": {},
+      "auto_pricing": false
+    }
+  ],
   "construction_sites": [],
   "demolition_sites": [],
-  "stockpile": [
+  "stockpile": [],
+  "furniture": [
     {
-      "resource_type": "Wood",
-      "amount": 1000,
-      "grid_x": 2,
-      "grid_y": -6,
-      "owner_type": "landlord",
-      "owner_id": null
+      "id": "furn_1",
+      "furniture_type": "household_storage",
+      "gx": -3,
+      "gy": -3,
+      "rotation": 0,
+      "permit_id": "permit_3",
+      "family_id": null,
+      "assigned_villager_id": null,
+      "assigned_workers": [],
+      "is_dropped": false,
+      "stored_in_id": null,
+      "construction_order": {
+        "material_cost_copper": 20,
+        "living_wage_copper": 3,
+        "price_copper": 23,
+        "materials": {
+          "Wood": 10,
+          "Stone": 0
+        },
+        "food_unit_price_at_order": 3,
+        "id": "furn_1",
+        "order_type": "BUILD",
+        "status": "AWAITING_PAYMENT",
+        "payer_family_id": "fam_1",
+        "payer_id": null,
+        "carpenter_id": null,
+        "artisan_job": "Carpenter",
+        "commission_paid": false
+      },
+      "construction_progress": 0.0,
+      "designated_target": null,
+      "carrier_id": null,
+      "condition": 1.0,
+      "inventory": {
+        "Potato": 100,
+        "Wood": 500,
+        "Stone": 500,
+        "Hoe": 3,
+        "Sickle": 3,
+        "Watering_Can": 3,
+        "Saw": 1,
+        "Adze": 1,
+        "Felling_Axe": 1,
+        "Spade": 1,
+        "Pickaxe": 1,
+        "Sledgehammer": 1,
+        "Gold": 1
+      },
+      "currency": {},
+      "break_check_day": 1,
+      "break_check_hour": 19.39822709709708,
+      "break_checked_today": false,
+      "station_quota_daily": 0,
+      "station_quota_today": 0,
+      "station_quota_day": -1,
+      "plant_tree_enabled": false,
+      "bound_mine_id": null
     },
     {
-      "resource_type": "Food",
-      "amount": 1000,
-      "grid_x": 3,
-      "grid_y": -6,
-      "owner_type": "landlord",
-      "owner_id": null
+      "id": "furn_2",
+      "furniture_type": "carpenter_workbench",
+      "gx": 1,
+      "gy": 1,
+      "rotation": 0,
+      "permit_id": "permit_1",
+      "family_id": "fam_1",
+      "assigned_villager_id": null,
+      "assigned_workers": [],
+      "is_dropped": false,
+      "stored_in_id": null,
+      "construction_order": {
+        "material_cost_copper": 10,
+        "living_wage_copper": 3,
+        "price_copper": 13,
+        "materials": {
+          "Wood": 5,
+          "Stone": 0
+        },
+        "food_unit_price_at_order": 3,
+        "id": "furn_2",
+        "order_type": "BUILD",
+        "status": "AWAITING_PAYMENT",
+        "payer_family_id": "fam_1",
+        "payer_id": null,
+        "carpenter_id": null,
+        "artisan_job": "Carpenter",
+        "commission_paid": false
+      },
+      "construction_progress": 0.0,
+      "designated_target": null,
+      "carrier_id": null,
+      "condition": 1.0,
+      "inventory": {},
+      "currency": {},
+      "break_check_day": 1,
+      "break_check_hour": 5.120631541494352,
+      "break_checked_today": true,
+      "station_quota_daily": 0,
+      "station_quota_today": 0,
+      "station_quota_day": -1,
+      "plant_tree_enabled": false,
+      "bound_mine_id": null
     },
     {
-      "resource_type": "Stone",
-      "amount": 1000,
-      "grid_x": 4,
-      "grid_y": -6,
-      "owner_type": "landlord",
-      "owner_id": null
-    },
-    {
-      "resource_type": "Water",
-      "amount": 1000,
-      "grid_x": 5,
-      "grid_y": -6,
-      "owner_type": "landlord",
-      "owner_id": null
-    },
-    {
-      "resource_type": "Copper",
-      "amount": 1000,
-      "grid_x": 6,
-      "grid_y": -6,
-      "owner_type": "landlord",
-      "owner_id": null
-    },
-    {
-      "resource_type": "Silver",
-      "amount": 1000,
-      "grid_x": 2,
-      "grid_y": -5,
-      "owner_type": "landlord",
-      "owner_id": null
-    },
-    {
-      "resource_type": "Gold",
-      "amount": 1000,
-      "grid_x": 3,
-      "grid_y": -5,
-      "owner_type": "landlord",
-      "owner_id": null
-    },
-    {
-      "resource_type": "Hoe",
-      "amount": 10,
-      "grid_x": 4,
-      "grid_y": -5,
-      "owner_type": "landlord",
-      "owner_id": null
-    },
-    {
-      "resource_type": "Sickle",
-      "amount": 10,
-      "grid_x": 5,
-      "grid_y": -5,
-      "owner_type": "landlord",
-      "owner_id": null
-    },
-    {
-      "resource_type": "Watering_Can",
-      "amount": 10,
-      "grid_x": 6,
-      "grid_y": -5,
-      "owner_type": "landlord",
-      "owner_id": null
-    },
-    {
-      "resource_type": "Hammer",
-      "amount": 5,
-      "grid_x": 2,
-      "grid_y": -4,
-      "owner_type": "landlord",
-      "owner_id": null
+      "id": "furn_3",
+      "furniture_type": "lord_treasury_chest",
+      "gx": 1,
+      "gy": -1,
+      "rotation": 0,
+      "permit_id": "permit_1",
+      "family_id": null,
+      "assigned_villager_id": null,
+      "assigned_workers": [],
+      "is_dropped": false,
+      "stored_in_id": null,
+      "construction_order": {},
+      "construction_progress": 0.0,
+      "designated_target": null,
+      "carrier_id": null,
+      "condition": 1.0,
+      "inventory": {},
+      "currency": {},
+      "break_check_day": 1,
+      "break_check_hour": 18.316803348842072,
+      "break_checked_today": false,
+      "station_quota_daily": 0,
+      "station_quota_today": 0,
+      "station_quota_day": -1,
+      "plant_tree_enabled": false,
+      "bound_mine_id": null
     }
   ],
-  "furniture": [],
-  "families": [],
+  "families": [
+    {
+      "id": "fam_1",
+      "surname": "Fisher",
+      "assigned_permit_id": "permit_1",
+      "generations_present": [
+        1,
+        2,
+        3
+      ],
+      "pending_death_recovery": [],
+      "income_report_period": null,
+      "income_report_by_source": {},
+      "income_report_last_day": 1,
+      "members": [
+        {
+          "id": "vil_1",
+          "first_name": "Edward",
+          "last_name": "Fisher",
+          "gender": "Male",
+          "age": 72,
+          "generation": 1,
+          "role": "Grandfather",
+          "family_id": "fam_1",
+          "job": "Unassigned",
+          "x": -111.70399473041172,
+          "y": -112.86387392603356,
+          "task": "SLEEPING",
+          "carrying_crop": 0,
+          "inventory": {},
+          "currency": {},
+          "active_tool": null,
+          "has_water": false,
+          "water_day": -1,
+          "water_charges": 0,
+          "assigned_bed_id": null,
+          "carrying_furniture_id": null,
+          "watering_timer": 0.0,
+          "tilling_timer": 0.0,
+          "station_carry": {},
+          "hunger": 99.22499999999938,
+          "thirst": 99.22499999999938,
+          "need_toilet": 98.83749999999974,
+          "faith": 100.0,
+          "sleep_need": 100.0,
+          "sleep_forced": false,
+          "sleeping_recharge_active": true,
+          "sleep_any_rest_active": false,
+          "sleep_schedule_task_state": null,
+          "pending_schedule_tasks": [],
+          "socage_tax_round": null,
+          "socage_tax_last_cycle": null,
+          "socage_tax_prepared_cycle": null,
+          "socage_tax_prepared_amount": 0,
+          "happiness": 60.0,
+          "happiness_effects": {
+            "needs_comfortable": {
+              "amount": 5.0,
+              "expires_day": 1
+            }
+          },
+          "happiness_trigger_days": {
+            "needs_comfortable": 1
+          },
+          "happiness_food_day": null,
+          "happiness_food_types": [],
+          "last_faith_decay_day": 1,
+          "prayer_attendance_day": null,
+          "church_tax_prepared_day": null,
+          "church_tax_prepared_amount": 0,
+          "last_faith_prayer_day": null,
+          "last_confession_day": null,
+          "pending_commission_task": null,
+          "pending_commission_data": {},
+          "pending_commission_tasks": [],
+          "interrupted_task_state": null,
+          "activity_description": null,
+          "hunger_death_timer": null,
+          "thirst_death_timer": null,
+          "daily_food_consumed": 0,
+          "daily_water_consumed": 0,
+          "is_alive": true,
+          "status": "ALIVE",
+          "death_reason": null,
+          "death_day": null,
+          "carrying_corpse_id": null,
+          "burial_payment_target_corpse_id": null,
+          "burial_payment_gravedigger_id": null,
+          "carpenter_payment_order_id": null,
+          "carpenter_payment_carpenter_id": null,
+          "is_buried": false,
+          "is_picked_up": false
+        },
+        {
+          "id": "vil_2",
+          "first_name": "Eleanor",
+          "last_name": "Fisher",
+          "gender": "Female",
+          "age": 71,
+          "generation": 1,
+          "role": "Grandmother",
+          "family_id": "fam_1",
+          "job": "Unassigned",
+          "x": -28.483177932335437,
+          "y": -109.9346981089665,
+          "task": "SLEEPING",
+          "carrying_crop": 0,
+          "inventory": {},
+          "currency": {},
+          "active_tool": null,
+          "has_water": false,
+          "water_day": -1,
+          "water_charges": 0,
+          "assigned_bed_id": null,
+          "carrying_furniture_id": null,
+          "watering_timer": 0.0,
+          "tilling_timer": 0.0,
+          "station_carry": {},
+          "hunger": 99.22499999999938,
+          "thirst": 99.22499999999938,
+          "need_toilet": 98.83749999999974,
+          "faith": 100.0,
+          "sleep_need": 100.0,
+          "sleep_forced": false,
+          "sleeping_recharge_active": true,
+          "sleep_any_rest_active": false,
+          "sleep_schedule_task_state": null,
+          "pending_schedule_tasks": [],
+          "socage_tax_round": null,
+          "socage_tax_last_cycle": null,
+          "socage_tax_prepared_cycle": null,
+          "socage_tax_prepared_amount": 0,
+          "happiness": 60.0,
+          "happiness_effects": {
+            "needs_comfortable": {
+              "amount": 5.0,
+              "expires_day": 1
+            }
+          },
+          "happiness_trigger_days": {
+            "needs_comfortable": 1
+          },
+          "happiness_food_day": null,
+          "happiness_food_types": [],
+          "last_faith_decay_day": 1,
+          "prayer_attendance_day": null,
+          "church_tax_prepared_day": null,
+          "church_tax_prepared_amount": 0,
+          "last_faith_prayer_day": null,
+          "last_confession_day": null,
+          "pending_commission_task": null,
+          "pending_commission_data": {},
+          "pending_commission_tasks": [],
+          "interrupted_task_state": null,
+          "activity_description": null,
+          "hunger_death_timer": null,
+          "thirst_death_timer": null,
+          "daily_food_consumed": 0,
+          "daily_water_consumed": 0,
+          "is_alive": true,
+          "status": "ALIVE",
+          "death_reason": null,
+          "death_day": null,
+          "carrying_corpse_id": null,
+          "burial_payment_target_corpse_id": null,
+          "burial_payment_gravedigger_id": null,
+          "carpenter_payment_order_id": null,
+          "carpenter_payment_carpenter_id": null,
+          "is_buried": false,
+          "is_picked_up": false
+        },
+        {
+          "id": "vil_3",
+          "first_name": "Henry",
+          "last_name": "Fisher",
+          "gender": "Male",
+          "age": 49,
+          "generation": 2,
+          "role": "Father",
+          "family_id": "fam_1",
+          "job": "Unassigned",
+          "x": -11.881831524862253,
+          "y": -58.56713333786337,
+          "task": "SLEEPING",
+          "carrying_crop": 0,
+          "inventory": {},
+          "currency": {},
+          "active_tool": null,
+          "has_water": false,
+          "water_day": -1,
+          "water_charges": 0,
+          "assigned_bed_id": null,
+          "carrying_furniture_id": null,
+          "watering_timer": 0.0,
+          "tilling_timer": 0.0,
+          "station_carry": {},
+          "hunger": 99.23333333333272,
+          "thirst": 99.23333333333272,
+          "need_toilet": 98.84999999999974,
+          "faith": 100.0,
+          "sleep_need": 100.0,
+          "sleep_forced": false,
+          "sleeping_recharge_active": true,
+          "sleep_any_rest_active": false,
+          "sleep_schedule_task_state": null,
+          "pending_schedule_tasks": [],
+          "socage_tax_round": null,
+          "socage_tax_last_cycle": null,
+          "socage_tax_prepared_cycle": null,
+          "socage_tax_prepared_amount": 0,
+          "happiness": 60.0,
+          "happiness_effects": {
+            "needs_comfortable": {
+              "amount": 5.0,
+              "expires_day": 1
+            }
+          },
+          "happiness_trigger_days": {
+            "needs_comfortable": 1
+          },
+          "happiness_food_day": null,
+          "happiness_food_types": [],
+          "last_faith_decay_day": 1,
+          "prayer_attendance_day": null,
+          "church_tax_prepared_day": null,
+          "church_tax_prepared_amount": 0,
+          "last_faith_prayer_day": null,
+          "last_confession_day": null,
+          "pending_commission_task": null,
+          "pending_commission_data": {},
+          "pending_commission_tasks": [],
+          "interrupted_task_state": null,
+          "activity_description": null,
+          "hunger_death_timer": null,
+          "thirst_death_timer": null,
+          "daily_food_consumed": 0,
+          "daily_water_consumed": 0,
+          "is_alive": true,
+          "status": "ALIVE",
+          "death_reason": null,
+          "death_day": null,
+          "carrying_corpse_id": null,
+          "burial_payment_target_corpse_id": null,
+          "burial_payment_gravedigger_id": null,
+          "carpenter_payment_order_id": null,
+          "carpenter_payment_carpenter_id": null,
+          "is_buried": false,
+          "is_picked_up": false
+        },
+        {
+          "id": "vil_4",
+          "first_name": "Mary",
+          "last_name": "Fisher",
+          "gender": "Female",
+          "age": 46,
+          "generation": 2,
+          "role": "Mother",
+          "family_id": "fam_1",
+          "job": "Unassigned",
+          "x": 77.78139346139776,
+          "y": -95.48085872681722,
+          "task": "SLEEPING",
+          "carrying_crop": 0,
+          "inventory": {},
+          "currency": {},
+          "active_tool": null,
+          "has_water": false,
+          "water_day": -1,
+          "water_charges": 0,
+          "assigned_bed_id": null,
+          "carrying_furniture_id": null,
+          "watering_timer": 0.0,
+          "tilling_timer": 0.0,
+          "station_carry": {},
+          "hunger": 99.23333333333272,
+          "thirst": 99.23333333333272,
+          "need_toilet": 98.84999999999974,
+          "faith": 100.0,
+          "sleep_need": 100.0,
+          "sleep_forced": false,
+          "sleeping_recharge_active": true,
+          "sleep_any_rest_active": false,
+          "sleep_schedule_task_state": null,
+          "pending_schedule_tasks": [],
+          "socage_tax_round": null,
+          "socage_tax_last_cycle": null,
+          "socage_tax_prepared_cycle": null,
+          "socage_tax_prepared_amount": 0,
+          "happiness": 60.0,
+          "happiness_effects": {
+            "needs_comfortable": {
+              "amount": 5.0,
+              "expires_day": 1
+            }
+          },
+          "happiness_trigger_days": {
+            "needs_comfortable": 1
+          },
+          "happiness_food_day": null,
+          "happiness_food_types": [],
+          "last_faith_decay_day": 1,
+          "prayer_attendance_day": null,
+          "church_tax_prepared_day": null,
+          "church_tax_prepared_amount": 0,
+          "last_faith_prayer_day": null,
+          "last_confession_day": null,
+          "pending_commission_task": null,
+          "pending_commission_data": {},
+          "pending_commission_tasks": [],
+          "interrupted_task_state": null,
+          "activity_description": null,
+          "hunger_death_timer": null,
+          "thirst_death_timer": null,
+          "daily_food_consumed": 0,
+          "daily_water_consumed": 0,
+          "is_alive": true,
+          "status": "ALIVE",
+          "death_reason": null,
+          "death_day": null,
+          "carrying_corpse_id": null,
+          "burial_payment_target_corpse_id": null,
+          "burial_payment_gravedigger_id": null,
+          "carpenter_payment_order_id": null,
+          "carpenter_payment_carpenter_id": null,
+          "is_buried": false,
+          "is_picked_up": false
+        },
+        {
+          "id": "vil_5",
+          "first_name": "Agnes",
+          "last_name": "Fisher",
+          "gender": "Female",
+          "age": 30,
+          "generation": 3,
+          "role": "Adult Daughter",
+          "family_id": "fam_1",
+          "job": "Unassigned",
+          "x": 155.26778250427776,
+          "y": -94.99699097247762,
+          "task": "SLEEPING",
+          "carrying_crop": 0,
+          "inventory": {},
+          "currency": {},
+          "active_tool": null,
+          "has_water": false,
+          "water_day": -1,
+          "water_charges": 0,
+          "assigned_bed_id": null,
+          "carrying_furniture_id": null,
+          "watering_timer": 0.0,
+          "tilling_timer": 0.0,
+          "station_carry": {},
+          "hunger": 99.23333333333272,
+          "thirst": 99.23333333333272,
+          "need_toilet": 98.84999999999974,
+          "faith": 100.0,
+          "sleep_need": 100.0,
+          "sleep_forced": false,
+          "sleeping_recharge_active": true,
+          "sleep_any_rest_active": false,
+          "sleep_schedule_task_state": null,
+          "pending_schedule_tasks": [],
+          "socage_tax_round": null,
+          "socage_tax_last_cycle": null,
+          "socage_tax_prepared_cycle": null,
+          "socage_tax_prepared_amount": 0,
+          "happiness": 60.0,
+          "happiness_effects": {
+            "needs_comfortable": {
+              "amount": 5.0,
+              "expires_day": 1
+            }
+          },
+          "happiness_trigger_days": {
+            "needs_comfortable": 1
+          },
+          "happiness_food_day": null,
+          "happiness_food_types": [],
+          "last_faith_decay_day": 1,
+          "prayer_attendance_day": null,
+          "church_tax_prepared_day": null,
+          "church_tax_prepared_amount": 0,
+          "last_faith_prayer_day": null,
+          "last_confession_day": null,
+          "pending_commission_task": null,
+          "pending_commission_data": {},
+          "pending_commission_tasks": [],
+          "interrupted_task_state": null,
+          "activity_description": null,
+          "hunger_death_timer": null,
+          "thirst_death_timer": null,
+          "daily_food_consumed": 0,
+          "daily_water_consumed": 0,
+          "is_alive": true,
+          "status": "ALIVE",
+          "death_reason": null,
+          "death_day": null,
+          "carrying_corpse_id": null,
+          "burial_payment_target_corpse_id": null,
+          "burial_payment_gravedigger_id": null,
+          "carpenter_payment_order_id": null,
+          "carpenter_payment_carpenter_id": null,
+          "is_buried": false,
+          "is_picked_up": false
+        }
+      ]
+    }
+  ],
   "servants": [
     {
       "id": "servant_1",
       "name": "Servant Alden",
-      "x": -20.0,
-      "y": 60.0,
+      "x": -63.60422327227613,
+      "y": 6.137566775891997,
       "work_priorities": {
         "Building": 1,
         "Hauling": 1,
@@ -876,13 +1304,21 @@
         "Crafting": 0,
         "Cooking": 0
       },
-      "carrying_furniture_id": null
+      "carrying_furniture_id": null,
+      "state": "IDLE",
+      "inventory": {},
+      "carpenter_commission_order_id": null,
+      "carpenter_commission_carpenter_id": null,
+      "carpenter_commission_fee_copper": 0,
+      "carpenter_commission_remaining_copper": 0,
+      "carpenter_commission_storage_tile": null,
+      "carpenter_commission_treasury_id": null
     },
     {
       "id": "servant_2",
       "name": "Servant Barnaby",
-      "x": 20.0,
-      "y": 60.0,
+      "x": -27.89352062915272,
+      "y": 121.22408403173324,
       "work_priorities": {
         "Building": 1,
         "Hauling": 1,
@@ -890,12 +1326,49 @@
         "Crafting": 0,
         "Cooking": 0
       },
-      "carrying_furniture_id": null
+      "carrying_furniture_id": null,
+      "state": "IDLE",
+      "inventory": {},
+      "carpenter_commission_order_id": null,
+      "carpenter_commission_carpenter_id": null,
+      "carpenter_commission_fee_copper": 0,
+      "carpenter_commission_remaining_copper": 0,
+      "carpenter_commission_storage_tile": null,
+      "carpenter_commission_treasury_id": null
     }
   ],
   "schedules": {
-    "Unassigned": {
-      "Monday": [
+    "prayer_start_hour": 3,
+    "prayer_end_hour": 4,
+    "universal_schedule": [
+      "SLEEP",
+      "SLEEP",
+      "SLEEP",
+      "SLEEP",
+      "SLEEP",
+      "SLEEP",
+      "LEISURE",
+      "LEISURE",
+      "WORK",
+      "WORK",
+      "WORK",
+      "WORK",
+      "WORK",
+      "WORK",
+      "WORK",
+      "WORK",
+      "WORK",
+      "WORK",
+      "LEISURE",
+      "LEISURE",
+      "LEISURE",
+      "LEISURE",
+      "SLEEP",
+      "SLEEP"
+    ],
+    "universal_schedule_enabled": false,
+    "job_schedules": {
+      "Unassigned": [
         "SLEEP",
         "SLEEP",
         "SLEEP",
@@ -921,7 +1394,7 @@
         "SLEEP",
         "SLEEP"
       ],
-      "Tuesday": [
+      "Farmer": [
         "SLEEP",
         "SLEEP",
         "SLEEP",
@@ -947,7 +1420,7 @@
         "SLEEP",
         "SLEEP"
       ],
-      "Wednesday": [
+      "Builder": [
         "SLEEP",
         "SLEEP",
         "SLEEP",
@@ -973,7 +1446,7 @@
         "SLEEP",
         "SLEEP"
       ],
-      "Thursday": [
+      "Blacksmith": [
         "SLEEP",
         "SLEEP",
         "SLEEP",
@@ -999,7 +1472,7 @@
         "SLEEP",
         "SLEEP"
       ],
-      "Friday": [
+      "Carpenter": [
         "SLEEP",
         "SLEEP",
         "SLEEP",
@@ -1025,7 +1498,7 @@
         "SLEEP",
         "SLEEP"
       ],
-      "Saturday": [
+      "Tax Collector": [
         "SLEEP",
         "SLEEP",
         "SLEEP",
@@ -1051,35 +1524,7 @@
         "SLEEP",
         "SLEEP"
       ],
-      "Sunday": [
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "LEISURE",
-        "LEISURE",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "SLEEP",
-        "SLEEP"
-      ]
-    },
-    "Farmer": {
-      "Monday": [
+      "Baker": [
         "SLEEP",
         "SLEEP",
         "SLEEP",
@@ -1105,7 +1550,7 @@
         "SLEEP",
         "SLEEP"
       ],
-      "Tuesday": [
+      "Fisherman": [
         "SLEEP",
         "SLEEP",
         "SLEEP",
@@ -1131,1073 +1576,21 @@
         "SLEEP",
         "SLEEP"
       ],
-      "Wednesday": [
+      "Priest": [
         "SLEEP",
         "SLEEP",
         "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "LEISURE",
-        "LEISURE",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "SLEEP",
-        "SLEEP"
-      ],
-      "Thursday": [
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "LEISURE",
-        "LEISURE",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "SLEEP",
-        "SLEEP"
-      ],
-      "Friday": [
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "LEISURE",
-        "LEISURE",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "SLEEP",
-        "SLEEP"
-      ],
-      "Saturday": [
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "LEISURE",
-        "LEISURE",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "SLEEP",
-        "SLEEP"
-      ],
-      "Sunday": [
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "LEISURE",
-        "LEISURE",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "SLEEP",
-        "SLEEP"
-      ]
-    },
-    "Builder": {
-      "Monday": [
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "LEISURE",
-        "LEISURE",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "SLEEP",
-        "SLEEP"
-      ],
-      "Tuesday": [
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "LEISURE",
-        "LEISURE",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "SLEEP",
-        "SLEEP"
-      ],
-      "Wednesday": [
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "LEISURE",
-        "LEISURE",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "SLEEP",
-        "SLEEP"
-      ],
-      "Thursday": [
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "LEISURE",
-        "LEISURE",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "SLEEP",
-        "SLEEP"
-      ],
-      "Friday": [
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "LEISURE",
-        "LEISURE",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "SLEEP",
-        "SLEEP"
-      ],
-      "Saturday": [
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "LEISURE",
-        "LEISURE",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "SLEEP",
-        "SLEEP"
-      ],
-      "Sunday": [
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "LEISURE",
-        "LEISURE",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "SLEEP",
-        "SLEEP"
-      ]
-    },
-    "Blacksmith": {
-      "Monday": [
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "LEISURE",
-        "LEISURE",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "SLEEP",
-        "SLEEP"
-      ],
-      "Tuesday": [
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "LEISURE",
-        "LEISURE",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "SLEEP",
-        "SLEEP"
-      ],
-      "Wednesday": [
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "LEISURE",
-        "LEISURE",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "SLEEP",
-        "SLEEP"
-      ],
-      "Thursday": [
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "LEISURE",
-        "LEISURE",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "SLEEP",
-        "SLEEP"
-      ],
-      "Friday": [
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "LEISURE",
-        "LEISURE",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "SLEEP",
-        "SLEEP"
-      ],
-      "Saturday": [
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "LEISURE",
-        "LEISURE",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "SLEEP",
-        "SLEEP"
-      ],
-      "Sunday": [
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "LEISURE",
-        "LEISURE",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "SLEEP",
-        "SLEEP"
-      ]
-    },
-    "Carpenter": {
-      "Monday": [
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "LEISURE",
-        "LEISURE",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "SLEEP",
-        "SLEEP"
-      ],
-      "Tuesday": [
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "LEISURE",
-        "LEISURE",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "SLEEP",
-        "SLEEP"
-      ],
-      "Wednesday": [
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "LEISURE",
-        "LEISURE",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "SLEEP",
-        "SLEEP"
-      ],
-      "Thursday": [
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "LEISURE",
-        "LEISURE",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "SLEEP",
-        "SLEEP"
-      ],
-      "Friday": [
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "LEISURE",
-        "LEISURE",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "SLEEP",
-        "SLEEP"
-      ],
-      "Saturday": [
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "LEISURE",
-        "LEISURE",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "SLEEP",
-        "SLEEP"
-      ],
-      "Sunday": [
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "LEISURE",
-        "LEISURE",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "SLEEP",
-        "SLEEP"
-      ]
-    },
-    "Baker": {
-      "Monday": [
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "LEISURE",
-        "LEISURE",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "SLEEP",
-        "SLEEP"
-      ],
-      "Tuesday": [
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "LEISURE",
-        "LEISURE",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "SLEEP",
-        "SLEEP"
-      ],
-      "Wednesday": [
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "LEISURE",
-        "LEISURE",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "SLEEP",
-        "SLEEP"
-      ],
-      "Thursday": [
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "LEISURE",
-        "LEISURE",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "SLEEP",
-        "SLEEP"
-      ],
-      "Friday": [
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "LEISURE",
-        "LEISURE",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "SLEEP",
-        "SLEEP"
-      ],
-      "Saturday": [
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "LEISURE",
-        "LEISURE",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "SLEEP",
-        "SLEEP"
-      ],
-      "Sunday": [
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "LEISURE",
-        "LEISURE",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "SLEEP",
-        "SLEEP"
-      ]
-    },
-    "Fisherman": {
-      "Monday": [
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "LEISURE",
-        "LEISURE",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "SLEEP",
-        "SLEEP"
-      ],
-      "Tuesday": [
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "LEISURE",
-        "LEISURE",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "SLEEP",
-        "SLEEP"
-      ],
-      "Wednesday": [
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "LEISURE",
-        "LEISURE",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "SLEEP",
-        "SLEEP"
-      ],
-      "Thursday": [
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "LEISURE",
-        "LEISURE",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "SLEEP",
-        "SLEEP"
-      ],
-      "Friday": [
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "LEISURE",
-        "LEISURE",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "SLEEP",
-        "SLEEP"
-      ],
-      "Saturday": [
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "LEISURE",
-        "LEISURE",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "SLEEP",
-        "SLEEP"
-      ],
-      "Sunday": [
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "LEISURE",
-        "LEISURE",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "SLEEP",
-        "SLEEP"
-      ]
-    },
-    "Priest": {
-      "Monday": [
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "LEISURE",
-        "LEISURE",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
         "PRAYER",
-        "PRAYER",
+        "SLEEP",
+        "SLEEP",
+        "LEISURE",
+        "LEISURE",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
         "WORK",
         "WORK",
         "WORK",
@@ -2209,165 +1602,7 @@
         "SLEEP",
         "SLEEP"
       ],
-      "Tuesday": [
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "LEISURE",
-        "LEISURE",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "PRAYER",
-        "PRAYER",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "SLEEP",
-        "SLEEP"
-      ],
-      "Wednesday": [
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "LEISURE",
-        "LEISURE",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "PRAYER",
-        "PRAYER",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "SLEEP",
-        "SLEEP"
-      ],
-      "Thursday": [
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "LEISURE",
-        "LEISURE",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "PRAYER",
-        "PRAYER",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "SLEEP",
-        "SLEEP"
-      ],
-      "Friday": [
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "LEISURE",
-        "LEISURE",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "PRAYER",
-        "PRAYER",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "SLEEP",
-        "SLEEP"
-      ],
-      "Saturday": [
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "LEISURE",
-        "LEISURE",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "PRAYER",
-        "PRAYER",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "SLEEP",
-        "SLEEP"
-      ],
-      "Sunday": [
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "LEISURE",
-        "LEISURE",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "PRAYER",
-        "PRAYER",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "SLEEP",
-        "SLEEP"
-      ]
-    },
-    "Gravedigger": {
-      "Monday": [
+      "Gravedigger": [
         "SLEEP",
         "SLEEP",
         "SLEEP",
@@ -2393,7 +1628,7 @@
         "SLEEP",
         "SLEEP"
       ],
-      "Tuesday": [
+      "Woodsman": [
         "SLEEP",
         "SLEEP",
         "SLEEP",
@@ -2419,111 +1654,7 @@
         "SLEEP",
         "SLEEP"
       ],
-      "Wednesday": [
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "LEISURE",
-        "LEISURE",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "SLEEP",
-        "SLEEP"
-      ],
-      "Thursday": [
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "LEISURE",
-        "LEISURE",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "SLEEP",
-        "SLEEP"
-      ],
-      "Friday": [
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "LEISURE",
-        "LEISURE",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "SLEEP",
-        "SLEEP"
-      ],
-      "Saturday": [
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "LEISURE",
-        "LEISURE",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "SLEEP",
-        "SLEEP"
-      ],
-      "Sunday": [
+      "Miner": [
         "SLEEP",
         "SLEEP",
         "SLEEP",
@@ -2551,5 +1682,29 @@
       ]
     }
   },
-  "production_records": {}
+  "production_records": {},
+  "burial_commissions": [],
+  "confession_state": {
+    "queues": {},
+    "active": {}
+  },
+  "taxation_state": {
+    "church_enabled": false,
+    "church_tax": {
+      "Gold": 0,
+      "Silver": 0,
+      "Copper": 1
+    },
+    "church_tax_paid_households_today": [],
+    "church_tax_last_day": 1,
+    "socage_enabled": false,
+    "socage_percent": 10,
+    "socage_report_period": null,
+    "socage_report_collected_copper": 0
+  },
+  "immigration": {
+    "postings": {},
+    "pending": [],
+    "counter": 0
+  }
 }

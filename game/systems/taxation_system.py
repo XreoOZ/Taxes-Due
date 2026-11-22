@@ -113,7 +113,7 @@ class TaxationSystem:
         if not isinstance(data, dict):
             return
         from game.systems.church_system import ChurchSystem
-        ChurchSystem.set_tax_enabled(data.get("church_enabled", True))
+        ChurchSystem.set_tax_enabled(data.get("church_enabled", False))
         church_state = ChurchSystem.get_instance()
         church_state.tax_paid_households_today = set(
             str(family_id) for family_id in data.get("church_tax_paid_households_today", [])
@@ -162,7 +162,15 @@ class TaxationSystem:
 
     @classmethod
     def apply_tax_unhappiness(cls, family_id, effect_id, amount, villager_manager, day_number):
-        """Give every living member of a taxed household the timed unhappiness effect."""
+        """Give every living member of a taxed household the timed unhappiness effect.
+
+        *** ESTABLISHED — USER-CONFIRMED, DO NOT REGRESS ***
+        Tax unhappiness is EVENT-DRIVEN, not always-on — it is applied only
+        when tax is actually collected (socage rounds and church tithes),
+        lasts TAX_UNHAPPINESS_DURATION_DAYS (10) via HAPPINESS_MODIFIERS
+        durations, and shows remaining days in the happiness breakdown.
+        Persistent factors display "Indefinite". Do not restore permanent
+        always-on tax penalties in HappinessSystem."""
         from game.systems.happiness_system import HappinessSystem
         amount = float(amount or 0.0)
         if amount == 0.0:
