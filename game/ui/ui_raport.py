@@ -1243,9 +1243,9 @@ class RaportUI:
                             from game.systems.workplace_system import get_job_workplaces
                             workplaces = get_job_workplaces(job_id, permit_manager, furniture_manager, building_manager)
                             station = next((ws for ws in workplaces if self._workplace_key(ws) == station_key), None)
-                            if station is not None and getattr(station, "permit_type", None):
+                            if station is not None and station[0] == "permit":
                                 permit_manager.change_max_workers(
-                                    station.id, delta, villager_manager,
+                                    station[1].id, delta, villager_manager,
                                     furniture_manager=furniture_manager, auto_assign=False,
                                 )
                             return f"workplace_max_{delta}_{job_id}"
@@ -1255,8 +1255,8 @@ class RaportUI:
                             from game.systems.workplace_system import get_job_workplaces
                             workplaces = get_job_workplaces(job_id, permit_manager, furniture_manager, building_manager)
                             station = next((ws for ws in workplaces if self._workplace_key(ws) == station_key), None)
-                            if station is not None and getattr(station, "permit_type", None):
-                                self.crop_picker_permit_id = station.id
+                            if station is not None and station[0] == "permit":
+                                self.crop_picker_permit_id = station[1].id
                             return f"workplace_crop_{job_id}"
                 if self.universal_schedule_btn_rect and self.universal_schedule_btn_rect.collidepoint(mouse_pos):
                     if schedule_manager:
