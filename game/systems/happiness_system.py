@@ -150,7 +150,7 @@ class HappinessSystem:
 
         active = []
         breakdown = [{"label": "Starting happiness", "amount": float(HAPPINESS_INITIAL_VALUE), "duration": "Base"}]
-        def add_factor(label, amount, duration="While active"):
+        def add_factor(label, amount, duration="Indefinite"):
             amount = float(amount)
             if amount:
                 active.append(amount)
@@ -205,11 +205,8 @@ class HappinessSystem:
 
         from game.systems.taxation_system import TaxationSystem
         church_effect = TaxationSystem.church_happiness_effect()
-        socage_effect = TaxationSystem.socage_happiness_effect()
-        if church_effect:
-            add_factor("Church tax" if church_effect < 0 else "No church tax", church_effect)
-        if socage_effect:
-            add_factor(f"Socage tax ({TaxationSystem.get_socage_percent()}%)", socage_effect)
+        if church_effect > 0:
+            add_factor("No church tax", church_effect)
 
         gold_rule = HAPPINESS_MODIFIERS["gold_coin"]
         gold_bonus = float(gold_rule["amount_per_coin"]) * cls._owned_gold_coins(villager)

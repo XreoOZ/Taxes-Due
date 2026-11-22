@@ -1423,7 +1423,10 @@ HAPPINESS_ACTIVITY_MULTIPLIERS = {
     "happy": 1.0,
     "very_happy": 1.0,
 }
+TAX_UNHAPPINESS_DURATION_DAYS = 10
 HAPPINESS_MODIFIERS = {
+    "tax_church": {"label": "Church tax", "amount": 0.0, "duration_days": TAX_UNHAPPINESS_DURATION_DAYS},
+    "tax_socage": {"label": "Socage tax", "amount": 0.0, "duration_days": TAX_UNHAPPINESS_DURATION_DAYS},
     "ate_varied_food": {"label": "Ate varied food", "amount": 5.0, "duration_days": 1, "food_variety_required": 2},
     "needs_comfortable": {"label": "Hunger, thirst and toilet satisfied", "amount": 5.0, "duration_days": 1, "threshold": 50.0},
     "usable_bed": {"label": "Usable bed", "amount": 5.0, "persistent": True},

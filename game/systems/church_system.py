@@ -258,6 +258,15 @@ class ChurchSystem:
         inst.tax_paid_households_today.add(fam_str)
 
     @classmethod
+    def _apply_church_tax_unhappiness(cls, family_id, church_permit, villager_manager, day_number):
+        from game.systems.taxation_system import TaxationSystem
+        TaxationSystem.apply_tax_unhappiness(
+            family_id, "tax_church",
+            TaxationSystem.church_tax_happiness_amount(church_permit),
+            villager_manager, day_number,
+        )
+
+    @classmethod
     def prepare_church_tax_payment(cls, representative, church_permit, furniture_manager,
                                    day_number=1):
         """Have the household representative take today's tithe from their chest before prayer."""
@@ -348,6 +357,7 @@ class ChurchSystem:
 
         if paid_copper <= 0:
             cls.mark_tax_paid(fam_id, church_permit)
+            cls._apply_church_tax_unhappiness(fam_id, church_permit, villager_manager, day)
             representative.say("Our household has no coins for today's church tithe, Father.", duration=2.2)
             return 0
 
@@ -359,6 +369,7 @@ class ChurchSystem:
             VillageWealthSystem.mark_dirty()
             representative.church_tax_prepared_amount = 0
             cls.mark_tax_paid(fam_id, church_permit)
+            cls._apply_church_tax_unhappiness(fam_id, church_permit, villager_manager, day)
             from game.systems.market_sales_report import MarketSalesReportSystem
             if str(getattr(priest, "family_id", "")) != str(fam_id):
                 MarketSalesReportSystem.record_household_income(

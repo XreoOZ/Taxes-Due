@@ -142,18 +142,35 @@ class TaxationSystem:
         return 0.0
 
     @classmethod
+    def church_tax_happiness_amount(cls, church_permit=None):
+        from game.systems.church_system import ChurchSystem
+        amount = ChurchSystem.get_configured_tax_amount(church_permit)
+        return cls._tier_value(amount, CHURCH_TAX_HAPPINESS_TIERS_COPPER)
+
+    @classmethod
     def church_happiness_effect(cls):
         from game.systems.church_system import ChurchSystem
         if not ChurchSystem.is_tax_enabled():
             return float(NO_CHURCH_TAX_HAPPINESS_BONUS)
-        amount = ChurchSystem.get_configured_tax_amount()
-        return cls._tier_value(amount, CHURCH_TAX_HAPPINESS_TIERS_COPPER)
+        return cls.church_tax_happiness_amount()
 
     @classmethod
     def socage_happiness_effect(cls):
         if not cls.is_socage_enabled():
             return 0.0
         return cls._tier_value(cls.get_socage_percent(), SOCAGE_TAX_HAPPINESS_TIERS)
+
+    @classmethod
+    def apply_tax_unhappiness(cls, family_id, effect_id, amount, villager_manager, day_number):
+        """Give every living member of a taxed household the timed unhappiness effect."""
+        from game.systems.happiness_system import HappinessSystem
+        amount = float(amount or 0.0)
+        if amount == 0.0:
+            return
+        family = villager_manager.get_family_by_id(family_id) if villager_manager else None
+        for member in getattr(family, "members", []) or []:
+            if getattr(member, "is_alive", True):
+                HappinessSystem.record_event(member, effect_id, day_number, amount=amount)
 
     @classmethod
     def household_chest_wallet(cls, furniture_manager, family_id):
@@ -427,6 +444,10 @@ class TaxationSystem:
                     if success:
                         round_state["household_paid"] = True
                         cls.record_socage_tax_collected(due, day_number)
+                        cls.apply_tax_unhappiness(
+                            family.id, "tax_socage", cls.socage_happiness_effect(),
+                            villager_manager, day_number,
+                        )
                         collector.say("I have recorded my own household's tax payment.", duration=2.5)
                         from game.systems.wealth_system import VillageWealthSystem
                         VillageWealthSystem.mark_dirty()
@@ -510,6 +531,10 @@ class TaxationSystem:
                 villager.socage_tax_prepared_amount = 0
                 villager.socage_tax_prepared_cycle = None
                 cls.record_socage_tax_collected(due, day_number)
+                cls.apply_tax_unhappiness(
+                    villager.family_id, "tax_socage", cls.socage_happiness_effect(),
+                    villager_manager, day_number,
+                )
                 from game.systems.wealth_system import VillageWealthSystem
                 VillageWealthSystem.mark_dirty()
                 replies = SOCAGE_TAX_HAPPINESS_REPLIES.get(
