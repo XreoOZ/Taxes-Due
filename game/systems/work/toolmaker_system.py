@@ -309,7 +309,8 @@ class ToolmakerSystem:
         # DELIVERING: carry finished tools to the payer's storage.
         if order.get("status") == "DELIVERING":
             return cls._deliver_step(toolmaker, subject, dt, furniture_manager,
-                                     building_manager, all_entities, player)
+                                     building_manager, all_entities, player,
+                                     stockpile_manager=stockpile_manager)
 
         if order.get("status") == "PAID":
             order["status"] = "CRAFTING"
@@ -387,7 +388,8 @@ class ToolmakerSystem:
 
     @classmethod
     def _deliver_step(cls, toolmaker, subject, dt, furniture_manager,
-                      building_manager, all_entities, player):
+                      building_manager, all_entities, player,
+                      stockpile_manager=None):
         order = subject.construction_order
         tool_name = order.get("tool_name")
         qty = int(order.get("qty_total", 1))
@@ -407,14 +409,30 @@ class ToolmakerSystem:
             dest_chest = furniture_manager.get_storage_for_family(str(payer_family))
 
         if dest_chest is None:
-            # No storage: drop tools as owner-tagged loose stacks at the bench.
-            gx = int(toolmaker.x // TILE_SIZE)
-            gy = int(toolmaker.y // TILE_SIZE)
-            sm = getattr(toolmaker, "_stockpile_manager", None)
-            owner_type = "landlord" if order.get("payer_type") == "landlord" else "villager"
-            owner_id = None if order.get("payer_type") == "landlord" else str(payer_family)
-            # stockpile_manager isn't threaded here; deposit stays in inventory
-            # until a chest exists — keep order DELIVERING and retry next tick.
+            # No household chest: drop the tools as owner-tagged loose stacks
+            # at the toolmaker's feet so the family can still collect them.
+            if stockpile_manager is not None:
+                gx = int(toolmaker.x // TILE_SIZE)
+                gy = int(toolmaker.y // TILE_SIZE)
+                owner_type = "landlord" if order.get("payer_type") == "landlord" else "villager"
+                owner_id = None if order.get("payer_type") == "landlord" else str(payer_family)
+                amount = min(carried, qty)
+                stockpile_manager.drop_resource(
+                    tool_name, amount, gx, gy,
+                    owner_type=owner_type, owner_id=owner_id)
+                toolmaker.inventory[tool_name] = carried - amount
+                if toolmaker.inventory[tool_name] <= 0:
+                    toolmaker.inventory.pop(tool_name, None)
+                    from game.systems.work.tool_condition import ToolConditionSystem
+                    conds = getattr(toolmaker, "tool_conditions", {})
+                    if isinstance(conds, dict):
+                        conds.pop(tool_name, None)
+                order["status"] = "COMPLETE"
+                order["progress_ratio"] = 1.0
+                toolmaker.task = "IDLE"
+                toolmaker.active_tool = None
+                toolmaker.say(f"Dropped {amount} {tool_name} — the household has no chest.", duration=2.5)
+                return True
             if not getattr(toolmaker, "speech_text", None):
                 toolmaker.say("The payer has no storage yet; tools are safe in my pack.", duration=3.0)
             toolmaker.task = "TOOLMAKER_DELIVERING"

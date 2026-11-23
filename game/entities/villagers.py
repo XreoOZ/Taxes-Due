@@ -1022,6 +1022,50 @@ class Villager:
         """Mendapatkan daftar alat yang belum dimiliki untuk pekerjaan saat ini"""
         return get_missing_tools_for_worker(self)
 
+    def _ensure_tool_commissions(self, missing_tools, building_manager, furniture_manager, villager_manager):
+        """Queue toolmaker commissions for missing job tools instead of idling.
+
+        Every missing tool that a toolmaker workbench can forge gets an active
+        commission order (deduplicated per tool). Returns True only when ALL
+        missing tools are covered by an active or freshly queued order, so the
+        caller can keep the villager busy on needs/chores while the household
+        payment + forge + delivery pipeline fulfills the order."""
+        if not furniture_manager:
+            return False
+        from game.systems.work.toolmaker_system import ToolmakerSystem
+        benches = ToolmakerSystem._toolmaker_workbenches(furniture_manager)
+        if not benches:
+            return False
+        active_statuses = {
+            "AWAITING_PAYMENT", "PAYMENT_REQUESTED", "PAYMENT_TRAVELING",
+            "PAID", "CRAFTING", "AWAITING_MATERIAL", "DELIVERING",
+        }
+        covered = set()
+        for subject in ToolmakerSystem._tool_order_subjects(furniture_manager):
+            order = subject.construction_order
+            if (order.get("payer_family_id") == str(self.family_id)
+                    and order.get("status") in active_statuses):
+                covered.add(order.get("tool_name"))
+        craftable = set(ToolmakerSystem.craftable_tools())
+        for tool_name, qty in missing_tools:
+            if tool_name in covered or tool_name not in craftable:
+                continue
+            bench = min(
+                benches,
+                key=lambda b: math.hypot(
+                    b.get_world_pos(TILE_SIZE)[0] - self.x,
+                    b.get_world_pos(TILE_SIZE)[1] - self.y),
+            )
+            subject, err = ToolmakerSystem.create_tool_order(
+                bench, tool_name, max(1, int(qty or 1)),
+                payer_family_id=str(self.family_id),
+                building_manager=building_manager,
+                villager_manager=villager_manager,
+            )
+            if subject is not None:
+                covered.add(tool_name)
+        return all(tool_name in covered for tool_name, _ in missing_tools)
+
     def get_irrelevant_tools(self):
         """
         Mendapatkan daftar alat kerja yang TIDAK LAGI RELEVAN dengan pekerjaan saat ini
@@ -2832,7 +2876,13 @@ class Villager:
                         self.job_tool_purchase_items = purchase_items
                         self.task = "BUYING_JOB_TOOLS_RETRIEVE_COINS"
                         return
-                    if self.job == "Builder":
+                    if self._ensure_tool_commissions(
+                            missing_tools, building_manager, furniture_manager, villager_manager):
+                        # Commission queued/active — keep working, meeting needs
+                        # and doing chores while payment/forge/delivery runs.
+                        if not getattr(self, "speech_text", None):
+                            self.say("My tools are on order — the toolmaker will forge them.", duration=2.5)
+                    elif self.job == "Builder":
                         # Builder commission errands (claiming orders, payment
                         # requests, material hauling) do not need the saw/adze.
                         # BuilderSystem gates only the actual build phase, so

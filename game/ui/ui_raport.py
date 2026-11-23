@@ -1487,6 +1487,12 @@ class RaportUI(
         # 8.5. Tab 7: Taxation & Tithes
         elif self.active_tab == 7:
             if self.show_item_dist_dialog:
+                # The wealth card sits outside the dialog — let it switch
+                # dialogs directly instead of being blocked by the overlay.
+                if self.check_wealth_detail_btn_rect and self.check_wealth_detail_btn_rect.collidepoint(mouse_pos):
+                    self.show_wealth_detail_dialog = True
+                    self.show_item_dist_dialog = False
+                    return "open_wealth_dialog"
                 if self.item_dist_close_rect and self.item_dist_close_rect.collidepoint(mouse_pos):
                     self.show_item_dist_dialog = False
                     return "close_item_dist_dialog"
@@ -1505,10 +1511,16 @@ class RaportUI(
 
             if self.check_item_dist_btn_rect and self.check_item_dist_btn_rect.collidepoint(mouse_pos):
                 self.show_item_dist_dialog = True
+                self.show_wealth_detail_dialog = False
                 self.item_dist_view = "production"
                 return "open_item_dist_dialog"
 
             if self.show_wealth_detail_dialog:
+                if self.check_item_dist_btn_rect and self.check_item_dist_btn_rect.collidepoint(mouse_pos):
+                    self.show_item_dist_dialog = True
+                    self.show_wealth_detail_dialog = False
+                    self.item_dist_view = "production"
+                    return "open_item_dist_dialog"
                 if self.close_wealth_dlg_btn_rect and self.close_wealth_dlg_btn_rect.collidepoint(mouse_pos):
                     self.show_wealth_detail_dialog = False
                     return "close_wealth_dialog"
@@ -1516,6 +1528,7 @@ class RaportUI(
 
             if self.check_wealth_detail_btn_rect and self.check_wealth_detail_btn_rect.collidepoint(mouse_pos):
                 self.show_wealth_detail_dialog = True
+                self.show_item_dist_dialog = False
                 return "open_wealth_dialog"
 
             from game.systems.village_life.church_system import ChurchSystem

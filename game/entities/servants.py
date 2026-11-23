@@ -1686,6 +1686,10 @@ class Servant:
         target_dist = math.hypot(tx - (self.path_target[0] if self.path_target else 999999),
                                  ty - (self.path_target[1] if self.path_target else 999999))
         target_changed = self.path_target is None or target_dist > PATH_WAYPOINT_TOLERANCE
+        # Phase-through servants route straight through furniture: hand the
+        # pathfinder no furniture manager so occupied furniture tiles count
+        # as walkable. Building walls still block via building_manager.
+        nav_furniture_manager = None if SERVANT_PHASE_THROUGH_OBSTACLES else furniture_manager
         needs_new_path = (
             target_changed
             or (self.current_path and self.path_index >= len(self.current_path))
@@ -1698,7 +1702,7 @@ class Servant:
                 self.path_retry_timer = 0.0
             candidate_path = find_navigation_path(
                 (self.x, self.y), (tx, ty), building_manager,
-                furniture_manager=furniture_manager, tile_size=TILE_SIZE,
+                furniture_manager=nav_furniture_manager, tile_size=TILE_SIZE,
             )
             if candidate_path:
                 self.current_path = candidate_path
@@ -1722,7 +1726,7 @@ class Servant:
         # the actor cuts corners instead of retracing the stale polyline.
         steer_idx = resolve_steer_index(
             self, (self.x, self.y), self.current_path, self.path_index, dt,
-            building_manager, furniture_manager=furniture_manager,
+            building_manager, furniture_manager=nav_furniture_manager,
             tile_size=TILE_SIZE,
         )
         target_wp = self.current_path[steer_idx]
