@@ -174,6 +174,23 @@ class ToolmakerSystem:
         return actual
 
     @classmethod
+    def _repatriate_carried(cls, toolmaker, chest, item_names):
+        """Pindahkan material recipe yang sedang di kantong toolmaker ke chest
+        keluarga (deposit fisik di rumah) sebelum cek stok — material di
+        pocket tetap kehitung, tidak perlu beli ulang."""
+        if chest is None:
+            return
+        inv = getattr(toolmaker, "inventory", None)
+        chest_inv = getattr(chest, "inventory", None)
+        if not isinstance(inv, dict) or not isinstance(chest_inv, dict):
+            return
+        for item in item_names:
+            amt = int(inv.get(item, 0) or 0)
+            if amt > 0:
+                chest.store_item(item, amt)
+                del inv[item]
+
+    @classmethod
     def _bars_today(cls, toolmaker, day_number):
         if getattr(toolmaker, "toolmaker_bars_day", -1) != int(day_number):
             toolmaker.toolmaker_bars_day = int(day_number)
@@ -194,6 +211,9 @@ class ToolmakerSystem:
             return False
         if cls._bars_today(toolmaker, day_number) >= TOOLMAKER_BAR_DAILY_CAP:
             return False
+        # Bahan di kantong toolmaker di-repatriate ke chest dulu (fisik).
+        cls._repatriate_carried(toolmaker, chest,
+                                list(TOOLMAKER_BAR_RECIPE.keys()) + ["Iron Bar"])
         # Need ore + wood in the household chest.
         missing = {
             item: int(amount)
@@ -305,6 +325,9 @@ class ToolmakerSystem:
                     stockpile_manager=None):
         order = subject.construction_order
         chest = cls._family_chest(toolmaker, furniture_manager)
+        # Material recipe yang di kantong toolmaker di-deposit ke chest
+        # (fisik, di rumah) sebelum gate stok — tidak pernah beli dobel.
+        cls._repatriate_carried(toolmaker, chest, list(TOOLMAKER_TOOL_RECIPE.keys()))
 
         # DELIVERING: carry finished tools to the payer's storage.
         if order.get("status") == "DELIVERING":

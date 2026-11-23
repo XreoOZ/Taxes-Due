@@ -368,8 +368,9 @@ class CemeterySystem:
             if payer is gravedigger:
                 payer = next((member for member in surviving if member is not gravedigger), None)
             if payer:
-                chest = furniture_manager.get_storage_for_family(fam_id) if furniture_manager else None
-                available = to_copper(getattr(chest, "inventory", {})) if chest else 0
+                from game.systems.economy.transactions import household_coin_total_copper
+                available = household_coin_total_copper(
+                    fam_id, furniture_manager, villager_manager, stockpile_manager)
             else:
                 payer_type = "landlord"
                 payer = gravedigger
@@ -461,25 +462,39 @@ class CemeterySystem:
             pass
 
     @classmethod
-    def _collect_household_fee(cls, payer, commission, furniture_manager):
-        chest = furniture_manager.get_storage_for_family(payer.family_id) if furniture_manager else None
-        if not chest or not isinstance(getattr(chest, "inventory", None), dict):
+    def _collect_household_fee(cls, payer, commission, furniture_manager,
+                                stockpile_manager=None, villager_manager=None,
+                                building_manager=None):
+        """Universal physical fee collection: gather the burial fee from ALL
+        reachable household coin sources (chest, ground stacks, nearby member
+        pockets) into the payer's pocket via transactions.collect_coins.
+        No chest rewrite, no telepathic wallet math, no free burial."""
+        from game.systems.economy.transactions import (
+            household_coin_total_copper, collect_coins)
+        fam_id = getattr(payer, "family_id", None)
+        total = household_coin_total_copper(
+            fam_id, furniture_manager, villager_manager, stockpile_manager)
+        fee = min(BURIAL_FEE_MAX_SILVER * COPPER_PER_SILVER, total)
+        if fee <= 0:
             commission["fee_paid"] = 0
             commission["status"] = "PAID"
             return 0
-
-        wallet = normalize_wallet(chest.inventory)
-        total = to_copper(wallet)
-        fee = min(BURIAL_FEE_MAX_SILVER * COPPER_PER_SILVER, total)
-        cls._replace_wallet_in_inventory(chest.inventory, from_copper(total - fee))
-        for denom, amount in from_copper(fee).items():
-            if amount:
-                payer.inventory[denom] = payer.inventory.get(denom, 0) + amount
-        from game.systems.economy.currency import compact_currency_wallet
-        compact_currency_wallet(chest.inventory)
-        compact_currency_wallet(payer.inventory)
+        ok, _msg = collect_coins(
+            payer, fam_id, fee,
+            furniture_manager=furniture_manager,
+            villager_manager=villager_manager,
+            stockpile_manager=stockpile_manager,
+            building_manager=building_manager or getattr(payer, "building_manager", None),
+        )
+        if not ok:
+            # Coins exist but are physically out of reach right now
+            # (e.g. carried by a member who is away). Keep the commission
+            # pending so the payment errand can be retried later.
+            commission["status"] = "PAYMENT_PENDING"
+            return 0
         commission["fee_paid"] = fee
         commission["status"] = "PAYMENT_TRAVELING"
+        cls._mark_wealth_dirty()
         return fee
 
     @classmethod
@@ -558,29 +573,47 @@ class CemeterySystem:
 
         if task == "BURIAL_PAYMENT_RETRIEVE":
             chest = furniture_manager.get_storage_for_family(villager.family_id) if furniture_manager else None
-            if not chest:
-                commission["fee_paid"] = 0
-                commission["status"] = "PAID"
-                cls._mark_wealth_dirty()
-                villager.task = "IDLE"
-                villager.burial_payment_target_corpse_id = None
-                villager.burial_payment_gravedigger_id = None
-                villager._resume_or_idle_after_need()
-                return True
-            pos = chest.get_approach_point(
-                villager.x, villager.y, worker_id=villager.id,
-                all_entities=all_entities, tile_size=TILE_SIZE,
-                bm=building_manager,
-            )
-            arrived = villager._move_towards(
-                pos[0], pos[1], dt, arrival_dist=CHEST_INTERACTION_RADIUS,
-                all_entities=all_entities, player=player,
-                building_manager=building_manager, furniture_manager=furniture_manager,
-                interaction_target=chest,
-            )
+            arrived = True
+            if chest:
+                pos = chest.get_approach_point(
+                    villager.x, villager.y, worker_id=villager.id,
+                    all_entities=all_entities, tile_size=TILE_SIZE,
+                    bm=building_manager,
+                )
+                arrived = villager._move_towards(
+                    pos[0], pos[1], dt, arrival_dist=CHEST_INTERACTION_RADIUS,
+                    all_entities=all_entities, player=player,
+                    building_manager=building_manager, furniture_manager=furniture_manager,
+                    interaction_target=chest,
+                )
+                if not arrived:
+                    return True
+            # No chest? Collect from whatever physical coin sources are
+            # reachable right here (ground stacks / nearby member pockets) —
+            # a chestless household still pays, never a free burial.
             if arrived:
-                fee = cls._collect_household_fee(villager, commission, furniture_manager)
-                if fee <= 0:
+                fee = cls._collect_household_fee(
+                    villager, commission, furniture_manager,
+                    stockpile_manager=stockpile_manager,
+                    villager_manager=villager_manager,
+                    building_manager=building_manager)
+                if fee <= 0 and commission.get("status") == "PAYMENT_PENDING":
+                    # Coins unreachable — stay pending and re-queue the
+                    # payment errand so the representative retries later
+                    # instead of burying for free or stalling forever.
+                    from game.systems.work.commission_schedule import CommissionScheduleSystem
+                    if not CommissionScheduleSystem.is_queued(
+                            villager, "BURIAL_PAYMENT_RETRIEVE"):
+                        CommissionScheduleSystem.queue(
+                            villager, "BURIAL_PAYMENT_RETRIEVE",
+                            burial_payment_target_corpse_id=commission.get("corpse_id"),
+                            burial_payment_gravedigger_id=commission.get("gravedigger_id"),
+                        )
+                    villager.task = "IDLE"
+                    villager.burial_payment_target_corpse_id = None
+                    villager.burial_payment_gravedigger_id = None
+                    villager._resume_or_idle_after_need()
+                elif fee <= 0:
                     villager.burial_payment_target_corpse_id = None
                     villager.burial_payment_gravedigger_id = None
                     villager._resume_or_idle_after_need()

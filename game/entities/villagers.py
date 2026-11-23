@@ -3497,39 +3497,34 @@ class Villager:
             # Pekerjaan spesifik: Penggali Kubur (Gravedigger) - AGENT 3
             if self.job == "Gravedigger":
                 from game.systems.village_life.cemetery_system import CemeterySystem
-                restock_tasks = {
+                from game.systems.work.builder_system import BuilderSystem
+                legacy_restock_tasks = {
                     "GRAVEDIGGER_RESTOCK_RETRIEVE_COINS",
                     "GRAVEDIGGER_RESTOCK_TRAVEL_TO_MARKET",
                     "GRAVEDIGGER_RESTOCK_HAULING_HOME",
                 }
-                if self.task in restock_tasks and (
-                    not getattr(self, "target_restock_market", None)
-                    or not getattr(self, "target_restock_mat", None)
-                    or getattr(self, "target_restock_qty", 0) <= 0
-                ):
-                    # Save files retain task names but not live market references.
-                    # Rebuild the purchase plan from current stock and funds.
+                # Universal bulk restock: any in-flight legacy single-item
+                # errand is replanned as one multi-item market run.
+                if self.task in legacy_restock_tasks:
                     self.task = "IDLE"
                     self.target_restock_market = None
                     self.target_restock_mat = None
                     self.target_restock_qty = 0
+                    self.target_restock_items = None
 
-                # Buy any missing tools before starting burial work. Process each
-                # missing tool through the same physical market workflow.
-                missing_tools = self.get_missing_job_tools()
-                if missing_tools and self.task not in restock_tasks:
-                    tool_name, tool_qty = missing_tools[0]
-                    market, _, buy_qty = AIMarketPurchasingSystem.find_nearest_market_for_material(
-                        self, tool_name, tool_qty, building_manager, furniture_manager, villager_manager
-                    )
-                    if market and buy_qty > 0:
-                        self.target_restock_market = market
-                        self.target_restock_mat = tool_name
-                        self.target_restock_qty = buy_qty
-                        self.task = "GRAVEDIGGER_RESTOCK_RETRIEVE_COINS"
-                    elif not getattr(self, "speech_text", None):
-                        self.say(f"I need {tool_name} to work, but no market has it in stock.", duration=2.5)
+                # Universal market run in progress (materials AND tools in
+                # one trip, resolved by BuilderSystem._update_restock).
+                if str(self.task).startswith("BUILDER_RESTOCK_"):
+                    BuilderSystem._update_restock(
+                        self, dt, building_manager, furniture_manager,
+                        villager_manager, all_entities, player,
+                        stockpile_manager=stockpile_manager,
+                        permit_manager=permit_manager)
                     return
+
+                # Missing job tools are merged into the universal restock
+                # plan below (one market run buys tools AND materials).
+                missing_tools = dict(self.get_missing_job_tools()) if self.task == "IDLE" else {}
 
                 cemetery_p = CemeterySystem.get_cemetery_permit(permit_manager)
                 if cemetery_p:
@@ -3654,22 +3649,19 @@ class Villager:
                 ]
                 unburied_corpses.sort(key=lambda v: not getattr(v, "is_cemetery_overflow", False))
 
-                if (ready_overflow or unburied_corpses) and self.task not in restock_tasks:
+                if (ready_overflow or unburied_corpses) and self.task == "IDLE":
                     target_corpse = ready_overflow or unburied_corpses[0]
                     _, missing_materials = CemeterySystem.get_missing_gravedigger_materials(self, furniture_manager)
-                    if missing_materials:
-                        mkt, mat_to_buy, can_buy, _ = AIMarketPurchasingSystem.find_market_for_material_needs(
-                            self, missing_materials, building_manager, furniture_manager, villager_manager
-                        )
-                        if mkt and can_buy > 0:
-                            self.target_restock_market = mkt
-                            self.target_restock_mat = mat_to_buy
-                            self.target_restock_qty = can_buy
-                            self.task = "GRAVEDIGGER_RESTOCK_RETRIEVE_COINS"
+                    needs = dict(missing_materials)
+                    for tname, tqty in missing_tools.items():
+                        needs[tname] = max(needs.get(tname, 0), int(tqty))
+                    if needs:
+                        if BuilderSystem._begin_restock(
+                                self, needs, building_manager, furniture_manager,
+                                villager_manager):
                             return
-                        else:
-                            self.say("I need burial materials, but no market has an affordable item in stock.", duration=2.5)
-                            return
+                        self.say("I need burial materials, but no market has an affordable item in stock.", duration=2.5)
+                        return
 
                     # Arrange payment first. The family representative visits the
                     # gravedigger, or the gravedigger collects from landlord storage.
@@ -3699,72 +3691,17 @@ class Villager:
                         self.say(f"Carrying {target_corpse.first_name}'s body to the cemetery...", duration=2.5)
                     return
 
-                # E. Restocking material rutin (Target 5 Wood, 5 Stone)
+                # E. Restocking material rutin (Target 5 Wood, 5 Stone) —
+                # universal bulk market run shared with every other job.
                 if self.task == "IDLE":
                     _, missing_materials = CemeterySystem.get_missing_gravedigger_materials(self, furniture_manager)
-                    if missing_materials:
-                        mkt, mat_to_buy, can_buy, _ = AIMarketPurchasingSystem.find_market_for_material_needs(
-                            self, missing_materials, building_manager, furniture_manager, villager_manager
-                        )
-                        if mkt and can_buy > 0:
-                            self.target_restock_market = mkt
-                            self.target_restock_mat = mat_to_buy
-                            self.target_restock_qty = can_buy
-                            self.task = "GRAVEDIGGER_RESTOCK_RETRIEVE_COINS"
-
-                if self.task == "GRAVEDIGGER_RESTOCK_RETRIEVE_COINS":
-                    chest = furniture_manager.get_storage_for_family(self.family_id) if furniture_manager else None
-                    mkt = getattr(self, "target_restock_market", None)
-                    mat = getattr(self, "target_restock_mat", "Wood")
-                    qty = getattr(self, "target_restock_qty", 1)
-                    unit_price = MarketService.get_item_price(mat, mkt)
-                    pocket_funds = to_copper(normalize_wallet(self.inventory))
-                    if pocket_funds >= unit_price * qty:
-                        arrived = True
-                    elif chest:
-                        cx, cy = chest.get_world_pos(TILE_SIZE)
-                        arrived = self._move_towards(cx, cy, dt, arrival_dist=CHEST_INTERACTION_RADIUS, all_entities=all_entities, player=player, building_manager=building_manager, furniture_manager=furniture_manager, interaction_target=chest)
-                    else:
-                        arrived = True
-                    if arrived:
-                        enough_coins, message = AIMarketPurchasingSystem.withdraw_household_coins(
-                            self, unit_price * qty, furniture_manager, villager_manager
-                        )
-                        if enough_coins:
-                            self.task = "GRAVEDIGGER_RESTOCK_TRAVEL_TO_MARKET"
-                        else:
-                            self.task = "IDLE"
-                            if not getattr(self, "speech_text", None):
-                                self.say(message, duration=2.5)
-                    return
-
-                if self.task == "GRAVEDIGGER_RESTOCK_TRAVEL_TO_MARKET":
-                    mkt = getattr(self, "target_restock_market", None)
-                    if mkt:
-                        mx, my = mkt.get_center_world(TILE_SIZE)
-                        arrived = self._move_towards(mx, my, dt, arrival_dist=36, all_entities=all_entities, player=player, building_manager=building_manager, furniture_manager=furniture_manager, interaction_target=mkt)
-                        if arrived:
-                            mat = getattr(self, "target_restock_mat", "Wood")
-                            qty = getattr(self, "target_restock_qty", 1)
-                            ok, msg = AIMarketPurchasingSystem.execute_material_transaction(
-                                self, mkt, mat, qty, day_number=getattr(day_cycle, "day_number", 1)
-                            )
-                            if ok:
-                                self.say(f"Bought {qty}x {mat} for burials.", duration=2.5)
-                            self.task = "GRAVEDIGGER_RESTOCK_HAULING_HOME"
-                    return
-
-                if self.task == "GRAVEDIGGER_RESTOCK_HAULING_HOME":
-                    chest = furniture_manager.get_storage_for_family(self.family_id) if furniture_manager else None
-                    if chest:
-                        cx, cy = chest.get_world_pos(TILE_SIZE)
-                        arrived = self._move_towards(cx, cy, dt, arrival_dist=CHEST_INTERACTION_RADIUS, all_entities=all_entities, player=player, building_manager=building_manager, furniture_manager=furniture_manager, interaction_target=chest)
-                        if arrived:
-                            AIMarketPurchasingSystem.deposit_materials_and_change_to_chest(self, furniture_manager)
-                            self.say("Stored materials in chest.", duration=2.0)
-                    else:
-                        AIMarketPurchasingSystem.deposit_materials_and_change_to_chest(self, furniture_manager)
-                    return
+                    needs = dict(missing_materials)
+                    for tname, tqty in missing_tools.items():
+                        needs[tname] = max(needs.get(tname, 0), int(tqty))
+                    if needs:
+                        BuilderSystem._begin_restock(
+                            self, needs, building_manager, furniture_manager,
+                            villager_manager)
 
         # -------------------------------------------------------------
         # Rutinitas 3: Waktu Santai / Istirahat (LEISURE / Chores Finished)

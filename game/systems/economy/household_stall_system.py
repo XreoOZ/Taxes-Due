@@ -523,7 +523,9 @@ class HouseholdStallSystem:
                                              furniture_manager=furniture_manager,
                                              interaction_target=market)
             if arrived:
-                # Withdraw coins from market into villager personal pocket
+                # Withdraw coins from market into villager pocket.
+                # Canonical wallet = inventory ONLY (villager.currency is a
+                # legacy shadow wallet — writing both double-counts coins).
                 mkt_curr = getattr(market, "currency", {})
                 withdrawn = {}
                 for denom in ("Copper", "Silver", "Gold"):
@@ -531,13 +533,15 @@ class HouseholdStallSystem:
                     if amt > 0:
                         withdrawn[denom] = amt
                         mkt_curr[denom] = 0
-                        # Store in villager currency/inventory
-                        if not hasattr(villager, "currency") or not isinstance(villager.currency, dict):
-                            villager.currency = {"Copper": 0, "Silver": 0, "Gold": 0}
-                        villager.currency[denom] = villager.currency.get(denom, 0) + amt
                         villager.inventory[denom] = villager.inventory.get(denom, 0) + amt
+                # Fold any legacy shadow-wallet coins into the canonical one.
+                if isinstance(getattr(villager, "currency", None), dict):
+                    for denom in ("Copper", "Silver", "Gold"):
+                        amt = villager.currency.get(denom, 0)
+                        if amt > 0:
+                            villager.inventory[denom] = villager.inventory.get(denom, 0) + amt
+                            villager.currency[denom] = 0
                 compact_currency_wallet(mkt_curr)
-                compact_currency_wallet(villager.currency)
                 compact_currency_wallet(villager.inventory)
 
                 VillageWealthSystem.mark_dirty()
@@ -563,27 +567,34 @@ class HouseholdStallSystem:
                                              furniture_manager=furniture_manager,
                                              interaction_target=chest)
             if arrived:
-                # Deposit carried coins from pocket into chest
+                # Deposit carried coins into the chest's canonical wallet
+                # (inventory). Legacy shadow wallets are folded in first so
+                # no coin is counted twice or left behind.
                 deposited = {}
                 for denom in ("Copper", "Silver", "Gold"):
-                    # Check villager pocket
                     amt = villager.inventory.get(denom, 0)
-                    if hasattr(villager, "currency") and villager.currency.get(denom, 0) > amt:
-                        amt = villager.currency[denom]
+                    if isinstance(getattr(villager, "currency", None), dict):
+                        amt += villager.currency.get(denom, 0)
+                        villager.currency[denom] = 0
                     if amt > 0:
                         deposited[denom] = amt
                         villager.inventory[denom] = 0
-                        if hasattr(villager, "currency"):
-                            villager.currency[denom] = 0
-                        # Store into chest
-                        if not hasattr(chest, "currency") or not isinstance(chest.currency, dict):
-                            chest.currency = {"Copper": 0, "Silver": 0, "Gold": 0}
-                        chest.currency[denom] = chest.currency.get(denom, 0) + amt
-                        if hasattr(chest, "inventory") and isinstance(chest.inventory, dict):
+                        if isinstance(getattr(chest, "inventory", None), dict):
                             chest.inventory[denom] = chest.inventory.get(denom, 0) + amt
-                compact_currency_wallet(chest.currency)
-                compact_currency_wallet(chest.inventory)
-                compact_currency_wallet(villager.currency)
+                        elif isinstance(getattr(chest, "currency", None), dict):
+                            chest.currency[denom] = chest.currency.get(denom, 0) + amt
+                if isinstance(getattr(chest, "currency", None), dict):
+                    # Fold legacy chest shadow wallet into canonical inventory.
+                    if isinstance(getattr(chest, "inventory", None), dict):
+                        for denom in ("Copper", "Silver", "Gold"):
+                            amt = chest.currency.get(denom, 0)
+                            if amt > 0:
+                                chest.inventory[denom] = chest.inventory.get(denom, 0) + amt
+                                chest.currency[denom] = 0
+                if isinstance(getattr(chest, "inventory", None), dict):
+                    compact_currency_wallet(chest.inventory)
+                if isinstance(getattr(chest, "currency", None), dict):
+                    compact_currency_wallet(chest.currency)
                 compact_currency_wallet(villager.inventory)
 
                 VillageWealthSystem.mark_dirty()

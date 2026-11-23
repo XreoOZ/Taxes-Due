@@ -169,6 +169,10 @@ class TestHouseholdFoodPurchaseNoChest(unittest.TestCase):
         self.furniture_manager.furnitures.append(chest)
         alice = Villager(2, "Alice", "Smith", "Female", 28, 2, "Mother", "fam_1")
         alice.inventory = {"Copper": 10}
+        # Member pockets are only reachable while the member is physically
+        # inside the household permit (no telepathic coin transfers).
+        alice.x = 5 * TILE_SIZE
+        alice.y = 5 * TILE_SIZE
         self.fam.members.append(alice)
 
         ok, _ = AIFoodPurchasingSystem.retrieve_coins_from_storage(

@@ -302,39 +302,21 @@ class AIFoodPurchasingSystem:
         if _pocket_copper() >= price_in_copper:
             return True, "Villager already carries enough coins in pocket."
 
-        # 1. Household storage chest (partial withdrawal allowed — the
-        #    remainder is collected from abstract wallets below).
-        chest = furniture_manager.get_storage_for_family(villager.family_id) if furniture_manager else None
-        if chest and hasattr(chest, "inventory") and isinstance(chest.inventory, dict):
-            chest_copper = to_copper(normalize_wallet(chest.inventory))
-            if chest_copper > 0:
-                take = min(price_in_copper - _pocket_copper(), chest_copper)
-                ok, _ = transfer_currency_value(chest.inventory, villager.inventory, take)
-                if ok and _pocket_copper() >= price_in_copper:
-                    return True, "Successfully retrieved coins from household storage."
-
-        # 2. Abstract household wallets: family purse + living members'
-        #    pockets. No chest or physical stack required — identical to the
-        #    commission payment collection rule.
-        deficit = price_in_copper - _pocket_copper()
-        if deficit > 0:
-            for wallet in cls._family_abstract_wallets(villager, villager_manager):
-                if deficit <= 0:
-                    break
-                if wallet is villager.inventory:
-                    continue  # own pocket already counted
-                wallet_copper = to_copper(normalize_wallet(wallet))
-                if wallet_copper <= 0:
-                    continue
-                ok, _ = transfer_currency_value(
-                    wallet, villager.inventory, min(deficit, wallet_copper)
-                )
-                if ok:
-                    deficit = price_in_copper - _pocket_copper()
-
-        if deficit <= 0:
-            return True, "Successfully retrieved coins from household wallets."
-        return False, "Household does not have enough coins for the purchase."
+        # Universal physical collection (transactions.collect_coins):
+        # chest -> household ground coin stacks -> nearby member pockets.
+        # Affordability was already verified against the abstract wallet
+        # upstream; this only moves coins the carrier can actually reach.
+        from game.systems.economy.transactions import collect_coins
+        ok, msg = collect_coins(
+            villager, getattr(villager, "family_id", None), int(price_in_copper),
+            furniture_manager=furniture_manager,
+            villager_manager=villager_manager,
+            stockpile_manager=getattr(villager, "stockpile_manager", None),
+            building_manager=getattr(villager, "building_manager", None),
+        )
+        if ok:
+            return True, "Successfully retrieved coins from household sources."
+        return False, msg or "Household does not have enough coins for the purchase."
 
     @classmethod
     def execute_market_transaction(cls, villager, market, food_item, building_manager=None, quantity=1, day_number=None):
@@ -558,23 +540,21 @@ class AIMarketPurchasingSystem:
 
     @classmethod
     def withdraw_household_coins(cls, villager, amount, furniture_manager=None, villager_manager=None):
-        """Move enough household currency into the worker's inventory for a purchase."""
-        pocket = getattr(villager, "inventory", {})
-        deficit = max(0, int(amount) - to_copper(pocket))
-        if deficit <= 0:
-            return True, "Enough coins are already in the worker's inventory."
+        """Move enough household currency into the worker's inventory for a purchase.
 
-        _, source = MarketService.get_household_funds_and_source(
-            villager, furniture_manager, villager_manager
+        Universal physical collection: chest -> household ground coin stacks ->
+        nearby household members' pockets (collect_coins enforces proximity so
+        coins never teleport). Callers are expected to be at/near the household
+        when this runs (errand walks to the chest first).
+        """
+        from game.systems.economy.transactions import collect_coins
+        return collect_coins(
+            villager, getattr(villager, "family_id", None), int(amount),
+            furniture_manager=furniture_manager,
+            villager_manager=villager_manager,
+            stockpile_manager=getattr(villager, "stockpile_manager", None),
+            building_manager=getattr(villager, "building_manager", None),
         )
-        if not source or source is pocket:
-            return False, "Household funds are unavailable."
-
-        source_wallet = normalize_wallet(source)
-        if to_copper(source_wallet) < deficit:
-            return False, "Household does not have enough coins for the purchase."
-
-        return transfer_currency_value(source, pocket, deficit)
 
     @classmethod
     def find_market_for_items(cls, villager, requested_items, building_manager, furniture_manager=None, villager_manager=None):
