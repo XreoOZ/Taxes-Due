@@ -1769,7 +1769,7 @@ def main():
             wealth_context_timer -= real_dt
             # Periodic autosave: one file per in-game day (autosave-dayNN).
             from game.data.config import AUTOSAVE_INTERVAL_SECONDS
-            from game.save_system import autosave_slot_name
+            from game.save_system import autosave_slot_name, prune_autosaves
             autosave_elapsed += real_dt
             if autosave_elapsed >= AUTOSAVE_INTERVAL_SECONDS:
                 autosave_elapsed = 0.0
@@ -1782,6 +1782,10 @@ def main():
                     )
                 except Exception as e:
                     print(f"[Autosave] failed: {e}")
+                try:
+                    prune_autosaves()
+                except Exception as e:
+                    print(f"[Autosave] prune failed: {e}")
             if wealth_context_timer <= 0.0:
                 wealth_data = VillageWealthSystem.calculate_village_wealth(
                     resources=resources,

@@ -2020,3 +2020,4 @@ MAP_OVERLAY_ZOOM_STEP = 0.15
 
 # Autosave: writes saves/autosave-dayNN.json every interval (real seconds).
 AUTOSAVE_INTERVAL_SECONDS = 300.0
+AUTOSAVE_KEEP_COUNT = 3

@@ -50,6 +50,31 @@ def _sanitize_save_name(name):
 def autosave_slot_name(day_number):
     return f"autosave-day{int(day_number):02d}"
 
+def prune_autosaves(keep=None):
+    """Keep only the newest `keep` autosave-dayNN files; delete the oldest."""
+    from game.data.config import AUTOSAVE_KEEP_COUNT
+    keep = int(keep if keep is not None else AUTOSAVE_KEEP_COUNT)
+    if keep < 1:
+        return 0
+    ensure_save_dir()
+    autos = []
+    for fn in os.listdir(SAVE_DIR):
+        if fn.startswith("autosave-day") and fn.endswith(".json"):
+            try:
+                day = int(fn[len("autosave-day"):-len(".json")])
+            except ValueError:
+                day = 0
+            autos.append((day, fn))
+    autos.sort(key=lambda t: (t[0], t[1]), reverse=True)
+    removed = 0
+    for _day, fn in autos[keep:]:
+        try:
+            os.remove(os.path.join(SAVE_DIR, fn))
+            removed += 1
+        except OSError:
+            pass
+    return removed
+
 def get_slot_path(slot_id):
     ensure_save_dir()
     if isinstance(slot_id, int):
