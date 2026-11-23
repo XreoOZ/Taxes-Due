@@ -9,7 +9,7 @@ from game.entities.servants import Servant, ServantManager
 from game.entities.villagers import Villager, VillagerManager, Family
 from game.world.permits import PermitManager, AreaPermit
 from game.world.stockpile import StockpileManager
-from game.world.pathfinding import GlobalPathRegistry
+from game.world.navigation.pathfinding import GlobalPathRegistry
 
 class TestDoorwayAndPathfinding(unittest.TestCase):
     def setUp(self):

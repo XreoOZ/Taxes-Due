@@ -22,9 +22,9 @@ from game.world.stockpile import StockpileManager
 from game.entities.servants import ServantManager
 from game.entities.villagers import VillagerManager, Family, Villager
 from game.buildings.furniture import Furniture, FurnitureManager
-from game.systems.day_cycle import DayCycleSystem
-from game.systems.schedule import ScheduleManager
-from game.systems.save_system import save_to_slot, load_from_slot, get_slot_meta, get_slot_path
+from game.systems.core.day_cycle import DayCycleSystem
+from game.systems.work.schedule import ScheduleManager
+from game.systems.core.save_system import save_to_slot, load_from_slot, get_slot_meta, get_slot_path
 
 
 class TestSaveOverwriteAndFurnitureMove(unittest.TestCase):

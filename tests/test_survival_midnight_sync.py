@@ -21,9 +21,9 @@ from game.entities.villagers import Villager, VillagerManager, Family
 from game.world.permits import PermitManager, AreaPermit
 from game.buildings.building_manager import BuildingManager
 from game.buildings.furniture import Furniture, FurnitureManager
-from game.systems.day_cycle import DayCycleSystem
-from game.systems.schedule import ScheduleManager
-from game.systems.save_system import serialize_game_state, load_from_slot
+from game.systems.core.day_cycle import DayCycleSystem
+from game.systems.work.schedule import ScheduleManager
+from game.systems.core.save_system import serialize_game_state, load_from_slot
 from game.entities.player import Player
 from game.world.stockpile import StockpileManager
 from game.data.config import (
@@ -256,7 +256,7 @@ class TestSurvivalMidnightSync(unittest.TestCase):
         from game.entities.servants import ServantManager
         serv_m = ServantManager()
 
-        from game.systems.save_system import save_to_slot, load_from_slot, get_slot_path
+        from game.systems.core.save_system import save_to_slot, load_from_slot, get_slot_path
         save_to_slot(
             99, self.dc, self.resources, self.player, self.pm, self.bm,
             self.sm, self.fm, self.vm, serv_m, self.sched

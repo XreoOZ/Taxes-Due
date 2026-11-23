@@ -24,9 +24,9 @@ from game.world.stockpile import StockpileManager, ResourceStack
 from game.buildings.furniture import FurnitureManager, Furniture
 from game.entities.villagers import VillagerManager, Family, Villager
 from game.entities.servants import ServantManager
-from game.systems.day_cycle import DayCycleSystem
-from game.systems.schedule import ScheduleManager
-from game.systems.currency import (
+from game.systems.core.day_cycle import DayCycleSystem
+from game.systems.work.schedule import ScheduleManager
+from game.systems.economy.currency import (
     to_copper,
     from_copper,
     normalize_wallet,
@@ -36,9 +36,9 @@ from game.systems.currency import (
     execute_currency_transfer,
     consolidate_wallet
 )
-from game.systems.market_service import MarketService
-from game.ui.market_modal import MarketProfileModal
-from game.systems.save_system import serialize_game_state, save_to_slot, load_from_slot, get_slot_path
+from game.systems.economy.market_service import MarketService
+from game.ui.modals.market_modal import MarketProfileModal
+from game.systems.core.save_system import serialize_game_state, save_to_slot, load_from_slot, get_slot_path
 
 class TestAgent2MarketAndCurrency(unittest.TestCase):
     def setUp(self):

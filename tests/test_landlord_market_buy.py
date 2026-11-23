@@ -8,9 +8,9 @@ from game.entities.servants import ServantManager
 from game.entities.villagers import VillagerManager
 from game.world.stockpile import StockpileManager
 from game.buildings.furniture import Furniture, FurnitureManager
-from game.systems.lord_treasury import LordTreasurySystem
-from game.systems.currency import to_copper
-from game.systems.market_service import MarketService
+from game.systems.economy.lord_treasury import LordTreasurySystem
+from game.systems.economy.currency import to_copper
+from game.systems.economy.market_service import MarketService
 
 
 class TestLandlordMarketBuy(unittest.TestCase):
@@ -165,7 +165,7 @@ class TestLandlordMarketBuy(unittest.TestCase):
         self.assertEqual(spent, gained)
 
     def test_05_buy_button_only_on_assigned_stall(self):
-        from game.ui.market_modal import MarketProfileModal
+        from game.ui.modals.market_modal import MarketProfileModal
         modal = MarketProfileModal()
         surface = pygame.Surface((1280, 720))
 

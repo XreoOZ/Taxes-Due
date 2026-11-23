@@ -20,9 +20,9 @@ from game.buildings.building import Building
 from game.buildings.building_manager import BuildingManager
 from game.world.stockpile import StockpileManager
 from game.world.permits import AreaPermit, PermitManager
-from game.systems.day_cycle import DayCycleSystem
-from game.systems.schedule import ScheduleManager
-from game.systems.save_system import save_to_slot, load_from_slot, get_slot_path
+from game.systems.core.day_cycle import DayCycleSystem
+from game.systems.work.schedule import ScheduleManager
+from game.systems.core.save_system import save_to_slot, load_from_slot, get_slot_path
 import os
 
 
@@ -276,7 +276,7 @@ class TestAgent1AICoreNeedsJobsAndDeathRecovery(unittest.TestCase):
         self.vm.families = [fam]
 
         from game.entities.servants import ServantManager
-        from game.systems.schedule import ScheduleManager
+        from game.systems.work.schedule import ScheduleManager
         from game.data.config import DEFAULT_RESOURCES
 
         class MockPlayer:

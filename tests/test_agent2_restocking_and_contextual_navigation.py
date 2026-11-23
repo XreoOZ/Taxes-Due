@@ -6,7 +6,7 @@ from game.buildings.building_manager import BuildingManager
 from game.permits import AreaPermit, PermitManager
 from game.entities.servants import Servant, ServantManager
 from game.entities.villagers import Villager, VillagerManager, Family
-from game.ui.market_modal import MarketProfileModal
+from game.ui.modals.market_modal import MarketProfileModal
 from game.ui.ui_raport import RaportUI
 from game.world.stockpile import StockpileManager, ResourceStack
 from game.buildings.furniture import Furniture, FurnitureManager

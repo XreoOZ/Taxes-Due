@@ -5,7 +5,7 @@ from game.buildings.building import Building
 from game.buildings.building_manager import BuildingManager
 from game.buildings.furniture import Furniture
 from game.entities.villagers import Villager
-from game.world.navigation import distance_to_object, interaction_arrival_distance
+from game.world.navigation.navigation import distance_to_object, interaction_arrival_distance
 
 
 class TestInteractionProximity(unittest.TestCase):

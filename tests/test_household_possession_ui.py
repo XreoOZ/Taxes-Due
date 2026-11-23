@@ -12,14 +12,14 @@ from game.entities.villagers import Villager, Family, VillagerManager
 from game.buildings.furniture import FurnitureManager, Furniture
 from game.world.stockpile import StockpileManager, ResourceStack
 from game.entities.servants import ServantManager
-from game.systems.household_inventory import (
+from game.systems.economy.household_inventory import (
     get_household_possessions,
     canonical_item_name,
     sort_possession_items
 )
 from game.ui.ui_raport import RaportUI, draw_item_icon
 from game.data.planning import get_all_planning_features
-from game.systems.save_system import save_to_slot, load_from_slot
+from game.systems.core.save_system import save_to_slot, load_from_slot
 
 
 class TestHouseholdPossessionUI(unittest.TestCase):
@@ -125,7 +125,7 @@ class TestHouseholdPossessionUI(unittest.TestCase):
 
     def test_04_producing_or_purchasing_automatically_adds_item(self):
         """4. Producing or purchasing an item automatically adds it."""
-        from game.systems.market_service import MarketService
+        from game.systems.economy.market_service import MarketService
         from game.buildings.building import Building
 
         market = Building("market", [(20, 20), (21, 20), (22, 20), (20, 21), (21, 21), (22, 21)])
@@ -249,9 +249,9 @@ class TestHouseholdPossessionUI(unittest.TestCase):
         self.chest.inventory = {"Potato": 88, "Hoe": 2, "Water": 12, "Copper": 105}
         before_pos = get_household_possessions(self.family, self.furniture_manager)
 
-        from game.systems.day_cycle import DayCycleSystem
+        from game.systems.core.day_cycle import DayCycleSystem
         from game.entities.player import Player
-        from game.systems.schedule import ScheduleManager
+        from game.systems.work.schedule import ScheduleManager
 
         from game.world.permits import PermitManager
         from game.buildings.building_manager import BuildingManager

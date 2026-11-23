@@ -13,11 +13,11 @@ from game.buildings.building import Building
 from game.buildings.furniture import FurnitureManager, Furniture
 from game.world.permits import PermitManager
 from game.world.stockpile import StockpileManager
-from game.systems.market_service import MarketService
-from game.systems.market_purchasing import AIFoodPurchasingSystem
-from game.systems.currency import to_copper, normalize_wallet
-from game.systems.save_system import save_to_slot, load_from_slot
-from game.systems.day_cycle import DayCycleSystem
+from game.systems.economy.market_service import MarketService
+from game.systems.economy.market_purchasing import AIFoodPurchasingSystem
+from game.systems.economy.currency import to_copper, normalize_wallet
+from game.systems.core.save_system import save_to_slot, load_from_slot
+from game.systems.core.day_cycle import DayCycleSystem
 from game.entities.player import Player
 from game.entities.servants import ServantManager
 from game.schedule import ScheduleManager

@@ -2,7 +2,7 @@
 import unittest
 from types import SimpleNamespace
 
-from game.systems.carpenter_system import CarpenterSystem
+from game.systems.work.carpenter_system import CarpenterSystem
 
 
 def make_order(**kw):

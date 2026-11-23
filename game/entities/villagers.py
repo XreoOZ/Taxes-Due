@@ -108,16 +108,16 @@ from game.config import (
     NARROW_PASSAGE_WAIT_DISTANCE
 )
 from game.render_cache import ellipse_surface
-from game.world.pathfinding import GlobalPathRegistry, calculate_collision_slide, is_narrow_passage_tile
-from game.world.navigation import find_navigation_path, interaction_arrival_distance, find_nearest_target, resolve_steer_index
-from game.systems.market_interface import request_market_food_purchase
-from game.systems.market_purchasing import AIFoodPurchasingSystem, AIMarketPurchasingSystem
-from game.systems.market_service import MarketService
-from game.systems.ai_simulation_scheduler import AISimulationScheduler
-from game.systems.household_inventory import get_inventory_room
-from game.systems.spatial_entities import SpatialEntityIndex
-from game.systems.currency import to_copper, normalize_wallet, from_copper, canonical_denomination
-from game.systems.job_tool_system import (
+from game.world.navigation.pathfinding import GlobalPathRegistry, calculate_collision_slide, is_narrow_passage_tile
+from game.world.navigation.navigation import find_navigation_path, interaction_arrival_distance, find_nearest_target, resolve_steer_index
+from game.systems.economy.market_interface import request_market_food_purchase
+from game.systems.economy.market_purchasing import AIFoodPurchasingSystem, AIMarketPurchasingSystem
+from game.systems.economy.market_service import MarketService
+from game.systems.core.ai_simulation_scheduler import AISimulationScheduler
+from game.systems.economy.household_inventory import get_inventory_room
+from game.systems.core.spatial_entities import SpatialEntityIndex
+from game.systems.economy.currency import to_copper, normalize_wallet, from_copper, canonical_denomination
+from game.systems.work.job_tool_system import (
     get_job_required_tools,
     get_missing_tools_for_worker,
     get_irrelevant_tools_in_inventory,
@@ -125,7 +125,7 @@ from game.systems.job_tool_system import (
     deposit_irrelevant_tools,
     is_tool_item
 )
-from game.systems.scheduled_activity import ScheduledActivitySystem
+from game.systems.work.scheduled_activity import ScheduledActivitySystem
 
 class Villager:
     def __init__(self, villager_id, first_name, last_name, gender, age, generation, role, family_id=None, x=0.0, y=0.0):
@@ -229,7 +229,7 @@ class Villager:
         self.sleep_schedule_task_state = None
         from game.config import HAPPINESS_INITIAL_VALUE
         self.happiness = float(HAPPINESS_INITIAL_VALUE)
-        from game.systems.happiness_system import HappinessSystem
+        from game.systems.village_life.happiness_system import HappinessSystem
         self.happiness_status = HappinessSystem.status_for(self.happiness)
         self.happiness_effects = {}
         self.happiness_trigger_days = {}
@@ -632,7 +632,7 @@ class Villager:
 
     def die(self, reason="Starvation", day=1, stockpile_manager=None, family=None, permit_manager=None):
         """Transition this villager to the DECEASED state (corpse) and drop 100% of personal inventory."""
-        from game.systems.happiness_system import HappinessSystem
+        from game.systems.village_life.happiness_system import HappinessSystem
         HappinessSystem.record_bereavement(self, family, day)
         self.is_alive = False
         self.status = "DECEASED"
@@ -659,7 +659,7 @@ class Villager:
 
         # Release production-station claims/state (forest tree claims etc.)
         try:
-            from game.systems.station_jobs import StationJobSystem
+            from game.systems.work.station_jobs import StationJobSystem
             carry = getattr(self, "station_carry", None) or {}
             for item, amt in carry.items():
                 if amt > 0:
@@ -1040,7 +1040,7 @@ class Villager:
         self.title = job_cfg.get("title", new_job)
         self.needs_tool_reassessment = True
         try:
-            from game.systems.station_jobs import StationJobSystem
+            from game.systems.work.station_jobs import StationJobSystem
             StationJobSystem.reset_worker_state(self)
         except Exception:
             pass
@@ -1371,7 +1371,7 @@ class Villager:
         if self._happiness_refresh_acc < HAPPINESS_REFRESH_INTERVAL_SECONDS:
             return
         self._happiness_refresh_acc = 0.0
-        from game.systems.happiness_system import HappinessSystem
+        from game.systems.village_life.happiness_system import HappinessSystem
         HappinessSystem.refresh(
             self, getattr(day_cycle, "day_number", 1), permit_manager,
             building_manager, furniture_manager, villager_manager,
@@ -1442,7 +1442,7 @@ class Villager:
         # Survival needs keep using world time. Happiness slows actor movement
         # and activity progress only, never route-search computation or need decay.
         world_dt = dt
-        from game.systems.happiness_system import HappinessSystem
+        from game.systems.village_life.happiness_system import HappinessSystem
         self._refresh_happiness(world_dt, day_cycle, permit_manager,
                                 building_manager, furniture_manager, villager_manager)
         dt = world_dt * HappinessSystem.activity_multiplier(self)
@@ -1507,7 +1507,7 @@ class Villager:
                          or farm.get_unwatered_tiles())
                 )
             elif self.job == "Carpenter" and furniture_manager:
-                from game.systems.carpenter_system import CarpenterSystem
+                from game.systems.work.carpenter_system import CarpenterSystem
                 order_subjects = (
                     list(getattr(furniture_manager, "furnitures", []))
                     + list(getattr(building_manager, "buildings", []) if building_manager else [])
@@ -1543,14 +1543,14 @@ class Villager:
                 )
                 no_work_available = not (has_order or needs_stock)
             elif self.job == "Gravedigger":
-                from game.systems.cemetery_system import CemeterySystem
+                from game.systems.village_life.cemetery_system import CemeterySystem
                 inst = CemeterySystem.get_instance()
                 no_work_available = not (
                     getattr(inst, "pending_commissions", None)
                     or getattr(inst, "overflow_corpses", None)
                 )
             elif self.job == "Tax Collector":
-                from game.systems.taxation_system import TaxationSystem
+                from game.systems.economy.taxation_system import TaxationSystem
                 round_state = getattr(self, "socage_tax_round", None)
                 day_number = getattr(day_cycle, "day_number", 1)
                 no_work_available = not (
@@ -1558,7 +1558,7 @@ class Villager:
                     or TaxationSystem.next_collection_day(day_number, villager_manager) == day_number
                 )
             elif self.job in ("Woodsman", "Miner") and furniture_manager:
-                from game.systems.station_jobs import StationJobSystem
+                from game.systems.work.station_jobs import StationJobSystem
                 no_work_available = not StationJobSystem.has_work(
                     self, self.job, furniture_manager, day_cycle)
             else:
@@ -1574,7 +1574,7 @@ class Villager:
                 self.current_schedule_activity = sched_activity
 
         if schedule_manager:
-            from game.systems.confession_system import ConfessionSystem
+            from game.systems.village_life.confession_system import ConfessionSystem
             ConfessionSystem.cancel_if_schedule_ended(
                 self, villager_manager, furniture_manager, day_cycle,
                 schedule_manager,
@@ -1589,7 +1589,7 @@ class Villager:
                 and self.task in ("SEEKING_FOOD", "SEEKING_WATER", "SEEKING_TOILET")):
             toilet_target = getattr(self, "target_toilet", None)
             if self.task == "SEEKING_TOILET" and toilet_target is not None:
-                from game.systems.toilet_system import ToiletSystem
+                from game.systems.village_life.toilet_system import ToiletSystem
                 ToiletSystem.release_toilet(self, toilet_target)
             self._resume_or_idle_after_need()
 
@@ -1609,7 +1609,7 @@ class Villager:
         elif sched_activity == "SLEEP":
             self.sleeping_recharge_active = True
 
-        from game.systems.sleep_system import SleepSystem
+        from game.systems.village_life.sleep_system import SleepSystem
         SleepSystem.initialize(self)
         if sched_activity != "SLEEP" and not self.sleep_forced:
             self.sleeping_recharge_active = False
@@ -1650,10 +1650,10 @@ class Villager:
                                 building_manager, furniture_manager, villager_manager)
         dt = world_dt * HappinessSystem.activity_multiplier(self)
 
-        from game.systems.commission_schedule import CommissionScheduleSystem
+        from game.systems.work.commission_schedule import CommissionScheduleSystem
         CommissionScheduleSystem.activate(self, sched_activity)
 
-        from game.systems.cemetery_system import CemeterySystem
+        from game.systems.village_life.cemetery_system import CemeterySystem
         if (sched_activity in FREE_TIME_SCHEDULE_ACTIVITIES
                 or self.task == "GRAVEDIGGER_BURIAL_PAYMENT_RETRIEVE") and CemeterySystem.update_burial_payment_task(
                     self, dt, building_manager, furniture_manager, stockpile_manager,
@@ -1661,7 +1661,7 @@ class Villager:
                     day_number=getattr(day_cycle, "day_number", 1),
                 ):
             return
-        from game.systems.carpenter_system import CarpenterSystem
+        from game.systems.work.carpenter_system import CarpenterSystem
         if ((sched_activity in FREE_TIME_SCHEDULE_ACTIVITIES or sched_activity == "WORK")
                 and CarpenterSystem.update_payment_task(
                     self, dt, building_manager, furniture_manager, stockpile_manager,
@@ -1984,7 +1984,7 @@ class Villager:
                 amount = stockpile_manager.take_from_stack(stack, min(stack.amount, amount_needed))
                 if amount > 0 and denomination:
                     self.inventory[denomination] = self.inventory.get(denomination, 0) + amount
-                    from game.systems.currency import compact_currency_wallet
+                    from game.systems.economy.currency import compact_currency_wallet
                     compact_currency_wallet(self.inventory)
                 self.target_loose_stack = None
                 if to_copper(normalize_wallet(self.inventory)) >= getattr(self, "purchase_target_price", 0):
@@ -2163,7 +2163,7 @@ class Villager:
 
         # Eksekusi Pencarian Toilet (SEEKING_TOILET)
         if self.task == "SEEKING_TOILET":
-            from game.systems.toilet_system import ToiletSystem
+            from game.systems.village_life.toilet_system import ToiletSystem
             handled = ToiletSystem.execute_villager_toilet_routine(
                 self, dt, building_manager, all_entities=all_entities, player=player, furniture_manager=furniture_manager
             )
@@ -2185,7 +2185,7 @@ class Villager:
             )
             return
 
-        from game.systems.taxation_system import TaxationSystem
+        from game.systems.economy.taxation_system import TaxationSystem
         if TaxationSystem.update_collector(
             self, dt, sched_activity, day_cycle, permit_manager, villager_manager,
             building_manager, furniture_manager, all_entities, player,
@@ -2209,13 +2209,13 @@ class Villager:
         # -------------------------------------------------------------
         # Rutinitas Sholat / Doa (Church & Prayer Time) - AGENT 3
         # -------------------------------------------------------------
-        from game.systems.church_system import ChurchSystem
+        from game.systems.village_life.church_system import ChurchSystem
         church_p = ChurchSystem.get_church_permit(permit_manager)
         priest_worker = ChurchSystem.get_assigned_priest(permit_manager, villager_manager)
         is_prayer = ChurchSystem.is_prayer_time(cur_hour, schedule_manager)
 
         if is_prayer:
-            from game.systems.happiness_system import HappinessSystem
+            from game.systems.village_life.happiness_system import HappinessSystem
             # *** ESTABLISHED — USER-CONFIRMED, DO NOT REGRESS ***
             # Praying without a physical church BUILDING (a bare church
             # permit does not count) applies the "no_church_building"
@@ -2275,7 +2275,7 @@ class Villager:
         else:
             ChurchSystem.release_church_tile(self)
             ChurchSystem.refund_unpaid_church_tax(self, furniture_manager)
-            from game.systems.confession_system import ConfessionSystem
+            from game.systems.village_life.confession_system import ConfessionSystem
             ConfessionSystem.on_prayer_completed(self, getattr(day_cycle, "day_number", 1))
             if self == priest_worker and sched_activity in ("WORK", "ANY"):
                 if not ConfessionSystem.has_pending_requests_for_priest(self, permit_manager):
@@ -2293,7 +2293,7 @@ class Villager:
                             ChurchSystem.priest_deposit_tithes_home(self, furniture_manager)
 
 
-        from game.systems.confession_system import ConfessionSystem
+        from game.systems.village_life.confession_system import ConfessionSystem
         if ConfessionSystem.update_villager(
             self, dt, sched_activity, day_cycle, permit_manager, villager_manager,
             building_manager, furniture_manager, all_entities, player, schedule_manager,
@@ -2509,7 +2509,7 @@ class Villager:
         # -------------------------------------------------------------
         if (sched_activity in FREE_TIME_SCHEDULE_ACTIVITIES
                 and self.task.startswith("HAULING_STALL_")):
-            from game.systems.household_stall_system import HouseholdStallSystem
+            from game.systems.economy.household_stall_system import HouseholdStallSystem
             handled = HouseholdStallSystem.execute_stall_chores_tick(
                 self, dt, building_manager, furniture_manager,
                 all_entities=all_entities, player=player, tile_size=TILE_SIZE,
@@ -2982,7 +2982,7 @@ class Villager:
                                     self.current_work_tile = None
                                     GlobalPathRegistry.get_instance().release_reservation(self.id)
                                     if yield_amt > 0:
-                                        from game.systems.production_distribution import ProductionDistributionSystem
+                                        from game.systems.economy.production_distribution import ProductionDistributionSystem
                                         ps = production_system or ProductionDistributionSystem.get_instance()
                                         workplace_id = getattr(assigned_farm, "id", "farm")
                                         participating_workers = getattr(assigned_farm, "assigned_workers", [self.id])
@@ -3208,7 +3208,7 @@ class Villager:
 
             # Pekerjaan spesifik: Woodsman & Miner (production stations)
             if self.job in ("Woodsman", "Miner"):
-                from game.systems.station_jobs import StationJobSystem
+                from game.systems.work.station_jobs import StationJobSystem
                 if StationJobSystem.update(
                     self, dt, self.job, building_manager, furniture_manager,
                     villager_manager, all_entities, player, day_cycle,
@@ -3218,7 +3218,7 @@ class Villager:
 
             # Pekerjaan spesifik: Penggali Kubur (Gravedigger) - AGENT 3
             if self.job == "Gravedigger":
-                from game.systems.cemetery_system import CemeterySystem
+                from game.systems.village_life.cemetery_system import CemeterySystem
                 restock_tasks = {
                     "GRAVEDIGGER_RESTOCK_RETRIEVE_COINS",
                     "GRAVEDIGGER_RESTOCK_TRAVEL_TO_MARKET",
@@ -3500,7 +3500,7 @@ class Villager:
             # time — strictly after needs are satisfied (checked inside).
             if (self.job in ("Woodsman", "Miner") and furniture_manager
                     and is_free_time_schedule):
-                from game.systems.station_jobs import StationJobSystem
+                from game.systems.work.station_jobs import StationJobSystem
                 if StationJobSystem.haul_leftovers_if_idle(
                     self, dt, self.job, furniture_manager,
                     all_entities, player, building_manager,
@@ -3568,7 +3568,7 @@ class Villager:
         # Evaluasi Household Market Stall (Stall Chores during Leisure Time)
         if (sched_activity in FREE_TIME_SCHEDULE_ACTIVITIES
                 and self.task in ("IDLE", "LEISURE", "STROLLING")):
-            from game.systems.household_stall_system import HouseholdStallSystem
+            from game.systems.economy.household_stall_system import HouseholdStallSystem
             started = HouseholdStallSystem.check_and_start_stall_chores(
                 self, building_manager, furniture_manager, all_entities=all_entities,
                 allow_restock=True,
@@ -3612,7 +3612,7 @@ class Villager:
                         avail_tiles = [t for t in avail_tiles if t != adj_tile]
                     
                     # Rule: Narrow doorways & passages must NEVER become an AI idle position
-                    from game.world.pathfinding import is_narrow_passage_tile
+                    from game.world.navigation.pathfinding import is_narrow_passage_tile
                     open_tiles = [t for t in avail_tiles if not is_narrow_passage_tile(t, building_manager=building_manager)]
                     if open_tiles:
                         avail_tiles = open_tiles
@@ -3653,7 +3653,7 @@ class Villager:
                 self.say(random.choice(phrases), duration=2.5)
 
         # Bebaskan lorong sempit jika tanpa sengaja berada di lorong sempit saat idle (Image 2 unjamming)
-        from game.world.pathfinding import is_narrow_passage_tile
+        from game.world.navigation.pathfinding import is_narrow_passage_tile
         cur_gx = int(math.floor(self.x / TILE_SIZE))
         cur_gy = int(math.floor(self.y / TILE_SIZE))
         if is_narrow_passage_tile((cur_gx, cur_gy), building_manager=building_manager):
@@ -4480,7 +4480,7 @@ class Family:
         Single Source of Truth: returns dict of {canonical_item_name: quantity}
         for all actual possessions currently owned by this household.
         """
-        from game.systems.household_inventory import get_household_possessions
+        from game.systems.economy.household_inventory import get_household_possessions
         return get_household_possessions(self, furniture_manager=furniture_manager, stockpile_manager=stockpile_manager, servant_manager=servant_manager)
 
     @property
@@ -4887,7 +4887,7 @@ class VillagerManager:
                     m.last_faith_decay_day = day_number
 
         # Reset church daily tax records for new day
-        from game.systems.church_system import ChurchSystem
+        from game.systems.village_life.church_system import ChurchSystem
         ChurchSystem.reset_daily_taxes(day_number)
 
     def draw(self, surface, camera):

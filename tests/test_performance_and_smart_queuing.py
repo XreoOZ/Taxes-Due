@@ -8,7 +8,7 @@ from game.buildings.building import Building
 from game.buildings.building_manager import BuildingManager
 from game.buildings.furniture import Furniture, FurnitureManager
 from game.entities.villagers import Villager, VillagerManager, Family
-from game.world.pathfinding import GlobalPathRegistry
+from game.world.navigation.pathfinding import GlobalPathRegistry
 
 class TestPerformanceAndSmartQueuing(unittest.TestCase):
     def setUp(self):

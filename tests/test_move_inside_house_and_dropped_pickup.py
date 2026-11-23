@@ -8,7 +8,7 @@ from game.buildings.furniture import FurnitureManager, Furniture
 from game.world.permits import PermitManager
 from game.entities.villagers import VillagerManager, Villager, Family
 from game.world.stockpile import StockpileManager
-from game.world.pathfinding import GlobalPathRegistry
+from game.world.navigation.pathfinding import GlobalPathRegistry
 
 class TestMoveInsideHouseAndDroppedPickup(unittest.TestCase):
     def setUp(self):

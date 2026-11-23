@@ -58,11 +58,11 @@ from game.config import (
     SERVANT_MAX_TELEPORTS_PER_TARGET,
 )
 from game.data.config import MARKET_TRADEABLE_ITEMS, MARKET_CURRENCY_DENOMINATIONS
-from game.systems.ai_simulation_scheduler import AISimulationScheduler
-from game.systems.spatial_entities import SpatialEntityIndex
-from game.world.pathfinding import GlobalPathRegistry, calculate_collision_slide, is_narrow_passage_tile
-from game.world.navigation import find_navigation_path, interaction_arrival_distance, resolve_steer_index
-from game.systems.job_tool_system import (
+from game.systems.core.ai_simulation_scheduler import AISimulationScheduler
+from game.systems.core.spatial_entities import SpatialEntityIndex
+from game.world.navigation.pathfinding import GlobalPathRegistry, calculate_collision_slide, is_narrow_passage_tile
+from game.world.navigation.navigation import find_navigation_path, interaction_arrival_distance, resolve_steer_index
+from game.systems.work.job_tool_system import (
     get_job_required_tools,
     get_missing_tools_for_worker,
     get_irrelevant_tools_in_inventory,
@@ -254,9 +254,9 @@ class Servant:
                 self.speech_text = None
 
         if self.state in ("CARPENTER_COMMISSION_RETRIEVE", "CARPENTER_COMMISSION_DELIVER"):
-            from game.systems.carpenter_system import CarpenterSystem
-            from game.systems.cemetery_system import CemeterySystem
-            from game.systems.currency import compact_currency_wallet, from_copper, to_copper
+            from game.systems.work.carpenter_system import CarpenterSystem
+            from game.systems.village_life.cemetery_system import CemeterySystem
+            from game.systems.economy.currency import compact_currency_wallet, from_copper, to_copper
             order_subject = next((entity for entity in (
                 list(getattr(furniture_manager, "furnitures", []))
                 + list(getattr(building_manager, "buildings", []))
@@ -278,7 +278,7 @@ class Servant:
                 return
 
             if self.state == "CARPENTER_COMMISSION_RETRIEVE":
-                from game.systems.lord_treasury import LordTreasurySystem
+                from game.systems.economy.lord_treasury import LordTreasurySystem
                 treasury = LordTreasurySystem.get_chest(furniture_manager)
                 if treasury and str(getattr(treasury, "id", "")) == str(
                         getattr(self, "carpenter_commission_treasury_id", treasury.id)):
@@ -337,7 +337,7 @@ class Servant:
                     denomination = CemeterySystem._landlord_coin_stacks(stockpile_manager)
                     if target_stack not in denomination:
                         return
-                    from game.systems.currency import canonical_denomination
+                    from game.systems.economy.currency import canonical_denomination
                     coin_type = canonical_denomination(target_stack.resource_type)
                     unit_value = to_copper({coin_type: 1})
                     available = max(0, int(getattr(target_stack, "available_amount", target_stack.amount)))
@@ -386,7 +386,7 @@ class Servant:
                     order["paid_by_id"] = "landlord"
                     order["paid_amount_copper"] = fee
                     CarpenterSystem._ensure_paid_seq(order, furniture_manager, building_manager)
-                    from game.systems.market_sales_report import MarketSalesReportSystem
+                    from game.systems.economy.market_sales_report import MarketSalesReportSystem
                     MarketSalesReportSystem.record_household_income(
                         villager_manager, getattr(carpenter, "family_id", None),
                         "Public Carpenter Commissions", fee,
@@ -410,9 +410,9 @@ class Servant:
             return
 
         if self.state in ("COMMISSION_REFUND_COLLECT", "COMMISSION_REFUND_DELIVER"):
-            from game.systems.carpenter_system import CarpenterSystem
-            from game.systems.lord_treasury import LordTreasurySystem
-            from game.systems.currency import (
+            from game.systems.work.carpenter_system import CarpenterSystem
+            from game.systems.economy.lord_treasury import LordTreasurySystem
+            from game.systems.economy.currency import (
                 compact_currency_wallet, normalize_wallet, to_copper,
             )
 
@@ -679,9 +679,9 @@ class Servant:
                 # Arrived at loose item! Pick it up
                 res_type = self.target_loose_stack.resource_type
                 treasury_chest = None
-                from game.systems.currency import canonical_denomination, CURRENCY_DENOMINATIONS
+                from game.systems.economy.currency import canonical_denomination, CURRENCY_DENOMINATIONS
                 if canonical_denomination(res_type) in CURRENCY_DENOMINATIONS:
-                    from game.systems.lord_treasury import LordTreasurySystem
+                    from game.systems.economy.lord_treasury import LordTreasurySystem
                     treasury_chest = LordTreasurySystem.get_chest(furniture_manager)
                 avail_dest = (
                     (treasury_chest.grid_x, treasury_chest.grid_y)
@@ -733,7 +733,7 @@ class Servant:
                             self.carried_res, self.carried_amount - stored,
                             self.target_storage_tile[0], self.target_storage_tile[1], owner_type="landlord",
                         )
-                    from game.systems.lord_treasury import LordTreasurySystem
+                    from game.systems.economy.lord_treasury import LordTreasurySystem
                     LordTreasurySystem._mark_wealth_dirty()
                     self.say(f"Stored {stored} {self.carried_res} in the Lord's Treasury Chest!")
                 else:
@@ -776,8 +776,8 @@ class Servant:
             all_ents = list(all_servants or []) + all_vils
             if self._move_towards(self.target_grant_pos[0], self.target_grant_pos[1], dt, arrival_dist=24, all_servants=all_servants, player=player, building_manager=building_manager, all_entities=all_ents, furniture_manager=furniture_manager, exclusive_target=False):
                 if treasury_chest is not None:
-                    from game.systems.currency import canonical_denomination
-                    from game.systems.wealth_system import VillageWealthSystem
+                    from game.systems.economy.currency import canonical_denomination
+                    from game.systems.economy.wealth_system import VillageWealthSystem
                     denom = canonical_denomination(self.target_grant_res) or self.target_grant_res
                     actual = treasury_chest.take_item(denom, self.target_grant_amount)
                     if actual > 0:
@@ -897,11 +897,11 @@ class Servant:
                     if not isinstance(getattr(mkt, "currency", None), dict):
                         mkt.currency = {denom: 0 for denom in MARKET_CURRENCY_DENOMINATIONS}
                     mkt.currency[self.carried_res] = mkt.currency.get(self.carried_res, 0) + self.carried_amount
-                    from game.systems.currency import compact_currency_wallet
+                    from game.systems.economy.currency import compact_currency_wallet
                     compact_currency_wallet(mkt.currency)
                 else:
                     mkt.inventory[self.carried_res] = mkt.inventory.get(self.carried_res, 0) + self.carried_amount
-                    from game.systems.market_pricing import MarketPricingSystem
+                    from game.systems.economy.market_pricing import MarketPricingSystem
                     MarketPricingSystem.update_market_prices(mkt)
 
                 if self.target_restock_order:
@@ -938,7 +938,7 @@ class Servant:
             all_vils = villager_manager.get_all_villagers() if villager_manager else []
             all_ents = list(all_servants or []) + all_vils
             if self._move_towards(self.target_buy_fetch_pos[0], self.target_buy_fetch_pos[1], dt, arrival_dist=24, all_servants=all_servants, player=player, building_manager=building_manager, all_entities=all_ents, furniture_manager=furniture_manager, exclusive_target=False):
-                from game.systems.lord_treasury import LordTreasurySystem
+                from game.systems.economy.lord_treasury import LordTreasurySystem
                 ok, _msg = LordTreasurySystem.withdraw_covering(
                     furniture_manager, self.buy_wallet, self.target_buy_total)
                 if not ok:
@@ -958,8 +958,8 @@ class Servant:
             all_vils = villager_manager.get_all_villagers() if villager_manager else []
             all_ents = list(all_servants or []) + all_vils
             if self._move_towards(self.target_buy_market_pos[0], self.target_buy_market_pos[1], dt, arrival_dist=32, all_servants=all_servants, player=player, building_manager=building_manager, all_entities=all_ents, furniture_manager=furniture_manager, exclusive_target=False):
-                from game.systems.market_service import MarketService
-                from game.systems.currency import (
+                from game.systems.economy.market_service import MarketService
+                from game.systems.economy.currency import (
                     calculate_payment_and_change, execute_currency_transfer,
                 )
                 item_name = order["item_name"]
@@ -990,9 +990,9 @@ class Servant:
                 mkt.inventory[item_name] -= qty
                 if mkt.inventory[item_name] <= 0:
                     del mkt.inventory[item_name]
-                from game.systems.market_pricing import MarketPricingSystem
+                from game.systems.economy.market_pricing import MarketPricingSystem
                 MarketPricingSystem.update_market_prices(mkt)
-                from game.systems.market_sales_report import MarketSalesReportSystem
+                from game.systems.economy.market_sales_report import MarketSalesReportSystem
                 MarketSalesReportSystem.record_sale(mkt, item_name, qty, price)
 
                 order["fulfilled"] = order.get("fulfilled", 0) + qty
@@ -1030,7 +1030,7 @@ class Servant:
             all_ents = list(all_servants or []) + all_vils
             dest = self.target_buy_fetch_pos
             if self._move_towards(dest[0], dest[1], dt, arrival_dist=24, all_servants=all_servants, player=player, building_manager=building_manager, all_entities=all_ents, furniture_manager=furniture_manager, exclusive_target=False):
-                from game.systems.lord_treasury import LordTreasurySystem
+                from game.systems.economy.lord_treasury import LordTreasurySystem
                 LordTreasurySystem.deposit_all(furniture_manager, self.buy_wallet)
                 self.buy_wallet = {}
                 self._finish_buy_order(servant_manager)
@@ -1078,7 +1078,7 @@ class Servant:
         if s_low == r_low:
             return True
         try:
-            from game.systems.household_inventory import canonical_item_name
+            from game.systems.economy.household_inventory import canonical_item_name
             if canonical_item_name(stack_res_type) == canonical_item_name(requested_item):
                 return True
         except ImportError:
@@ -1133,8 +1133,8 @@ class Servant:
                     self.repath_cooldown = 0.0
 
                     # Source A: coin grants are fetched from the Lord Treasury Chest
-                    from game.systems.currency import canonical_denomination
-                    from game.systems.lord_treasury import LordTreasurySystem
+                    from game.systems.economy.currency import canonical_denomination
+                    from game.systems.economy.lord_treasury import LordTreasurySystem
                     denom = canonical_denomination(item_type)
                     if denom and furniture_manager is not None:
                         treasury_chest = LordTreasurySystem.get_chest(furniture_manager)
@@ -1258,8 +1258,8 @@ class Servant:
         # the household's auto-pricing/manual price) is paid into market.currency,
         # which the household later collects as earnings. Change returns to treasury.
         if servant_manager and getattr(servant_manager, "buy_orders", None) and furniture_manager:
-            from game.systems.lord_treasury import LordTreasurySystem
-            from game.systems.market_service import MarketService
+            from game.systems.economy.lord_treasury import LordTreasurySystem
+            from game.systems.economy.market_service import MarketService
             treasury_chest = LordTreasurySystem.get_chest(furniture_manager)
             if treasury_chest is not None:
                 for order in list(servant_manager.buy_orders):
@@ -1373,8 +1373,8 @@ class Servant:
             if self.work_priorities.get("Hauling", 0) == p_level:
                 # A0. Coin stacks stored inside storage permits are not "loose", so they
                 # never reach the Lord's Treasury Chest unless we haul them explicitly.
-                from game.systems.currency import CURRENCY_DENOMINATIONS, canonical_denomination
-                from game.systems.lord_treasury import LordTreasurySystem
+                from game.systems.economy.currency import CURRENCY_DENOMINATIONS, canonical_denomination
+                from game.systems.economy.lord_treasury import LordTreasurySystem
                 treasury_chest = LordTreasurySystem.get_chest(furniture_manager)
                 if treasury_chest:
                     for stack in stockpile_manager.stacks:
@@ -1401,7 +1401,7 @@ class Servant:
 
                         treasury_chest = None
                         if canonical_denomination(stack.resource_type) in CURRENCY_DENOMINATIONS:
-                            from game.systems.lord_treasury import LordTreasurySystem
+                            from game.systems.economy.lord_treasury import LordTreasurySystem
                             treasury_chest = LordTreasurySystem.get_chest(furniture_manager)
                         dest_tile = (
                             (treasury_chest.grid_x, treasury_chest.grid_y)
@@ -2145,7 +2145,7 @@ class ServantManager:
         all_vils = villager_manager.get_all_villagers() if villager_manager else []
 
         if run_ai_scheduler:
-            from game.systems.carpenter_system import CarpenterSystem
+            from game.systems.work.carpenter_system import CarpenterSystem
             CarpenterSystem.dispatch_pending_public_commissions(
                 building_manager, self, villager_manager, furniture_manager,
                 day_cycle=day_cycle, stockpile_manager=stockpile_manager,

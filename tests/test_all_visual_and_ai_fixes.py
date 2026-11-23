@@ -16,11 +16,11 @@ from game.world.permits import PermitManager, AreaPermit
 from game.entities.villagers import VillagerManager, Villager, Family
 from game.entities.servants import ServantManager, Servant
 from game.buildings.furniture import FurnitureManager, Furniture
-from game.systems.day_cycle import DayCycleSystem
-from game.systems.schedule import ScheduleManager
+from game.systems.core.day_cycle import DayCycleSystem
+from game.systems.work.schedule import ScheduleManager
 from game.ui.ui_raport import RaportUI
-from game.ui.save_modal import SaveLoadModal
-from game.ui.settings import SettingsModal
+from game.ui.modals.save_modal import SaveLoadModal
+from game.ui.modals.settings import SettingsModal
 
 
 def test_no_unicode_emoji_in_ui():

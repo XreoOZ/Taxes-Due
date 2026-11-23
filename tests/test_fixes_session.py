@@ -25,7 +25,7 @@ from game.entities.villagers import VillagerManager, Villager, Family
 from game.entities.servants import ServantManager, Servant
 from game.buildings.furniture import FurnitureManager
 from game.ui.ui_raport import RaportUI
-from game.systems.day_cycle import DayCycleSystem
+from game.systems.core.day_cycle import DayCycleSystem
 
 def test_raport_ui_close():
     ui = RaportUI()

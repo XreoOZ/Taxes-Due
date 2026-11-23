@@ -2,10 +2,10 @@ import unittest
 from unittest.mock import patch
 
 from game.config import TILE_SIZE
-from game.systems.church_system import ChurchSystem
-from game.systems.confession_system import ConfessionSystem
-from game.systems.currency import to_copper
-from game.systems.schedule import ScheduleManager
+from game.systems.village_life.church_system import ChurchSystem
+from game.systems.village_life.confession_system import ConfessionSystem
+from game.systems.economy.currency import to_copper
+from game.systems.work.schedule import ScheduleManager
 
 
 class _Actor:
@@ -386,7 +386,7 @@ class TestConfessionSystemFlow(unittest.TestCase):
             )
         self.assertEqual(first_request["state"], "IN_PROGRESS")
 
-        with patch("game.systems.happiness_system.HappinessSystem.record_event"):
+        with patch("game.systems.village_life.happiness_system.HappinessSystem.record_event"):
             ConfessionSystem.update_priest(
                 priest, 5.0, day_cycle, None, permit_manager, villager_manager,
                 None, furniture_manager, [visitor, next_visitor, priest], None,

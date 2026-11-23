@@ -6,9 +6,9 @@ from unittest.mock import patch
 os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from game.systems.taxation_system import TaxationSystem
-from game.systems.currency import to_copper
-from game.systems.scheduled_activity import ScheduledActivitySystem
+from game.systems.economy.taxation_system import TaxationSystem
+from game.systems.economy.currency import to_copper
+from game.systems.work.scheduled_activity import ScheduledActivitySystem
 
 
 class _Collector:

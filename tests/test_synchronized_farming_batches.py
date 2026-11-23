@@ -15,16 +15,16 @@ Verifies all 10 Acceptance Criteria:
 
 import unittest
 from game.world.permits import AreaPermit, FarmingBatch, PermitManager
-from game.systems.save_system import serialize_game_state, deserialize_game_state
-from game.systems.day_cycle import DayCycleSystem
+from game.systems.core.save_system import serialize_game_state, deserialize_game_state
+from game.systems.core.day_cycle import DayCycleSystem
 from game.entities.player import Player
 from game.buildings.building_manager import BuildingManager
 from game.world.stockpile import StockpileManager
 from game.buildings.furniture import FurnitureManager
 from game.entities.villagers import VillagerManager, Family, Villager
 from game.entities.servants import ServantManager
-from game.systems.schedule import ScheduleManager
-from game.systems.production_distribution import ProductionDistributionSystem
+from game.systems.work.schedule import ScheduleManager
+from game.systems.economy.production_distribution import ProductionDistributionSystem
 
 
 class TestSynchronizedFarmingBatches(unittest.TestCase):

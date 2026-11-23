@@ -9,7 +9,7 @@ from game.buildings.building_manager import BuildingManager
 from game.buildings.furniture import Furniture, FurnitureManager
 from game.entities.villagers import Villager, VillagerManager
 from game.entities.servants import Servant, ServantManager
-from game.world.pathfinding import Pathfinder, GlobalPathRegistry
+from game.world.navigation.pathfinding import Pathfinder, GlobalPathRegistry
 
 
 class TestPathReservationAndPriority(unittest.TestCase):

@@ -14,8 +14,8 @@ from game.world.permits import PermitManager
 from game.entities.villagers import VillagerManager, Family
 from game.buildings.building_manager import BuildingManager
 from game.world.stockpile import StockpileManager
-from game.systems.save_system import save_to_slot, load_from_slot
-from game.systems.day_cycle import DayCycleSystem
+from game.systems.core.save_system import save_to_slot, load_from_slot
+from game.systems.core.day_cycle import DayCycleSystem
 from game.schedule import ScheduleManager
 from game.entities.player import Player
 from game.entities.servants import ServantManager

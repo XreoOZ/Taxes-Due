@@ -21,10 +21,10 @@ from game.buildings.building_manager import BuildingManager
 from game.buildings.furniture import Furniture, FurnitureManager
 from game.world.permits import AreaPermit, PermitManager
 from game.world.stockpile import ResourceStack, StockpileManager
-from game.world.pathfinding import GlobalPathRegistry
-from game.systems.day_cycle import DayCycleSystem
-from game.systems.household_inventory import get_household_possessions
-from game.systems.save_system import save_to_slot, load_from_slot
+from game.world.navigation.pathfinding import GlobalPathRegistry
+from game.systems.core.day_cycle import DayCycleSystem
+from game.systems.economy.household_inventory import get_household_possessions
+from game.systems.core.save_system import save_to_slot, load_from_slot
 from game.entities.player import Player
 
 
@@ -246,7 +246,7 @@ class TestDeathCountdownAndGrantFood(unittest.TestCase):
     def test_12_save_load_preserves_active_countdown(self):
         """12. Save/load preserves active countdowns accurately without restarting."""
         import os
-        from game.systems.schedule import ScheduleManager
+        from game.systems.work.schedule import ScheduleManager
         slot_id = 8
         schedule_mgr = ScheduleManager()
 

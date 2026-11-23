@@ -136,7 +136,7 @@ class Furniture:
         if accepted is not None and item_name not in accepted:
             return 0
         if self.furniture_type == "lord_treasury_chest":
-            from game.systems.currency import canonical_denomination
+            from game.systems.economy.currency import canonical_denomination
             denomination = canonical_denomination(item_name)
             if not denomination:
                 return 0
@@ -147,7 +147,7 @@ class Furniture:
 
     def take_item(self, item_name, amount):
         if self.furniture_type == "lord_treasury_chest":
-            from game.systems.currency import canonical_denomination
+            from game.systems.economy.currency import canonical_denomination
             item_name = canonical_denomination(item_name)
             if not item_name:
                 return 0
@@ -625,7 +625,7 @@ class FurnitureManager:
 
     def check_breaks_by_time(self, current_day, current_hour):
         """Check furniture breaks at their scheduled random time during the day."""
-        from game.systems.carpenter_system import CarpenterSystem
+        from game.systems.work.carpenter_system import CarpenterSystem
 
         newly_broken = []
         for furniture in self.furnitures:
@@ -848,7 +848,7 @@ class FurnitureManager:
         if cfg.get("instant_place"):
             f.construction_order = None
         else:
-            from game.systems.carpenter_system import CarpenterSystem
+            from game.systems.work.carpenter_system import CarpenterSystem
             f.construction_order = CarpenterSystem.create_order(f, bm, vm)
         self.furnitures.append(f)
         self.invalidate_cache()
@@ -1189,7 +1189,7 @@ class FurnitureManager:
 
         order = getattr(f, "construction_order", None)
         if order and order.get("status") != "COMPLETE":
-            from game.systems.carpenter_system import CarpenterSystem
+            from game.systems.work.carpenter_system import CarpenterSystem
             CarpenterSystem.refund_order_materials(order, f, self, stockpile_manager)
 
         f.destroy(stockpile_manager=stockpile_manager, resources=resources)

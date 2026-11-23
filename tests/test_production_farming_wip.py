@@ -15,7 +15,7 @@ os.environ["SDL_VIDEODRIVER"] = "dummy"
 pygame.init()
 
 from game.data.config import CROP_TYPES, RAPORT_MODAL_WIDTH, RAPORT_MODAL_HEIGHT
-from game.systems.production_distribution import ProductionDistributionSystem
+from game.systems.economy.production_distribution import ProductionDistributionSystem
 from game.data.planning import (
     PLANNING_FEATURES,
     get_all_planning_features,
@@ -379,9 +379,9 @@ class TestProductionDistributionAndWIP(unittest.TestCase):
 
     def test_production_records_survive_save_load(self):
         """Production distribution records serialize and deserialize cleanly in save_system."""
-        from game.systems.save_system import serialize_game_state, save_to_slot, load_from_slot, get_slot_path
-        from game.systems.day_cycle import DayCycleSystem
-        from game.systems.schedule import ScheduleManager
+        from game.systems.core.save_system import serialize_game_state, save_to_slot, load_from_slot, get_slot_path
+        from game.systems.core.day_cycle import DayCycleSystem
+        from game.systems.work.schedule import ScheduleManager
         from game.entities.servants import ServantManager
         from game.entities.player import Player
         from game.buildings.building_manager import BuildingManager

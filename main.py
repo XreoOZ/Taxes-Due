@@ -86,26 +86,26 @@ from game.servants import ServantManager
 from game.villagers import VillagerManager
 from game.furniture import FurnitureManager
 from game.ui_raport import RaportUI
-from game.ui.market_modal import MarketProfileModal
-from game.ui.add_item_modal import AddItemModal
-from game.ui.cheat_modal import CheatModal
-from game.ui.carpenter_catalog_modal import CarpenterCatalogModal
+from game.ui.modals.market_modal import MarketProfileModal
+from game.ui.modals.add_item_modal import AddItemModal
+from game.ui.modals.cheat_modal import CheatModal
+from game.ui.modals.carpenter_catalog_modal import CarpenterCatalogModal
 from game.ui.path_debug_overlay import PathDebugOverlay
 from game.ui.map_overlay import MapOverlay
-from game.systems.production_distribution import ProductionDistributionSystem
+from game.systems.economy.production_distribution import ProductionDistributionSystem
 from game.speed_control import SpeedController
 from game.day_cycle import DayCycleSystem
 from game.settings import SettingsModal
 from game.schedule import ScheduleManager
 from game.save_modal import SaveLoadModal
 from game.save_system import save_to_slot, load_from_slot
-from game.systems.currency import from_copper
-from game.systems.market_pricing import MarketPricingSystem
-from game.systems.market_service import MarketService
-from game.systems.wealth_system import VillageWealthSystem
-from game.systems.cheat_system import apply_add_item_cheat, clean_resources_dictionary, spawn_item_physically
-from game.systems.activity_preview import ActivityPreviewSystem
-from game.systems.happiness_system import HappinessSystem
+from game.systems.economy.currency import from_copper
+from game.systems.economy.market_pricing import MarketPricingSystem
+from game.systems.economy.market_service import MarketService
+from game.systems.economy.wealth_system import VillageWealthSystem
+from game.systems.core.cheat_system import apply_add_item_cheat, clean_resources_dictionary, spawn_item_physically
+from game.systems.work.activity_preview import ActivityPreviewSystem
+from game.systems.village_life.happiness_system import HappinessSystem
 
 STATE_MENU = "menu"
 STATE_PLAYING = "playing"
@@ -325,11 +325,11 @@ def main():
         from game.world.roads import get_roads
         get_roads().reset()
 
-        from game.systems.cemetery_system import CemeterySystem
+        from game.systems.village_life.cemetery_system import CemeterySystem
         cemetery_system = CemeterySystem.get_instance()
         cemetery_system.pending_commissions.clear()
         cemetery_system.overflow_corpses.clear()
-        from game.systems.confession_system import ConfessionSystem
+        from game.systems.village_life.confession_system import ConfessionSystem
         confession_system = ConfessionSystem.get_instance()
         confession_system.queues.clear()
         confession_system.active.clear()
@@ -748,7 +748,7 @@ def main():
                                     rotation=planning_building_rotation
                                 )
                                 if started and b_cfg.get("carpenter_commissionable"):
-                                    from game.systems.carpenter_system import CarpenterSystem
+                                    from game.systems.work.carpenter_system import CarpenterSystem
                                     CarpenterSystem.dispatch_pending_public_commissions(
                                         building_manager, servant_manager, villager_manager,
                                         furniture_manager, day_cycle=day_cycle,
@@ -768,7 +768,7 @@ def main():
                                     rotation=planning_building_rotation
                                 )
                                 if started and b_cfg.get("carpenter_commissionable"):
-                                    from game.systems.carpenter_system import CarpenterSystem
+                                    from game.systems.work.carpenter_system import CarpenterSystem
                                     CarpenterSystem.dispatch_pending_public_commissions(
                                         building_manager, servant_manager, villager_manager,
                                         furniture_manager, day_cycle=day_cycle,
@@ -1266,7 +1266,7 @@ def main():
                 # 4.8. STARTER PLACEMENT MODE (pick drop location → confirm)
                 # -------------------------------------------------------------
                 elif pending_starter_id is not None:
-                    from game.systems.starter_preset import StarterPresetSystem
+                    from game.systems.core.starter_preset import StarterPresetSystem
                     if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
                         if starter_confirm_tile is not None:
                             starter_confirm_tile = None
@@ -1769,7 +1769,7 @@ def main():
             # Dead/reassigned artisans: dissolve their commission queues and
             # spawn refund errands for PAID orders.
             if furniture_manager is not None and villager_manager is not None:
-                from game.systems.carpenter_system import CarpenterSystem
+                from game.systems.work.carpenter_system import CarpenterSystem
                 CarpenterSystem.sweep_dead_commission_orders(
                     building_manager, furniture_manager, villager_manager,
                     servant_manager=servant_manager, stockpile_manager=stockpile_manager,
@@ -1777,7 +1777,7 @@ def main():
 
             # Immigration: pending households travel/wait/leave at the Notice Board.
             if furniture_manager is not None and villager_manager is not None:
-                from game.systems.immigration_system import get_immigration_system
+                from game.systems.village_life.immigration_system import get_immigration_system
                 _imm_ents = villager_manager.get_all_villagers() + servant_manager.servants
                 get_immigration_system().update(
                     game_dt, day_cycle, furniture_manager, villager_manager,
@@ -1823,7 +1823,7 @@ def main():
             if pending_starter_id is None:
                 villager_manager.draw(screen, camera)
                 servant_manager.draw(screen, camera)
-                from game.systems.immigration_system import get_immigration_system
+                from game.systems.village_life.immigration_system import get_immigration_system
                 get_immigration_system().draw(screen, camera, TILE_SIZE)
                 player.draw(screen, camera)
 
@@ -3269,7 +3269,7 @@ def main():
 
             # 11.8. Starter Placement Ghost + Confirm Dialog
             if pending_starter_id is not None:
-                from game.systems.starter_preset import StarterPresetSystem
+                from game.systems.core.starter_preset import StarterPresetSystem
                 anchor = starter_confirm_tile if starter_confirm_tile is not None else (m_gx, m_gy)
                 zones, valid = StarterPresetSystem.get_anchor_preview(
                     pending_starter_id, anchor,

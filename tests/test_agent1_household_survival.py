@@ -21,11 +21,11 @@ from game.entities.villagers import Villager, Family, VillagerManager
 from game.entities.servants import Servant
 from game.buildings.furniture import Furniture, FurnitureManager
 from game.world.permits import AreaPermit, PermitManager
-from game.systems.day_cycle import DayCycleSystem
-from game.systems.schedule import ScheduleManager
+from game.systems.core.day_cycle import DayCycleSystem
+from game.systems.work.schedule import ScheduleManager
 from game.world.stockpile import StockpileManager
-from game.systems.market_interface import request_market_food_purchase
-from game.world.pathfinding import GlobalPathRegistry
+from game.systems.economy.market_interface import request_market_food_purchase
+from game.world.navigation.pathfinding import GlobalPathRegistry
 
 # Initialize pygame headless
 pygame.init()

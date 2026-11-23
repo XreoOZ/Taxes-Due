@@ -23,12 +23,12 @@ from game.world.stockpile import StockpileManager, ResourceStack
 from game.buildings.furniture import FurnitureManager, Furniture
 from game.entities.villagers import VillagerManager, Family, Villager
 from game.entities.servants import ServantManager
-from game.systems.day_cycle import DayCycleSystem
-from game.systems.schedule import ScheduleManager
-from game.systems.market_service import MarketService
-from game.systems.market_interface import request_market_food_purchase
-from game.systems.currency import to_copper, normalize_wallet
-from game.systems.save_system import save_to_slot, load_from_slot, get_slot_path
+from game.systems.core.day_cycle import DayCycleSystem
+from game.systems.work.schedule import ScheduleManager
+from game.systems.economy.market_service import MarketService
+from game.systems.economy.market_interface import request_market_food_purchase
+from game.systems.economy.currency import to_copper, normalize_wallet
+from game.systems.core.save_system import save_to_slot, load_from_slot, get_slot_path
 from game.ui.ui_raport import RaportUI
 
 

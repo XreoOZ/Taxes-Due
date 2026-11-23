@@ -42,7 +42,7 @@ class ResourceHUD:
         if furniture_manager and hasattr(furniture_manager, "get_lord_treasury_chest"):
             treasury = furniture_manager.get_lord_treasury_chest()
             if treasury:
-                from game.systems.currency import canonical_denomination
+                from game.systems.economy.currency import canonical_denomination
                 for item, amount in getattr(treasury, "inventory", {}).items():
                     denomination = canonical_denomination(item)
                     if denomination in core_resources:

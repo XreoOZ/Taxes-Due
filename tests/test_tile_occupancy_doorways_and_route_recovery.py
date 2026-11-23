@@ -19,7 +19,7 @@ from game.config import (
     TILE_OCCUPANCY_TIMEOUT,
     TILE_STEP_RESERVATION_TIMEOUT
 )
-from game.world.pathfinding import (
+from game.world.navigation.pathfinding import (
     GlobalPathRegistry,
     Pathfinder,
     is_narrow_passage_tile,

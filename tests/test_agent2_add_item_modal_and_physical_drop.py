@@ -12,8 +12,8 @@ from game.data.config import DEFAULT_RESOURCES, ITEM_CATEGORIES, FURNITURE_TYPES
 from game.world.stockpile import StockpileManager, ResourceStack, MAX_TILE_CAPACITY
 from game.buildings.furniture import Furniture
 from game.permits import PermitManager
-from game.ui.add_item_modal import AddItemModal
-from game.systems.cheat_system import (
+from game.ui.modals.add_item_modal import AddItemModal
+from game.systems.core.cheat_system import (
     get_registered_item_types,
     clean_resources_dictionary,
     find_drop_tile_near_storage,

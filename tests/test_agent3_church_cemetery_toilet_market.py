@@ -39,11 +39,11 @@ from game.buildings.building_manager import BuildingManager
 from game.world.permits import AreaPermit, PermitManager
 from game.entities.villagers import Villager, Family, VillagerManager
 from game.buildings.furniture import FurnitureManager, Furniture
-from game.systems.schedule import ScheduleManager
-from game.systems.toilet_system import ToiletSystem
-from game.systems.church_system import ChurchSystem
-from game.systems.cemetery_system import CemeterySystem
-from game.systems.market_purchasing import AIMarketPurchasingSystem
+from game.systems.work.schedule import ScheduleManager
+from game.systems.village_life.toilet_system import ToiletSystem
+from game.systems.village_life.church_system import ChurchSystem
+from game.systems.village_life.cemetery_system import CemeterySystem
+from game.systems.economy.market_purchasing import AIMarketPurchasingSystem
 
 
 class TestAgent3ChurchCemeteryToiletMarket(unittest.TestCase):

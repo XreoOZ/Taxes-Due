@@ -8,8 +8,8 @@ pygame.init()
 from game.data.config import DEDICATED_JOBS, TILE_SIZE
 from game.entities.villagers import Villager, VillagerManager, Family
 from game.world.permits import PermitManager, AreaPermit
-from game.systems.job_tool_system import assign_job_worker, release_job_worker
-from game.systems.cemetery_system import CemeterySystem
+from game.systems.work.job_tool_system import assign_job_worker, release_job_worker
+from game.systems.village_life.cemetery_system import CemeterySystem
 from game.ui.ui_raport import RaportUI
 
 

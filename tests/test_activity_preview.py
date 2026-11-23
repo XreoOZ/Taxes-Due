@@ -1,8 +1,8 @@
 import unittest
 from types import SimpleNamespace
 
-from game.systems.activity_preview import ActivityPreviewSystem
-from game.systems.scheduled_activity import ScheduledActivitySystem
+from game.systems.work.activity_preview import ActivityPreviewSystem
+from game.systems.work.scheduled_activity import ScheduledActivitySystem
 
 
 class TestActivityPreview(unittest.TestCase):

@@ -24,8 +24,8 @@ from game.entities.villagers import Villager, VillagerManager, Family
 from game.entities.servants import Servant
 from game.world.permits import PermitManager
 from game.world.stockpile import StockpileManager
-from game.systems.day_cycle import DayCycleSystem
-from game.world.pathfinding import Pathfinder, get_tiles_along_segment
+from game.systems.core.day_cycle import DayCycleSystem
+from game.world.navigation.pathfinding import Pathfinder, get_tiles_along_segment
 
 class TestObstacleAwarePathfinding(unittest.TestCase):
     def setUp(self):

@@ -1,8 +1,8 @@
 import unittest
 from types import SimpleNamespace
 
-from game.systems.taxation_system import TaxationSystem
-from game.systems.currency import to_copper
+from game.systems.economy.taxation_system import TaxationSystem
+from game.systems.economy.currency import to_copper
 
 
 class TestSocageTaxReport(unittest.TestCase):

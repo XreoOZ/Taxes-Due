@@ -30,9 +30,9 @@ from game.buildings.building_manager import BuildingManager
 from game.world.permits import AreaPermit, PermitManager
 from game.entities.villagers import Villager, Family, VillagerManager
 from game.buildings.furniture import FurnitureManager, Furniture
-from game.systems.schedule import ScheduleManager
-from game.systems.church_system import ChurchSystem
-from game.systems.currency import to_copper
+from game.systems.work.schedule import ScheduleManager
+from game.systems.village_life.church_system import ChurchSystem
+from game.systems.economy.currency import to_copper
 
 
 class TestAgent2ChurchPriestPrayerAndTax(unittest.TestCase):

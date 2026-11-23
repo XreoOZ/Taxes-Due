@@ -19,8 +19,8 @@ from game.buildings.construction_site import ConstructionSite
 from game.buildings.furniture import Furniture, FurnitureManager
 from game.world.permits import AreaPermit, PermitManager
 from game.world.stockpile import StockpileManager, ResourceStack
-from game.systems.day_cycle import DayCycleSystem
-from game.world.pathfinding import GlobalPathRegistry
+from game.systems.core.day_cycle import DayCycleSystem
+from game.world.navigation.pathfinding import GlobalPathRegistry
 
 class TestUniversalParallelWork(unittest.TestCase):
     def setUp(self):

@@ -8,9 +8,9 @@ pygame.init()
 from game.data.config import TILE_SIZE
 from game.entities.villagers import Villager, VillagerManager, Family
 from game.world.permits import PermitManager, AreaPermit, get_villager_home_position, find_closest_unassigned_household_worker
-from game.systems.job_tool_system import assign_job_worker, release_job_worker
-from game.systems.church_system import ChurchSystem
-from game.systems.cemetery_system import CemeterySystem
+from game.systems.work.job_tool_system import assign_job_worker, release_job_worker
+from game.systems.village_life.church_system import ChurchSystem
+from game.systems.village_life.cemetery_system import CemeterySystem
 
 
 class TestWorkerDistanceAndRelocation(unittest.TestCase):

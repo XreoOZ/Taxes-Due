@@ -9,8 +9,8 @@ from game.world.permits import PermitManager
 from game.world.stockpile import StockpileManager
 from game.entities.villagers import VillagerManager, Villager, Family
 from game.entities.servants import ServantManager, Servant
-from game.systems.day_cycle import DayCycleSystem
-from game.systems.schedule import ScheduleManager
+from game.systems.core.day_cycle import DayCycleSystem
+from game.systems.work.schedule import ScheduleManager
 
 class TestPossessionAndDispersalFarming(unittest.TestCase):
     def setUp(self):

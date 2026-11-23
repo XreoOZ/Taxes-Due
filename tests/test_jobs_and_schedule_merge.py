@@ -11,9 +11,9 @@ from game.data.config import (
 from game.entities.villagers import Villager, Family, VillagerManager
 from game.world.permits import PermitManager, AreaPermit
 from game.buildings.building_manager import BuildingManager
-from game.systems.schedule import ScheduleManager
+from game.systems.work.schedule import ScheduleManager
 from game.ui.ui_raport import RaportUI
-from game.systems.save_system import save_to_slot, load_from_slot, get_slot_path
+from game.systems.core.save_system import save_to_slot, load_from_slot, get_slot_path
 
 
 class TestJobsAndScheduleMerge(unittest.TestCase):
@@ -199,7 +199,7 @@ class TestJobsAndScheduleMerge(unittest.TestCase):
 
     def test_07_save_and_load_persistence_unaffected(self):
         """7. Existing schedules and worker assignments remain intact after save/load."""
-        from game.systems.day_cycle import DayCycleSystem
+        from game.systems.core.day_cycle import DayCycleSystem
         from game.entities.player import Player
         from game.world.stockpile import StockpileManager
         from game.buildings.furniture import FurnitureManager

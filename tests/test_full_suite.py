@@ -25,9 +25,9 @@ from game.world.stockpile import StockpileManager
 from game.entities.servants import ServantManager
 from game.entities.villagers import VillagerManager, Villager, Family
 from game.buildings.furniture import FurnitureManager, Furniture
-from game.systems.day_cycle import DayCycleSystem
-from game.systems.schedule import ScheduleManager
-from game.systems.save_system import serialize_game_state, save_to_slot, load_from_slot, SAVE_DIR, get_slot_path
+from game.systems.core.day_cycle import DayCycleSystem
+from game.systems.work.schedule import ScheduleManager
+from game.systems.core.save_system import serialize_game_state, save_to_slot, load_from_slot, SAVE_DIR, get_slot_path
 
 class TestFullSuite(unittest.TestCase):
     def setUp(self):

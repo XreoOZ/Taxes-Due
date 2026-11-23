@@ -8,10 +8,10 @@ os.environ["SDL_VIDEODRIVER"] = "dummy"
 pygame.init()
 
 from game.data.config import DEFAULT_ITEM_PRICES, ITEM_CATEGORIES
-from game.ui.market_modal import MarketProfileModal
+from game.ui.modals.market_modal import MarketProfileModal
 from game.ui.item_icons import draw_item_icon
-from game.systems.wealth_system import VillageWealthSystem
-from game.systems.cheat_system import get_registered_item_types, apply_add_item_cheat
+from game.systems.economy.wealth_system import VillageWealthSystem
+from game.systems.core.cheat_system import get_registered_item_types, apply_add_item_cheat
 from game.buildings.furniture import Furniture
 
 

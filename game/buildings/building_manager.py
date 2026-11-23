@@ -64,7 +64,7 @@ class BuildingManager:
     @property
     def pathfinder(self):
         if self._pathfinder is None:
-            from game.world.pathfinding import Pathfinder
+            from game.world.navigation.pathfinding import Pathfinder
             self._pathfinder = Pathfinder(self)
         return self._pathfinder
 
@@ -145,7 +145,7 @@ class BuildingManager:
             for site in completed:
                 self.construction_sites.remove(site)
             self.rebuild_tile_cache()
-            from game.world.pathfinding import GlobalPathRegistry
+            from game.world.navigation.pathfinding import GlobalPathRegistry
             GlobalPathRegistry.get_instance().reset()
 
         for b in self.buildings:
@@ -167,7 +167,7 @@ class BuildingManager:
         """Apply configured wear to public structures and create carpenter repair orders."""
         import random
         from game.data.config import BUILDING_TYPES, PUBLIC_STRUCTURE_DAILY_BREAK_CHANCE
-        from game.systems.carpenter_system import CarpenterSystem
+        from game.systems.work.carpenter_system import CarpenterSystem
 
         damaged = []
         for _ in range(max(0, int(days))):
@@ -235,7 +235,7 @@ class BuildingManager:
         carpenter_delivered = {}
         order = getattr(site, "construction_order", None)
         if order and order.get("status") != "COMPLETE":
-            from game.systems.carpenter_system import CarpenterSystem
+            from game.systems.work.carpenter_system import CarpenterSystem
             carpenter_delivered = CarpenterSystem.refund_order_materials(
                 order, site, furniture_manager, stockpile_manager,
             )
@@ -279,7 +279,7 @@ class BuildingManager:
                     s.path_target = None
 
         # 5. Reset rute dan reservasi pathfinding
-        from game.world.pathfinding import GlobalPathRegistry
+        from game.world.navigation.pathfinding import GlobalPathRegistry
         GlobalPathRegistry.get_instance().reset()
         return True
 
@@ -318,7 +318,7 @@ class BuildingManager:
                     s.current_path = []
                     s.path_target = None
 
-        from game.world.pathfinding import GlobalPathRegistry
+        from game.world.navigation.pathfinding import GlobalPathRegistry
         GlobalPathRegistry.get_instance().reset()
         return True
 
@@ -675,7 +675,7 @@ class BuildingManager:
 
         # Invalidate village wealth cache
         try:
-            from game.systems.wealth_system import VillageWealthSystem
+            from game.systems.economy.wealth_system import VillageWealthSystem
             VillageWealthSystem.mark_dirty()
         except ImportError:
             pass

@@ -22,11 +22,11 @@ from game.buildings.building import Building
 from game.buildings.furniture import FurnitureManager
 from game.world.permits import PermitManager, AreaPermit
 from game.entities.villagers import VillagerManager, Villager, Family
-from game.systems.schedule import ScheduleManager
+from game.systems.work.schedule import ScheduleManager
 from game.ui.ui_raport import RaportUI
-from game.ui.market_modal import MarketProfileModal
-from game.systems.market_service import MarketService
-from game.systems.currency import to_copper, from_copper
+from game.ui.modals.market_modal import MarketProfileModal
+from game.systems.economy.market_service import MarketService
+from game.systems.economy.currency import to_copper, from_copper
 
 
 class TestAgent1BuildingJobsScheduleMarketUI(unittest.TestCase):

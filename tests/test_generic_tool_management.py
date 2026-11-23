@@ -18,8 +18,8 @@ from game.world.permits import PermitManager
 from game.world.stockpile import StockpileManager
 from game.entities.villagers import Villager, VillagerManager, Family
 from game.entities.servants import Servant
-from game.systems.day_cycle import DayCycleSystem
-from game.systems.job_tool_system import (
+from game.systems.core.day_cycle import DayCycleSystem
+from game.systems.work.job_tool_system import (
     get_job_required_tools,
     get_missing_tools_for_worker,
     get_irrelevant_tools_in_inventory,

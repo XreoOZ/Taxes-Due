@@ -10,9 +10,9 @@ from game.data.config import (
     SLEEP_MAX_VALUE,
 )
 from game.entities.villagers import Family, Villager, VillagerManager
-from game.systems.schedule import ScheduleManager
-from game.systems.scheduled_activity import ScheduledActivitySystem
-from game.systems.sleep_system import SleepSystem
+from game.systems.work.schedule import ScheduleManager
+from game.systems.work.scheduled_activity import ScheduledActivitySystem
+from game.systems.village_life.sleep_system import SleepSystem
 from game.world.permits import PermitManager
 
 

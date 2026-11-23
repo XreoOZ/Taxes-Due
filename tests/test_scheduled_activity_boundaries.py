@@ -7,10 +7,10 @@ from game.data.config import SLEEP_ANY_REST_THRESHOLD
 from game.entities.player import Player
 from game.entities.servants import ServantManager
 from game.entities.villagers import Family, Villager, VillagerManager
-from game.systems.day_cycle import DayCycleSystem
-from game.systems.save_system import deserialize_game_state, serialize_game_state
-from game.systems.schedule import ScheduleManager
-from game.systems.scheduled_activity import ScheduledActivitySystem
+from game.systems.core.day_cycle import DayCycleSystem
+from game.systems.core.save_system import deserialize_game_state, serialize_game_state
+from game.systems.work.schedule import ScheduleManager
+from game.systems.work.scheduled_activity import ScheduledActivitySystem
 from game.world.permits import PermitManager
 from game.world.stockpile import StockpileManager
 

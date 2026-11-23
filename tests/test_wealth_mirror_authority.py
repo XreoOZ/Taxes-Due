@@ -1,7 +1,7 @@
 import unittest
 from types import SimpleNamespace
 
-from game.systems.wealth_system import VillageWealthSystem
+from game.systems.economy.wealth_system import VillageWealthSystem
 
 
 class TestWealthMirrorAuthority(unittest.TestCase):

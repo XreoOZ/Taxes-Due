@@ -10,10 +10,10 @@ import pygame
 
 pygame.init()
 
-from game.systems import day_cycle as day_cycle_module
-from game.systems.day_cycle import DayCycleSystem
-from game.systems.speed_control import SpeedController
-from game.systems.taxation_system import TaxationSystem
+from game.systems.core import day_cycle as day_cycle_module
+from game.systems.core.day_cycle import DayCycleSystem
+from game.systems.core.speed_control import SpeedController
+from game.systems.economy.taxation_system import TaxationSystem
 from game.ui.ui_raport import RaportUI
 
 

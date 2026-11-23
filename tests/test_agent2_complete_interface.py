@@ -19,11 +19,11 @@ from game.data.config import (
     DAYS_OF_WEEK,
     DEDICATED_JOBS,
 )
-from game.systems.schedule import ScheduleManager
+from game.systems.work.schedule import ScheduleManager
 from game.world.permits import PermitManager, AreaPermit
 from game.buildings.building_manager import BuildingManager
 from game.ui.ui_raport import RaportUI
-from game.ui.market_modal import MarketProfileModal
+from game.ui.modals.market_modal import MarketProfileModal
 
 
 def test_building_categories():

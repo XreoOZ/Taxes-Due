@@ -14,7 +14,7 @@ from game.buildings.building_manager import BuildingManager
 from game.buildings.construction_site import ConstructionSite
 from game.world.permits import PermitManager, AreaPermit
 from game.world.stockpile import StockpileManager, ResourceStack
-from game.world.pathfinding import GlobalPathRegistry, Pathfinder
+from game.world.navigation.pathfinding import GlobalPathRegistry, Pathfinder
 from game.entities.servants import Servant, ServantManager
 from game.entities.villagers import Villager, VillagerManager, Family
 from game.buildings.furniture import Furniture, FurnitureManager

@@ -667,7 +667,7 @@ class AreaPermit:
         self._tile_crop_sync_needed = True
         self._recalculate_bounds()
         if self.permit_type == "cemetery":
-            from game.systems.cemetery_system import CemeterySystem
+            from game.systems.village_life.cemetery_system import CemeterySystem
             CemeterySystem.ensure_cemetery_graves(self)
 
     def expand_tiles(self, new_tiles):
@@ -1057,10 +1057,10 @@ class PermitManager:
             # 1. Decreasing worker count: release the corresponding worker(s)
             if delta < 0:
                 if p.permit_type == "church":
-                    from game.systems.church_system import ChurchSystem
+                    from game.systems.village_life.church_system import ChurchSystem
                     ChurchSystem.release_priest(self, villager_manager, target_permit=p)
                 elif p.permit_type == "cemetery":
-                    from game.systems.cemetery_system import CemeterySystem
+                    from game.systems.village_life.cemetery_system import CemeterySystem
                     CemeterySystem.release_gravedigger(self, villager_manager, target_permit=p)
                 else:
                     while len(p.assigned_workers) > p.max_workers:
@@ -1104,7 +1104,7 @@ class PermitManager:
     def auto_sort_workers(self, villager_manager, job_filter=None, furniture_manager=None):
         """Backward-compatible shim — delegates to the workplace-system
         recalibration which covers permits, furniture, and buildings."""
-        from game.systems.workplace_system import auto_sort_all_workers
+        from game.systems.work.workplace_system import auto_sort_all_workers
         return auto_sort_all_workers(self, furniture_manager, villager_manager,
                                      building_manager=None, job_filter=job_filter)
 

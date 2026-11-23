@@ -10,12 +10,12 @@ from game.buildings.furniture import Furniture, FurnitureManager
 from game.entities.villagers import Villager, VillagerManager, Family
 from game.world.stockpile import StockpileManager, ResourceStack
 from game.permits import AreaPermit, PermitManager
-from game.systems.market_pricing import MarketPricingSystem
-from game.systems.household_stall_system import HouseholdStallSystem
-from game.systems.wealth_system import VillageWealthSystem
-from game.systems.market_service import MarketService
-from game.systems.market_purchasing import AIMarketPurchasingSystem
-from game.systems.save_system import serialize_game_state, deserialize_game_state
+from game.systems.economy.market_pricing import MarketPricingSystem
+from game.systems.economy.household_stall_system import HouseholdStallSystem
+from game.systems.economy.wealth_system import VillageWealthSystem
+from game.systems.economy.market_service import MarketService
+from game.systems.economy.market_purchasing import AIMarketPurchasingSystem
+from game.systems.core.save_system import serialize_game_state, deserialize_game_state
 
 
 class TestMarketEconomyStallsWealth(unittest.TestCase):
@@ -285,7 +285,7 @@ class TestMarketEconomyStallsWealth(unittest.TestCase):
         market.auto_pricing = True
         self.bm.buildings.append(market)
 
-        from game.systems.day_cycle import DayCycleSystem
+        from game.systems.core.day_cycle import DayCycleSystem
         dc = DayCycleSystem()
 
         class DummyPlayer:

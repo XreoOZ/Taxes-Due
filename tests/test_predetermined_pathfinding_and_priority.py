@@ -11,7 +11,7 @@ from game.buildings.building_manager import BuildingManager
 from game.buildings.furniture import FurnitureManager, Furniture
 from game.entities.servants import Servant, ServantManager
 from game.entities.villagers import Villager, VillagerManager, Family
-from game.world.pathfinding import Pathfinder, GlobalPathRegistry
+from game.world.navigation.pathfinding import Pathfinder, GlobalPathRegistry
 from game.world.camera import Camera
 from game.ui.path_debug_overlay import PathDebugOverlay
 

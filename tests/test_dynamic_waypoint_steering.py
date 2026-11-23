@@ -9,7 +9,7 @@ import pygame
 from game.config import TILE_SIZE, PATH_STEER_LOOKAHEAD
 from game.buildings.building import Building
 from game.buildings.building_manager import BuildingManager
-from game.world.navigation import steer_towards_visible_waypoint, resolve_steer_index
+from game.world.navigation.navigation import steer_towards_visible_waypoint, resolve_steer_index
 
 
 class _DummyEntity:
