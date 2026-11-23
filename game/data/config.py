@@ -3,6 +3,39 @@ Configuration and Global Constants
 """
 
 import sys
+from game.data.catalog import (
+    ARTISAN_JOB_IDS, BUILDER_DEFAULT_LIVING_HOUSEHOLD_SIZE, BUILDER_TOOL_SWING_ANGLE, BUILDER_TOOL_SWING_SPEED, COLOR_CROP_WITHERED, COLOR_SOIL_DRY,
+    COLOR_SOIL_WET, COLOR_WATER_SHEEN, COMMISSION_CLAIM_RETRY_SECONDS, CROP_TYPES, DAYS_OF_WEEK, DEDICATED_JOBS,
+    DEFAULT_COMMISSION_ARTISAN_JOB, DEFAULT_JOB_SCHEDULE, DEFAULT_PLOT_MAX_WORKERS, DEFAULT_PRAYER_END_HOUR, DEFAULT_PRAYER_START_HOUR, DEFAULT_PRIORITIES,
+    DEFAULT_STARTER_TOOLS, FARMING_BATCH_GROWTH_DAYS, FARMING_BATCH_WINDOW_DAYS, FARM_TILE_ARRIVAL_DIST, FARM_TILE_DISPERSION_ENABLED, FARM_TILE_PROXIMITY_PENALTY_ADJACENT,
+    FARM_TILE_PROXIMITY_PENALTY_NEAR, FREE_TIME_SCHEDULE_ACTIVITIES, FURNITURE_CLAIM_BED_SEARCH_RADIUS, ITEM_CATEGORIES, PRIORITY_COLORS, RESOURCE_COLORS,
+    SCHEDULE_ACTIVITY_CANCEL_ON_BOUNDARY, SCHEDULE_ACTIVITY_NEUTRAL_TASKS, SCHEDULE_ACTIVITY_STRICT_TASKS, SCHEDULE_ACTIVITY_STRICT_TASK_PREFIXES, SCHEDULE_ACTIVITY_STRICT_TASK_PREFIX_EXEMPTIONS, SCHEDULE_ACTIVITY_TASKS,
+    SCHEDULE_ACTIVITY_TASK_PREFIXES, SCHEDULE_ACTIVITY_TASK_STATE_FIELDS, SCHEDULE_ANY, SCHEDULE_LEISURE, SCHEDULE_NON_WORK_TASKS, SCHEDULE_PRAYER,
+    SCHEDULE_SLEEP, SCHEDULE_TYPES, SCHEDULE_WORK, STARTER_FAMILY_SIZE, STARTER_PRESETS, TILLING_DURATION_INGAME_HOURS,
+    TOOLMAKER_BAR_DAILY_CAP, TOOLMAKER_BAR_RECIPE, TOOLMAKER_BAR_SMELT_INGAME_MINUTES, TOOLMAKER_BAR_STOCK_TARGET, TOOLMAKER_TOOL_MAX_INGAME_HOURS, TOOLMAKER_TOOL_MIN_INGAME_HOURS,
+    TOOLMAKER_TOOL_RECIPE, TOOL_CONDITION_CHECK_EVERY_DAYS, TOOL_CONDITION_DEGRADE_CHANCE, TOOL_CONDITION_STAGES, TOOL_TYPES, TREE_WOOD_YIELD_MAX,
+    TREE_WOOD_YIELD_MIN, VILLAGER_FEMALE_NAMES, VILLAGER_MALE_NAMES, VILLAGER_SURNAMES, WATERING_DURATION_INGAME_HOURS, WATERING_DURATION_SECONDS,
+    WEEKDAY_NAMES, WOODSMAN_CUT_INGAME_HOURS, WOODSMAN_PLANT_INGAME_HOURS, WOODSMAN_WORKSTATION_TILES, WORKSTATION_DEFAULT_QUOTA_DAILY, WORKSTATION_MAX_WORKERS,
+    WORKSTATION_QUOTA_STEP, WORK_TYPES,
+)
+from game.data.structures import (
+    BUILDER_BUILD_DURATION_INGAME_HOURS, BUILDER_REPAIR_FOOD_DAYS, BUILDER_REPAIR_MATERIALS, BUILDING_TYPES, BUILDING_WALL_THICKNESS, BUILD_DURATION_SECONDS,
+    BURIAL_FEE_MAX_SILVER, COLOR_BUILDING_DOOR, COLOR_BUILDING_FLOOR, COLOR_BUILDING_FLOOR_ALT, COLOR_BUILDING_WALL, COLOR_BUILDING_WALL_OUTLINE,
+    COLOR_STONE_DOOR, COLOR_STONE_FLOOR, COLOR_STONE_FLOOR_ALT, COLOR_STONE_WALL, COLOR_STONE_WALL_OUTLINE, COST_PER_BLOCK_STONE,
+    COST_PER_BLOCK_WOOD, DEMOLISH_DURATION_SECONDS, DEMOLITION_REFUND_RATIO, FURNITURE_DAILY_BREAK_CHANCE, FURNITURE_TYPES, GRAVEDIGGER_TARGET_STONE,
+    GRAVEDIGGER_TARGET_WOOD, GRAVE_BURY_HOURS, GRAVE_COST_STONE, GRAVE_COST_WOOD, GRAVE_DIG_HOURS, GRAVE_REUSE_DAYS,
+    LORD_TREASURY_PLACEMENT_SEARCH_RADIUS, LORD_TREASURY_START_TILE, PERMIT_TYPES, PUBLIC_STRUCTURE_DAILY_BREAK_CHANCE, ROAD_PLACEMENT_BLOCKED, ROAD_TYPES,
+    TOMBSTONE_MODELS_COUNT,
+)
+from game.data.economy import (
+    BUILDER_INSUFFICIENT_LANDLORD_COIN_MESSAGES, CHURCH_TAX_HAPPINESS_TIERS_COPPER, CURRENCY_DENOMINATIONS, DEFAULT_CHURCH_TAX, DEFAULT_ITEM_PRICES, DEFAULT_RESOURCES,
+    DEFAULT_SOCAGE_TAX_ENABLED, DEFAULT_SOCAGE_TAX_PERCENT, DENOMINATION_CAP, EXCHANGE_RATES, HAPPINESS_WEALTH_DENOMINATION, HOUSEHOLD_STALL_HAUL_CAPACITY,
+    MARKET_CURRENCY_DENOMINATIONS, MARKET_DEFAULT_HOUSEHOLD_SALE_PERCENT, MARKET_PERCENT_STEP, MARKET_QUANTITY_DEFAULT, MARKET_QUANTITY_MAX, MARKET_SALES_REPORT_PERIOD_DAYS,
+    MARKET_TRADEABLE_ITEMS, MARKET_WEALTH_CONTEXT_REFRESH_SECONDS, MARKET_WEALTH_PRICE_ELASTICITY, MARKET_WEALTH_PRICE_FACTOR_MAX, MARKET_WEALTH_PRICE_FACTOR_MIN, MARKET_WEALTH_REFERENCE_DAYS,
+    MAX_STACK_SIZE, MAX_TILE_CAPACITY, NO_CHURCH_TAX_HAPPINESS_BONUS, SOCAGE_TAX_GREETING_LINES, SOCAGE_TAX_HAPPINESS_REPLIES, SOCAGE_TAX_HAPPINESS_TIERS,
+    SOCAGE_TAX_INTERVAL_DAYS, SOCAGE_TAX_QUICK_STEP, TAX_COLLECTOR_STATION_ARRIVAL_DISTANCE, TAX_UNHAPPINESS_DURATION_DAYS, VILLAGER_HUD_COUNT_REFRESH_SECONDS, VILLAGER_INVENTORY_CAPACITY,
+)
+
 
 # High DPI Awareness for Windows
 if sys.platform == "win32":
@@ -98,15 +131,6 @@ SERVANT_TELEPORT_SEARCH_RADIUS_TILES = 10
 # Max anti-softlock teleports allowed per destination tile. Beyond this the
 # servant abandons the task instead of bouncing between tiles forever.
 SERVANT_MAX_TELEPORTS_PER_TARGET = 2
-BUILD_DURATION_SECONDS = 5.0
-# Collision thickness of building perimeter walls. Kept slim so 1-tile-wide
-# interior corridors (concave footprints like U-shapes) remain passable for
-# the player (radius 24 needs ~48px of free width inside a 64px tile).
-# *** ESTABLISHED — DO NOT REGRESS *** Raising this above ~8 re-blocks
-# 1-tile corridors for the player; lowering it lets entities clip wall edges.
-BUILDING_WALL_THICKNESS = 6
-DEMOLISH_DURATION_SECONDS = 5.0
-DEMOLITION_REFUND_RATIO = 0.5  # 50% resource refund when demolishing buildings
 ENTITY_AVOIDANCE_RADIUS = 56.0
 SERVANT_YIELD_FORCE = 60.0
 # AI servants phase through walls/furniture/narrow passages: they still compute
@@ -194,25 +218,11 @@ NARROW_PASSAGE_WAIT_DISTANCE = 32.0       # Distance to halt outside narrow pass
 # Villager & Family Settings
 VILLAGER_RADIUS = 20
 VILLAGER_SPEED = 180.0
-WATERING_DURATION_SECONDS = 2.0
 DOORWAY_WAYPOINT_DISTANCE = 24.0
-DEFAULT_PLOT_MAX_WORKERS = 2
-# Farm plots use a manually configurable worker cap (set via Jobs > Workstations > Farmer).
-
-# Farming Task Durations & Dispersion Settings (Config-Driven, Zero Hardcode)
-# Farm task durations per tile, in in-game hours.
-# *** ESTABLISHED — user-requested 30 in-game minutes each ***
-WATERING_DURATION_INGAME_HOURS = 0.5  # 30 in-game minutes per tile
-TILLING_DURATION_INGAME_HOURS = 0.5   # 30 in-game minutes per tile
-FARM_TILE_DISPERSION_ENABLED = False           # False = farmers sweep tiles nearest-first in order; True = spread workers apart
-FARM_TILE_PROXIMITY_PENALTY_ADJACENT = 3000.0  # Heavy penalty for tiles adjacent to other active workers (< 1.5 grid units)
-FARM_TILE_PROXIMITY_PENALTY_NEAR = 1500.0      # Penalty for tiles within 2.5 grid units
-FARM_TILE_ARRIVAL_DIST = 20.0                  # Arrival radius inside target work tile
 INTERACTION_CONTACT_RADIUS = 58.0              # Contact pickup distance (allowing adjacent tile pickup without clipping)
 TOOL_STOW_ARRIVAL_DIST = 36.0                  # Arrival distance to household chest when returning unused tools
 LOOSE_ITEM_ARRIVAL_DIST = 24.0                 # Arrival distance for gathering loose items
 CHEST_INTERACTION_RADIUS = 36.0                # Interaction distance with household chest
-BUILDER_BUILD_DURATION_INGAME_HOURS = 1.0
 
 # =====================================================================
 # Natural Resources: Forest & Mines (Island world only)
@@ -242,14 +252,6 @@ FOREST_MAP_COLOR = (21, 128, 61)         # biome tint on the world map overlay
 FOREST_TREE_CHUNK_TILES = 16             # spatial bucket size for tree rendering
 FOREST_MOVE_SPEED_FACTOR = 0.7           # -30% movement speed on forest tiles
 TREE_GROWTH_DAYS = 10.0                  # in-game days for a planted tree to mature
-WOODSMAN_CUT_INGAME_HOURS = 0.5          # 30 in-game minutes per tree
-WOODSMAN_PLANT_INGAME_HOURS = 0.25       # 15 in-game minutes per replant
-TREE_WOOD_YIELD_MIN = 1
-TREE_WOOD_YIELD_MAX = 3
-WOODSMAN_WORKSTATION_TILES = 4           # Woodsman Lodge footprint (square)
-WORKSTATION_MAX_WORKERS = 5
-WORKSTATION_DEFAULT_QUOTA_DAILY = 0      # 0 = unlimited daily output quota
-WORKSTATION_QUOTA_STEP = 10
 
 # Stone/ore mines: 5x5 pre-generated deposits scattered on the island.
 MINE_SIZE_TILES = 5
@@ -271,399 +273,8 @@ MINE_TYPE_TABLE = {
     "Stone Mine": {"output_item": "Stone", "color": (203, 213, 225)},
     "Iron Mine": {"output_item": "Iron Ore", "color": (249, 115, 22)},
 }
-BUILDER_DEFAULT_LIVING_HOUSEHOLD_SIZE = 1
-FURNITURE_DAILY_BREAK_CHANCE = 0.05
-BUILDER_REPAIR_FOOD_DAYS = 3
-BUILDER_REPAIR_MATERIALS = {"Wood": 2}
-# Commission queue: seconds before a failed payment claim may be retried.
-COMMISSION_CLAIM_RETRY_SECONDS = 20.0
-
-# -----------------------------------------------------------------------------
-# Toolmaker System (Iron chain: Iron Mine -> Iron Ore -> Iron Bar -> Tools)
-# -----------------------------------------------------------------------------
-# Smelting: 1 Iron Ore + 1 Wood -> 1 Iron Bar at the Toolmaker Workbench.
-TOOLMAKER_BAR_RECIPE = {"Iron Ore": 1, "Wood": 1}
-TOOLMAKER_BAR_SMELT_INGAME_MINUTES = 10.0
-# Automatic bar production: keep up to this many bars in the toolmaker's
-# household chest; never exceed this many smelts per in-game day.
-TOOLMAKER_BAR_STOCK_TARGET = 10
-TOOLMAKER_BAR_DAILY_CAP = 10
-# Tool forging: every craftable tool costs this per unit, build time is a
-# per-unit RNG roll between min and max in-game hours.
-TOOLMAKER_TOOL_RECIPE = {"Wood": 2, "Iron Bar": 3}
-TOOLMAKER_TOOL_MIN_INGAME_HOURS = 1.0
-TOOLMAKER_TOOL_MAX_INGAME_HOURS = 2.0
-# Craftable catalogue = every item whose ITEM_CATEGORIES value is "TOOL".
-# -----------------------------------------------------------------------------
-# Tool Condition Lifecycle (per-unit wear on every TOOL item)
-# -----------------------------------------------------------------------------
-TOOL_CONDITION_STAGES = ["PRISTINE", "GOOD", "WORN", "DAMAGED", "BROKEN"]
-TOOL_CONDITION_DEGRADE_CHANCE = 0.30   # per unit, per check
-TOOL_CONDITION_CHECK_EVERY_DAYS = 2     # degradation sweep cadence
-# Orders carry "artisan_job"; missing value falls back to this job id.
-DEFAULT_COMMISSION_ARTISAN_JOB = "Builder"
-BUILDER_TOOL_SWING_SPEED = 7.0
-BUILDER_TOOL_SWING_ANGLE = 0.55
-FURNITURE_CLAIM_BED_SEARCH_RADIUS = 8.5        # Max tile distance to infer chest household ownership from beds
 COLOR_VILLAGER_BODY = (34, 197, 94)     # Forest/Emerald green (Peasant tunic)
 COLOR_VILLAGER_OUTLINE = (20, 83, 45)   # Deep forest green
-VILLAGER_SURNAMES = [
-    "Miller", "Fletcher", "Smith", "Cooper", "Baker",
-    "Tanner", "Ward", "Carter", "Mason", "Thatcher",
-    "Weaver", "Shepherd", "Potter", "Fisher", "Brewer"
-]
-VILLAGER_MALE_NAMES = [
-    "Arthur", "John", "Thomas", "William", "Robert",
-    "Edward", "Henry", "Walter", "Hugh", "Geoffrey"
-]
-VILLAGER_FEMALE_NAMES = [
-    "Mary", "Alice", "Agnes", "Joan", "Margaret",
-    "Emma", "Matilda", "Eleanor", "Beatrice", "Cecily"
-]
-# Fresh-game starter household size (randomized composition each new game).
-STARTER_FAMILY_SIZE = 5
-
-# New-game starter presets ("difficulty" select after map choice).
-# enabled=False entries render as WIP and cannot be picked.
-STARTER_PRESETS = [
-    {
-        "id": "nepo_baby",
-        "label": "Nepo Baby : Easy Start",
-        "desc": "A supplied household, stocked landlord storage, a ready timber hall, and a market.",
-        "enabled": True,
-        "wip": False,
-        "family_size": 5,
-        "permit_padding": 0,
-        "house": {"building_type": "wooden_structure", "width": 6, "height": 3},
-        "market": {"building_type": "market", "width": 3, "height": 2},
-        # Player-picked placement: tile offsets from the HOUSE TOP-LEFT.
-        # House occupies (0,0)-(5,2); market sits left with a 1-tile gap,
-        # storage yard below leaving the door front yard (rows 3-4) clear.
-        "farm": {"width": 6, "height": 4},
-        "cluster": {
-            "house": {"dx": 0, "dy": 0},
-            "market": {"dx": -4, "dy": 0},
-            "storage": {"dx": 0, "dy": 5},
-            "farm": {"dx": 7, "dy": 0},
-            "props": [
-                {"building": "toilet", "dx": 6, "dy": 0},
-                # Well & Toilet are public structures — no permit needed,
-                # they sit on open ground beside the farm tiles.
-                {"building": "well", "dx": 13, "dy": 1},
-            ],
-        },
-        "landlord_storage": True,
-        "storage_permit_width": 6,
-        "storage_permit_height": 6,
-        "storage_chest_inside_house": True,
-        "builder_workbench": True,
-        # Lord Treasury belongs to the landlord — parked on open ground
-        # beside the storage yard, never inside the household home.
-        "treasury_chest_spot": "beside_storage",
-        "treasury_items": {"Gold": 10},
-        "storage_items": {
-            "Potato": 100,
-            "Wood": 500,
-            "Stone": 500,
-            "Iron Ore": 50,
-            "Iron Bar": 50,
-            "Hoe": 3,
-            "Sickle": 3,
-            "Watering_Can": 3,
-            "Hammer": 1,
-            "Tongs": 1,
-            "Saw": 1,
-            "Adze": 1,
-            "Felling_Axe": 1,
-            "Spade": 1,
-            "Pickaxe": 1,
-            "Sledgehammer": 1,
-        },
-    },
-    {
-        "id": "trailblazer",
-        "label": "Trailblazer : Hard Start",
-        "desc": "Work in progress — a harsher founding scenario.",
-        "enabled": False,
-        "wip": True,
-        "family_size": None,
-        "permit_padding": 2,
-        "house": None,
-        "market": None,
-        "landlord_storage": False,
-        "builder_workbench": False,
-        "storage_items": {},
-    },
-]
-DEDICATED_JOBS = {
-    "Unassigned": {
-        "id": "Unassigned",
-        "name": "Unassigned",
-        "title": "Unassigned",
-        "color": (148, 163, 184),
-        "wip": False,
-        "workplace_permit": None,
-        "desc": "Individual with no assigned job. Available for assignment.",
-        "required_tools": []
-    },
-    "Farmer": {
-        "id": "Farmer",
-        "name": "Farmer",
-        "title": "Farmer",
-        "color": (34, 197, 94),
-        "wip": False,
-        "workplace_permit": "farm",
-        "desc": "Tends crops and agricultural plots; waters and harvests food.",
-        "required_tools": ["Hoe", "Watering_Can", "Sickle"]
-    },
-    "Builder": {
-        "id": "Builder",
-        "name": "Builder",
-        "title": "Builder",
-        "color": (245, 158, 11),
-        "wip": False,
-        "workplace_permit": "construction",
-        "desc": "Constructs buildings, infrastructure, and structural works.",
-        "required_tools": ["Hammer"]
-    },
-    "Blacksmith": {
-        "id": "Blacksmith",
-        "name": "Blacksmith",
-        "title": "Blacksmith (WIP)",
-        "color": (239, 68, 68),
-        "wip": True,
-        "workplace_permit": "smithy",
-        "desc": "Forges iron tools, nails, and armor for the settlement.",
-        "required_tools": ["Hammer", "Tongs"]
-    },
-    "Builder": {
-        "id": "Builder",
-        "name": "Builder",
-        "title": "Builder",
-        "color": (234, 179, 8),
-        "wip": False,
-        "workplace_permit": "construction",
-        "workplace_furniture_type": "builder_workbench",
-        "desc": "Crafts furniture, structural beams, and wooden barrels.",
-        "required_tools": ["Saw", "Adze"],
-        "material_stock_target": {"Wood": 10, "Stone": 10}
-    },
-    "Tax Collector": {
-        "id": "Tax Collector",
-        "name": "Tax Collector",
-        "title": "Tax Collector",
-        "color": (180, 83, 9),
-        "wip": False,
-        "workplace_building_type": "tax_house",
-        "desc": "Collects the scheduled household socage tax and returns it to the Crown Treasury.",
-        "required_tools": []
-    },
-    "Baker": {
-        "id": "Baker",
-        "name": "Baker",
-        "title": "Baker (WIP)",
-        "color": (249, 115, 22),
-        "wip": True,
-        "workplace_permit": "bakery",
-        "desc": "Mills grain and bakes daily bread loaves for villagers.",
-        # "Rolling_Pin"/"Peel"/"Fishing_Rod" disabled — reserved for WIP
-        # Baker/Fisherman jobs; uncomment when those mechanics ship.
-        "required_tools": []
-    },
-    "Fisherman": {
-        "id": "Fisherman",
-        "name": "Fisherman",
-        "title": "Fisherman (WIP)",
-        "color": (56, 189, 248),
-        "wip": True,
-        "workplace_permit": "fishery",
-        "desc": "Catches fish and gathers seafood at village docks and shores.",
-        "required_tools": []
-    },
-    "Priest": {
-        "id": "Priest",
-        "name": "Priest",
-        "title": "Priest",
-        "color": (168, 85, 247),
-        "wip": False,
-        "auto_sortable": False,
-        "workplace_permit": "church",
-        "desc": "Conducts daily prayer and collects church taxes at the village church.",
-        "required_tools": []
-    },
-    "Gravedigger": {
-        "id": "Gravedigger",
-        "name": "Gravedigger",
-        "title": "Gravedigger",
-        "color": (48, 50, 56),
-        "wip": False,
-        "workplace_permit": "cemetery",
-        "desc": "Prepares graves and buries deceased villagers in the cemetery.",
-        "required_tools": ["Hoe"],
-        "material_stock_target": {"Wood": 5, "Stone": 5},
-        "materials_per_grave": {"Wood": 1, "Stone": 1}
-    },
-    "Woodsman": {
-        "id": "Woodsman",
-        "name": "Woodsman",
-        "title": "Woodsman",
-        "color": (22, 101, 52),
-        "wip": False,
-        "workplace_furniture_type": "woodsman_lodge",
-        "desc": "Fells the nearest mature trees in the forest and replants them when the lodge is set to Plant a Tree.",
-        "required_tools": ["Felling_Axe", "Spade"]
-    },
-    "Miner": {
-        "id": "Miner",
-        "name": "Miner",
-        "title": "Miner",
-        "color": (71, 85, 105),
-        "wip": False,
-        "workplace_furniture_type": "miner_workstation",
-        "desc": "Extracts ore at the mine a Miner Workstation is built upon (Stone, Copper, Gold, ...).",
-        "required_tools": ["Pickaxe", "Sledgehammer"]
-    },
-    "Toolmaker": {
-        "id": "Toolmaker",
-        "name": "Toolmaker",
-        "title": "Toolmaker",
-        "color": (180, 83, 9),
-        "wip": False,
-        "workplace_furniture_type": "toolmaker_workbench",
-        "desc": "Smelts iron ore into bars and forges tools at the Toolmaker Workbench (hammer, tongs, and moulds).",
-        "required_tools": ["Hammer", "Tongs"],
-        "material_stock_target": {"Wood": 10}
-    }
-}
-
-# Calendar labels shown in the HUD only; schedules are shared across every day.
-WEEKDAY_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
-DAYS_OF_WEEK = WEEKDAY_NAMES  # Legacy import compatibility; never used by schedules.
-
-# 24-Hour Schedule System (RimWorld-Style Activity Management)
-SCHEDULE_WORK = "WORK"
-SCHEDULE_LEISURE = "LEISURE"
-SCHEDULE_SLEEP = "SLEEP"
-SCHEDULE_ANY = "ANY"
-SCHEDULE_PRAYER = "PRAYER"
-DEFAULT_PRAYER_START_HOUR = 3
-DEFAULT_PRAYER_END_HOUR = 4
-
-SCHEDULE_TYPES = {
-    "WORK": {
-        "id": "WORK",
-        "name": "Work",
-        "color": (59, 130, 246),       # Bright blue
-        "desc": "Mandatory labor: tending farm crops, harvesting, or crafting at workplace."
-    },
-    "LEISURE": {
-        "id": "LEISURE",
-        "name": "Leisure",
-        "color": (34, 197, 94),        # Emerald green
-        "desc": "Rest, stroll around town, chat with villagers, and recreate."
-    },
-    "SLEEP": {
-        "id": "SLEEP",
-        "name": "Sleep",
-        "color": (147, 51, 234),       # Royal purple
-        "desc": "Sleep inside family home to restore energy."
-    },
-    "ANY": {
-        "id": "ANY",
-        "name": "Anything",
-        "color": (100, 116, 139),      # Slate gray
-        "desc": "Finish active work, meet needs (including sleep), then choose leisure or available work."
-    },
-    "PRAYER": {
-        "id": "PRAYER",
-        "name": "Prayer",
-        "color": (234, 179, 8),        # Radiant gold
-        "desc": "Mandatory church prayer time decreed by the Priest."
-    }
-}
-
-# Task states are paused outside these schedule slots and resumed when the slot
-# returns. Prefixes are kept separate so task families stay data-driven.
-SCHEDULE_ACTIVITY_TASKS = {
-    "WORK": frozenset({
-        "BUYING_JOB_TOOLS_RETRIEVE_COINS", "BUYING_JOB_TOOLS_TRAVEL_TO_MARKET",
-        "BUYING_JOB_TOOLS_RETURN_HOME", "MISSING_TOOL", "RETURNING_TOOLS",
-        "EQUIPPING_JOB_TOOLS", "TILLING", "FETCHING_WATER", "WATERING",
-        "HARVESTING", "HAULING_HOME", "PREACHING", "RETURNING_TITHES_HOME",
-        "CARRYING_CORPSE", "DIGGING_GRAVE", "BURYING_GRAVE", "FETCHING_CORPSE",
-        "GRAVEDIGGER_BURIAL_PAYMENT_RETRIEVE", "WAITING_FOR_BURIAL_PAYMENT",
-        "GOING_TO_TAX_OFFICE", "STATIONED_AT_TAX_OFFICE",
-        "VISITING_HOUSEHOLD_FOR_TAX", "WAITING_FOR_HOUSEHOLD_TAX",
-        "RETURNING_TAX_TO_TREASURY", "PAYING_SOCAGE_TAX",
-        "WAITING_FOR_BUILDER_COMMISSION", "BUILDER_CONSTRUCTING",
-        "BUILDER_COLLECTING_MATERIALS", "BUILDER_DELIVERING_MATERIALS",
-        "BUILDER_REPAIRING",
-        "BUILDER_FEE_RETRIEVE", "BUILDER_FEE_TRAVEL",
-        "BUILDER_FEE_LANDLORD_RETRIEVE",
-        "STATION_LEFTOVER_FETCH", "STATION_LEFTOVER_DELIVER",
-    }),
-    "LEISURE": frozenset({
-        "SEEKING_FOOD", "SEEKING_WATER", "SEEKING_TOILET",
-        "RECOVER_DEATH_ITEMS", "BUYING_FOOD_RETRIEVE_COINS",
-        "BUYING_FOOD_RETRIEVE_GROUND_COINS", "BUYING_FOOD_TRAVEL_TO_MARKET",
-        "BUYING_FOOD_HAULING_HOME", "FETCHING_FURNITURE",
-        "FETCHING_DROPPED_FURNITURE", "HAULING_FURNITURE",
-        "HAULING_DROPPED_FURNITURE", "FETCHING_POSSESSION",
-        "HAULING_POSSESSION_HOME", "HAULING_HOUSEHOLD_WATER",
-        "COLLECTING_HOUSEHOLD_WATER", "BURIAL_PAYMENT_RETRIEVE",
-        "BURIAL_PAYMENT_TRAVEL", "CONFESSION_QUEUED",
-        "WAITING_FOR_CONFESSION", "CONFESSION_RETRIEVE_COINS",
-        "CONFESSION_TRAVEL_TO_PRIEST", "GOING_TO_CONFESSOR",
-        "GOING_TO_CONFESSION_BOX", "CONFESSING", "HEARING_CONFESSION",
-        "DEPOSITING_UNUSED_ITEMS",
-        "STATION_LEFTOVER_FETCH", "STATION_LEFTOVER_DELIVER",
-    }),
-    "SLEEP": frozenset({"SLEEPING", "DEPOSITING_UNUSED_ITEMS"}),
-    "PRAYER": frozenset({"LEADING_PRAYER", "ATTENDING_PRAYER", "PRAYING"}),
-}
-SCHEDULE_ACTIVITY_TASK_PREFIXES = (
-    ("BUILDER_FEE_", "LEISURE"),
-    ("BUILDER_RESTOCK_", "WORK"),
-    ("BUILDER_", "WORK"),
-    ("GRAVEDIGGER_RESTOCK_", "WORK"),
-    ("HAULING_STALL_", "LEISURE"),
-)
-ARTISAN_JOB_IDS = ("Builder", "Blacksmith", "Baker", "Toolmaker")
-SCHEDULE_ACTIVITY_STRICT_TASK_PREFIXES = tuple(
-    f"{job.upper()}_" for job in ARTISAN_JOB_IDS
-)
-SCHEDULE_ACTIVITY_STRICT_TASK_PREFIX_EXEMPTIONS = ("BUILDER_FEE_",)
-SCHEDULE_ACTIVITY_NEUTRAL_TASKS = frozenset({
-    "IDLE", "DECEASED", "LEISURE", "STROLLING", "ZONKED_SLEEP",
-})
-SCHEDULE_ACTIVITY_CANCEL_ON_BOUNDARY = frozenset({
-    "SLEEPING", "LEADING_PRAYER", "ATTENDING_PRAYER", "PRAYING",
-    "CONFESSION_QUEUED", "WAITING_FOR_CONFESSION",
-    "CONFESSION_RETRIEVE_COINS", "CONFESSION_TRAVEL_TO_PRIEST",
-    "GOING_TO_CONFESSOR", "GOING_TO_CONFESSION_BOX", "CONFESSING",
-    "HEARING_CONFESSION",
-})
-SCHEDULE_ACTIVITY_STRICT_TASKS = frozenset({
-    "GOING_TO_TAX_OFFICE", "STATIONED_AT_TAX_OFFICE",
-    "VISITING_HOUSEHOLD_FOR_TAX", "WAITING_FOR_HOUSEHOLD_TAX",
-    "RETURNING_TAX_TO_TREASURY",
-    "WAITING_FOR_BUILDER_COMMISSION",
-})
-SCHEDULE_ACTIVITY_TASK_STATE_FIELDS = (
-    "current_work_tile", "tilling_timer", "watering_timer", "well_draw_timer",
-    "has_water", "water_day", "water_charges", "carrying_crop",
-    "carrying_res", "carrying_amount", "water_collect_amount",
-    "station_work_timer", "station_target_tile", "station_phase", "station_carry",
-)
-
-# Kept for older callers; scheduling now uses SCHEDULE_ACTIVITY_TASKS.
-SCHEDULE_NON_WORK_TASKS = frozenset(
-    task
-    for group, tasks in SCHEDULE_ACTIVITY_TASKS.items()
-    if group != "WORK"
-    for task in tasks
-) | SCHEDULE_ACTIVITY_NEUTRAL_TASKS
-FREE_TIME_SCHEDULE_ACTIVITIES = frozenset({"LEISURE", "ANY"})
 AI_ACTIVITY_PREVIEW_MAX_NEXT = 5
 AI_PROFILE_HAPPINESS_VISIBLE_ROWS = 5
 AI_PROFILE_ACTIVITY_ROW_HEIGHT = 14
@@ -732,33 +343,6 @@ AI_ACTIVITY_NEXT_STEPS = {
     "CONFESSING": ("Complete confession",),
     "COMMISSION_REFUND_COLLECT": ("Collect the refund", "Deliver it to the household"),
 }
-MARKET_SALES_REPORT_PERIOD_DAYS = 10
-BUILDER_INSUFFICIENT_LANDLORD_COIN_MESSAGES = (
-    "The treasury does not hold enough coin for this commission, my Lord.",
-    "I cannot pay the Builder yet; the treasury is short on coin.",
-    "The available coin falls short of the Builder's price, Sire.",
-    "We need more treasury coin before this work can be commissioned.",
-    "The Builder's fee exceeds our current coin reserve, my Lord.",
-)
-
-DEFAULT_JOB_SCHEDULE = [
-    # 00:00 - 05:00: Night Sleep
-    "SLEEP", "SLEEP", "SLEEP", "SLEEP", "SLEEP", "SLEEP",
-    # 06:00 - 07:00: Morning Preparation / Leisure
-    "LEISURE", "LEISURE",
-    # 08:00 - 17:00: Prime Daytime Labor (10 hours)
-    "WORK", "WORK", "WORK", "WORK", "WORK", "WORK", "WORK", "WORK", "WORK", "WORK",
-    # 18:00 - 21:00: Evening Dinner & Leisure
-    "LEISURE", "LEISURE", "LEISURE", "LEISURE",
-    # 22:00 - 23:00: Bedtime Sleep
-    "SLEEP", "SLEEP"
-]
-
-# Soil & Crop Visuals
-COLOR_SOIL_DRY = (115, 80, 50, 130)
-COLOR_SOIL_WET = (50, 32, 16, 230)
-COLOR_WATER_SHEEN = (125, 211, 252, 160)
-COLOR_CROP_WITHERED = (140, 120, 85)
 
 # UI HUD Colors
 COLOR_HUD_BG = (15, 23, 42, 220)
@@ -767,149 +351,6 @@ COLOR_TEXT_TITLE = (56, 189, 248)
 COLOR_TEXT_MAIN = (241, 245, 249)
 COLOR_TEXT_MUTED = (148, 163, 184)
 COLOR_KBD_BG = (51, 65, 85)
-
-# Resource System & HUD Settings
-DEFAULT_RESOURCES = {
-    "Wood": 0,
-    "Food": 0,
-    "Stone": 0,
-    "Water": 0,
-    "Copper": 0,
-    "Silver": 0,
-    "Gold": 0,
-}
-MAX_STACK_SIZE = 100
-MAX_TILE_CAPACITY = 1000  # Up to 10 stacks of 100 per tile (kotak)
-VILLAGER_INVENTORY_CAPACITY = 50
-
-# Currency & Economy System Settings (Config-Driven, Zero Hardcode)
-DENOMINATION_CAP = 1000
-CURRENCY_DENOMINATIONS = ["Copper", "Silver", "Gold"]
-EXCHANGE_RATES = {
-    "Copper": 1,       # 1 Copper = 1 Copper (base monetary unit)
-    "Silver": 10,      # 1 Silver = 10 Copper
-    "Gold": 100,       # 1 Gold = 100 Copper = 10 Silver
-}
-DEFAULT_ITEM_PRICES = {
-    "Potato": 3,       # 1 Potato = 3 Copper (Configurable default price)
-    "Wood": 2,         # 1 Wood = 2 Copper
-    "Stone": 3,        # 1 Stone = 3 Copper
-    "Water": 2,
-    "Hoe": 8,
-    "Sickle": 6,
-    "Watering_Can": 8,
-    "Saw": 12,
-    "Adze": 10,
-    "Felling_Axe": 15,
-    "Spade": 8,
-    "Pickaxe": 14,
-    "Sledgehammer": 10,
-    "Hammer": 12,
-    "Tongs": 10,
-    "Iron Ore": 4,      # Raw ore; base for smelting cost
-    "Iron Bar": 10,     # Smelted bar: ore + wood + labor priced in
-}
-
-# Only goods with implemented storage and market behavior are listed here.
-# Other ITEM_CATEGORIES entries may be used by WIP systems, but are not sellable.
-MARKET_TRADEABLE_ITEMS = {
-    "Potato": "Food",
-    "Wood": "Wood",
-    "Stone": "Stone",
-    "Water": "Water",
-    "Hoe": "Hoe",
-    "Sickle": "Sickle",
-    "Watering_Can": "Watering_Can",
-    "Saw": "Saw",
-    "Adze": "Adze",
-    "Felling_Axe": "Felling_Axe",
-    "Spade": "Spade",
-    "Pickaxe": "Pickaxe",
-    "Sledgehammer": "Sledgehammer",
-    "Hammer": "Hammer",
-    "Tongs": "Tongs",
-    "Iron Ore": "Iron Ore",
-    "Iron Bar": "Iron Bar",
-}
-MARKET_CURRENCY_DENOMINATIONS = ("Gold", "Silver", "Copper")
-MARKET_DEFAULT_HOUSEHOLD_SALE_PERCENT = 20
-HOUSEHOLD_STALL_HAUL_CAPACITY = 20
-MARKET_QUANTITY_DEFAULT = 10
-MARKET_QUANTITY_MAX = 1000
-MARKET_PERCENT_STEP = 5
-MARKET_WEALTH_REFERENCE_DAYS = 7.0
-MARKET_WEALTH_PRICE_ELASTICITY = 0.12
-MARKET_WEALTH_PRICE_FACTOR_MIN = 0.75
-MARKET_WEALTH_PRICE_FACTOR_MAX = 1.5
-VILLAGER_HUD_COUNT_REFRESH_SECONDS = 0.5
-MARKET_WEALTH_CONTEXT_REFRESH_SECONDS = 0.5
-
-# -----------------------------------------------------------------------------
-# GENERIC ITEM CATEGORY DEFINITIONS (Single Source of Truth - No Hardcoding)
-# -----------------------------------------------------------------------------
-ITEM_CATEGORIES = {
-    # FOOD
-    "Potato": "FOOD",
-    "potato": "FOOD",
-    "Food": "FOOD",
-    "food": "FOOD",
-    "Bread": "FOOD",
-    "bread": "FOOD",
-    "Carrot": "FOOD",
-    "carrot": "FOOD",
-    "Cabbage": "FOOD",
-    "cabbage": "FOOD",
-    "Wheat": "FOOD",
-    "wheat": "FOOD",
-    "Fish": "FOOD",
-    "fish": "FOOD",
-    "Meat": "FOOD",
-    "meat": "FOOD",
-    "Apple": "FOOD",
-    "apple": "FOOD",
-
-    # WATER
-    "Water": "WATER",
-    "water": "WATER",
-
-    # TOOLS
-    "Hoe": "TOOL",
-    "Sickle": "TOOL",
-    "Watering_Can": "TOOL",
-    "Watering Can": "TOOL",
-    "Hammer": "TOOL",
-    "Tongs": "TOOL",
-    "Saw": "TOOL",
-    "Adze": "TOOL",
-    # "Rolling_Pin": "TOOL",   # disabled — WIP Baker job
-    # "Peel": "TOOL",          # disabled — WIP Baker job
-    # "Fishing_Rod": "TOOL",   # disabled — WIP Fisherman job
-    "Felling_Axe": "TOOL",
-    "Spade": "TOOL",
-    "Pickaxe": "TOOL",
-    "Sledgehammer": "TOOL",
-
-    # RESOURCES
-    "Wood": "RESOURCE",
-    "Stone": "RESOURCE",
-    "Timber": "RESOURCE",
-    "Carved Stone": "RESOURCE",
-    "Linen Cloth": "RESOURCE",
-    "Copper Ore": "RESOURCE",
-    "Gold Ore": "RESOURCE",
-    "Iron Ore": "RESOURCE",
-    "iron ore": "RESOURCE",
-    "Iron Bar": "RESOURCE",
-    "iron bar": "RESOURCE",
-
-    # CURRENCY
-    "Copper": "CURRENCY",
-    "Silver": "CURRENCY",
-    "Gold": "CURRENCY",
-    "Copper Coin": "CURRENCY",
-    "Silver Coin": "CURRENCY",
-    "Gold Coin": "CURRENCY",
-}
 
 def register_item_category(item_name: str, category: str):
     """
@@ -947,141 +388,6 @@ def is_water_item(item_name: str) -> bool:
     Generic verification if an item belongs to the WATER category.
     """
     return get_item_category(item_name) == "WATER"
-
-
-RESOURCE_COLORS = {
-    "Wood": (180, 120, 70),     # Wood brown
-    "Food": (234, 179, 8),      # Golden food grain
-    "Stone": (148, 163, 184),   # Slate stone
-    "Water": (56, 189, 248),    # Fresh water blue
-    "Potato": (194, 120, 60),   # Russet brown potato
-    "Hoe": (202, 138, 4),       # Iron & wood hoe
-    "Sickle": (168, 85, 247),   # Curved steel sickle
-    "Watering_Can": (180, 105, 55), # Medieval copper/clay sprinkler pot
-    "Copper": (184, 115, 51),   # Copper coin bronze
-    "Silver": (203, 213, 225),  # Silver coin shine
-    "Gold": (250, 204, 21),     # Gold coin luster
-    "Copper Coin": (184, 115, 51),
-    "Silver Coin": (203, 213, 225),
-    "Gold Coin": (250, 204, 21),
-    "Felling_Axe": (101, 67, 33),
-    "Spade": (146, 64, 14),
-    "Pickaxe": (100, 116, 139),
-    "Sledgehammer": (71, 85, 105),
-    "Copper Ore": (194, 96, 40),
-    "Gold Ore": (234, 179, 8),
-    "Iron Ore": (120, 72, 40),
-    "Iron Bar": (148, 163, 184),
-}
-
-TOOL_TYPES = {
-    "Hoe": {
-        "id": "Hoe",
-        "name": "Hoe",
-        "icon": "⛏",
-        "color": (202, 138, 4),
-        "desc": "Forged iron farming hoe for tilling soil and sowing crop seeds."
-    },
-    "Sickle": {
-        "id": "Sickle",
-        "name": "Sickle",
-        "icon": "🌾",
-        "color": (168, 85, 247),
-        "desc": "Curved steel harvesting sickle for reaping ripe agricultural crops."
-    },
-    "Watering_Can": {
-        "id": "Watering_Can",
-        "name": "Watering Can",
-        "icon": "🏺",
-        "color": (180, 105, 55),
-        "desc": "Medieval copper sprinkler pot (chantepleure) for irrigating crops."
-    },
-    "Hammer": {
-        "id": "Hammer",
-        "name": "Hammer",
-        "icon": "🔨",
-        "color": (148, 163, 184),
-        "desc": "Heavy iron construction hammer for raising structures and masonry."
-    },
-    "Tongs": {
-        "id": "Tongs",
-        "name": "Tongs",
-        "icon": "🛠",
-        "color": (100, 116, 139),
-        "desc": "Forged iron tongs for holding red-hot iron on the smithy anvil."
-    },
-    "Saw": {
-        "id": "Saw",
-        "name": "Saw",
-        "icon": "🪚",
-        "color": (217, 119, 6),
-        "desc": "Steel builder saw for cutting structural timber and planks."
-    },
-    "Adze": {
-        "id": "Adze",
-        "name": "Adze",
-        "icon": "🪓",
-        "color": (180, 83, 9),
-        "desc": "Curved woodworking adze for dressing beams and shaping wood."
-    },
-    # Disabled until Baker/Fisherman jobs ship — uncomment to re-enable.
-    # "Rolling_Pin": {
-    #     "id": "Rolling_Pin",
-    #     "name": "Rolling Pin",
-    #     "icon": "🥖",
-    #     "color": (245, 158, 11),
-    #     "desc": "Hardwood rolling pin for flattening dough in the bakery."
-    # },
-    # "Peel": {
-    #     "id": "Peel",
-    #     "name": "Baker's Peel",
-    #     "icon": "🍞",
-    #     "color": (217, 119, 6),
-    #     "desc": "Broad wooden paddle for loading and removing loaves from the stone oven."
-    # },
-    # "Fishing_Rod": {
-    #     "id": "Fishing_Rod",
-    #     "name": "Fishing Rod",
-    #     "icon": "🎣",
-    #     "color": (14, 165, 233),
-    #     "desc": "Flexible ash-wood rod with line and hook for catching fish."
-    # },
-    "Felling_Axe": {
-        "id": "Felling_Axe",
-        "name": "Felling Axe",
-        "icon": "🪓",
-        "color": (101, 67, 33),
-        "desc": "Heavy two-handed axe for felling mature forest trees."
-    },
-    "Spade": {
-        "id": "Spade",
-        "name": "Spade",
-        "icon": "⛏",
-        "color": (146, 64, 14),
-        "desc": "Flat-bladed spade for replanting saplings on forest tiles."
-    },
-    "Pickaxe": {
-        "id": "Pickaxe",
-        "name": "Pickaxe",
-        "icon": "⛏",
-        "color": (100, 116, 139),
-        "desc": "Iron-headed pick for breaking ore out of mine walls."
-    },
-    "Sledgehammer": {
-        "id": "Sledgehammer",
-        "name": "Sledgehammer",
-        "icon": "🔨",
-        "color": (71, 85, 105),
-        "desc": "Two-handed sledge carried by miners as part of the trade kit."
-    }
-}
-
-DEFAULT_STARTER_TOOLS = {
-    "Hoe": 0,
-    "Sickle": 0,
-    "Watering_Can": 0,
-    "Hammer": 0
-}
 
 def get_job_required_tools(job_id):
     """Mendapatkan daftar alat yang dibutuhkan oleh profesi/pekerjaan secara data-driven"""
@@ -1200,173 +506,6 @@ DAY_CYCLE_LIGHTING = {
     "sunrise_color": (251, 191, 36),
     "sunrise_alpha": 110,
 }
-
-# RimWorld-Style Work Priorities Configuration
-WORK_TYPES = [
-    {"id": "Building", "name": "Building", "wip": False, "desc": "Construct & demolish buildings."},
-    {"id": "Hauling", "name": "Hauling", "wip": False, "desc": "Haul loose items to storage & materials to sites."},
-    {"id": "Cleaning", "name": "Cleaning (WIP)", "wip": True, "desc": "Sweep debris and dirt."},
-    {"id": "Crafting", "name": "Crafting (WIP)", "wip": True, "desc": "Produce tools and goods."},
-    {"id": "Cooking", "name": "Cooking (WIP)", "wip": True, "desc": "Prepare meals and rations."},
-]
-DEFAULT_PRIORITIES = {"Building": 1, "Hauling": 1, "Cleaning": 0, "Crafting": 0, "Cooking": 0}
-PRIORITY_COLORS = {
-    1: (34, 197, 94),     # High Priority (Green)
-    2: (59, 130, 246),    # Normal Priority (Blue)
-    3: (234, 179, 8),     # Low Priority (Yellow)
-    4: (148, 163, 184),   # Lowest Priority (Gray)
-    0: (71, 85, 105)      # Disabled / Off (Dark Slate)
-}
-
-# Building Visuals (RimWorld Cutaway Style)
-COLOR_BUILDING_WALL = (120, 80, 50)
-COLOR_BUILDING_WALL_OUTLINE = (60, 35, 15)
-COLOR_BUILDING_FLOOR = (195, 150, 105)
-COLOR_BUILDING_FLOOR_ALT = (185, 140, 95)
-COLOR_BUILDING_DOOR = (140, 90, 55)
-
-# Stone Building Visuals
-COLOR_STONE_WALL = (95, 100, 110)
-COLOR_STONE_WALL_OUTLINE = (40, 45, 55)
-COLOR_STONE_FLOOR = (160, 165, 175)
-COLOR_STONE_FLOOR_ALT = (145, 150, 160)
-COLOR_STONE_DOOR = (110, 75, 45)
-
-# Free-Form Building Types (Zero Templates, Material-Driven Structures)
-COST_PER_BLOCK_WOOD = 5
-COST_PER_BLOCK_STONE = 5
-
-BUILDING_TYPES = {
-    "wooden_structure": {
-        "id": "wooden_structure",
-        "name": "Wooden Structure",
-        "category": "Structure",
-        "category_id": "structure",
-        "desc": "Timber-framed building constructed from logs and wooden planks.",
-        "cost_wood": 5,
-        "cost_stone": 1,
-        "color": (180, 120, 70),
-        "border_color": (217, 119, 6),
-        "required_permit": "housing",
-        "allowed_permits": ["housing", "storage", "landlord_private", "church"],
-    },
-    "stone_structure": {
-        "id": "stone_structure",
-        "name": "Stone Structure",
-        "category": "Structure",
-        "category_id": "structure",
-        "desc": "Heavy masonry structure built from carved stones and mortar.",
-        "cost_wood": 1,
-        "cost_stone": 5,
-        "color": (148, 163, 184),
-        "border_color": (203, 213, 225),
-        "required_permit": "housing",
-        "allowed_permits": ["housing", "storage", "landlord_private", "church"],
-    },
-    "well": {
-        "id": "well",
-        "name": "Well",
-        "category": "Well",
-        "category_id": "public_structure",
-        "public_structure": True,
-        "maintainable": True,
-        "desc": "Fresh water well built of masonry and timber. Impenetrable 4-tile solid structure.",
-        "cost_wood": 5,
-        "cost_stone": 20,
-        "fixed_cost": True,
-        "fixed_tiles_count": 4,
-        "width_tiles": 2,
-        "height_tiles": 2,
-        "is_solid": True,
-        "has_door": False,
-        "color": (56, 189, 248),
-        "border_color": (96, 165, 250),
-        "required_permit": "any",
-        "allowed_permits": ["housing", "storage", "landlord_private", "church"],
-        "builder_commissionable": True,
-    },
-    "market": {
-        "id": "market",
-        "name": "Market",
-        "title": "Market Stall",
-        "category": "Market Stall",
-        "category_id": "public_structure",
-        "public_structure": True,
-        "maintainable": True,
-        "desc": "Medieval marketplace stall for trading food, goods, and currency. Footprint: 3x2 tiles.",
-        "cost_wood": 15,
-        "cost_stone": 5,
-        "fixed_cost": True,
-        "fixed_tiles_count": 6,
-        "width_tiles": 3,
-        "height_tiles": 2,
-        "is_solid": False,
-        "has_door": False,
-        "color": (245, 158, 11),
-        "border_color": (251, 191, 36),
-        "required_permit": "any",
-        "allowed_permits": ["market", "storage", "landlord_private", "housing"],
-        "builder_commissionable": True,
-    },
-    "toilet": {
-        "id": "toilet",
-        "name": "Toilet",
-        "category": "Toilet",
-        "category_id": "public_structure",
-        "public_structure": True,
-        "maintainable": True,
-        "desc": "Medieval wooden outhouse latrine. Footprint: 1x1 tile. Does not require a Permit.",
-        "cost_wood": 5,
-        "cost_stone": 0,
-        "fixed_cost": True,
-        "fixed_tiles_count": 1,
-        "width_tiles": 1,
-        "height_tiles": 1,
-        "is_solid": False,
-        "has_door": False,
-        "color": (120, 80, 40),
-        "border_color": (160, 110, 60),
-        "required_permit": None,
-        "allowed_permits": None,
-        "builder_commissionable": True,
-    },
-    "tax_house": {
-        "id": "tax_house",
-        "name": "Tax Office",
-        "category": "Tax Office",
-        "category_id": "workplace",
-        "public_structure": True,
-        "maintainable": True,
-        "desc": "An open medieval tax-collection work station with a clerk's counter, ledgers, and royal banner.",
-        "cost_wood": 20,
-        "cost_stone": 15,
-        "fixed_cost": True,
-        "fixed_tiles_count": 4,
-        "width_tiles": 2,
-        "height_tiles": 2,
-        "max_workers": 1,
-        "is_solid": False,
-        "has_door": False,
-        "color": (177, 132, 82),
-        "border_color": (217, 119, 6),
-        "required_permit": None,
-        "allowed_permits": None,
-        "builder_commissionable": True,
-        "visual_style": {
-            "platform": (95, 75, 53),
-            "platform_light": (105, 83, 59),
-            "platform_dark": (88, 69, 49),
-            "tile_seam": (72, 56, 40),
-            "wood": (121, 78, 42),
-            "wood_light": (166, 112, 61),
-            "wood_dark": (62, 39, 26),
-            "royal_cloth": (126, 32, 35),
-            "gold": (226, 174, 73),
-            "parchment": (221, 202, 158),
-            "metal": (105, 112, 119),
-        },
-    }
-}
 # Placeable structures and furniture share quarter-turn rotation behavior.
 for _building_config in BUILDING_TYPES.values():
     _building_config.setdefault("rotatable", True)
@@ -1374,39 +513,6 @@ for _building_config in BUILDING_TYPES.values():
 BUILDING_TYPES["house"] = BUILDING_TYPES["wooden_structure"]
 BUILDING_TYPES["storage"] = BUILDING_TYPES["wooden_structure"]
 BUILDING_TYPES["manor"] = BUILDING_TYPES["stone_structure"]
-
-# Roads: instant-paint public tile layer. cost = resources per tile,
-# speed_multiplier applies to every mover standing on the tile.
-ROAD_TYPES = {
-    "dirt_road": {
-        "id": "dirt_road",
-        "name": "Dirt Road",
-        "desc": "Packed earth path. +5% walk speed.",
-        "color": (146, 104, 58),
-        "rut_color": (120, 84, 44),
-        "speed_multiplier": 1.05,
-        "cost": {"Wood": 1},
-    },
-    "stone_road": {
-        "id": "stone_road",
-        "name": "Stone Road",
-        "desc": "Paved flagstones. +10% walk speed.",
-        "color": (120, 130, 145),
-        "rut_color": (96, 105, 120),
-        "speed_multiplier": 1.10,
-        "cost": {"Stone": 1},
-    },
-    "luxury_road": {
-        "id": "luxury_road",
-        "name": "Luxury Road",
-        "desc": "Fine paved boulevard. +15% walk speed.",
-        "color": (203, 213, 225),
-        "rut_color": (160, 170, 185),
-        "speed_multiplier": 1.15,
-        "cost": {"Stone": 5},
-    },
-}
-ROAD_PLACEMENT_BLOCKED = True   # roads cannot overlap buildings/furniture/stockpiles
 
 def get_building_categories():
     """
@@ -1477,73 +583,6 @@ def get_building_categories():
     }
     return list(categories.values())
 
-# Area Permit Types (Landlord Zoning)
-PERMIT_TYPES = {
-    "housing": {
-        "id": "housing",
-        "name": "Housing Permit",
-        "category": "Housing & Residential",
-        "category_id": "housing",
-        "desc": "Official landlord deed for residential settlements.",
-        "color": (59, 130, 246, 60),
-        "border_color": (96, 165, 250),
-    },
-    "storage": {
-        "id": "storage",
-        "name": "Storage Permit",
-        "category": "Logistics & Storage",
-        "category_id": "storage",
-        "desc": "Official landlord deed for resource storage & stockpiles.",
-        "color": (234, 179, 8, 60),
-        "border_color": (250, 204, 21),
-    },
-    "market": {
-        "id": "market",
-        "name": "Market Permit",
-        "category": "Commercial & Trade",
-        "category_id": "market",
-        "desc": "Official landlord deed for commercial trade and market stalls.",
-        "color": (245, 158, 11, 60),
-        "border_color": (251, 191, 36),
-    },
-    "farm": {
-        "id": "farm",
-        "name": "Farm Permit",
-        "category": "Agriculture & Farming",
-        "category_id": "farm",
-        "desc": "Official landlord agricultural deed for cultivating crops.",
-        "color": (34, 197, 94, 50),
-        "border_color": (74, 222, 128),
-    },
-    "landlord_private": {
-        "id": "landlord_private",
-        "name": "Landlord Private Area",
-        "category": "Estate & Private Grounds",
-        "category_id": "landlord_private",
-        "desc": "Restricted estate grounds. Only Landlord and Servants may enter.",
-        "color": (147, 51, 234, 60),
-        "border_color": (234, 179, 8),
-    },
-    "church": {
-        "id": "church",
-        "name": "Church Permit",
-        "category": "Religious & Community",
-        "category_id": "church",
-        "desc": "Official landlord deed for church grounds. Uses Wooden or Stone Structure construction.",
-        "color": (168, 85, 247, 60),
-        "border_color": (192, 132, 252),
-    },
-    "cemetery": {
-        "id": "cemetery",
-        "name": "Cemetery Permit",
-        "category": "Burial & Memorial Grounds",
-        "category_id": "cemetery",
-        "desc": "Consecrated ground for burial plots and tombstones. Editable plot area.",
-        "color": (100, 116, 139, 60),
-        "border_color": (148, 163, 184),
-    }
-}
-
 def get_permit_categories():
     """
     Returns dynamically discovered categories from PERMIT_TYPES.
@@ -1564,214 +603,6 @@ def get_permit_categories():
         if p_id not in categories[cat_id]["permit_types"]:
             categories[cat_id]["permit_types"].append(p_id)
     return list(categories.values())
-
-# Agricultural Crops System (Cultivated on Farm Permits)
-FARMING_BATCH_GROWTH_DAYS = 10.0
-FARMING_BATCH_WINDOW_DAYS = 1.0  # 1 in-game day default planting window
-
-CROP_TYPES = {
-    "potato": {
-        "id": "potato",
-        "name": "Potato",
-        "icon": "🥔",
-        "wip": False,
-        "desc": "Hearty staple tuber crop. Each tile yields 2 potatoes 80% of the time, 4 potatoes 15% of the time, and 5 potatoes 5% of the time every 10 days.",
-        "growth_days": 10.0,
-        "sprout_day": 2.0,
-        "leaf_day": 4.0,
-        "harvest_day": 10.0,
-        "yield_distribution": [
-            {"amount": 2, "weight": 0.80},
-            {"amount": 4, "weight": 0.15},
-            {"amount": 5, "weight": 0.05},
-        ],
-        "yield_per_tile": 2,
-        "yield": 2
-    },
-    "wheat": {
-        "id": "wheat",
-        "name": "Wheat (WIP)",
-        "icon": "🌾",
-        "wip": True,
-        "desc": "Golden cereal grain for milling flour and bread."
-    },
-    "carrot": {
-        "id": "carrot",
-        "name": "Carrot (WIP)",
-        "icon": "🥕",
-        "wip": True,
-        "desc": "Sweet orange root vegetable."
-    },
-    "corn": {
-        "id": "corn",
-        "name": "Corn (WIP)",
-        "icon": "🌽",
-        "wip": True,
-        "desc": "Tall sweet maize stalks."
-    }
-}
-
-# Furniture System (Household Storage & Furnishings)
-FURNITURE_TYPES = {
-    "household_storage": {
-        "id": "household_storage",
-        "name": "Household Storage",
-        "desc": "Wooden storage chest for a family's crops and goods. Placed inside a house or lot.",
-        "capacity": 500,
-        "materials": {"Wood": 10, "Stone": 0},
-        "width_tiles": 1,
-        "height_tiles": 1,
-        "color_body": (139, 90, 43),
-        "color_lid": (160, 105, 55),
-        "color_clasp": (234, 179, 8)
-    },
-    "bed": {
-        "id": "bed",
-        "name": "Bed",
-        "desc": "Single wooden bed for 1 villager. Placed inside a house or lot.",
-        "capacity": 0,
-        "materials": {"Wood": 5, "Stone": 0},
-        "width_tiles": 1,
-        "height_tiles": 1,
-        "color_frame": (139, 90, 43),
-        "color_blanket": (59, 130, 246),
-        "color_pillow": (241, 245, 249)
-    },
-    "builder_workbench": {
-        "id": "builder_workbench",
-        "name": "Builder Workbench",
-        "category_id": "workplace",
-        "desc": "A sturdy medieval workbench for shaping and assembling furniture. Place inside a household or house.",
-        "capacity": 0,
-        "materials": {"Wood": 5, "Stone": 0},
-        "width_tiles": 2,
-        "height_tiles": 1,
-        "max_workers": 2,
-        "workplace_available_while_building": True,
-        "color_frame": (112, 72, 38),
-        "color_top": (170, 119, 70),
-        "color_iron": (82, 91, 101)
-    },
-    "confession_box": {
-        "id": "confession_box",
-        "name": "Confession Box",
-        "category_id": "public_structure",
-        "public_structure": True,
-        "maintainable": True,
-        "desc": "A private medieval confessional for church visitors.",
-        "capacity": 0,
-        "materials": {"Wood": 5, "Stone": 0},
-        "width_tiles": 1,
-        "height_tiles": 1,
-        "max_workers": 0,
-        "allowed_permits": ["church"],
-        "household_owned": False,
-        "builder_commissionable": True,
-        "color_frame": (92, 57, 34),
-        "color_panel": (122, 75, 42),
-        "color_cloth": (112, 35, 42),
-        "color_trim": (190, 151, 83)
-    },
-    "lord_treasury_chest": {
-        "id": "lord_treasury_chest",
-        "name": "Lord Treasury Chest",
-        "category_id": "furniture",
-        "desc": "A reinforced royal coffer for landlord coin only. Free and ready to use immediately.",
-        "capacity": 0,
-        "materials": {},
-        "width_tiles": 1,
-        "height_tiles": 1,
-        "household_owned": False,
-        "instant_place": True,
-        "placement_anywhere": True,
-        "unique": True,
-        "rotatable": False,
-        "maintainable": False,
-        "color_body": (70, 55, 38),
-        "color_lid": (112, 85, 48),
-        "color_clasp": (250, 204, 21),
-        "color_trim": (203, 213, 225)
-    },
-    "woodsman_lodge": {
-        "id": "woodsman_lodge",
-        "name": "Woodsman Lodge",
-        "category_id": "workplace",
-        "desc": "Outdoor logging lodge where Woodsmen store felling tools and stockpile Wood. Place on open ground.",
-        "capacity": 0,
-        "materials": {"Wood": 20, "Stone": 10},
-        "width_tiles": 4,
-        "height_tiles": 4,
-        "max_workers": 5,
-        "household_owned": False,
-        "placement_anywhere": True,
-        "maintainable": False,
-        "station_inventory_items": ["Wood"],
-        "color_frame": (101, 67, 33),
-        "color_roof": (22, 101, 52),
-        "color_door": (146, 64, 14)
-    },
-    "miner_workstation": {
-        "id": "miner_workstation",
-        "name": "Miner Workstation",
-        "category_id": "workplace",
-        "desc": "5x5 mine-head workstation. Must be placed exactly on top of a generated mine deposit.",
-        "capacity": 0,
-        "materials": {"Stone": 20, "Wood": 10},
-        "width_tiles": 5,
-        "height_tiles": 5,
-        "max_workers": 5,
-        "household_owned": False,
-        "placement_anywhere": True,
-        "maintainable": False,
-        "rotatable": False,
-        "station_inventory_mine_bound": True,
-        "color_frame": (71, 85, 105),
-        "color_roof": (51, 65, 85),
-        "color_rock": (100, 116, 139)
-    },
-    "toolmaker_workbench": {
-        "id": "toolmaker_workbench",
-        "name": "Toolmaker Workbench",
-        "category_id": "workplace",
-        "desc": "Smithy bench with anvil, tongs, and moulds. Place inside a household or house.",
-        "capacity": 0,
-        "materials": {"Wood": 15, "Stone": 10},
-        "width_tiles": 2,
-        "height_tiles": 1,
-        "max_workers": 2,
-        "maintainable": False,
-        "color_frame": (70, 55, 38),
-        "color_top": (112, 85, 48),
-        "color_iron": (100, 116, 139),
-        "color_anvil": (71, 85, 105)
-    },
-    # *** ESTABLISHED — DO NOT REGRESS ***
-    # Notice Board attracts immigrant households. UNIQUE: max 1 per village
-    # (enforced by add_furniture). public_structure + builder_commissionable
-    # so only a builder can build it (1h). household_owned False — it belongs
-    # to the village, not a family. Clicking it opens Town Ledger > Immigrant.
-    "notice_board": {
-        "id": "notice_board",
-        "name": "Notice Board",
-        "category_id": "public_structure",
-        "public_structure": True,
-        "maintainable": True,
-        "desc": "A public bulletin board. Post immigration notices to attract settler households.",
-        "capacity": 0,
-        "materials": {"Wood": 10},
-        "width_tiles": 2,
-        "height_tiles": 1,
-        "household_owned": False,
-        "placement_anywhere": True,
-        "unique": True,
-        "rotatable": True,
-        "builder_commissionable": True,
-        "color_frame": (101, 67, 33),
-        "color_panel": (146, 96, 48),
-        "color_paper": (241, 245, 249),
-        "color_pin": (220, 38, 38)
-    }
-}
 
 # =====================================================================
 # Immigration / Notice Board System
@@ -1798,10 +629,6 @@ IMMIGRATION_DEFAULT_REWARD_GOLD = 1   # gold coins per household, paid on Accept
 for _furniture_config in FURNITURE_TYPES.values():
     _furniture_config.setdefault("can_be_dropped", True)
     _furniture_config.setdefault("rotatable", True)
-
-PUBLIC_STRUCTURE_DAILY_BREAK_CHANCE = FURNITURE_DAILY_BREAK_CHANCE
-LORD_TREASURY_START_TILE = (1, 0)
-LORD_TREASURY_PLACEMENT_SEARCH_RADIUS = 8
 
 # =====================================================================
 # Needs, Survival & Household Consumption System (Agent 1)
@@ -1837,7 +664,6 @@ HAPPINESS_MAX_VALUE = 100.0
 # Full happiness recompute (permit/building scans, wallet normalize) is a
 # slow stat — throttle it to this many game-seconds per villager.
 HAPPINESS_REFRESH_INTERVAL_SECONDS = 5.0
-HAPPINESS_WEALTH_DENOMINATION = "Gold"
 HAPPINESS_STATUS_BANDS = (
     {"id": "miserable", "label": "Miserable", "min": 0.0, "max": 24.0},
     {"id": "unhappy", "label": "Unhappy", "min": 25.0, "max": 49.0},
@@ -1856,7 +682,6 @@ HAPPINESS_ACTIVITY_MULTIPLIERS = {
     "happy": 1.0,
     "very_happy": 1.0,
 }
-TAX_UNHAPPINESS_DURATION_DAYS = 10
 HAPPINESS_MODIFIERS = {
     "tax_church": {"label": "Church tax", "amount": 0.0, "duration_days": TAX_UNHAPPINESS_DURATION_DAYS},
     "tax_socage": {"label": "Socage tax", "amount": 0.0, "duration_days": TAX_UNHAPPINESS_DURATION_DAYS},
@@ -1930,40 +755,7 @@ COLOR_STATUS_ALIVE = (34, 197, 94)
 COLOR_STATUS_DECEASED = (148, 163, 184)
 COLOR_CORPSE_BODY = (100, 116, 139)       # Desaturated slate gray for deceased villagers
 COLOR_CORPSE_OUTLINE = (51, 65, 85)
-
-# =====================================================================
-# Church, Priest, Cemetery, Gravedigger & Toilet Systems (Agent 3)
-# =====================================================================
-DEFAULT_CHURCH_TAX = {"Gold": 0, "Silver": 0, "Copper": 1}  # 1 Copper per household per day default
-DEFAULT_SOCAGE_TAX_ENABLED = False
-DEFAULT_SOCAGE_TAX_PERCENT = 10
-SOCAGE_TAX_QUICK_STEP = 10
-SOCAGE_TAX_INTERVAL_DAYS = 10
-SOCAGE_TAX_HAPPINESS_TIERS = ((1, 10, -5), (11, 20, -20), (21, 30, -30),
-                               (31, 60, -50), (61, 100, -100))
-CHURCH_TAX_HAPPINESS_TIERS_COPPER = ((1, 1, -5), (2, 19, -10),
-                                     (20, 99, -20), (100, None, -50))
-NO_CHURCH_TAX_HAPPINESS_BONUS = 10
-TAX_COLLECTOR_STATION_ARRIVAL_DISTANCE = 20.0
-SOCAGE_TAX_GREETING_LINES = ("Pay your taxes, please.", "The Crown's due is collected today.",
-                             "I am here for the household socage.")
-SOCAGE_TAX_HAPPINESS_REPLIES = {
-    "miserable": ("This levy leaves us with too little.", "Must we pay even now?"),
-    "unhappy": ("We will pay, though it is a burden.", "Here is the household's due."),
-    "happy": ("Here is the household tax. Thank you.", "Our due is ready."),
-    "very_happy": ("Gladly; may the village prosper.", "The Crown's due, collected in good faith."),
-}
-
-GRAVEDIGGER_TARGET_WOOD = 5
-GRAVEDIGGER_TARGET_STONE = 5
-GRAVE_COST_WOOD = 1
-GRAVE_COST_STONE = 1
-GRAVE_DIG_HOURS = 1.0           # Exactly 1 in-game hour digging
-GRAVE_BURY_HOURS = 0.5          # Exactly 30 in-game minutes burial
-GRAVE_REUSE_DAYS = 30.0         # Reusable after 30 in-game days
-BURIAL_FEE_MAX_SILVER = 1       # Up to 1 Silver (10 Copper)
 CORPSE_CARRY_SPEED_RATIO = 0.5  # 50% speed while carrying corpse
-TOMBSTONE_MODELS_COUNT = 5      # At least 5 distinct tombstone variants
 
 AI_NEED_TOILET_DECAY_PER_DAY = 150.0   # Decays over time to trigger urgent need ~1-2 times daily
 AI_NEED_TOILET_URGENT_THRESHOLD = 20.0 # <= 20% triggers toilet seeking
