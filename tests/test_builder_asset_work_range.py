@@ -2,7 +2,7 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from game.systems.work.carpenter_system import CarpenterSystem
+from game.systems.work.builder_system import BuilderSystem
 
 
 class _FurnitureManager:
@@ -12,9 +12,9 @@ class _FurnitureManager:
         return None
 
 
-class _Carpenter:
-    id = "carpenter"
-    job = "Carpenter"
+class _Builder:
+    id = "builder"
+    job = "Builder"
     family_id = "family"
 
     def __init__(self, x, y):
@@ -42,7 +42,7 @@ class _RepairTarget:
         self.construction_order = {
             "order_type": "REPAIR",
             "commission_paid": True,
-            "carpenter_id": "carpenter",
+            "builder_id": "builder",
             "status": "PAID",
             "materials_committed": True,
             "build_duration_seconds": 10.0,
@@ -52,97 +52,97 @@ class _RepairTarget:
         return 96.0, 96.0
 
 
-class TestCarpenterAssetWorkRange(unittest.TestCase):
-    def _run_repair(self, carpenter):
+class TestBuilderAssetWorkRange(unittest.TestCase):
+    def _run_repair(self, builder):
         target = _RepairTarget()
         building_manager = SimpleNamespace(buildings=[target], construction_sites=[])
-        CarpenterSystem.update_worker(
-            carpenter, 0.25, "WORK", building_manager, _FurnitureManager(),
+        BuilderSystem.update_worker(
+            builder, 0.25, "WORK", building_manager, _FurnitureManager(),
             None, [], None, None,
         )
         return target
 
     def test_public_repair_routes_to_perimeter_and_waits_until_in_range(self):
-        carpenter = _Carpenter(96.0, 126.0)
+        builder = _Builder(96.0, 126.0)
 
-        target = self._run_repair(carpenter)
+        target = self._run_repair(builder)
 
-        self.assertEqual(carpenter.movement_target, (96.0, 96.0))
+        self.assertEqual(builder.movement_target, (96.0, 96.0))
         self.assertEqual(target.construction_progress, 0.0)
 
-        carpenter.y = 121.0
-        target = self._run_repair(carpenter)
+        builder.y = 121.0
+        target = self._run_repair(builder)
 
         self.assertEqual(target.construction_progress, 0.25)
 
     def test_shared_work_range_checks_distance_to_asset_bounds(self):
-        carpenter = _Carpenter(96.0, 126.0)
+        builder = _Builder(96.0, 126.0)
         target = _RepairTarget()
 
-        self.assertFalse(CarpenterSystem._within_asset_work_range(carpenter, target))
-        carpenter.y = 121.0
-        self.assertTrue(CarpenterSystem._within_asset_work_range(carpenter, target))
+        self.assertFalse(BuilderSystem._within_asset_work_range(builder, target))
+        builder.y = 121.0
+        self.assertTrue(BuilderSystem._within_asset_work_range(builder, target))
 
     def test_material_delivery_moves_close_enough_to_enter_asset_work_range(self):
-        carpenter = _Carpenter(224.0, 132.0)
+        builder = _Builder(224.0, 132.0)
         target = _RepairTarget()
         target.get_approach_point = lambda *args, **kwargs: (224.0, 96.0)
         order = {"id": "repair:market:0:0", "materials_delivered": {}}
         required = {"Wood": 2}
 
-        CarpenterSystem._deliver_build_materials(
-            carpenter, target, order, required, None, 0.25,
+        BuilderSystem._deliver_build_materials(
+            builder, target, order, required, None, 0.25,
             [], None, None, _FurnitureManager(), furniture_target=True,
         )
 
-        self.assertEqual(carpenter.movement_target, (224.0, 96.0))
-        self.assertLess(carpenter.movement_arrival_dist, 36.0)
+        self.assertEqual(builder.movement_target, (224.0, 96.0))
+        self.assertLess(builder.movement_arrival_dist, 36.0)
 
-        carpenter.y = 108.0
-        CarpenterSystem._deliver_build_materials(
-            carpenter, target, order, required, None, 0.25,
+        builder.y = 108.0
+        BuilderSystem._deliver_build_materials(
+            builder, target, order, required, None, 0.25,
             [], None, None, _FurnitureManager(), furniture_target=True,
         )
         self.assertTrue(order["materials_committed"])
 
     def test_restock_is_started_only_during_work(self):
-        carpenter = _Carpenter(96.0, 96.0)
+        builder = _Builder(96.0, 96.0)
         building_manager = SimpleNamespace(buildings=[], construction_sites=[])
         furniture_manager = _FurnitureManager()
 
-        with patch.object(CarpenterSystem, "_begin_restock", return_value=True) as begin_restock:
+        with patch.object(BuilderSystem, "_begin_restock", return_value=True) as begin_restock:
             for schedule in ("LEISURE", "ANY"):
-                self.assertFalse(CarpenterSystem.update_worker(
-                    carpenter, 0.25, schedule, building_manager, furniture_manager,
+                self.assertFalse(BuilderSystem.update_worker(
+                    builder, 0.25, schedule, building_manager, furniture_manager,
                     None, [], None, None,
                 ))
             begin_restock.assert_not_called()
 
-            self.assertTrue(CarpenterSystem.update_worker(
-                carpenter, 0.25, "WORK", building_manager, furniture_manager,
+            self.assertTrue(BuilderSystem.update_worker(
+                builder, 0.25, "WORK", building_manager, furniture_manager,
                 None, [], None, None,
             ))
             begin_restock.assert_called_once()
 
     def test_active_restock_pauses_outside_work(self):
-        carpenter = _Carpenter(96.0, 96.0)
-        carpenter.task = "CARPENTER_RESTOCK_HAULING_HOME"
+        builder = _Builder(96.0, 96.0)
+        builder.task = "BUILDER_RESTOCK_HAULING_HOME"
         building_manager = SimpleNamespace(buildings=[], construction_sites=[])
         furniture_manager = _FurnitureManager()
 
-        with patch.object(CarpenterSystem, "_update_restock", return_value=True) as update_restock:
-            self.assertFalse(CarpenterSystem.update_worker(
-                carpenter, 0.25, "LEISURE", building_manager, furniture_manager,
+        with patch.object(BuilderSystem, "_update_restock", return_value=True) as update_restock:
+            self.assertFalse(BuilderSystem.update_worker(
+                builder, 0.25, "LEISURE", building_manager, furniture_manager,
                 None, [], None, None,
             ))
-            self.assertFalse(CarpenterSystem.update_worker(
-                carpenter, 0.25, "ANY", building_manager, furniture_manager,
+            self.assertFalse(BuilderSystem.update_worker(
+                builder, 0.25, "ANY", building_manager, furniture_manager,
                 None, [], None, None,
             ))
             update_restock.assert_not_called()
 
-            self.assertTrue(CarpenterSystem.update_worker(
-                carpenter, 0.25, "WORK", building_manager, furniture_manager,
+            self.assertTrue(BuilderSystem.update_worker(
+                builder, 0.25, "WORK", building_manager, furniture_manager,
                 None, [], None, None,
             ))
             update_restock.assert_called_once()

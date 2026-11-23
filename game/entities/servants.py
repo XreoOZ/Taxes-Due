@@ -57,7 +57,7 @@ from game.config import (
     SERVANT_TELEPORT_SEARCH_RADIUS_TILES,
     SERVANT_MAX_TELEPORTS_PER_TARGET,
 )
-from game.data.config import MARKET_TRADEABLE_ITEMS, MARKET_CURRENCY_DENOMINATIONS
+from game.data.config import MARKET_TRADEABLE_ITEMS, MARKET_CURRENCY_DENOMINATIONS, SERVANT_PHASE_THROUGH_OBSTACLES
 from game.systems.core.ai_simulation_scheduler import AISimulationScheduler
 from game.systems.core.spatial_entities import SpatialEntityIndex
 from game.world.navigation.pathfinding import GlobalPathRegistry, calculate_collision_slide, is_narrow_passage_tile
@@ -134,17 +134,17 @@ class Servant:
         self.target_buy_chunk = 0
         self.target_buy_total = 0
         self.buy_wallet = {}
-        self.carpenter_commission_order_id = None
-        self.carpenter_commission_carpenter_id = None
-        self.carpenter_commission_fee_copper = 0
-        self.carpenter_commission_remaining_copper = 0
-        self.carpenter_commission_storage_tile = None
-        self.carpenter_commission_treasury_id = None
+        self.builder_commission_order_id = None
+        self.builder_commission_builder_id = None
+        self.builder_commission_fee_copper = 0
+        self.builder_commission_remaining_copper = 0
+        self.builder_commission_storage_tile = None
+        self.builder_commission_treasury_id = None
 
         # Dead-artisan commission refund: recover coins from the deceased
         # artisan's household funds, return them to the Lord Treasury.
-        self.carpenter_refund_from_family = None
-        self.carpenter_refund_amount = 0
+        self.builder_refund_from_family = None
+        self.builder_refund_amount = 0
 
         # Carried items (Max 5 items)
         self.carried_res = None
@@ -253,8 +253,8 @@ class Servant:
             if self.speech_timer <= 0:
                 self.speech_text = None
 
-        if self.state in ("CARPENTER_COMMISSION_RETRIEVE", "CARPENTER_COMMISSION_DELIVER"):
-            from game.systems.work.carpenter_system import CarpenterSystem
+        if self.state in ("BUILDER_COMMISSION_RETRIEVE", "BUILDER_COMMISSION_DELIVER"):
+            from game.systems.work.builder_system import BuilderSystem
             from game.systems.village_life.cemetery_system import CemeterySystem
             from game.systems.economy.currency import compact_currency_wallet, from_copper, to_copper
             order_subject = next((entity for entity in (
@@ -262,26 +262,26 @@ class Servant:
                 + list(getattr(building_manager, "buildings", []))
                 + list(getattr(building_manager, "construction_sites", []))
             ) if str((getattr(entity, "construction_order", None) or {}).get("id"))
-                 == str(self.carpenter_commission_order_id)), None)
+                 == str(self.builder_commission_order_id)), None)
             order = getattr(order_subject, "construction_order", None) if order_subject else None
-            carpenter = next((worker for worker in (villager_manager.get_all_villagers() if villager_manager else [])
-                              if str(getattr(worker, "id", "")) == str(self.carpenter_commission_carpenter_id)
+            builder = next((worker for worker in (villager_manager.get_all_villagers() if villager_manager else [])
+                              if str(getattr(worker, "id", "")) == str(self.builder_commission_builder_id)
                               and getattr(worker, "is_alive", True)), None)
-            if not order or order.get("status") not in ("LANDLORD_RETRIEVING", "PAYMENT_TRAVELING") or not carpenter:
-                CarpenterSystem.refund_public_courier_coins(self, stockpile_manager, furniture_manager)
+            if not order or order.get("status") not in ("LANDLORD_RETRIEVING", "PAYMENT_TRAVELING") or not builder:
+                BuilderSystem.refund_public_courier_coins(self, stockpile_manager, furniture_manager)
                 if order and order.get("payer_type") == "landlord":
                     order["status"] = "AWAITING_PAYMENT"
                     order["payer_id"] = None
-                self.carpenter_commission_order_id = None
-                self.carpenter_commission_carpenter_id = None
+                self.builder_commission_order_id = None
+                self.builder_commission_builder_id = None
                 self.state = "IDLE"
                 return
 
-            if self.state == "CARPENTER_COMMISSION_RETRIEVE":
+            if self.state == "BUILDER_COMMISSION_RETRIEVE":
                 from game.systems.economy.lord_treasury import LordTreasurySystem
                 treasury = LordTreasurySystem.get_chest(furniture_manager)
                 if treasury and str(getattr(treasury, "id", "")) == str(
-                        getattr(self, "carpenter_commission_treasury_id", treasury.id)):
+                        getattr(self, "builder_commission_treasury_id", treasury.id)):
                     approach_x, approach_y = treasury.get_approach_point(
                         self.x, self.y, worker_id=self.id, all_entities=all_entities,
                         tile_size=TILE_SIZE, bm=building_manager,
@@ -294,30 +294,30 @@ class Servant:
                         interaction_target=treasury,
                     )
                     if arrived:
-                        fee = max(0, int(self.carpenter_commission_remaining_copper))
+                        fee = max(0, int(self.builder_commission_remaining_copper))
                         success, _ = LordTreasurySystem.withdraw_covering(
                             furniture_manager, self.inventory, fee
                         )
                         if success:
-                            self.carpenter_commission_remaining_copper = 0
+                            self.builder_commission_remaining_copper = 0
                             order["status"] = "PAYMENT_TRAVELING"
-                            self.state = "CARPENTER_COMMISSION_DELIVER"
-                            self.say("I have the commission coins; taking them to the Carpenter, my Lord.", duration=2.5)
+                            self.state = "BUILDER_COMMISSION_DELIVER"
+                            self.say("I have the commission coins; taking them to the Builder, my Lord.", duration=2.5)
                         else:
                             order["status"] = "LANDLORD_PAYMENT_PENDING"
                             self.say("The Lord's Treasury Chest no longer has enough coin, my Lord.", duration=3.0)
                     return
 
                 stacks = CemeterySystem._landlord_coin_stacks(stockpile_manager)
-                remaining = max(0, int(self.carpenter_commission_remaining_copper))
+                remaining = max(0, int(self.builder_commission_remaining_copper))
                 if not stacks:
-                    CarpenterSystem.refund_public_courier_coins(self, stockpile_manager, furniture_manager)
+                    BuilderSystem.refund_public_courier_coins(self, stockpile_manager, furniture_manager)
                     if order:
                         order["status"] = "AWAITING_PAYMENT"
                         order["payer_id"] = None
                     self.say("Landlord storage has no commission coins, my Lord.", duration=3.0)
-                    self.carpenter_commission_order_id = None
-                    self.carpenter_commission_carpenter_id = None
+                    self.builder_commission_order_id = None
+                    self.builder_commission_builder_id = None
                     self.state = "IDLE"
                     return
                 target_stack = min(stacks, key=lambda stack: math.hypot(
@@ -356,74 +356,74 @@ class Servant:
                         for coin, amount in from_copper(exact_fee).items():
                             if amount:
                                 self.inventory[coin] = self.inventory.get(coin, 0) + amount
-                        self.carpenter_commission_remaining_copper = 0
+                        self.builder_commission_remaining_copper = 0
                     else:
                         for coin, amount in from_copper(value_taken).items():
                             if amount:
                                 self.inventory[coin] = self.inventory.get(coin, 0) + amount
-                        self.carpenter_commission_remaining_copper = remaining - value_taken
+                        self.builder_commission_remaining_copper = remaining - value_taken
                     if target_stack.amount <= 0 and target_stack in stockpile_manager.stacks:
                         stockpile_manager.stacks.remove(target_stack)
                     stockpile_manager.mark_totals_dirty()
                     compact_currency_wallet(self.inventory)
-                    if self.carpenter_commission_remaining_copper <= 0:
+                    if self.builder_commission_remaining_copper <= 0:
                         order["status"] = "PAYMENT_TRAVELING"
-                        self.state = "CARPENTER_COMMISSION_DELIVER"
-                        self.say("I have the commission coins; taking them to the Carpenter, my Lord.", duration=2.5)
+                        self.state = "BUILDER_COMMISSION_DELIVER"
+                        self.say("I have the commission coins; taking them to the Builder, my Lord.", duration=2.5)
                 return
 
             arrived = self._move_towards(
-                carpenter.x, carpenter.y, dt, arrival_dist=INTERACTION_CONTACT_RADIUS,
+                builder.x, builder.y, dt, arrival_dist=INTERACTION_CONTACT_RADIUS,
                 all_servants=all_servants, player=player, building_manager=building_manager,
                 all_entities=all_entities, furniture_manager=furniture_manager,
-                interaction_target=carpenter,
+                interaction_target=builder,
             )
             if arrived:
                 fee = max(0, int(order.get("price_copper", 0)))
-                if CarpenterSystem._move_exact_value(self.inventory, carpenter.inventory, fee):
+                if BuilderSystem._move_exact_value(self.inventory, builder.inventory, fee):
                     order["status"] = "PAID"
                     order["commission_paid"] = True
                     order["paid_by_id"] = "landlord"
                     order["paid_amount_copper"] = fee
-                    CarpenterSystem._ensure_paid_seq(order, furniture_manager, building_manager)
+                    BuilderSystem._ensure_paid_seq(order, furniture_manager, building_manager)
                     from game.systems.economy.market_sales_report import MarketSalesReportSystem
                     MarketSalesReportSystem.record_household_income(
-                        villager_manager, getattr(carpenter, "family_id", None),
-                        "Public Carpenter Commissions", fee,
+                        villager_manager, getattr(builder, "family_id", None),
+                        "Public Builder Commissions", fee,
                         getattr(villager_manager, "current_day_number", 1),
                     )
-                    carpenter.say(f"Public commission received: {fee} Copper.", duration=3.0)
-                    self.say("Commission delivered to the Carpenter, my Lord.", duration=2.5)
-                    CarpenterSystem.refund_public_courier_coins(self, stockpile_manager, furniture_manager)
+                    builder.say(f"Public commission received: {fee} Copper.", duration=3.0)
+                    self.say("Commission delivered to the Builder, my Lord.", duration=2.5)
+                    BuilderSystem.refund_public_courier_coins(self, stockpile_manager, furniture_manager)
                 else:
-                    CarpenterSystem.refund_public_courier_coins(self, stockpile_manager, furniture_manager)
+                    BuilderSystem.refund_public_courier_coins(self, stockpile_manager, furniture_manager)
                     order["status"] = "AWAITING_PAYMENT"
                     order["payer_id"] = None
                     self.say("The commission coins could not be transferred, my Lord.", duration=3.0)
-                self.carpenter_commission_order_id = None
-                self.carpenter_commission_carpenter_id = None
-                self.carpenter_commission_fee_copper = 0
-                self.carpenter_commission_remaining_copper = 0
-                self.carpenter_commission_storage_tile = None
-                self.carpenter_commission_treasury_id = None
+                self.builder_commission_order_id = None
+                self.builder_commission_builder_id = None
+                self.builder_commission_fee_copper = 0
+                self.builder_commission_remaining_copper = 0
+                self.builder_commission_storage_tile = None
+                self.builder_commission_treasury_id = None
                 self.state = "IDLE"
             return
 
         if self.state in ("COMMISSION_REFUND_COLLECT", "COMMISSION_REFUND_DELIVER"):
-            from game.systems.work.carpenter_system import CarpenterSystem
+            from game.systems.work.builder_system import BuilderSystem
             from game.systems.economy.lord_treasury import LordTreasurySystem
             from game.systems.economy.currency import (
                 compact_currency_wallet, normalize_wallet, to_copper,
             )
 
             if self.state == "COMMISSION_REFUND_COLLECT":
-                amount = max(0, int(getattr(self, "carpenter_refund_amount", 0) or 0))
+                amount = max(0, int(getattr(self, "builder_refund_amount", 0) or 0))
                 if to_copper(normalize_wallet(self.inventory)) >= amount:
                     self.state = "COMMISSION_REFUND_DELIVER"
                     self.say("Coins recovered; returning them to the Treasury, my Lord.", duration=2.5)
                     return
                 # 1) Deceased artisan's household chest.
-                src_chest = (furniture_manager.get_storage_for_family(self.carpenter_refund_from_family)
+                src_chest = (furniture_manager.get_storage_for_family(self.builder_refund_from_family)
                              if furniture_manager else None)
                 if src_chest is not None and to_copper(normalize_wallet(src_chest.inventory)) > 0:
                     approach_x, approach_y = src_chest.get_approach_point(
@@ -440,19 +440,19 @@ class Servant:
                     if arrived:
                         take = min(amount - to_copper(normalize_wallet(self.inventory)),
                                    to_copper(normalize_wallet(src_chest.inventory)))
-                        CarpenterSystem._move_exact_value(src_chest.inventory, self.inventory, take)
+                        BuilderSystem._move_exact_value(src_chest.inventory, self.inventory, take)
                         compact_currency_wallet(self.inventory)
                     return
                 # 2) Abstract household wallets, then 3) Treasury backstop.
                 remaining = amount - to_copper(normalize_wallet(self.inventory))
-                for wallet in CarpenterSystem._family_abstract_wallets(
-                        self.carpenter_refund_from_family, villager_manager):
+                for wallet in BuilderSystem._family_abstract_wallets(
+                        self.builder_refund_from_family, villager_manager):
                     remaining = amount - to_copper(normalize_wallet(self.inventory))
                     if remaining <= 0:
                         break
                     take = min(remaining, to_copper(normalize_wallet(wallet)))
                     if take > 0:
-                        CarpenterSystem._move_exact_value(wallet, self.inventory, take)
+                        BuilderSystem._move_exact_value(wallet, self.inventory, take)
                 remaining = amount - to_copper(normalize_wallet(self.inventory))
                 if remaining > 0:
                     treasury_value = LordTreasurySystem.value(furniture_manager)
@@ -466,8 +466,8 @@ class Servant:
             # COMMISSION_REFUND_DELIVER: walk to the Treasury Chest and deposit.
             treasury = LordTreasurySystem.get_chest(furniture_manager)
             if not treasury:
-                self.carpenter_refund_from_family = None
-                self.carpenter_refund_amount = 0
+                self.builder_refund_from_family = None
+                self.builder_refund_amount = 0
                 self.state = "IDLE"
                 return
             approach_x, approach_y = treasury.get_approach_point(
@@ -484,8 +484,8 @@ class Servant:
             if arrived:
                 LordTreasurySystem.deposit_all(furniture_manager, self.inventory)
                 compact_currency_wallet(self.inventory)
-                self.carpenter_refund_from_family = None
-                self.carpenter_refund_amount = 0
+                self.builder_refund_from_family = None
+                self.builder_refund_amount = 0
                 self.state = "IDLE"
                 self.say("Refund returned to the Treasury, my Lord.", duration=2.5)
             return
@@ -1202,10 +1202,15 @@ class Servant:
                 if remaining > 0:
                     item_type = order["item_type"]
                     target_res = "Food" if item_type in ("Potato", "potato") else item_type
-                    # Find stack in Landlord's stockpile with available capacity
+                    # Find stack in Landlord's stockpile with available capacity.
+                    # Only in-storage stacks qualify: loose stacks (e.g. goods
+                    # just withdrawn from a stall near the market) must be
+                    # hauled into storage first, not sucked straight back in.
                     storage_stack = None
                     for s in stockpile_manager.stacks:
                         if getattr(s, "owner_type", "landlord") == "landlord" and getattr(s, "available_amount", s.amount) > 0:
+                            if not stockpile_manager.is_tile_in_storage(s.grid_x, s.grid_y, permit_manager):
+                                continue
                             if s.resource_type in (item_type, target_res) or self._is_matching_grant_item(s.resource_type, item_type):
                                 storage_stack = s
                                 break
@@ -1574,8 +1579,8 @@ class Servant:
         # Commission refund errand cleanup: any coins already collected stay
         # in self.inventory (same convention as commission/buy wallets —
         # physical coins the servant holds are never voided).
-        self.carpenter_refund_from_family = None
-        self.carpenter_refund_amount = 0
+        self.builder_refund_from_family = None
+        self.builder_refund_amount = 0
         self.nav_target = None
         self.door_waypoints = []
 
@@ -1605,6 +1610,47 @@ class Servant:
         self.is_waiting_for_path = False
         self._move_towards(self.idle_target[0], self.idle_target[1], dt, arrival_dist=20, all_servants=all_servants, player=player, building_manager=building_manager, all_entities=all_entities, furniture_manager=furniture_manager, exclusive_target=False)
 
+    def _find_phase_escape_tile(self, building_manager, furniture_manager):
+        """Nearest fully-free tile when trapped inside untraversable tiles
+        (solid structures / furniture footprints). A* cannot route out of
+        blocked tiles, but phase-through servants can walk straight out."""
+        gx = int(math.floor(self.x / TILE_SIZE))
+        gy = int(math.floor(self.y / TILE_SIZE))
+        furniture_tiles = (furniture_manager.get_occupied_tiles()
+                           if furniture_manager and hasattr(furniture_manager, "get_occupied_tiles")
+                           else set())
+
+        def _blocked_tile(tx, ty):
+            b = building_manager.get_building_at(tx, ty) if building_manager else None
+            if b is not None and (getattr(b, "is_solid", False) or not getattr(b, "door_pos", None)):
+                return True
+            return (tx, ty) in furniture_tiles
+
+        # Only intervene when standing on an untraversable tile.
+        if not _blocked_tile(gx, gy):
+            return None
+
+        from collections import deque
+        from game.world.island import is_land_world
+        max_radius = 12
+        visited = {(gx, gy)}
+        queue = deque([(gx, gy, 0)])
+        while queue:
+            cx, cy, depth = queue.popleft()
+            if depth >= max_radius:
+                continue
+            for nx, ny in ((cx + 1, cy), (cx - 1, cy), (cx, cy + 1), (cx, cy - 1)):
+                if (nx, ny) in visited:
+                    continue
+                visited.add((nx, ny))
+                if not _blocked_tile(nx, ny):
+                    wx = (nx + 0.5) * TILE_SIZE
+                    wy = (ny + 0.5) * TILE_SIZE
+                    if is_land_world(wx, wy, TILE_SIZE):
+                        return (wx, wy)
+                queue.append((nx, ny, depth + 1))
+        return None
+
     def _move_towards(self, tx, ty, dt, arrival_dist=10, all_servants=None, player=None, building_manager=None, all_entities=None, furniture_manager=None, exclusive_target=False, interaction_target=None):
         if getattr(self, "player_avoid_speech_cooldown", 0.0) > 0.0:
             self.player_avoid_speech_cooldown = max(0.0, self.player_avoid_speech_cooldown - dt)
@@ -1623,6 +1669,22 @@ class Servant:
             self.is_waiting_for_path = False
             self.route_state = ROUTE_STATE_COMPLETED
             return True
+
+        # Phase-through unstuck: trapped inside untraversable tiles (solid
+        # structures / furniture footprints) A* cannot route out — walk
+        # straight to the nearest free tile; normal pathing resumes outside.
+        if SERVANT_PHASE_THROUGH_OBSTACLES and building_manager is not None:
+            escape_pos = self._find_phase_escape_tile(building_manager, furniture_manager)
+            if escape_pos is not None:
+                edx = escape_pos[0] - self.x
+                edy = escape_pos[1] - self.y
+                edist = math.hypot(edx, edy)
+                if edist > TILE_SIZE * 0.1:
+                    step = min(self.speed * dt, edist)
+                    self.x += (edx / edist) * step
+                    self.y += (edy / edist) * step
+                    self.is_moving = True
+                return False
 
         target_dist = math.hypot(tx - (self.path_target[0] if self.path_target else 999999),
                                  ty - (self.path_target[1] if self.path_target else 999999))
@@ -1762,7 +1824,7 @@ class Servant:
             if not is_land_world(self.x, self.y, TILE_SIZE):
                 self.x, self.y = step_ox, step_oy
                 break
-            if building_manager:
+            if building_manager and not SERVANT_PHASE_THROUGH_OBSTACLES:
                 self.x, self.y = building_manager.resolve_collision(self.x, self.y, self.radius, TILE_SIZE, old_x=step_ox, old_y=step_oy)
 
         if building_manager:
@@ -2145,8 +2207,8 @@ class ServantManager:
         all_vils = villager_manager.get_all_villagers() if villager_manager else []
 
         if run_ai_scheduler:
-            from game.systems.work.carpenter_system import CarpenterSystem
-            CarpenterSystem.dispatch_pending_public_commissions(
+            from game.systems.work.builder_system import BuilderSystem
+            BuilderSystem.dispatch_pending_public_commissions(
                 building_manager, self, villager_manager, furniture_manager,
                 day_cycle=day_cycle, stockpile_manager=stockpile_manager,
             )
@@ -2206,7 +2268,7 @@ class ServantManager:
                         s.say(random.choice(["Making way, Lord!", "Pardon, my Lord!", "Right away, Lord!"]), duration=1.8)
 
         # 4. Building Wall Collision Resolution for Servants
-        if building_manager:
+        if building_manager and not SERVANT_PHASE_THROUGH_OBSTACLES:
             for idx, s in enumerate(self.servants):
                 ox, oy = old_serv_pos[idx]
                 s.x, s.y = building_manager.resolve_collision(s.x, s.y, s.radius, TILE_SIZE, old_x=ox, old_y=oy)

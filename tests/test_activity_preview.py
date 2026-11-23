@@ -9,14 +9,14 @@ class TestActivityPreview(unittest.TestCase):
     def test_preview_recomputes_when_the_active_task_changes(self):
         villager = SimpleNamespace(
             is_alive=True,
-            task="CARPENTER_RESTOCK_HAULING_HOME",
+            task="BUILDER_RESTOCK_HAULING_HOME",
             pending_commission_tasks=[],
             pending_schedule_tasks=[],
         )
 
         self.assertEqual(
             ActivityPreviewSystem.get_next_activities(villager),
-            ["Store materials", "Resume Carpenter work"],
+            ["Store materials", "Resume Builder work"],
         )
 
         villager.task = "IDLE"
@@ -42,8 +42,8 @@ class TestActivityPreview(unittest.TestCase):
 
     def test_artisan_work_tasks_require_work_but_fee_errands_keep_free_time(self):
         for task in (
-            "CARPENTER_RESTOCK_TRAVEL_TO_MARKET",
-            "CARPENTER_CONSTRUCTING",
+            "BUILDER_RESTOCK_TRAVEL_TO_MARKET",
+            "BUILDER_CONSTRUCTING",
             "BLACKSMITH_FORGING",
             "BAKER_BAKING",
         ):
@@ -51,7 +51,7 @@ class TestActivityPreview(unittest.TestCase):
             self.assertFalse(ScheduledActivitySystem.task_is_allowed(task, "LEISURE"))
             self.assertFalse(ScheduledActivitySystem.task_is_allowed(task, "ANY"))
 
-        self.assertTrue(ScheduledActivitySystem.task_is_allowed("CARPENTER_FEE_TRAVEL", "ANY"))
+        self.assertTrue(ScheduledActivitySystem.task_is_allowed("BUILDER_FEE_TRAVEL", "ANY"))
 
 
 if __name__ == "__main__":

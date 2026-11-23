@@ -949,7 +949,7 @@ class RaportUI(
                     self.cancel_demolition_btn_rects.clear()
                     return "cancel_demolition"
 
-            # Public carpenter commissions are dispatched automatically from the Lord's Treasury.
+            # Public builder commissions are dispatched automatically from the Lord's Treasury.
             # Check Cancel Construction buttons
             for s, rect in list(self.cancel_construction_btn_rects.items()):
                 if rect.collidepoint(mouse_pos):

@@ -21,7 +21,7 @@ class ConstructionSite:
         self._recalculate_bounds()
         self.name = f"{self.type_cfg['name']} ({len(self.tiles)} tiles)"
         self.construction_order = None
-        if self.type_cfg.get("carpenter_commissionable"):
+        if self.type_cfg.get("builder_commissionable"):
             self.construction_order = {
                 "id": f"public:{building_type}:{self.grid_x}:{self.grid_y}",
                 "order_type": "PUBLIC_BUILD",
@@ -29,7 +29,7 @@ class ConstructionSite:
                 "status": "AWAITING_PAYMENT",
                 "payer_family_id": None,
                 "payer_id": None,
-                "carpenter_id": None,
+                "builder_id": None,
                 "artisan_job": DEFAULT_COMMISSION_ARTISAN_JOB,
                 "commission_paid": False,
             }
@@ -148,7 +148,7 @@ class ConstructionSite:
     # release_resource() (never a fixed capacity) or reserved_cost leaks and
     # get_needed_resource() returns None forever -> blueprint stalls mid-build.
     # deposit_resource() only counts delivered material; it must NOT touch
-    # reserved_cost (carpenters never reserve, servants release explicitly).
+    # reserved_cost (builders never reserve, servants release explicitly).
     def release_resource(self, res, amount):
         self.reserved_cost[res] = max(0, self.reserved_cost[res] - amount)
 
@@ -377,13 +377,13 @@ class ConstructionSite:
 
         if is_public_build and public_status in ("AWAITING_PAYMENT", "LANDLORD_PAYMENT_PENDING",
                                                  "LANDLORD_RETRIEVING", "PAYMENT_TRAVELING"):
-            lbl_txt = "Awaiting Carpenter commission"
+            lbl_txt = "Awaiting Builder commission"
         elif not self.is_materials_complete():
             pct = self.total_delivered() / max(1, self.total_required())
             fill_w = int(bar_w * pct)
             if fill_w > 0:
                 pygame.draw.rect(surface, (234, 179, 8), (bar_x, bar_y, fill_w, bar_h), border_radius=3)
-            lbl_txt = ("Carpenter gathering materials" if is_public_build
+            lbl_txt = ("Builder gathering materials" if is_public_build
                        else f"{self.name}: {self.total_delivered()}/{self.total_required()}")
         else:
             duration = BUILD_DURATION_SECONDS

@@ -89,7 +89,7 @@ from game.ui_raport import RaportUI
 from game.ui.modals.market_modal import MarketProfileModal
 from game.ui.modals.add_item_modal import AddItemModal
 from game.ui.modals.cheat_modal import CheatModal
-from game.ui.modals.carpenter_catalog_modal import CarpenterCatalogModal
+from game.ui.modals.builder_catalog_modal import BuilderCatalogModal
 from game.ui.path_debug_overlay import PathDebugOverlay
 from game.ui.map_overlay import MapOverlay
 from game.systems.economy.production_distribution import ProductionDistributionSystem
@@ -155,7 +155,7 @@ def furniture_menu_actions(f):
     """Contextual action buttons shown inside the furniture context menu."""
     acts = []
     ftype = getattr(f, "furniture_type", "")
-    if ftype == "carpenter_workbench":
+    if ftype == "builder_workbench":
         acts.append(("catalogue", "Catalogue"))
     if ftype == "notice_board":
         acts.append(("immigrants", "Immigrants"))
@@ -209,7 +209,7 @@ def main():
     market_modal = MarketProfileModal()
     add_item_modal = AddItemModal()
     cheat_modal = CheatModal()
-    carpenter_catalog_modal = CarpenterCatalogModal()
+    builder_catalog_modal = BuilderCatalogModal()
     path_debug_overlay = PathDebugOverlay(enabled=False)
     map_overlay = MapOverlay()
     production_system = ProductionDistributionSystem.get_instance()
@@ -268,7 +268,7 @@ def main():
     btn_furn_house_rect = pygame.Rect(0, 0, 116, 26)
     btn_furn_poss_rect = pygame.Rect(0, 0, 116, 26)
     btn_furn_store_rect = pygame.Rect(0, 0, 252, 24)
-    btn_furn_pay_carpenter_rect = pygame.Rect(0, 0, 252, 24)
+    btn_furn_pay_builder_rect = pygame.Rect(0, 0, 252, 24)
     furn_action_btns = []     # [{"rect": Rect, "action": str}] contextual actions
 
     # Public-structure context menu (List / Destroy / special actions)
@@ -391,7 +391,7 @@ def main():
         selected_furniture = None
         selected_structure = None
         moving_furniture = None
-        carpenter_catalog_modal.close()
+        builder_catalog_modal.close()
         original_permit_tiles.clear()
         planning_road_tiles.clear()
         road_drag_start = None
@@ -411,6 +411,7 @@ def main():
 
     running = True
     wealth_context_timer = 0.0
+    autosave_elapsed = 0.0
     profile_enabled = os.environ.get("TAXES_DUE_PROFILE", "").strip().lower() in ("1", "true", "yes")
     profile_elapsed = 0.0
     profile_frame_count = 0
@@ -442,14 +443,14 @@ def main():
                 if save_modal.is_open:
                     save_action = save_modal.handle_event(event)
                     if save_action and save_action.startswith("load_slot_"):
-                        slot_id = int(save_action.split("_")[-1])
-                        success, msg = load_from_slot(slot_id, day_cycle, resources, player, permit_manager, building_manager, stockpile_manager, furniture_manager, villager_manager, servant_manager, schedule_manager)
+                        save_name = save_action.split("load_slot_", 1)[1]
+                        success, msg = load_from_slot(save_name, day_cycle, resources, player, permit_manager, building_manager, stockpile_manager, furniture_manager, villager_manager, servant_manager, schedule_manager)
                         if success:
                             save_modal.close()
                             settings_modal.close()
                             raport_ui.close()
                             market_modal.close()
-                            carpenter_catalog_modal.close()
+                            builder_catalog_modal.close()
                             planning_mode = "NONE"
                             session_planned_furniture.clear()
                             selected_planned_furniture = None
@@ -462,6 +463,11 @@ def main():
                             current_state = STATE_PLAYING
                         else:
                             save_modal.refresh_slots(f"Error: {msg}")
+                    elif save_action and save_action.startswith("delete_slot_"):
+                        from game.save_system import delete_save
+                        save_name = save_action.split("delete_slot_", 1)[1]
+                        success, msg = delete_save(save_name)
+                        save_modal.refresh_slots(msg if success else f"Error: {msg}")
                     continue
 
                 if settings_modal.is_open:
@@ -491,13 +497,14 @@ def main():
                 if save_modal.is_open:
                     save_action = save_modal.handle_event(event)
                     if save_action:
-                        if save_action.startswith("save_slot_"):
-                            slot_id = int(save_action.split("_")[-1])
-                            success, msg = save_to_slot(slot_id, day_cycle, resources, player, permit_manager, building_manager, stockpile_manager, furniture_manager, villager_manager, servant_manager, schedule_manager)
+                        if save_action.startswith("save_slot_") or save_action.startswith("new_save_"):
+                            save_name = (save_action.split("save_slot_", 1)[1] if save_action.startswith("save_slot_")
+                                         else save_action.split("new_save_", 1)[1])
+                            success, msg = save_to_slot(save_name, day_cycle, resources, player, permit_manager, building_manager, stockpile_manager, furniture_manager, villager_manager, servant_manager, schedule_manager)
                             save_modal.refresh_slots(msg if success else f"Error: {msg}")
                         elif save_action.startswith("load_slot_"):
-                            slot_id = int(save_action.split("_")[-1])
-                            success, msg = load_from_slot(slot_id, day_cycle, resources, player, permit_manager, building_manager, stockpile_manager, furniture_manager, villager_manager, servant_manager, schedule_manager)
+                            save_name = save_action.split("load_slot_", 1)[1]
+                            success, msg = load_from_slot(save_name, day_cycle, resources, player, permit_manager, building_manager, stockpile_manager, furniture_manager, villager_manager, servant_manager, schedule_manager)
                             if success:
                                 save_modal.close()
                                 settings_modal.close()
@@ -517,6 +524,11 @@ def main():
                                 camera.y = player.y
                             else:
                                 save_modal.refresh_slots(f"Error: {msg}")
+                        elif save_action.startswith("delete_slot_"):
+                            from game.save_system import delete_save
+                            save_name = save_action.split("delete_slot_", 1)[1]
+                            success, msg = delete_save(save_name)
+                            save_modal.refresh_slots(msg if success else f"Error: {msg}")
                     continue
 
                 s_action = settings_modal.handle_event(event, day_cycle, is_ingame=True)
@@ -548,8 +560,8 @@ def main():
                     )
                     continue
 
-                if carpenter_catalog_modal.is_open:
-                    catalog_action = carpenter_catalog_modal.handle_event(event)
+                if builder_catalog_modal.is_open:
+                    catalog_action = builder_catalog_modal.handle_event(event)
                     if catalog_action and catalog_action.startswith("commission_furniture_"):
                         planning_mode = "FURNITURE"
                         planning_furniture_type = catalog_action.removeprefix("commission_furniture_")
@@ -747,9 +759,9 @@ def main():
                                     planned_door_tile, planned_door_side, permit_manager,
                                     rotation=planning_building_rotation
                                 )
-                                if started and b_cfg.get("carpenter_commissionable"):
-                                    from game.systems.work.carpenter_system import CarpenterSystem
-                                    CarpenterSystem.dispatch_pending_public_commissions(
+                                if started and b_cfg.get("builder_commissionable"):
+                                    from game.systems.work.builder_system import BuilderSystem
+                                    BuilderSystem.dispatch_pending_public_commissions(
                                         building_manager, servant_manager, villager_manager,
                                         furniture_manager, day_cycle=day_cycle,
                                         stockpile_manager=stockpile_manager,
@@ -767,9 +779,9 @@ def main():
                                     planned_door_tile, planned_door_side, permit_manager,
                                     rotation=planning_building_rotation
                                 )
-                                if started and b_cfg.get("carpenter_commissionable"):
-                                    from game.systems.work.carpenter_system import CarpenterSystem
-                                    CarpenterSystem.dispatch_pending_public_commissions(
+                                if started and b_cfg.get("builder_commissionable"):
+                                    from game.systems.work.builder_system import BuilderSystem
+                                    BuilderSystem.dispatch_pending_public_commissions(
                                         building_manager, servant_manager, villager_manager,
                                         furniture_manager, day_cycle=day_cycle,
                                         stockpile_manager=stockpile_manager,
@@ -1459,7 +1471,7 @@ def main():
                                     if ab["rect"].collidepoint(event.pos):
                                         act = ab["action"]
                                         if act == "catalogue":
-                                            carpenter_catalog_modal.open(selected_furniture)
+                                            builder_catalog_modal.open(selected_furniture)
                                         elif act == "immigrants":
                                             raport_ui.open_immigrant_tab()
                                         elif act == "workplace":
@@ -1558,7 +1570,7 @@ def main():
                             # checked before entities so a worker standing on the tile
                             # doesn't swallow the click.
                             clicked_f = furniture_manager.get_furniture_at(m_gx, m_gy)
-                            if clicked_f and (clicked_f.furniture_type in ("carpenter_workbench", "notice_board")
+                            if clicked_f and (clicked_f.furniture_type in ("builder_workbench", "notice_board")
                                               or workplace_bases_for("furniture", clicked_f)):
                                 selected_furniture = clicked_f
                                 selected_entity = None
@@ -1629,8 +1641,8 @@ def main():
                                     if servant_manager:
                                         free_servant = next((s for s in servant_manager.servants if s.state == "IDLE"), None)
                                         if free_servant:
-                                            free_servant.state = "FETCH_RESOURCE"
-                                            free_servant.target_stack = clicked_stack
+                                            free_servant.state = "HAULING_LOOSE_FETCH"
+                                            free_servant.target_loose_stack = clicked_stack
                                             free_servant.say(f"Hauling {clicked_stack.resource_type} to storage, Sire!", duration=2.5)
                                 continue
 
@@ -1712,6 +1724,21 @@ def main():
             day_dt = game_dt / max(1.0, day_cycle.day_length_seconds)
             cur_day_time = day_cycle.day_number + (day_cycle.current_hour / 24.0)
             wealth_context_timer -= real_dt
+            # Periodic autosave: one file per in-game day (autosave-dayNN).
+            from game.data.config import AUTOSAVE_INTERVAL_SECONDS
+            from game.save_system import autosave_slot_name
+            autosave_elapsed += real_dt
+            if autosave_elapsed >= AUTOSAVE_INTERVAL_SECONDS:
+                autosave_elapsed = 0.0
+                try:
+                    save_to_slot(
+                        autosave_slot_name(day_cycle.day_number),
+                        day_cycle, resources, player, permit_manager, building_manager,
+                        stockpile_manager, furniture_manager, villager_manager,
+                        servant_manager, schedule_manager,
+                    )
+                except Exception as e:
+                    print(f"[Autosave] failed: {e}")
             if wealth_context_timer <= 0.0:
                 wealth_data = VillageWealthSystem.calculate_village_wealth(
                     resources=resources,
@@ -1769,8 +1796,8 @@ def main():
             # Dead/reassigned artisans: dissolve their commission queues and
             # spawn refund errands for PAID orders.
             if furniture_manager is not None and villager_manager is not None:
-                from game.systems.work.carpenter_system import CarpenterSystem
-                CarpenterSystem.sweep_dead_commission_orders(
+                from game.systems.work.builder_system import BuilderSystem
+                BuilderSystem.sweep_dead_commission_orders(
                     building_manager, furniture_manager, villager_manager,
                     servant_manager=servant_manager, stockpile_manager=stockpile_manager,
                     day_cycle=day_cycle)
@@ -2115,8 +2142,8 @@ def main():
 
                 # Header & Cost
                 tiles_label = f"Fixed: {b_cfg['fixed_tiles_count']} Tiles {dim_str}" if b_cfg.get("fixed_tiles_count") else f"Tiles: {len(planning_building_tiles)}"
-                if b_cfg.get("carpenter_commissionable"):
-                    info_txt = f"Design {b_cfg['name']} | {tiles_label} | Lord pays Carpenter commission"
+                if b_cfg.get("builder_commissionable"):
+                    info_txt = f"Design {b_cfg['name']} | {tiles_label} | Lord pays Builder commission"
                 else:
                     info_txt = f"Design {b_cfg['name']} | {tiles_label} | Cost: {cost_w} Wood, {cost_s} Stone"
                 screen.blit(font_card.render(info_txt, True, (56, 189, 248)), (bar_x + 16, bar_y + 10))
@@ -2253,7 +2280,7 @@ def main():
                 if f_cfg.get("instant_place"):
                     info_txt = f"Place {f_cfg['name']} | Planned: {planned_count} | Free and ready immediately"
                 else:
-                    info_txt = f"Order {f_cfg['name']} | Planned: {planned_count} | Household pays commission; Carpenter supplies materials"
+                    info_txt = f"Order {f_cfg['name']} | Planned: {planned_count} | Household pays commission; Builder supplies materials"
                 screen.blit(font_card.render(info_txt, True, (250, 204, 21)), (bar_x + 16, bar_y + 10))
 
                 if is_occupied_planned:
@@ -2686,14 +2713,14 @@ def main():
                         "LANDLORD_PAYMENT_PENDING": "Awaiting landlord funds",
                         "LANDLORD_RETRIEVING": "Servant collecting commission",
                         "PAYMENT_TRAVELING": "Servant delivering commission",
-                        "PAID": "Commission paid — Carpenter assigned",
-                        "BUILDING": "Carpenter building",
-                        "AWAITING_MATERIAL": "Carpenter gathering materials",
+                        "PAID": "Commission paid — Builder assigned",
+                        "BUILDING": "Builder building",
+                        "AWAITING_MATERIAL": "Builder gathering materials",
                     }
-                    order_text = font_badge.render(status_labels.get(order_status, "Carpenter order"), True, (56, 189, 248))
+                    order_text = font_badge.render(status_labels.get(order_status, "Builder order"), True, (56, 189, 248))
                     screen.blit(order_text, (cx + 14, row2_y + 6))
                 else:
-                    btn_furn_pay_carpenter_rect.x = -9999
+                    btn_furn_pay_builder_rect.x = -9999
 
                 # Buttons: Move & Destroy
                 btn_furn_move_rect.x = cx + 14
@@ -3319,7 +3346,7 @@ def main():
             settings_modal.draw(screen, day_cycle, is_ingame=True)
 
             # The workbench catalogue is the topmost modal when opened from the map.
-            carpenter_catalog_modal.draw(screen, building_manager, villager_manager)
+            builder_catalog_modal.draw(screen, building_manager, villager_manager)
 
             # 14. Save / Load Modal Dialog (Topmost overlay)
             save_modal.draw(screen)

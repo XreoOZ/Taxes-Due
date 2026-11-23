@@ -1,14 +1,14 @@
-"""Furniture catalogue and live commission quotes for Carpenter workbenches."""
+"""Furniture catalogue and live commission quotes for Builder workbenches."""
 
 import pygame
 
 from game.data.config import BUILDING_TYPES, FURNITURE_TYPES, COLOR_MODAL_BG, COLOR_MODAL_BORDER, COLOR_TEXT_TITLE, COLOR_TEXT_MAIN, COLOR_TEXT_MUTED
-from game.systems.work.carpenter_system import CarpenterSystem
+from game.systems.work.builder_system import BuilderSystem
 from game.systems.economy.currency import from_copper
 from game.config import TILE_SIZE
 
 
-class CarpenterCatalogModal:
+class BuilderCatalogModal:
     def __init__(self):
         self.is_open = False
         self.workbench = None
@@ -86,7 +86,7 @@ class CarpenterCatalogModal:
         pygame.draw.rect(surface, COLOR_MODAL_BG, self.modal_rect, border_radius=12)
         pygame.draw.rect(surface, COLOR_MODAL_BORDER, self.modal_rect, width=2, border_radius=12)
 
-        title = self.font_title.render("CARPENTER WORKBENCH", True, COLOR_TEXT_TITLE)
+        title = self.font_title.render("BUILDER WORKBENCH", True, COLOR_TEXT_TITLE)
         surface.blit(title, (modal_x + 24, modal_y + 18))
         subtitle = self.font_sub.render("Furniture and public build quotes use market material costs and living wages.", True, COLOR_TEXT_MUTED)
         surface.blit(subtitle, (modal_x + 26, modal_y + 48))
@@ -104,7 +104,7 @@ class CarpenterCatalogModal:
                                          max(0, viewport_bottom - viewport_top))
         item_types = [(key, cfg, "furniture") for key, cfg in FURNITURE_TYPES.items()]
         item_types.extend((key, cfg, "building") for key, cfg in BUILDING_TYPES.items()
-                          if cfg.get("carpenter_commissionable"))
+                          if cfg.get("builder_commissionable"))
         row_h = 90
         row_step = row_h + 8
         content_h = len(item_types) * row_step
@@ -128,7 +128,7 @@ class CarpenterCatalogModal:
             surface.blit(desc, (row.x + 14, row.y + 31))
             materials = cfg.get("materials", {})
             if item_kind == "building":
-                quote = CarpenterSystem.quote_building_order(item_type, building_manager, villager_manager)
+                quote = BuilderSystem.quote_building_order(item_type, building_manager, villager_manager)
                 materials = quote.get("materials", {})
             material_text = ", ".join(f"{amount}x {item}" for item, amount in materials.items() if amount)
             if not material_text:
@@ -137,7 +137,7 @@ class CarpenterCatalogModal:
             surface.blit(material_label, (row.x + 14, row.y + 56))
 
             if item_kind == "furniture":
-                quote = CarpenterSystem.quote_order(
+                quote = BuilderSystem.quote_order(
                     item_type, building_manager, villager_manager,
                     reference_position=reference_position,
                 )

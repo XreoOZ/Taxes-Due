@@ -2,13 +2,13 @@
 import unittest
 from types import SimpleNamespace
 
-from game.systems.work.carpenter_system import CarpenterSystem
+from game.systems.work.builder_system import BuilderSystem
 
 
 def make_order(**kw):
     base = {
         "id": "o1", "order_type": "BUILD", "status": "PAID",
-        "carpenter_id": "c1", "artisan_job": "Carpenter",
+        "builder_id": "c1", "artisan_job": "Builder",
         "commission_paid": True, "paid_amount_copper": 50,
         "paid_by_id": "v_payer", "paid_by_family_id": "fam_payer",
         "payer_family_id": "fam_payer", "payer_type": "household",
@@ -22,15 +22,15 @@ def make_subject(order, sid="f1"):
     return SimpleNamespace(id=sid, construction_order=order)
 
 
-def make_villager(vid, job="Carpenter", alive=True, family="fam_c", **kw):
+def make_villager(vid, job="Builder", alive=True, family="fam_c", **kw):
     v = SimpleNamespace(
         id=vid, job=job, is_alive=alive, family_id=family,
         task="IDLE", x=0.0, y=0.0, inventory={},
         pending_commission_tasks=[], pending_commission_task=None,
         pending_commission_data={}, speech_text=None,
-        carpenter_payment_order_id=None,
-        carpenter_refund_from_family=None, carpenter_refund_to_family=None,
-        carpenter_refund_amount=0, carpenter_refund_phase=None,
+        builder_payment_order_id=None,
+        builder_refund_from_family=None, builder_refund_to_family=None,
+        builder_refund_amount=0, builder_refund_phase=None,
     )
     v.say = lambda *a, **k: None
     v._resume_or_idle_after_need = lambda: None
@@ -59,13 +59,13 @@ class TestPaidSeqFIFO(unittest.TestCase):
         o1 = make_order(id="a")
         o2 = make_order(id="b")
         fm, bm, vm = make_managers([], furn_orders=[o1, o2])
-        CarpenterSystem._paid_seq_floor = 0
-        CarpenterSystem._ensure_paid_seq(o1, fm, bm)
-        CarpenterSystem._ensure_paid_seq(o2, fm, bm)
+        BuilderSystem._paid_seq_floor = 0
+        BuilderSystem._ensure_paid_seq(o1, fm, bm)
+        BuilderSystem._ensure_paid_seq(o2, fm, bm)
         self.assertEqual(o1["paid_seq"], 1)
         self.assertEqual(o2["paid_seq"], 2)
         # second call does not restamp
-        CarpenterSystem._ensure_paid_seq(o1, fm, bm)
+        BuilderSystem._ensure_paid_seq(o1, fm, bm)
         self.assertEqual(o1["paid_seq"], 1)
 
     def test_queue_length_counts_active_orders(self):
@@ -73,13 +73,13 @@ class TestPaidSeqFIFO(unittest.TestCase):
             make_order(id="a", status="PAID"),
             make_order(id="b", status="PAYMENT_TRAVELING"),
             make_order(id="c", status="COMPLETE"),
-            make_order(id="d", status="AWAITING_PAYMENT", carpenter_id=None),
-            make_order(id="e", carpenter_id="c2"),
+            make_order(id="d", status="AWAITING_PAYMENT", builder_id=None),
+            make_order(id="e", builder_id="c2"),
         ]
         fm, bm, vm = make_managers([], furn_orders=orders)
-        # PAID + PAYMENT_TRAVELING count; COMPLETE/AWAITING_PAYMENT/other carpenter don't
-        self.assertEqual(CarpenterSystem._queue_length("c1", fm, bm), 2)
-        self.assertEqual(CarpenterSystem._queue_length("c2", fm, bm), 1)
+        # PAID + PAYMENT_TRAVELING count; COMPLETE/AWAITING_PAYMENT/other builder don't
+        self.assertEqual(BuilderSystem._queue_length("c1", fm, bm), 2)
+        self.assertEqual(BuilderSystem._queue_length("c2", fm, bm), 1)
 
 
 class TestSweepDeadArtisan(unittest.TestCase):
@@ -90,10 +90,10 @@ class TestSweepDeadArtisan(unittest.TestCase):
         order = make_order()
         fm, bm, vm = make_managers(
             [dead, payer], families={"fam_payer": family}, furn_orders=[order])
-        CarpenterSystem.sweep_dead_commission_orders(bm, fm, vm)
+        BuilderSystem.sweep_dead_commission_orders(bm, fm, vm)
         self.assertTrue(order.get("refund_issued"))
         self.assertEqual(order["status"], "AWAITING_PAYMENT")
-        self.assertIsNone(order["carpenter_id"])
+        self.assertIsNone(order["builder_id"])
         self.assertFalse(order["commission_paid"])
         self.assertNotIn("paid_seq", order)
         # household rep got the refund errand queued
@@ -108,39 +108,39 @@ class TestSweepDeadArtisan(unittest.TestCase):
         servant = SimpleNamespace(is_alive=True, state="IDLE", say=lambda *a, **k: None,
                                   inventory={})
         sm = SimpleNamespace(servants=[servant])
-        CarpenterSystem.sweep_dead_commission_orders(bm, fm, vm, servant_manager=sm)
+        BuilderSystem.sweep_dead_commission_orders(bm, fm, vm, servant_manager=sm)
         self.assertTrue(order.get("refund_issued"))
         self.assertEqual(order["status"], "LANDLORD_PAYMENT_PENDING")
         self.assertEqual(servant.state, "COMMISSION_REFUND_COLLECT")
-        self.assertEqual(servant.carpenter_refund_amount, 50)
+        self.assertEqual(servant.builder_refund_amount, 50)
 
     def test_non_paid_order_only_releases_slot(self):
         dead = make_villager("c1", alive=False)
         order = make_order(status="AWAITING_MATERIAL", commission_paid=True,
                            paid_amount_copper=50)
         fm, bm, vm = make_managers([dead], furn_orders=[order])
-        CarpenterSystem.sweep_dead_commission_orders(bm, fm, vm)
-        self.assertIsNone(order["carpenter_id"])
+        BuilderSystem.sweep_dead_commission_orders(bm, fm, vm)
+        self.assertIsNone(order["builder_id"])
         self.assertFalse(order.get("refund_issued"))
         self.assertEqual(order["status"], "AWAITING_MATERIAL")
 
-    def test_alive_carpenter_untouched(self):
+    def test_alive_builder_untouched(self):
         alive = make_villager("c1", alive=True)
         order = make_order()
         fm, bm, vm = make_managers([alive], furn_orders=[order])
-        CarpenterSystem.sweep_dead_commission_orders(bm, fm, vm)
-        self.assertEqual(order["carpenter_id"], "c1")
+        BuilderSystem.sweep_dead_commission_orders(bm, fm, vm)
+        self.assertEqual(order["builder_id"], "c1")
         self.assertEqual(order["status"], "PAID")
         self.assertFalse(order.get("refund_issued"))
 
     def test_artisan_job_mismatch_not_swept(self):
-        # Order belongs to a Blacksmith; the dead villager was a Carpenter.
-        dead_carp = make_villager("c1", job="Carpenter", alive=False)
+        # Order belongs to a Blacksmith; the dead villager was a Builder.
+        dead_carp = make_villager("c1", job="Builder", alive=False)
         smith = make_villager("s1", job="Blacksmith", alive=True)
-        order = make_order(carpenter_id="s1", artisan_job="Blacksmith")
+        order = make_order(builder_id="s1", artisan_job="Blacksmith")
         fm, bm, vm = make_managers([dead_carp, smith], furn_orders=[order])
-        CarpenterSystem.sweep_dead_commission_orders(bm, fm, vm)
-        self.assertEqual(order["carpenter_id"], "s1")
+        BuilderSystem.sweep_dead_commission_orders(bm, fm, vm)
+        self.assertEqual(order["builder_id"], "s1")
         self.assertEqual(order["status"], "PAID")
 
     def test_zero_fee_order_no_refund(self):
@@ -148,7 +148,7 @@ class TestSweepDeadArtisan(unittest.TestCase):
         order = make_order(paid_amount_copper=0, price_copper=0,
                            paid_by_id="household")
         fm, bm, vm = make_managers([dead], furn_orders=[order])
-        CarpenterSystem.sweep_dead_commission_orders(bm, fm, vm)
+        BuilderSystem.sweep_dead_commission_orders(bm, fm, vm)
         self.assertEqual(order["status"], "AWAITING_PAYMENT")
         self.assertFalse(order.get("refund_issued"))
 

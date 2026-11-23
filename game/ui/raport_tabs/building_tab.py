@@ -299,17 +299,17 @@ class BuildingMixin:
 
                         cfg = BUILDING_TYPES.get(getattr(s, "building_type", ""), {})
                         order = getattr(s, "construction_order", None) or {}
-                        if cfg.get("carpenter_commissionable"):
+                        if cfg.get("builder_commissionable"):
                             status_labels = {
                                 "AWAITING_PAYMENT": "Awaiting landlord payment",
                                 "LANDLORD_PAYMENT_PENDING": "Awaiting landlord payment",
                                 "LANDLORD_RETRIEVING": "Servant collecting commission",
-                                "PAID": "Commission paid — awaiting Carpenter",
-                                "BUILDING": "Carpenter building",
-                                "AWAITING_MATERIAL": "Carpenter gathering materials",
+                                "PAID": "Commission paid — awaiting Builder",
+                                "BUILDING": "Builder building",
+                                "AWAITING_MATERIAL": "Builder gathering materials",
                                 "COMPLETE": "Complete",
                             }
-                            status = status_labels.get(order.get("status"), "Carpenter order")
+                            status = status_labels.get(order.get("status"), "Builder order")
                             status_text = self.font_badge.render(status, True, (56, 189, 248))
                             surface.blit(status_text, (mx + self.modal_w - status_text.get_width() - 136, y_cur + 4))
 
@@ -388,7 +388,7 @@ class BuildingMixin:
 
             # Furniture and building buttons share one grid — drawing them in
             # separate loops at the same row offsets made them overlap exactly
-            # (e.g. Tax Office covered the Carpenter Workbench button).
+            # (e.g. Tax Office covered the Builder Workbench button).
             grid_items = []
             if current_cat.get("kind") in ("furniture", "public"):
                 f_keys = (list(current_cat.get("furniture_types", ()))

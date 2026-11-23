@@ -109,6 +109,10 @@ DEMOLISH_DURATION_SECONDS = 5.0
 DEMOLITION_REFUND_RATIO = 0.5  # 50% resource refund when demolishing buildings
 ENTITY_AVOIDANCE_RADIUS = 56.0
 SERVANT_YIELD_FORCE = 60.0
+# AI servants phase through walls/furniture/narrow passages: they still compute
+# and follow normal A* paths, but skip building collision resolution so a 1-tile
+# gap or wall edge can't permanently stall them. Player & villagers unaffected.
+SERVANT_PHASE_THROUGH_OBSTACLES = True
 COLOR_SERVANT_BODY = (245, 158, 11)     # Amber orange
 COLOR_SERVANT_OUTLINE = (120, 53, 15)   # Deep brown/amber outline
 
@@ -208,7 +212,7 @@ INTERACTION_CONTACT_RADIUS = 58.0              # Contact pickup distance (allowi
 TOOL_STOW_ARRIVAL_DIST = 36.0                  # Arrival distance to household chest when returning unused tools
 LOOSE_ITEM_ARRIVAL_DIST = 24.0                 # Arrival distance for gathering loose items
 CHEST_INTERACTION_RADIUS = 36.0                # Interaction distance with household chest
-CARPENTER_BUILD_DURATION_INGAME_HOURS = 1.0
+BUILDER_BUILD_DURATION_INGAME_HOURS = 1.0
 
 # =====================================================================
 # Natural Resources: Forest & Mines (Island world only)
@@ -265,16 +269,16 @@ MINE_YIELD_PER_INGAME_HOUR = {
 MINE_TYPE_TABLE = {
     "Stone Mine": {"output_item": "Stone", "weight": 1},
 }
-CARPENTER_DEFAULT_LIVING_HOUSEHOLD_SIZE = 1
+BUILDER_DEFAULT_LIVING_HOUSEHOLD_SIZE = 1
 FURNITURE_DAILY_BREAK_CHANCE = 0.05
-CARPENTER_REPAIR_FOOD_DAYS = 3
-CARPENTER_REPAIR_MATERIALS = {"Wood": 2}
+BUILDER_REPAIR_FOOD_DAYS = 3
+BUILDER_REPAIR_MATERIALS = {"Wood": 2}
 # Commission queue: seconds before a failed payment claim may be retried.
 COMMISSION_CLAIM_RETRY_SECONDS = 20.0
 # Orders carry "artisan_job"; missing value falls back to this job id.
-DEFAULT_COMMISSION_ARTISAN_JOB = "Carpenter"
-CARPENTER_TOOL_SWING_SPEED = 7.0
-CARPENTER_TOOL_SWING_ANGLE = 0.55
+DEFAULT_COMMISSION_ARTISAN_JOB = "Builder"
+BUILDER_TOOL_SWING_SPEED = 7.0
+BUILDER_TOOL_SWING_ANGLE = 0.55
 FURNITURE_CLAIM_BED_SEARCH_RADIUS = 8.5        # Max tile distance to infer chest household ownership from beds
 COLOR_VILLAGER_BODY = (34, 197, 94)     # Forest/Emerald green (Peasant tunic)
 COLOR_VILLAGER_OUTLINE = (20, 83, 45)   # Deep forest green
@@ -327,7 +331,7 @@ STARTER_PRESETS = [
         "storage_permit_width": 6,
         "storage_permit_height": 6,
         "storage_chest_inside_house": True,
-        "carpenter_workbench": True,
+        "builder_workbench": True,
         # Lord Treasury belongs to the landlord — parked on open ground
         # beside the storage yard, never inside the household home.
         "treasury_chest_spot": "beside_storage",
@@ -358,7 +362,7 @@ STARTER_PRESETS = [
         "house": None,
         "market": None,
         "landlord_storage": False,
-        "carpenter_workbench": False,
+        "builder_workbench": False,
         "storage_items": {},
     },
 ]
@@ -403,14 +407,14 @@ DEDICATED_JOBS = {
         "desc": "Forges iron tools, nails, and armor for the settlement.",
         "required_tools": ["Hammer", "Tongs"]
     },
-    "Carpenter": {
-        "id": "Carpenter",
-        "name": "Carpenter",
-        "title": "Carpenter",
+    "Builder": {
+        "id": "Builder",
+        "name": "Builder",
+        "title": "Builder",
         "color": (234, 179, 8),
         "wip": False,
         "workplace_permit": "construction",
-        "workplace_furniture_type": "carpenter_workbench",
+        "workplace_furniture_type": "builder_workbench",
         "desc": "Crafts furniture, structural beams, and wooden barrels.",
         "required_tools": ["Saw", "Adze"],
         "material_stock_target": {"Wood": 10, "Stone": 10}
@@ -549,11 +553,11 @@ SCHEDULE_ACTIVITY_TASKS = {
         "GOING_TO_TAX_OFFICE", "STATIONED_AT_TAX_OFFICE",
         "VISITING_HOUSEHOLD_FOR_TAX", "WAITING_FOR_HOUSEHOLD_TAX",
         "RETURNING_TAX_TO_TREASURY", "PAYING_SOCAGE_TAX",
-        "WAITING_FOR_CARPENTER_COMMISSION", "CARPENTER_CONSTRUCTING",
-        "CARPENTER_COLLECTING_MATERIALS", "CARPENTER_DELIVERING_MATERIALS",
-        "CARPENTER_REPAIRING",
-        "CARPENTER_FEE_RETRIEVE", "CARPENTER_FEE_TRAVEL",
-        "CARPENTER_FEE_LANDLORD_RETRIEVE",
+        "WAITING_FOR_BUILDER_COMMISSION", "BUILDER_CONSTRUCTING",
+        "BUILDER_COLLECTING_MATERIALS", "BUILDER_DELIVERING_MATERIALS",
+        "BUILDER_REPAIRING",
+        "BUILDER_FEE_RETRIEVE", "BUILDER_FEE_TRAVEL",
+        "BUILDER_FEE_LANDLORD_RETRIEVE",
         "STATION_LEFTOVER_FETCH", "STATION_LEFTOVER_DELIVER",
     }),
     "LEISURE": frozenset({
@@ -576,17 +580,17 @@ SCHEDULE_ACTIVITY_TASKS = {
     "PRAYER": frozenset({"LEADING_PRAYER", "ATTENDING_PRAYER", "PRAYING"}),
 }
 SCHEDULE_ACTIVITY_TASK_PREFIXES = (
-    ("CARPENTER_FEE_", "LEISURE"),
-    ("CARPENTER_RESTOCK_", "WORK"),
-    ("CARPENTER_", "WORK"),
+    ("BUILDER_FEE_", "LEISURE"),
+    ("BUILDER_RESTOCK_", "WORK"),
+    ("BUILDER_", "WORK"),
     ("GRAVEDIGGER_RESTOCK_", "WORK"),
     ("HAULING_STALL_", "LEISURE"),
 )
-ARTISAN_JOB_IDS = ("Carpenter", "Blacksmith", "Baker")
+ARTISAN_JOB_IDS = ("Builder", "Blacksmith", "Baker")
 SCHEDULE_ACTIVITY_STRICT_TASK_PREFIXES = tuple(
     f"{job.upper()}_" for job in ARTISAN_JOB_IDS
 )
-SCHEDULE_ACTIVITY_STRICT_TASK_PREFIX_EXEMPTIONS = ("CARPENTER_FEE_",)
+SCHEDULE_ACTIVITY_STRICT_TASK_PREFIX_EXEMPTIONS = ("BUILDER_FEE_",)
 SCHEDULE_ACTIVITY_NEUTRAL_TASKS = frozenset({
     "IDLE", "DECEASED", "LEISURE", "STROLLING", "ZONKED_SLEEP",
 })
@@ -601,7 +605,7 @@ SCHEDULE_ACTIVITY_STRICT_TASKS = frozenset({
     "GOING_TO_TAX_OFFICE", "STATIONED_AT_TAX_OFFICE",
     "VISITING_HOUSEHOLD_FOR_TAX", "WAITING_FOR_HOUSEHOLD_TAX",
     "RETURNING_TAX_TO_TREASURY",
-    "WAITING_FOR_CARPENTER_COMMISSION",
+    "WAITING_FOR_BUILDER_COMMISSION",
 })
 SCHEDULE_ACTIVITY_TASK_STATE_FIELDS = (
     "current_work_tile", "tilling_timer", "watering_timer", "well_draw_timer",
@@ -663,20 +667,20 @@ AI_ACTIVITY_NEXT_STEPS = {
     "WATERING": ("Continue farming or return to other work",),
     "HARVESTING": ("Carry the harvest home", "Store the harvest"),
     "HAULING_HOME": ("Store the harvest",),
-    "CARPENTER_RESTOCK_RETRIEVE_COINS": (
+    "BUILDER_RESTOCK_RETRIEVE_COINS": (
         "Travel to the market", "Buy materials", "Carry materials to storage",
-        "Resume Carpenter work",
+        "Resume Builder work",
     ),
-    "CARPENTER_RESTOCK_TRAVEL_TO_MARKET": (
-        "Buy materials", "Carry materials to storage", "Resume Carpenter work",
+    "BUILDER_RESTOCK_TRAVEL_TO_MARKET": (
+        "Buy materials", "Carry materials to storage", "Resume Builder work",
     ),
-    "CARPENTER_RESTOCK_HAULING_HOME": (
-        "Store materials", "Resume Carpenter work",
+    "BUILDER_RESTOCK_HAULING_HOME": (
+        "Store materials", "Resume Builder work",
     ),
-    "CARPENTER_COLLECTING_MATERIALS": ("Deliver materials", "Continue construction or repair"),
-    "CARPENTER_DELIVERING_MATERIALS": ("Continue construction or repair",),
-    "CARPENTER_CONSTRUCTING": ("Continue construction",),
-    "CARPENTER_REPAIRING": ("Continue repair",),
+    "BUILDER_COLLECTING_MATERIALS": ("Deliver materials", "Continue construction or repair"),
+    "BUILDER_DELIVERING_MATERIALS": ("Continue construction or repair",),
+    "BUILDER_CONSTRUCTING": ("Continue construction",),
+    "BUILDER_REPAIRING": ("Continue repair",),
     "CONFESSION_QUEUED": ("Wait for the Priest", "Approach the Priest", "Confess"),
     "WAITING_FOR_CONFESSION": ("Approach the Priest when called", "Confess"),
     "CONFESSION_RETRIEVE_COINS": ("Travel to the Priest", "Confess"),
@@ -687,12 +691,12 @@ AI_ACTIVITY_NEXT_STEPS = {
     "COMMISSION_REFUND_COLLECT": ("Collect the refund", "Deliver it to the household"),
 }
 MARKET_SALES_REPORT_PERIOD_DAYS = 10
-CARPENTER_INSUFFICIENT_LANDLORD_COIN_MESSAGES = (
+BUILDER_INSUFFICIENT_LANDLORD_COIN_MESSAGES = (
     "The treasury does not hold enough coin for this commission, my Lord.",
-    "I cannot pay the Carpenter yet; the treasury is short on coin.",
-    "The available coin falls short of the Carpenter's price, Sire.",
+    "I cannot pay the Builder yet; the treasury is short on coin.",
+    "The available coin falls short of the Builder's price, Sire.",
     "We need more treasury coin before this work can be commissioned.",
-    "The Carpenter's fee exceeds our current coin reserve, my Lord.",
+    "The Builder's fee exceeds our current coin reserve, my Lord.",
 )
 
 DEFAULT_JOB_SCHEDULE = [
@@ -955,7 +959,7 @@ TOOL_TYPES = {
         "name": "Saw",
         "icon": "🪚",
         "color": (217, 119, 6),
-        "desc": "Steel carpenter saw for cutting structural timber and planks."
+        "desc": "Steel builder saw for cutting structural timber and planks."
     },
     "Adze": {
         "id": "Adze",
@@ -1222,7 +1226,7 @@ BUILDING_TYPES = {
         "border_color": (96, 165, 250),
         "required_permit": "any",
         "allowed_permits": ["housing", "storage", "landlord_private", "church"],
-        "carpenter_commissionable": True,
+        "builder_commissionable": True,
     },
     "market": {
         "id": "market",
@@ -1245,7 +1249,7 @@ BUILDING_TYPES = {
         "border_color": (251, 191, 36),
         "required_permit": "any",
         "allowed_permits": ["market", "storage", "landlord_private", "housing"],
-        "carpenter_commissionable": True,
+        "builder_commissionable": True,
     },
     "toilet": {
         "id": "toilet",
@@ -1267,7 +1271,7 @@ BUILDING_TYPES = {
         "border_color": (160, 110, 60),
         "required_permit": None,
         "allowed_permits": None,
-        "carpenter_commissionable": True,
+        "builder_commissionable": True,
     },
     "tax_house": {
         "id": "tax_house",
@@ -1290,7 +1294,7 @@ BUILDING_TYPES = {
         "border_color": (217, 119, 6),
         "required_permit": None,
         "allowed_permits": None,
-        "carpenter_commissionable": True,
+        "builder_commissionable": True,
         "visual_style": {
             "platform": (95, 75, 53),
             "platform_light": (105, 83, 59),
@@ -1576,9 +1580,9 @@ FURNITURE_TYPES = {
         "color_blanket": (59, 130, 246),
         "color_pillow": (241, 245, 249)
     },
-    "carpenter_workbench": {
-        "id": "carpenter_workbench",
-        "name": "Carpenter Workbench",
+    "builder_workbench": {
+        "id": "builder_workbench",
+        "name": "Builder Workbench",
         "category_id": "workplace",
         "desc": "A sturdy medieval workbench for shaping and assembling furniture. Place inside a household or house.",
         "capacity": 0,
@@ -1605,7 +1609,7 @@ FURNITURE_TYPES = {
         "max_workers": 0,
         "allowed_permits": ["church"],
         "household_owned": False,
-        "carpenter_commissionable": True,
+        "builder_commissionable": True,
         "color_frame": (92, 57, 34),
         "color_panel": (122, 75, 42),
         "color_cloth": (112, 35, 42),
@@ -1637,13 +1641,12 @@ FURNITURE_TYPES = {
         "category_id": "workplace",
         "desc": "Outdoor logging lodge where Woodsmen store felling tools and stockpile Wood. Place on open ground.",
         "capacity": 0,
-        "materials": {},
+        "materials": {"Wood": 20, "Stone": 10},
         "width_tiles": 4,
         "height_tiles": 4,
         "max_workers": 5,
         "household_owned": False,
         "placement_anywhere": True,
-        "instant_place": True,
         "maintainable": False,
         "station_inventory_items": ["Wood"],
         "color_frame": (101, 67, 33),
@@ -1656,13 +1659,12 @@ FURNITURE_TYPES = {
         "category_id": "workplace",
         "desc": "5x5 mine-head workstation. Must be placed exactly on top of a generated mine deposit.",
         "capacity": 0,
-        "materials": {},
+        "materials": {"Stone": 20, "Wood": 10},
         "width_tiles": 5,
         "height_tiles": 5,
         "max_workers": 5,
         "household_owned": False,
         "placement_anywhere": True,
-        "instant_place": True,
         "maintainable": False,
         "rotatable": False,
         "station_inventory_mine_bound": True,
@@ -1672,8 +1674,8 @@ FURNITURE_TYPES = {
     },
     # *** ESTABLISHED — DO NOT REGRESS ***
     # Notice Board attracts immigrant households. UNIQUE: max 1 per village
-    # (enforced by add_furniture). public_structure + carpenter_commissionable
-    # so only a carpenter can build it (1h). household_owned False — it belongs
+    # (enforced by add_furniture). public_structure + builder_commissionable
+    # so only a builder can build it (1h). household_owned False — it belongs
     # to the village, not a family. Clicking it opens Town Ledger > Immigrant.
     "notice_board": {
         "id": "notice_board",
@@ -1690,7 +1692,7 @@ FURNITURE_TYPES = {
         "placement_anywhere": True,
         "unique": True,
         "rotatable": True,
-        "carpenter_commissionable": True,
+        "builder_commissionable": True,
         "color_frame": (101, 67, 33),
         "color_panel": (146, 96, 48),
         "color_paper": (241, 245, 249),
@@ -1952,3 +1954,6 @@ MAP_OVERLAY_LAYERS = {
 MAP_OVERLAY_ZOOM_MIN = 0.25
 MAP_OVERLAY_ZOOM_MAX = 4.0
 MAP_OVERLAY_ZOOM_STEP = 0.15
+
+# Autosave: writes saves/autosave-dayNN.json every interval (real seconds).
+AUTOSAVE_INTERVAL_SECONDS = 300.0

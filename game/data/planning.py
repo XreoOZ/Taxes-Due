@@ -56,7 +56,7 @@ PLANNING_FEATURES = [
         "category": "Guilds & Production",
         "owner_agent": "Agent 3",
         "summary": "Support different household production specializations supplying different market goods.",
-        "description": "Expanded profession-specific output for artisans, carpenters, weavers, smiths, and bakers to produce varied trade commodities."
+        "description": "Expanded profession-specific output for artisans, builders, weavers, smiths, and bakers to produce varied trade commodities."
     },
     {
         "id": "dynamic_pricing",

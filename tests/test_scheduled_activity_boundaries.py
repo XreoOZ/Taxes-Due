@@ -23,19 +23,19 @@ class TestScheduledActivityBoundaries(unittest.TestCase):
         )
 
     def test_work_task_pauses_and_resumes_with_its_progress_state(self):
-        self.villager.task = "CARPENTER_CONSTRUCTING"
+        self.villager.task = "BUILDER_CONSTRUCTING"
         self.villager.tilling_timer = 1.5
         self.villager.current_work_tile = (4, 7)
 
         ScheduledActivitySystem.reconcile(self.villager, "LEISURE")
 
         self.assertEqual(self.villager.task, "IDLE")
-        self.assertEqual(self.villager.pending_schedule_tasks[0]["task"], "CARPENTER_CONSTRUCTING")
+        self.assertEqual(self.villager.pending_schedule_tasks[0]["task"], "BUILDER_CONSTRUCTING")
 
         self.villager.task = "LEISURE"
         ScheduledActivitySystem.reconcile(self.villager, "WORK")
 
-        self.assertEqual(self.villager.task, "CARPENTER_CONSTRUCTING")
+        self.assertEqual(self.villager.task, "BUILDER_CONSTRUCTING")
         self.assertEqual(self.villager.tilling_timer, 1.5)
         self.assertEqual(self.villager.current_work_tile, (4, 7))
         self.assertEqual(self.villager.pending_schedule_tasks, [])

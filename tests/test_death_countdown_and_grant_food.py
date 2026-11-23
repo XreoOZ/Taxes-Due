@@ -417,7 +417,7 @@ class TestDeathCountdownAndGrantFood(unittest.TestCase):
 
     def test_16_grant_non_food_item_wood_regression(self):
         """16. Non-food items (e.g. Wood, Hoe) continue working seamlessly without regression."""
-        fam = Family(16, "Carpenter")
+        fam = Family(16, "Builder")
         self.villager_manager.families.append(fam)
 
         chest = Furniture(160, "household_storage", 6, 6, permit_id="test_permit", family_id=16)

@@ -1,14 +1,14 @@
-"""Furniture orders, household commissions, Carpenter materials, and construction."""
+"""Furniture orders, household commissions, Builder materials, and construction."""
 
 import math
 import random
 import time
 
 from game.data.config import (
-    CARPENTER_BUILD_DURATION_INGAME_HOURS,
-    CARPENTER_DEFAULT_LIVING_HOUSEHOLD_SIZE,
-    CARPENTER_REPAIR_MATERIALS,
-    CARPENTER_REPAIR_FOOD_DAYS,
+    BUILDER_BUILD_DURATION_INGAME_HOURS,
+    BUILDER_DEFAULT_LIVING_HOUSEHOLD_SIZE,
+    BUILDER_REPAIR_MATERIALS,
+    BUILDER_REPAIR_FOOD_DAYS,
     DAILY_FOOD_REQUIREMENT,
     DAY_LENGTH_OPTIONS,
     DEFAULT_DAY_LENGTH_INDEX,
@@ -18,7 +18,7 @@ from game.data.config import (
     BUILDING_TYPES,
     MARKET_TRADEABLE_ITEMS,
     ROUTE_STATE_FAILED,
-    CARPENTER_INSUFFICIENT_LANDLORD_COIN_MESSAGES,
+    BUILDER_INSUFFICIENT_LANDLORD_COIN_MESSAGES,
     COMMISSION_CLAIM_RETRY_SECONDS,
     DEFAULT_COMMISSION_ARTISAN_JOB,
 )
@@ -36,7 +36,7 @@ from game.config import TILE_SIZE, CHEST_INTERACTION_RADIUS, INTERACTION_CONTACT
 from game.world.navigation.navigation import distance_to_object
 
 
-class CarpenterSystem:
+class BuilderSystem:
     # Monotonic FIFO floor: guarantees paid_seq stays unique even when a
     # partial subject scan (e.g. furniture-only) can't see every order.
     _paid_seq_floor = 0
@@ -49,8 +49,8 @@ class CarpenterSystem:
         order = getattr(subject, "construction_order", None)
         if hasattr(subject, "building_type"):
             cfg = BUILDING_TYPES.get(subject.building_type, {})
-            if not cfg.get("carpenter_commissionable"):
-                return False, "This public structure is not configured for a carpenter commission."
+            if not cfg.get("builder_commissionable"):
+                return False, "This public structure is not configured for a builder commission."
             if not (isinstance(order, dict) and order.get("order_type") == "REPAIR"):
                 quote = cls._quote_from_materials(
                     getattr(subject, "required_cost", {}), building_manager, villager_manager
@@ -73,21 +73,21 @@ class CarpenterSystem:
                 return False, "This furniture is not public property."
             order = getattr(subject, "construction_order", None)
             if not isinstance(order, dict):
-                return False, "This furniture has no carpenter order."
+                return False, "This furniture has no builder order."
             if order.get("order_type") != "REPAIR":
                 order.update(cls.quote_order(subject.furniture_type, building_manager, villager_manager))
             order["payer_family_id"] = None
         if not isinstance(order, dict):
-            return False, "This blueprint has no carpenter order."
+            return False, "This blueprint has no builder order."
         if order.get("status") not in ("AWAITING_PAYMENT", "LANDLORD_PAYMENT_PENDING"):
-            return False, "This carpenter commission is already being handled."
+            return False, "This builder commission is already being handled."
         artisan_job = cls._artisan_job(order)
-        carpenters = [v for v in villager_manager.get_all_villagers()
+        builders = [v for v in villager_manager.get_all_villagers()
                       if getattr(v, "job", None) == artisan_job and getattr(v, "is_alive", True)] if villager_manager else []
-        if not carpenters:
+        if not builders:
             return False, f"No {artisan_job} is available for this commission."
-        # Queue model: a carpenter may hold MANY commissions — new orders join
-        # his FIFO queue. Assign to the carpenter with the SHORTEST queue
+        # Queue model: a builder may hold MANY commissions — new orders join
+        # his FIFO queue. Assign to the builder with the SHORTEST queue
         # (like market stall choice: workload beats distance).
         servants = [s for s in getattr(servant_manager, "servants", [])
                     if getattr(s, "state", "IDLE") == "IDLE"] if servant_manager else []
@@ -95,7 +95,7 @@ class CarpenterSystem:
         from game.systems.economy.lord_treasury import LordTreasurySystem
         treasury = LordTreasurySystem.get_chest(furniture_manager)
         if not treasury or LordTreasurySystem.value(furniture_manager) < fee:
-            message = random.choice(CARPENTER_INSUFFICIENT_LANDLORD_COIN_MESSAGES)
+            message = random.choice(BUILDER_INSUFFICIENT_LANDLORD_COIN_MESSAGES)
             if servant_manager and getattr(servant_manager, "servants", None):
                 servant_manager.servants[0].say(message, duration=3.5)
             return False, message
@@ -109,8 +109,8 @@ class CarpenterSystem:
         else:
             target_x = (subject.grid_x + subject.tiles_w / 2.0) * TILE_SIZE
             target_y = (subject.grid_y + subject.tiles_h / 2.0) * TILE_SIZE
-        carpenter = min(
-            carpenters,
+        builder = min(
+            builders,
             key=lambda worker: (
                 cls._queue_length(worker.id, furniture_manager, building_manager),
                 math.hypot(worker.x - target_x, worker.y - target_y),
@@ -127,20 +127,20 @@ class CarpenterSystem:
         order["status"] = "LANDLORD_RETRIEVING"
         order["payer_type"] = "landlord"
         order["payer_id"] = "landlord"
-        order["carpenter_id"] = str(carpenter.id)
-        order["carpenter_family_id"] = str(getattr(carpenter, "family_id", "") or "")
+        order["builder_id"] = str(builder.id)
+        order["builder_family_id"] = str(getattr(builder, "family_id", "") or "")
         order["artisan_job"] = artisan_job
         order["commission_paid"] = False
         if day_cycle:
             seconds_per_hour = max(1.0, float(day_cycle.day_length_seconds)) / 24.0
-            order["build_duration_seconds"] = seconds_per_hour * CARPENTER_BUILD_DURATION_INGAME_HOURS
-        servant.carpenter_commission_order_id = str(order.get("id"))
-        servant.carpenter_commission_carpenter_id = str(carpenter.id)
-        servant.carpenter_commission_fee_copper = fee
-        servant.carpenter_commission_remaining_copper = fee
-        servant.carpenter_commission_storage_tile = [treasury.grid_x, treasury.grid_y]
-        servant.carpenter_commission_treasury_id = str(treasury.id)
-        servant.state = "CARPENTER_COMMISSION_RETRIEVE"
+            order["build_duration_seconds"] = seconds_per_hour * BUILDER_BUILD_DURATION_INGAME_HOURS
+        servant.builder_commission_order_id = str(order.get("id"))
+        servant.builder_commission_builder_id = str(builder.id)
+        servant.builder_commission_fee_copper = fee
+        servant.builder_commission_remaining_copper = fee
+        servant.builder_commission_storage_tile = [treasury.grid_x, treasury.grid_y]
+        servant.builder_commission_treasury_id = str(treasury.id)
+        servant.state = "BUILDER_COMMISSION_RETRIEVE"
         servant.say("I am retrieving the commission from the Lord's Treasury Chest, my Lord.", duration=2.5)
         return True, "A servant is retrieving coins from the Lord's Treasury Chest."
 
@@ -148,7 +148,7 @@ class CarpenterSystem:
     def dispatch_pending_public_commissions(cls, building_manager, servant_manager,
                                             villager_manager, furniture_manager,
                                             day_cycle=None, stockpile_manager=None):
-        """Automatically start landlord-paid Carpenter orders for eligible public blueprints."""
+        """Automatically start landlord-paid Builder orders for eligible public blueprints."""
         if not building_manager or not servant_manager or not villager_manager:
             return 0
         from game.systems.economy.lord_treasury import LordTreasurySystem
@@ -160,7 +160,7 @@ class CarpenterSystem:
         candidates = []
         for site in getattr(building_manager, "construction_sites", []):
             cfg = BUILDING_TYPES.get(getattr(site, "building_type", ""), {})
-            if cfg.get("carpenter_commissionable"):
+            if cfg.get("builder_commissionable"):
                 candidates.append(site)
         candidates.extend(
             building for building in getattr(building_manager, "buildings", [])
@@ -191,7 +191,7 @@ class CarpenterSystem:
                 idle_servant = next((servant for servant in getattr(servant_manager, "servants", [])
                                      if getattr(servant, "state", "IDLE") == "IDLE"), None)
                 if idle_servant and not order.get("insufficient_coin_notice_sent"):
-                    idle_servant.say(random.choice(CARPENTER_INSUFFICIENT_LANDLORD_COIN_MESSAGES), duration=3.5)
+                    idle_servant.say(random.choice(BUILDER_INSUFFICIENT_LANDLORD_COIN_MESSAGES), duration=3.5)
                     order["insufficient_coin_notice_sent"] = True
                 continue
             order.pop("insufficient_coin_notice_sent", None)
@@ -219,7 +219,7 @@ class CarpenterSystem:
         from game.systems.economy.lord_treasury import LordTreasurySystem
         refunded_to_treasury = LordTreasurySystem.deposit_all(furniture_manager, servant.inventory)
         if not refunded_to_treasury:
-            tile = getattr(servant, "carpenter_commission_storage_tile", None)
+            tile = getattr(servant, "builder_commission_storage_tile", None)
             tile = tile or [int(servant.x // TILE_SIZE), int(servant.y // TILE_SIZE)]
             if stockpile_manager:
                 for key in list(servant.inventory):
@@ -227,10 +227,10 @@ class CarpenterSystem:
                         amount = max(0, int(servant.inventory.pop(key, 0)))
                         if amount:
                             stockpile_manager.drop_resource(key, amount, *tile, owner_type="landlord")
-        servant.carpenter_commission_treasury_id = None
-        servant.carpenter_commission_fee_copper = 0
-        servant.carpenter_commission_remaining_copper = 0
-        servant.carpenter_commission_storage_tile = None
+        servant.builder_commission_treasury_id = None
+        servant.builder_commission_fee_copper = 0
+        servant.builder_commission_remaining_copper = 0
+        servant.builder_commission_storage_tile = None
         return refunded_to_treasury
 
     @classmethod
@@ -253,11 +253,11 @@ class CarpenterSystem:
     @classmethod
     def _quote_from_materials(cls, materials, building_manager=None, villager_manager=None):
         material_cost = cls._material_cost(materials, building_manager)
-        carpenters = [v for v in villager_manager.get_all_villagers()
-                      if getattr(v, "job", None) == "Carpenter" and getattr(v, "is_alive", True)] if villager_manager else []
-        family = villager_manager.get_family_by_id(carpenters[0].family_id) if carpenters else None
+        builders = [v for v in villager_manager.get_all_villagers()
+                      if getattr(v, "job", None) == "Builder" and getattr(v, "is_alive", True)] if villager_manager else []
+        family = villager_manager.get_family_by_id(builders[0].family_id) if builders else None
         household_size = max(
-            CARPENTER_DEFAULT_LIVING_HOUSEHOLD_SIZE,
+            BUILDER_DEFAULT_LIVING_HOUSEHOLD_SIZE,
             len([m for m in getattr(family, "members", []) if getattr(m, "is_alive", True)]) if family else 1,
         )
         markets = MarketService.get_all_markets(building_manager)
@@ -287,8 +287,8 @@ class CarpenterSystem:
         return distance_to_object(asset, x, y, TILE_SIZE)
 
     @classmethod
-    def _within_asset_work_range(cls, carpenter, asset):
-        return cls._distance_to_asset(asset, carpenter.x, carpenter.y) <= INTERACTION_CONTACT_RADIUS
+    def _within_asset_work_range(cls, builder, asset):
+        return cls._distance_to_asset(asset, builder.x, builder.y) <= INTERACTION_CONTACT_RADIUS
 
     @classmethod
     def _asset_approach_arrival_distance(cls, asset, target_x, target_y):
@@ -296,22 +296,22 @@ class CarpenterSystem:
         return max(0.0, INTERACTION_CONTACT_RADIUS - target_distance)
 
     @staticmethod
-    def _asset_approach_point(carpenter, asset, order, all_entities, building_manager):
+    def _asset_approach_point(builder, asset, order, all_entities, building_manager):
         order_id = str(
             order.get("id")
             or getattr(asset, "id", None)
             or f"{getattr(asset, 'building_type', getattr(asset, 'furniture_type', 'asset'))}:"
                f"{getattr(asset, 'grid_x', 0)}:{getattr(asset, 'grid_y', 0)}"
         )
-        if (str(getattr(carpenter, "carpenter_target_order_id", None)) != order_id
-                or not getattr(carpenter, "carpenter_target_position", None)):
-            carpenter.carpenter_target_order_id = order_id
-            carpenter.carpenter_failed_approach_points = set()
-            carpenter.carpenter_target_position = asset.get_approach_point(
-                carpenter.x, carpenter.y, worker_id=carpenter.id,
+        if (str(getattr(builder, "builder_target_order_id", None)) != order_id
+                or not getattr(builder, "builder_target_position", None)):
+            builder.builder_target_order_id = order_id
+            builder.builder_failed_approach_points = set()
+            builder.builder_target_position = asset.get_approach_point(
+                builder.x, builder.y, worker_id=builder.id,
                 all_entities=all_entities, tile_size=TILE_SIZE, bm=building_manager,
             )
-        return carpenter.carpenter_target_position
+        return builder.builder_target_position
 
     @staticmethod
     def _market_for_furniture(furniture, building_manager):
@@ -357,7 +357,7 @@ class CarpenterSystem:
             "status": "AWAITING_PAYMENT",
             "payer_family_id": furniture.family_id,
             "payer_id": None,
-            "carpenter_id": None,
+            "builder_id": None,
             "artisan_job": DEFAULT_COMMISSION_ARTISAN_JOB,
             "commission_paid": False,
         })
@@ -367,9 +367,9 @@ class CarpenterSystem:
     def create_repair_order(cls, asset, building_manager=None, villager_manager=None):
         markets = MarketService.get_all_markets(building_manager)
         food_unit_price = cls._food_unit_price(markets, minimum_stock=DAILY_FOOD_REQUIREMENT)
-        materials = dict(CARPENTER_REPAIR_MATERIALS)
+        materials = dict(BUILDER_REPAIR_MATERIALS)
         material_cost = cls._material_cost(materials, building_manager)
-        living_wage = food_unit_price * DAILY_FOOD_REQUIREMENT * CARPENTER_REPAIR_FOOD_DAYS
+        living_wage = food_unit_price * DAILY_FOOD_REQUIREMENT * BUILDER_REPAIR_FOOD_DAYS
         repair_price = material_cost + living_wage
         order_id = getattr(asset, "id", None)
         asset_type_cfg = getattr(asset, "type_cfg", {}) or {}
@@ -383,7 +383,7 @@ class CarpenterSystem:
             "payer_family_id": getattr(asset, "family_id", None),
             "payer_type": "landlord" if is_public else "household",
             "payer_id": "landlord" if is_public else None,
-            "carpenter_id": None,
+            "builder_id": None,
             "artisan_job": DEFAULT_COMMISSION_ARTISAN_JOB,
             "commission_paid": False,
             "materials": materials,
@@ -401,7 +401,7 @@ class CarpenterSystem:
     @staticmethod
     def _artisan_job(order):
         """Job id the commissioned artisan must hold (config-driven default so
-        orders without the field still route to Carpenters)."""
+        orders without the field still route to Builders)."""
         return str((order or {}).get("artisan_job") or DEFAULT_COMMISSION_ARTISAN_JOB)
 
     @classmethod
@@ -437,15 +437,15 @@ class CarpenterSystem:
         cls._paid_seq_floor = order["paid_seq"]
 
     @classmethod
-    def _queue_length(cls, carpenter_id, furniture_manager=None, building_manager=None):
-        """Active commission slots held by a carpenter (payment-transit counts —
+    def _queue_length(cls, builder_id, furniture_manager=None, building_manager=None):
+        """Active commission slots held by a builder (payment-transit counts —
         the slot is already reserved even before the build starts)."""
-        cid = str(carpenter_id)
+        cid = str(builder_id)
         terminal = {"COMPLETE", "AWAITING_PAYMENT", "LANDLORD_PAYMENT_PENDING"}
         return sum(
             1 for subject in cls._order_subjects(furniture_manager, building_manager)
             if isinstance(getattr(subject, "construction_order", None), dict)
-            and str(subject.construction_order.get("carpenter_id")) == cid
+            and str(subject.construction_order.get("builder_id")) == cid
             and subject.construction_order.get("status") not in terminal
         )
 
@@ -520,9 +520,9 @@ class CarpenterSystem:
                 order["status"] = "AWAITING_PAYMENT"
                 return False
             payer = family.get_available_recovery_representative() if hasattr(family, "get_available_recovery_representative") else survivors[0]
-            carpenter_id = str(order.get("carpenter_id"))
-            if payer and str(getattr(payer, "id", "")) == carpenter_id:
-                other_members = [member for member in survivors if str(getattr(member, "id", "")) != carpenter_id]
+            builder_id = str(order.get("builder_id"))
+            if payer and str(getattr(payer, "id", "")) == builder_id:
+                other_members = [member for member in survivors if str(getattr(member, "id", "")) != builder_id]
                 if other_members:
                     payer = next((member for member in other_members
                                   if getattr(member, "task", "") not in ("SEEKING_FOOD", "SEEKING_WATER", "SEEKING_TOILET", "RECOVER_DEATH_ITEMS")
@@ -531,48 +531,48 @@ class CarpenterSystem:
                                   and getattr(member, "need_toilet", 100.0) > 20.0), other_members[0])
             if not payer:
                 return False
-            carpenter = next((member for member in survivors
-                               if str(getattr(member, "id", "")) == carpenter_id), None)
-            if str(getattr(payer, "id", "")) == carpenter_id and carpenter:
+            builder = next((member for member in survivors
+                               if str(getattr(member, "id", "")) == builder_id), None)
+            if str(getattr(payer, "id", "")) == builder_id and builder:
                 order["payer_id"] = str(payer.id)
                 order["status"] = "PAYMENT_REQUESTED"
                 from game.systems.work.commission_schedule import CommissionScheduleSystem
                 CommissionScheduleSystem.queue(
-                    payer, "CARPENTER_FEE_RETRIEVE",
-                    carpenter_payment_order_id=order["id"],
-                    carpenter_payment_carpenter_id=order.get("carpenter_id"),
+                    payer, "BUILDER_FEE_RETRIEVE",
+                    builder_payment_order_id=order["id"],
+                    builder_payment_builder_id=order.get("builder_id"),
                 )
                 return True
             order["payer_id"] = str(payer.id)
             order["status"] = "PAYMENT_REQUESTED"
             from game.systems.work.commission_schedule import CommissionScheduleSystem
             CommissionScheduleSystem.queue(
-                payer, "CARPENTER_FEE_RETRIEVE",
-                carpenter_payment_order_id=order["id"],
-                carpenter_payment_carpenter_id=order.get("carpenter_id"),
+                payer, "BUILDER_FEE_RETRIEVE",
+                builder_payment_order_id=order["id"],
+                builder_payment_builder_id=order.get("builder_id"),
             )
             return True
         order["status"] = "LANDLORD_PAYMENT_PENDING"
         return True
 
     @classmethod
-    def _finalize_fee_payment(cls, villager, order, carpenter, fee, villager_manager, day_number):
-        """Shared tail for CARPENTER_FEE_RETRIEVE once coins are in hand."""
-        if str(order.get("carpenter_id")) == str(villager.id):
+    def _finalize_fee_payment(cls, villager, order, builder, fee, villager_manager, day_number):
+        """Shared tail for BUILDER_FEE_RETRIEVE once coins are in hand."""
+        if str(order.get("builder_id")) == str(villager.id):
             order["status"] = "PAID"
             order["commission_paid"] = True
             order["paid_by_id"] = str(villager.id)
             order["paid_by_family_id"] = str(villager.family_id)
             order["paid_amount_copper"] = fee
             cls._ensure_paid_seq(order, furniture_manager, building_manager)
-            villager.carpenter_payment_order_id = None
-            villager.carpenter_payment_carpenter_id = None
-            villager.carpenter_fee_needed = None
+            villager.builder_payment_order_id = None
+            villager.builder_payment_builder_id = None
+            villager.builder_fee_needed = None
             villager.task = "IDLE"
             villager.say(f"Commission paid from our household: {fee} Copper.", duration=2.5)
         else:
             order["status"] = "PAYMENT_TRAVELING"
-            villager.task = "CARPENTER_FEE_TRAVEL"
+            villager.task = "BUILDER_FEE_TRAVEL"
 
     @classmethod
     def update_payment_task(cls, villager, dt, building_manager, furniture_manager,
@@ -583,36 +583,36 @@ class CarpenterSystem:
             return cls._update_refund_task(
                 villager, dt, building_manager, furniture_manager,
                 stockpile_manager, all_entities, player, villager_manager)
-        if task not in ("CARPENTER_FEE_RETRIEVE", "CARPENTER_FEE_TRAVEL", "CARPENTER_FEE_LANDLORD_RETRIEVE"):
+        if task not in ("BUILDER_FEE_RETRIEVE", "BUILDER_FEE_TRAVEL", "BUILDER_FEE_LANDLORD_RETRIEVE"):
             return False
-        order_furniture = cls._get_order(furniture_manager, getattr(villager, "carpenter_payment_order_id", None))
+        order_furniture = cls._get_order(furniture_manager, getattr(villager, "builder_payment_order_id", None))
         if not order_furniture:
-            villager.carpenter_payment_order_id = None
-            villager.carpenter_payment_carpenter_id = None
+            villager.builder_payment_order_id = None
+            villager.builder_payment_builder_id = None
             villager._resume_or_idle_after_need()
             return True
         order = order_furniture.construction_order
-        if task == "CARPENTER_FEE_LANDLORD_RETRIEVE":
-            # Landlord storage is servant-only: the Carpenter must never
+        if task == "BUILDER_FEE_LANDLORD_RETRIEVE":
+            # Landlord storage is servant-only: the Builder must never
             # withdraw from the Lord's Treasury or landlord stacks himself.
             # Hand the order back to the public commission dispatcher, which
             # sends a servant to fetch the fee instead.
             order["status"] = "LANDLORD_PAYMENT_PENDING"
             order["payer_type"] = "landlord"
             order["payer_id"] = "landlord"
-            villager.carpenter_payment_order_id = None
-            villager.carpenter_payment_carpenter_id = None
+            villager.builder_payment_order_id = None
+            villager.builder_payment_builder_id = None
             villager.task = "IDLE"
             villager._resume_or_idle_after_need()
             return True
-        carpenter = (
-            all_entities.by_id(order.get("carpenter_id"))
+        builder = (
+            all_entities.by_id(order.get("builder_id"))
             if hasattr(all_entities, "by_id")
-            else next((e for e in all_entities if str(getattr(e, "id", "")) == str(order.get("carpenter_id"))), None)
+            else next((e for e in all_entities if str(getattr(e, "id", "")) == str(order.get("builder_id"))), None)
         )
         fee = max(0, int(order.get("price_copper", 0)))
 
-        if task == "CARPENTER_FEE_RETRIEVE":
+        if task == "BUILDER_FEE_RETRIEVE":
             chest = furniture_manager.get_storage_for_family(villager.family_id) if furniture_manager else None
             chest_covers = chest and to_copper(normalize_wallet(chest.inventory)) >= fee
             coin_stacks = cls._family_coin_stacks(villager.family_id, stockpile_manager)
@@ -626,8 +626,8 @@ class CarpenterSystem:
             )
             if not chest_covers and stack_total + wallet_total < fee:
                 order["status"] = "AWAITING_PAYMENT"
-                villager.carpenter_payment_order_id = None
-                villager.carpenter_fee_needed = None
+                villager.builder_payment_order_id = None
+                villager.builder_fee_needed = None
                 villager._resume_or_idle_after_need()
                 return True
             if chest_covers:
@@ -639,12 +639,12 @@ class CarpenterSystem:
                                                  interaction_target=chest)
                 if arrived:
                     if cls._move_exact_value(chest.inventory, villager.inventory, fee):
-                        cls._finalize_fee_payment(villager, order, carpenter, fee, villager_manager, day_number)
+                        cls._finalize_fee_payment(villager, order, builder, fee, villager_manager, day_number)
                     else:
                         order["status"] = "AWAITING_PAYMENT"
                         villager.say("Our household does not have enough coins for this furniture order.", duration=3.0)
-                        villager.carpenter_payment_order_id = None
-                        villager.carpenter_fee_needed = None
+                        villager.builder_payment_order_id = None
+                        villager.builder_fee_needed = None
                         villager._resume_or_idle_after_need()
                 return True
 
@@ -654,7 +654,7 @@ class CarpenterSystem:
             carried = to_copper(normalize_wallet(villager.inventory))
             still_needed_copper = max(0, fee - carried)
             if still_needed_copper <= 0:
-                cls._finalize_fee_payment(villager, order, carpenter, fee, villager_manager, day_number)
+                cls._finalize_fee_payment(villager, order, builder, fee, villager_manager, day_number)
                 return True
             # Abstract household wallets (family purse + member pockets) can cover
             # the remainder instantly — no walking to physical coins required.
@@ -665,7 +665,7 @@ class CarpenterSystem:
                 if ok:
                     still_needed_copper = max(0, fee - to_copper(normalize_wallet(villager.inventory)))
             if still_needed_copper <= 0:
-                cls._finalize_fee_payment(villager, order, carpenter, fee, villager_manager, day_number)
+                cls._finalize_fee_payment(villager, order, builder, fee, villager_manager, day_number)
                 return True
             candidates = [
                 s for s in cls._family_coin_stacks(villager.family_id, stockpile_manager)
@@ -673,8 +673,8 @@ class CarpenterSystem:
             ]
             if not candidates:
                 order["status"] = "AWAITING_PAYMENT"
-                villager.carpenter_payment_order_id = None
-                villager.carpenter_fee_needed = None
+                villager.builder_payment_order_id = None
+                villager.builder_fee_needed = None
                 villager._resume_or_idle_after_need()
                 return True
             stack = min(candidates, key=lambda s: math.hypot(
@@ -682,7 +682,7 @@ class CarpenterSystem:
                 (s.grid_y + 0.5) * TILE_SIZE - villager.y,
             ))
             sx, sy = (stack.grid_x + 0.5) * TILE_SIZE, (stack.grid_y + 0.5) * TILE_SIZE
-            villager.task = "CARPENTER_FEE_RETRIEVE"
+            villager.task = "BUILDER_FEE_RETRIEVE"
             arrived = villager._move_towards(sx, sy, dt, arrival_dist=LOOSE_ITEM_ARRIVAL_DIST,
                                              all_entities=all_entities, player=player,
                                              building_manager=building_manager, furniture_manager=furniture_manager,
@@ -698,54 +698,54 @@ class CarpenterSystem:
                         stockpile_manager.stacks.remove(stack)
                     stockpile_manager.mark_totals_dirty()
                 villager.inventory[denom] = int(villager.inventory.get(denom, 0)) + take
-                villager.carpenter_fee_needed = {denom: take}
+                villager.builder_fee_needed = {denom: take}
                 # Next tick re-evaluates whether carried >= fee.
             return True
 
-        if task == "CARPENTER_FEE_TRAVEL":
-            if not carpenter or not getattr(carpenter, "is_alive", True):
+        if task == "BUILDER_FEE_TRAVEL":
+            if not builder or not getattr(builder, "is_alive", True):
                 chest = furniture_manager.get_storage_for_family(villager.family_id) if furniture_manager else None
                 if chest:
                     cls._move_exact_value(villager.inventory, chest.inventory, fee)
                 order["status"] = "AWAITING_PAYMENT"
-                villager.carpenter_payment_order_id = None
+                villager.builder_payment_order_id = None
                 villager._resume_or_idle_after_need()
                 return True
-            arrived = villager._move_towards(carpenter.x, carpenter.y, dt, arrival_dist=INTERACTION_CONTACT_RADIUS,
+            arrived = villager._move_towards(builder.x, builder.y, dt, arrival_dist=INTERACTION_CONTACT_RADIUS,
                                              all_entities=all_entities, player=player,
                                              building_manager=building_manager, furniture_manager=furniture_manager,
-                                             interaction_target=carpenter)
+                                             interaction_target=builder)
             if arrived:
-                if cls._move_exact_value(villager.inventory, carpenter.inventory, fee):
+                if cls._move_exact_value(villager.inventory, builder.inventory, fee):
                     order["status"] = "PAID"
                     order["commission_paid"] = True
                     order["paid_by_id"] = str(villager.id)
                     order["paid_by_family_id"] = str(villager.family_id)
                     order["paid_amount_copper"] = fee
                     cls._ensure_paid_seq(order, furniture_manager, building_manager)
-                    if str(getattr(villager, "family_id", "")) != str(getattr(carpenter, "family_id", "")):
+                    if str(getattr(villager, "family_id", "")) != str(getattr(builder, "family_id", "")):
                         from game.systems.economy.market_sales_report import MarketSalesReportSystem
                         MarketSalesReportSystem.record_household_income(
-                            villager_manager, getattr(carpenter, "family_id", None),
-                            "Carpenter Commissions", fee, day_number,
+                            villager_manager, getattr(builder, "family_id", None),
+                            "Builder Commissions", fee, day_number,
                         )
                     villager.say("Furniture commission paid.", duration=2.0)
-                    carpenter.say(f"Commission received: {fee} Copper. I will begin the order.", duration=2.5)
+                    builder.say(f"Commission received: {fee} Copper. I will begin the order.", duration=2.5)
                 else:
                     order["status"] = "AWAITING_PAYMENT"
                     villager.say("I no longer have the full furniture commission.", duration=2.5)
-                villager.carpenter_payment_order_id = None
-                villager.carpenter_payment_carpenter_id = None
+                villager.builder_payment_order_id = None
+                villager.builder_payment_builder_id = None
                 villager._resume_or_idle_after_need()
             return True
 
-        # CARPENTER_FEE_LANDLORD_RETRIEVE is intercepted above: landlord storage
+        # BUILDER_FEE_LANDLORD_RETRIEVE is intercepted above: landlord storage
         # is servant-only, so this task can never reach the treasury path.
 
     @classmethod
-    def _family_loose_stacks(cls, carpenter, stockpile_manager, family_id=None):
-        """Loose ground stacks owned by the paying household (defaults to the carpenter's)."""
-        fam_str = str(family_id if family_id is not None else getattr(carpenter, "family_id", "") or "")
+    def _family_loose_stacks(cls, builder, stockpile_manager, family_id=None):
+        """Loose ground stacks owned by the paying household (defaults to the builder's)."""
+        fam_str = str(family_id if family_id is not None else getattr(builder, "family_id", "") or "")
         if not stockpile_manager or not fam_str:
             return []
         return [s for s in getattr(stockpile_manager, "stacks", [])
@@ -754,47 +754,47 @@ class CarpenterSystem:
                 and getattr(s, "amount", 0) > 0]
 
     @classmethod
-    def _order_loose_stacks(cls, carpenter, stockpile_manager, payer_type, family_id=None):
+    def _order_loose_stacks(cls, builder, stockpile_manager, payer_type, family_id=None):
         """Loose stacks usable as material sources for an order.
 
         Only the paying household's stacks qualify — landlord storage is
-        servant-only and is never a material source for the Carpenter.
+        servant-only and is never a material source for the Builder.
         """
-        # Landlord storage is servant-only: the Carpenter never draws materials
+        # Landlord storage is servant-only: the Builder never draws materials
         # from the Lord's Treasury or landlord-owned stacks. Materials always
-        # come from the paying household (or the Carpenter's own household for
+        # come from the paying household (or the Builder's own household for
         # landlord-funded public commissions).
-        stacks = list(cls._family_loose_stacks(carpenter, stockpile_manager, family_id))
+        stacks = list(cls._family_loose_stacks(builder, stockpile_manager, family_id))
         return stacks
 
     @classmethod
-    def _materials_in_storage(cls, carpenter, furniture_manager, stockpile_manager=None, payer_type=None, family_id=None):
+    def _materials_in_storage(cls, builder, furniture_manager, stockpile_manager=None, payer_type=None, family_id=None):
         # Landlord storage is servant-only: never read the Lord's Treasury here.
         chest = None
         if furniture_manager:
             chest = furniture_manager.get_storage_for_family(
-                family_id if family_id is not None else carpenter.family_id
+                family_id if family_id is not None else builder.family_id
             )
-        totals = dict(getattr(carpenter, "inventory", {}))
-        material_types = DEDICATED_JOBS.get("Carpenter", {}).get("material_stock_target", {})
+        totals = dict(getattr(builder, "inventory", {}))
+        material_types = DEDICATED_JOBS.get("Builder", {}).get("material_stock_target", {})
         if chest:
             for item in material_types:
                 totals[item] = totals.get(item, 0) + chest.inventory.get(item, 0)
         # Loose stacks owned by the paying party also count as materials.
-        for stack in cls._order_loose_stacks(carpenter, stockpile_manager, payer_type, family_id):
+        for stack in cls._order_loose_stacks(builder, stockpile_manager, payer_type, family_id):
             totals[stack.resource_type] = totals.get(stack.resource_type, 0) + int(stack.amount)
         return chest, totals
 
     @classmethod
-    def _order_material_shortfall(cls, carpenter, subject, order, furniture_manager, stockpile_manager):
-        """Materials an AWAITING_MATERIAL order still needs beyond the Carpenter's
+    def _order_material_shortfall(cls, builder, subject, order, furniture_manager, stockpile_manager):
+        """Materials an AWAITING_MATERIAL order still needs beyond the Builder's
         accessible pool (inventory + payer chest + payer loose stacks)."""
         if hasattr(subject, "required_cost") and hasattr(subject, "delivered_cost"):
             required = {m: int(a) for m, a in (subject.required_cost or {}).items() if int(a) > 0}
             delivered = subject.delivered_cost or {}
         else:
             if order.get("order_type") == "REPAIR":
-                required = {m: int(a) for m, a in CARPENTER_REPAIR_MATERIALS.items() if int(a) > 0}
+                required = {m: int(a) for m, a in BUILDER_REPAIR_MATERIALS.items() if int(a) > 0}
             else:
                 recipe = FURNITURE_TYPES.get(getattr(subject, "furniture_type", ""), {})
                 required = {m: int(a) for m, a in recipe.get("materials", {}).items() if int(a) > 0}
@@ -804,7 +804,7 @@ class CarpenterSystem:
         if not remaining:
             return {}
         _, totals = cls._materials_in_storage(
-            carpenter, furniture_manager, stockpile_manager,
+            builder, furniture_manager, stockpile_manager,
             payer_type=order.get("payer_type"), family_id=order.get("payer_family_id"))
         return {
             material: amount - int(totals.get(material, 0))
@@ -813,29 +813,29 @@ class CarpenterSystem:
         }
 
     @classmethod
-    def _order_materials_progressable(cls, carpenter, subject, order, furniture_manager,
+    def _order_materials_progressable(cls, builder, subject, order, furniture_manager,
                                       stockpile_manager, building_manager, villager_manager):
         """True while ONE AWAITING_MATERIAL order can still progress: materials on
         hand, or a market can supply the shortfall for the paying household."""
         shortfall = cls._order_material_shortfall(
-            carpenter, subject, order, furniture_manager, stockpile_manager)
+            builder, subject, order, furniture_manager, stockpile_manager)
         if not shortfall:
             # Fully covered on hand (or nothing left to deliver): progressable.
             return True
         # Restock funds come from the paying household (landlord-funded public
-        # jobs use the Carpenter's own household), so affordability must be
-        # checked against that household, not always the Carpenter's.
+        # jobs use the Builder's own household), so affordability must be
+        # checked against that household, not always the Builder's.
         payer_family_id = order.get("payer_family_id")
         payer_type = order.get("payer_type")
         funds_family = (payer_family_id
                         if payer_family_id is not None and payer_type != "landlord"
-                        else carpenter.family_id)
-        funds_villager = carpenter
-        if funds_family != carpenter.family_id:
+                        else builder.family_id)
+        funds_villager = builder
+        if funds_family != builder.family_id:
             import types
             funds_villager = types.SimpleNamespace(
-                id=carpenter.id, family_id=funds_family,
-                x=carpenter.x, y=carpenter.y, inventory=carpenter.inventory,
+                id=builder.id, family_id=funds_family,
+                x=builder.x, y=builder.y, inventory=builder.inventory,
             )
         from game.systems.economy.market_purchasing import AIMarketPurchasingSystem
         for material, amount in shortfall.items():
@@ -847,34 +847,34 @@ class CarpenterSystem:
         return True
 
     @classmethod
-    def material_order_progressable(cls, carpenter, subjects, furniture_manager,
+    def material_order_progressable(cls, builder, subjects, furniture_manager,
                                     stockpile_manager, building_manager, villager_manager):
-        """True while an AWAITING_MATERIAL order assigned to this Carpenter can still
+        """True while an AWAITING_MATERIAL order assigned to this Builder can still
         progress: he is mid-haul/restock, the materials are on hand, or a market can
         supply the shortfall. A material wait that cannot progress is a waiting
-        state — the Carpenter should free-time for needs instead of standing idle."""
+        state — the Builder should free-time for needs instead of standing idle."""
         material_tasks = (
-            "CARPENTER_RESTOCK_RETRIEVE_COINS", "CARPENTER_RESTOCK_TRAVEL_TO_MARKET",
-            "CARPENTER_RESTOCK_HAULING_HOME", "CARPENTER_COLLECTING_MATERIALS",
-            "CARPENTER_DELIVERING_MATERIALS",
+            "BUILDER_RESTOCK_RETRIEVE_COINS", "BUILDER_RESTOCK_TRAVEL_TO_MARKET",
+            "BUILDER_RESTOCK_HAULING_HOME", "BUILDER_COLLECTING_MATERIALS",
+            "BUILDER_DELIVERING_MATERIALS",
         )
-        if getattr(carpenter, "task", "") in material_tasks:
+        if getattr(builder, "task", "") in material_tasks:
             return True
         for subject in subjects:
             order = getattr(subject, "construction_order", None)
             if not isinstance(order, dict) or order.get("status") != "AWAITING_MATERIAL":
                 continue
-            owner = order.get("carpenter_id")
-            if owner is not None and str(owner) not in ("", str(carpenter.id)):
+            owner = order.get("builder_id")
+            if owner is not None and str(owner) not in ("", str(builder.id)):
                 continue
             if cls._order_materials_progressable(
-                    carpenter, subject, order, furniture_manager, stockpile_manager,
+                    builder, subject, order, furniture_manager, stockpile_manager,
                     building_manager, villager_manager):
                 return True
         return False
 
     # ------------------------------------------------------------------
-    # Dead/reassigned carpenter: dissolve his queue, refund PAID orders
+    # Dead/reassigned builder: dissolve his queue, refund PAID orders
     # ------------------------------------------------------------------
 
 
@@ -884,13 +884,13 @@ class CarpenterSystem:
 
 
     @classmethod
-    def _deliver_build_materials(cls, carpenter, target, order, required, chest, dt,
+    def _deliver_build_materials(cls, builder, target, order, required, chest, dt,
                                  all_entities, player, building_manager, furniture_manager,
                                  furniture_target=False, stockpile_manager=None):
         """Physically haul recipe materials from a household chest to a build site."""
         order.setdefault(
             "material_source_family_id",
-            str(order.get("payer_family_id") or getattr(carpenter, "family_id", "") or ""),
+            str(order.get("payer_family_id") or getattr(builder, "family_id", "") or ""),
         )
         delivered = (order.setdefault("materials_delivered", {}) if furniture_target
                      else target.delivered_cost)
@@ -904,18 +904,18 @@ class CarpenterSystem:
             return True
 
         cargo = {
-            material: min(amount, max(0, int(carpenter.inventory.get(material, 0))))
+            material: min(amount, max(0, int(builder.inventory.get(material, 0))))
             for material, amount in remaining.items()
         }
         cargo = {material: amount for material, amount in cargo.items() if amount > 0}
         if cargo:
             target_x, target_y = cls._asset_approach_point(
-                carpenter, target, order, all_entities, building_manager,
+                builder, target, order, all_entities, building_manager,
             )
-            at_site = cls._within_asset_work_range(carpenter, target)
-            carpenter.task = "CARPENTER_DELIVERING_MATERIALS"
+            at_site = cls._within_asset_work_range(builder, target)
+            builder.task = "BUILDER_DELIVERING_MATERIALS"
             if not at_site:
-                carpenter._move_towards(
+                builder._move_towards(
                     target_x, target_y, dt,
                     arrival_dist=cls._asset_approach_arrival_distance(target, target_x, target_y),
                     all_entities=all_entities, player=player,
@@ -925,17 +925,17 @@ class CarpenterSystem:
                 )
                 return False
             for material, amount in cargo.items():
-                left = max(0, int(carpenter.inventory.get(material, 0)) - amount)
+                left = max(0, int(builder.inventory.get(material, 0)) - amount)
                 if left:
-                    carpenter.inventory[material] = left
+                    builder.inventory[material] = left
                 else:
-                    carpenter.inventory.pop(material, None)
+                    builder.inventory.pop(material, None)
                 if furniture_target:
                     delivered[material] = int(delivered.get(material, 0)) + amount
                 else:
                     target.deposit_resource(material, amount)
-                    carpenter_delivered = order.setdefault("materials_delivered", {})
-                    carpenter_delivered[material] = int(carpenter_delivered.get(material, 0)) + amount
+                    builder_delivered = order.setdefault("materials_delivered", {})
+                    builder_delivered[material] = int(builder_delivered.get(material, 0)) + amount
             if all(int(delivered.get(material, 0)) >= int(amount)
                    for material, amount in required.items()):
                 order["materials_committed"] = True
@@ -949,13 +949,13 @@ class CarpenterSystem:
         )
         if chest_can_supply:
             chest_x, chest_y = chest.get_approach_point(
-                carpenter.x, carpenter.y, worker_id=carpenter.id,
+                builder.x, builder.y, worker_id=builder.id,
                 all_entities=all_entities, tile_size=TILE_SIZE, bm=building_manager,
             )
-            at_chest = math.hypot(carpenter.x - chest_x, carpenter.y - chest_y) <= CHEST_INTERACTION_RADIUS
-            carpenter.task = "CARPENTER_COLLECTING_MATERIALS"
+            at_chest = math.hypot(builder.x - chest_x, builder.y - chest_y) <= CHEST_INTERACTION_RADIUS
+            builder.task = "BUILDER_COLLECTING_MATERIALS"
             if not at_chest:
-                carpenter._move_towards(
+                builder._move_towards(
                     chest_x, chest_y, dt, arrival_dist=CHEST_INTERACTION_RADIUS,
                     all_entities=all_entities, player=player,
                     building_manager=building_manager, furniture_manager=furniture_manager,
@@ -963,7 +963,7 @@ class CarpenterSystem:
                 )
                 return False
 
-            room = carpenter.get_inventory_room()
+            room = builder.get_inventory_room()
             loaded_any = False
             for material, amount in remaining.items():
                 if room <= 0:
@@ -974,27 +974,27 @@ class CarpenterSystem:
                 chest.inventory[material] -= take
                 if chest.inventory[material] <= 0:
                     chest.inventory.pop(material, None)
-                carpenter.inventory[material] = int(carpenter.inventory.get(material, 0)) + take
+                builder.inventory[material] = int(builder.inventory.get(material, 0)) + take
                 room -= take
                 loaded_any = True
             if loaded_any:
                 furniture_manager.invalidate_cache()
-            elif room <= 0 and carpenter._get_unneeded_inventory():
-                carpenter.task = "DEPOSITING_UNUSED_ITEMS"
+            elif room <= 0 and builder._get_unneeded_inventory():
+                builder.task = "DEPOSITING_UNUSED_ITEMS"
             # Chest could not fully supply; fall through to payer-owned loose stacks.
         return cls._collect_from_loose_stack(
-            carpenter, target, order, required, dt,
+            builder, target, order, required, dt,
             all_entities, player, building_manager, furniture_manager,
             stockpile_manager, furniture_target=furniture_target,
         )
 
     @classmethod
     def refund_order_materials(cls, order, asset, furniture_manager, stockpile_manager=None):
-        """Return carpenter-delivered materials to the paying party when an unfinished order is destroyed.
+        """Return builder-delivered materials to the paying party when an unfinished order is destroyed.
 
         *** ESTABLISHED — USER-CONFIRMED, DO NOT REGRESS ***
         Cancelling/destroying an UNFINISHED blueprint refunds the
-        materials the carpenter physically delivered (tracked in
+        materials the builder physically delivered (tracked in
         order["materials_delivered"]) back to the household chest recorded in
         material_source_family_id (falling back to payer_family_id), or drops
         them as loose stacks owned by that household when no chest exists.
@@ -1036,7 +1036,7 @@ class CarpenterSystem:
         return delivered
 
     @classmethod
-    def _collect_from_loose_stack(cls, carpenter, target, order, required, dt,
+    def _collect_from_loose_stack(cls, builder, target, order, required, dt,
                                   all_entities, player, building_manager, furniture_manager,
                                   stockpile_manager, furniture_target=False):
         """Pick up needed materials from the nearest payer-owned loose stack."""
@@ -1055,27 +1055,27 @@ class CarpenterSystem:
 
         payer_family_id = order.get("payer_family_id")
         candidates = [
-            s for s in cls._order_loose_stacks(carpenter, stockpile_manager, payer_type, payer_family_id)
+            s for s in cls._order_loose_stacks(builder, stockpile_manager, payer_type, payer_family_id)
             if s.resource_type in remaining
             and int(s.amount) > 0
-            and int(carpenter.inventory.get(s.resource_type, 0)) < remaining[s.resource_type]
+            and int(builder.inventory.get(s.resource_type, 0)) < remaining[s.resource_type]
         ]
         if not candidates:
             return False
 
-        fam_str = str(payer_family_id or getattr(carpenter, "family_id", "") or "")
+        fam_str = str(payer_family_id or getattr(builder, "family_id", "") or "")
         # Household-owned stacks are preferred; landlord stacks are fallback.
         stack = min(candidates, key=lambda s: (
             0 if (getattr(s, "owner_type", None) == "villager"
                   and str(getattr(s, "owner_id", "")) == fam_str) else 1,
             math.hypot(
-                (s.grid_x + 0.5) * TILE_SIZE - carpenter.x,
-                (s.grid_y + 0.5) * TILE_SIZE - carpenter.y,
+                (s.grid_x + 0.5) * TILE_SIZE - builder.x,
+                (s.grid_y + 0.5) * TILE_SIZE - builder.y,
             ),
         ))
         sx, sy = (stack.grid_x + 0.5) * TILE_SIZE, (stack.grid_y + 0.5) * TILE_SIZE
-        carpenter.task = "CARPENTER_COLLECTING_MATERIALS"
-        arrived = carpenter._move_towards(
+        builder.task = "BUILDER_COLLECTING_MATERIALS"
+        arrived = builder._move_towards(
             sx, sy, dt, arrival_dist=LOOSE_ITEM_ARRIVAL_DIST,
             all_entities=all_entities, player=player,
             building_manager=building_manager, furniture_manager=furniture_manager,
@@ -1084,13 +1084,13 @@ class CarpenterSystem:
         if not arrived:
             return False
 
-        room = carpenter.get_inventory_room()
+        room = builder.get_inventory_room()
         if room <= 0:
-            if carpenter._get_unneeded_inventory():
-                carpenter.task = "DEPOSITING_UNUSED_ITEMS"
+            if builder._get_unneeded_inventory():
+                builder.task = "DEPOSITING_UNUSED_ITEMS"
             return False
         material = stack.resource_type
-        need = max(0, remaining[material] - int(carpenter.inventory.get(material, 0)))
+        need = max(0, remaining[material] - int(builder.inventory.get(material, 0)))
         take = min(int(stack.amount), need, room)
         if take <= 0:
             return False
@@ -1099,59 +1099,59 @@ class CarpenterSystem:
             if stack in stockpile_manager.stacks:
                 stockpile_manager.stacks.remove(stack)
             stockpile_manager.mark_totals_dirty()
-        carpenter.inventory[material] = int(carpenter.inventory.get(material, 0)) + take
+        builder.inventory[material] = int(builder.inventory.get(material, 0)) + take
         furniture_manager.invalidate_cache()
         return False
 
     @classmethod
-    def _begin_restock(cls, carpenter, missing, building_manager, furniture_manager, villager_manager,
+    def _begin_restock(cls, builder, missing, building_manager, furniture_manager, villager_manager,
                        payer_type=None, family_id=None):
         from game.systems.economy.market_purchasing import AIMarketPurchasingSystem
         for material, quantity in missing.items():
             market, _, affordable = AIMarketPurchasingSystem.find_nearest_market_for_material(
-                carpenter, material, quantity, building_manager, furniture_manager, villager_manager)
+                builder, material, quantity, building_manager, furniture_manager, villager_manager)
             if market and affordable:
-                carpenter.target_restock_market = market
-                carpenter.target_restock_mat = material
-                carpenter.target_restock_qty = affordable
-                carpenter.target_restock_payer_type = payer_type
-                carpenter.target_restock_family_id = family_id
-                carpenter.task = "CARPENTER_RESTOCK_RETRIEVE_COINS"
+                builder.target_restock_market = market
+                builder.target_restock_mat = material
+                builder.target_restock_qty = affordable
+                builder.target_restock_payer_type = payer_type
+                builder.target_restock_family_id = family_id
+                builder.task = "BUILDER_RESTOCK_RETRIEVE_COINS"
                 return True
         return False
 
     @classmethod
-    def _update_restock(cls, carpenter, dt, building_manager, furniture_manager, villager_manager,
+    def _update_restock(cls, builder, dt, building_manager, furniture_manager, villager_manager,
                         all_entities, player, stockpile_manager=None, permit_manager=None):
         from game.systems.economy.market_purchasing import AIMarketPurchasingSystem
-        task = carpenter.task
-        market = getattr(carpenter, "target_restock_market", None)
-        material = getattr(carpenter, "target_restock_mat", None)
-        quantity = getattr(carpenter, "target_restock_qty", 0)
-        restock_payer_type = getattr(carpenter, "target_restock_payer_type", None)
-        restock_family_id = getattr(carpenter, "target_restock_family_id", None)
+        task = builder.task
+        market = getattr(builder, "target_restock_market", None)
+        material = getattr(builder, "target_restock_mat", None)
+        quantity = getattr(builder, "target_restock_qty", 0)
+        restock_payer_type = getattr(builder, "target_restock_payer_type", None)
+        restock_family_id = getattr(builder, "target_restock_family_id", None)
         # Landlord storage is servant-only: restock materials always return to a
-        # household chest (the payer's, or the Carpenter's own for public jobs).
+        # household chest (the payer's, or the Builder's own for public jobs).
         chest = (furniture_manager.get_storage_for_family(
-            restock_family_id if restock_family_id is not None else carpenter.family_id
+            restock_family_id if restock_family_id is not None else builder.family_id
         ) if furniture_manager else None)
         if not market or not material or quantity <= 0:
-            carpenter.task = "IDLE"
-            carpenter.target_restock_market = None
-            carpenter.target_restock_mat = None
-            carpenter.target_restock_qty = 0
-            carpenter.target_restock_payer_type = None
-            carpenter.target_restock_family_id = None
+            builder.task = "IDLE"
+            builder.target_restock_market = None
+            builder.target_restock_mat = None
+            builder.target_restock_qty = 0
+            builder.target_restock_payer_type = None
+            builder.target_restock_family_id = None
             return True
         unit_price = MarketService.get_item_price(material, market)
-        if task == "CARPENTER_RESTOCK_RETRIEVE_COINS":
+        if task == "BUILDER_RESTOCK_RETRIEVE_COINS":
             needed_coins = unit_price * quantity
-            pocket_coins = to_copper(normalize_wallet(getattr(carpenter, "inventory", {})))
+            pocket_coins = to_copper(normalize_wallet(getattr(builder, "inventory", {})))
             if pocket_coins >= needed_coins:
                 arrived = True
             elif chest:
                 x, y = chest.get_world_pos(TILE_SIZE)
-                arrived = carpenter._move_towards(x, y, dt, arrival_dist=CHEST_INTERACTION_RADIUS,
+                arrived = builder._move_towards(x, y, dt, arrival_dist=CHEST_INTERACTION_RADIUS,
                                                   all_entities=all_entities, player=player,
                                                   building_manager=building_manager, furniture_manager=furniture_manager,
                                                   interaction_target=chest)
@@ -1164,71 +1164,71 @@ class CarpenterSystem:
                 if not enough:
                     coin_family = (restock_family_id
                                    if restock_family_id is not None and restock_payer_type != "landlord"
-                                   else carpenter.family_id)
+                                   else builder.family_id)
                     _, coin_source = MarketService.get_household_funds_and_source(
                         coin_family, furniture_manager, villager_manager)
                     if (coin_source is not None
-                            and coin_source is not getattr(carpenter, "inventory", None)
+                            and coin_source is not getattr(builder, "inventory", None)
                             and to_copper(normalize_wallet(coin_source)) >= deficit):
-                        enough, _ = transfer_currency_value(coin_source, carpenter.inventory, deficit)
+                        enough, _ = transfer_currency_value(coin_source, builder.inventory, deficit)
                     else:
                         enough, message = AIMarketPurchasingSystem.withdraw_household_coins(
-                            carpenter, int(needed_coins), furniture_manager, villager_manager)
+                            builder, int(needed_coins), furniture_manager, villager_manager)
                 if enough:
-                    carpenter.task = "CARPENTER_RESTOCK_TRAVEL_TO_MARKET"
+                    builder.task = "BUILDER_RESTOCK_TRAVEL_TO_MARKET"
                 else:
-                    carpenter.say(message or "The household does not have enough coins for the purchase.", duration=2.5)
-                    carpenter.task = "IDLE"
+                    builder.say(message or "The household does not have enough coins for the purchase.", duration=2.5)
+                    builder.task = "IDLE"
             return True
-        if task == "CARPENTER_RESTOCK_TRAVEL_TO_MARKET":
+        if task == "BUILDER_RESTOCK_TRAVEL_TO_MARKET":
             x, y = market.get_center_world(TILE_SIZE)
-            if carpenter._move_towards(x, y, dt, arrival_dist=CHEST_INTERACTION_RADIUS,
+            if builder._move_towards(x, y, dt, arrival_dist=CHEST_INTERACTION_RADIUS,
                                        all_entities=all_entities, player=player,
                                        building_manager=building_manager, furniture_manager=furniture_manager,
                                        interaction_target=market):
-                ok, message = AIMarketPurchasingSystem.execute_material_transaction(carpenter, market, material, quantity)
+                ok, message = AIMarketPurchasingSystem.execute_material_transaction(builder, market, material, quantity)
                 if ok:
-                    carpenter.task = "CARPENTER_RESTOCK_HAULING_HOME"
+                    builder.task = "BUILDER_RESTOCK_HAULING_HOME"
                 else:
-                    carpenter.say(message, duration=2.5)
-                    carpenter.task = "IDLE"
+                    builder.say(message, duration=2.5)
+                    builder.task = "IDLE"
             return True
-        if task == "CARPENTER_RESTOCK_HAULING_HOME":
+        if task == "BUILDER_RESTOCK_HAULING_HOME":
             if chest:
                 x, y = chest.get_world_pos(TILE_SIZE)
-                if carpenter._move_towards(x, y, dt, arrival_dist=CHEST_INTERACTION_RADIUS,
+                if builder._move_towards(x, y, dt, arrival_dist=CHEST_INTERACTION_RADIUS,
                                            all_entities=all_entities, player=player,
                                            building_manager=building_manager, furniture_manager=furniture_manager,
                                            interaction_target=chest):
                     if (restock_family_id is not None
-                            and str(restock_family_id) != str(carpenter.family_id)
+                            and str(restock_family_id) != str(builder.family_id)
                             and restock_payer_type != "landlord" and chest is not None):
                         from game.systems.economy.currency import CURRENCY_DENOMINATIONS
                         for denom in CURRENCY_DENOMINATIONS:
-                            amt = carpenter.inventory.get(denom, 0)
+                            amt = builder.inventory.get(denom, 0)
                             if amt > 0:
                                 chest.inventory[denom] = chest.inventory.get(denom, 0) + amt
-                                del carpenter.inventory[denom]
+                                del builder.inventory[denom]
                         compact_currency_wallet(chest.inventory)
-                        amt = carpenter.inventory.get(material, 0)
+                        amt = builder.inventory.get(material, 0)
                         if amt > 0:
                             chest.store_item(material, amt)
-                            del carpenter.inventory[material]
+                            del builder.inventory[material]
                         furniture_manager.invalidate_cache()
                     else:
-                        AIMarketPurchasingSystem.deposit_materials_and_change_to_chest(carpenter, furniture_manager)
-                    carpenter.target_restock_market = None
-                    carpenter.target_restock_mat = None
-                    carpenter.target_restock_qty = 0
-                    carpenter.target_restock_payer_type = None
-                    carpenter.target_restock_family_id = None
-                    carpenter.say("Restocked Carpenter materials.", duration=2.0)
-                    carpenter.task = "IDLE"
+                        AIMarketPurchasingSystem.deposit_materials_and_change_to_chest(builder, furniture_manager)
+                    builder.target_restock_market = None
+                    builder.target_restock_mat = None
+                    builder.target_restock_qty = 0
+                    builder.target_restock_payer_type = None
+                    builder.target_restock_family_id = None
+                    builder.say("Restocked Builder materials.", duration=2.0)
+                    builder.task = "IDLE"
             else:
-                home_x, home_y = carpenter._get_home_storage_dest(
+                home_x, home_y = builder._get_home_storage_dest(
                     permit_manager, building_manager, furniture_manager, all_entities=all_entities
-                ) if permit_manager else (carpenter.x, carpenter.y)
-                family = villager_manager.get_family_by_id(carpenter.family_id) if villager_manager else None
+                ) if permit_manager else (builder.x, builder.y)
+                family = villager_manager.get_family_by_id(builder.family_id) if villager_manager else None
                 home_permit_id = getattr(family, "assigned_permit_id", None)
                 home_permit = next((p for p in getattr(permit_manager, "permits", [])
                                     if str(p.id) == str(home_permit_id)), None) if home_permit_id else None
@@ -1237,12 +1237,12 @@ class CarpenterSystem:
                                           if home_permit.overlaps_building(b)), None)
                     if home_building:
                         home_x, home_y = home_building.get_approach_point(
-                            (carpenter.x, carpenter.y), TILE_SIZE, building_manager
+                            (builder.x, builder.y), TILE_SIZE, building_manager
                         )
                     else:
                         home_x = (home_permit.grid_x + home_permit.tiles_w / 2.0) * TILE_SIZE
                         home_y = (home_permit.grid_y + home_permit.tiles_h / 2.0) * TILE_SIZE
-                if not carpenter._move_towards(
+                if not builder._move_towards(
                     home_x, home_y, dt, arrival_dist=CHEST_INTERACTION_RADIUS,
                     all_entities=all_entities, player=player,
                     building_manager=building_manager, furniture_manager=furniture_manager,
@@ -1251,16 +1251,16 @@ class CarpenterSystem:
                     return True
                 active_order = next((f for f in furniture_manager.furnitures
                                      if f.construction_order
-                                     and str(f.construction_order.get("carpenter_id")) == str(carpenter.id)
+                                     and str(f.construction_order.get("builder_id")) == str(builder.id)
                                      and f.construction_order.get("status") not in ("COMPLETE", "AWAITING_PAYMENT")), None)
-                material_targets = DEDICATED_JOBS.get("Carpenter", {}).get("material_stock_target", {})
+                material_targets = DEDICATED_JOBS.get("Builder", {}).get("material_stock_target", {})
                 retained = {item: max(0, int(amount)) for item, amount in material_targets.items()}
                 recipe = FURNITURE_TYPES.get(getattr(active_order, "furniture_type", ""), {})
                 for material, amount in recipe.get("materials", {}).items():
                     retained[material] = max(retained.get(material, 0), int(amount))
                 active_public_site = next((site for site in getattr(building_manager, "construction_sites", [])
                                            if getattr(site, "construction_order", None)
-                                           and str(site.construction_order.get("carpenter_id")) == str(carpenter.id)
+                                           and str(site.construction_order.get("builder_id")) == str(builder.id)
                                            and site.construction_order.get("order_type") == "PUBLIC_BUILD"
                                            and site.construction_order.get("status") not in ("COMPLETE", "AWAITING_PAYMENT", "LANDLORD_PAYMENT_PENDING")), None)
                 if active_public_site:
@@ -1272,45 +1272,45 @@ class CarpenterSystem:
                         retained[material] = max(retained.get(material, 0), amount)
                 drop_tile = (int(home_x // TILE_SIZE), int(home_y // TILE_SIZE))
                 for material in material_targets:
-                    surplus = max(0, int(carpenter.inventory.get(material, 0)) - int(retained.get(material, 0)))
+                    surplus = max(0, int(builder.inventory.get(material, 0)) - int(retained.get(material, 0)))
                     if surplus and stockpile_manager:
-                        carpenter.inventory[material] -= surplus
-                        if carpenter.inventory[material] <= 0:
-                            carpenter.inventory.pop(material, None)
+                        builder.inventory[material] -= surplus
+                        if builder.inventory[material] <= 0:
+                            builder.inventory.pop(material, None)
                         stockpile_manager.drop_resource(
                             material, surplus, *drop_tile,
-                            owner_type="villager", owner_id=carpenter.family_id,
+                            owner_type="villager", owner_id=builder.family_id,
                         )
-                carpenter.say("No household chest; surplus materials were left at home.", duration=2.5)
-                carpenter.task = "IDLE"
-            if carpenter.task == "IDLE":
-                carpenter.target_restock_market = None
-                carpenter.target_restock_mat = None
-                carpenter.target_restock_qty = 0
+                builder.say("No household chest; surplus materials were left at home.", duration=2.5)
+                builder.task = "IDLE"
+            if builder.task == "IDLE":
+                builder.target_restock_market = None
+                builder.target_restock_mat = None
+                builder.target_restock_qty = 0
                 return False
             return True
         return False
 
     @classmethod
-    def _block_until_tools_ready(cls, carpenter):
-        """Returns True when the carpenter lacks required job tools and must wait.
+    def _block_until_tools_ready(cls, builder):
+        """Returns True when the builder lacks required job tools and must wait.
 
         Commission errands (claiming orders, payment requests, material hauling)
         don't need tools; only the actual build/repair phase does.
         """
-        getter = getattr(carpenter, "get_missing_job_tools", None)
+        getter = getattr(builder, "get_missing_job_tools", None)
         if not callable(getter) or not getter():
             return False
-        if not getattr(carpenter, "speech_text", None):
-            carpenter.say("I need my job tools before I can build.", duration=3.0)
-        carpenter.task = "IDLE"
+        if not getattr(builder, "speech_text", None):
+            builder.say("I need my job tools before I can build.", duration=3.0)
+        builder.task = "IDLE"
         return True
 
     @classmethod
     # ------------------------------------------------------------------
     # *** ESTABLISHED FEATURES — USER-CONFIRMED, DO NOT REGRESS ***
     #
-    #  * Own-household orders (payer_family_id == carpenter.family_id): FREE
+    #  * Own-household orders (payer_family_id == builder.family_id): FREE
     #    labor — status jumps straight to PAID with no commission/fee errand,
     #    but materials are STILL consumed from the family exactly like paid
     #    orders. ESTABLISHED: both own-household and external-household
@@ -1318,180 +1318,180 @@ class CarpenterSystem:
     #
     #  * Material sourcing follows order["payer_family_id"] — the household
     #    that pays for the order supplies the materials from ITS OWN chest /
-    #    loose stacks (for own-household orders that IS the carpenter's
-    #    household). ESTABLISHED: the carpenter must source materials from
+    #    loose stacks (for own-household orders that IS the builder's
+    #    household). ESTABLISHED: the builder must source materials from
     #    the paying household's storage, never arbitrarily.
     #
     #  * LANDLORD STORAGE LOCKDOWN (ESTABLISHED, user-enforced rule):
-    #    carpenter material sourcing, coin withdrawals, and restock
+    #    builder material sourcing, coin withdrawals, and restock
     #    purchases must NEVER read the Lord Treasury chest or
     #    landlord-owned loose stacks. ONLY servants may touch landlord
     #    storage. Landlord-paid public fees go through
-    #    CarpenterSystem.dispatch_pending_public_commissions -> servant
-    #    courier, never the carpenter himself.
+    #    BuilderSystem.dispatch_pending_public_commissions -> servant
+    #    courier, never the builder himself.
     #
     #  * Public structure repair/build commissions (ESTABLISHED): public
-    #    site/repair orders with carpenter_id=None may be claimed by any
-    #    carpenter; if the claimant's household cannot supply materials the
-    #    claim is released (carpenter_id -> None) so another carpenter's
+    #    site/repair orders with builder_id=None may be claimed by any
+    #    builder; if the claimant's household cannot supply materials the
+    #    claim is released (builder_id -> None) so another builder's
     #    household gets a turn. Paid status is never reset (no double-charge).
     #    This rotation is what keeps public structures getting repaired.
     # ------------------------------------------------------------------
-    def _is_own_household_order(cls, order, carpenter):
-        """True when the commission's payer family is the carpenter's own family."""
+    def _is_own_household_order(cls, order, builder):
+        """True when the commission's payer family is the builder's own family."""
         payer_family = order.get("payer_family_id")
-        return payer_family is not None and str(payer_family) == str(getattr(carpenter, "family_id", ""))
+        return payer_family is not None and str(payer_family) == str(getattr(builder, "family_id", ""))
 
     @classmethod
-    def _select_awaiting_order(cls, carpenter, furniture_manager, villager_manager):
-        """Pick the next AWAITING_PAYMENT furniture order this carpenter may claim."""
+    def _select_awaiting_order(cls, builder, furniture_manager, villager_manager):
+        """Pick the next AWAITING_PAYMENT furniture order this builder may claim."""
         now = time.time()
         awaiting_orders = [f for f in furniture_manager.furnitures
                            if f.construction_order
                            and f.construction_order.get("status") == "AWAITING_PAYMENT"
-                           and f.construction_order.get("carpenter_id") in (None, str(carpenter.id))
-                           and cls._artisan_job(f.construction_order) == str(getattr(carpenter, "job", ""))
+                           and f.construction_order.get("builder_id") in (None, str(builder.id))
+                           and cls._artisan_job(f.construction_order) == str(getattr(builder, "job", ""))
                            and float(f.construction_order.get("_claim_retry_at", 0.0) or 0.0) <= now]
         active = next((f for f in awaiting_orders
-                       if str(f.construction_order.get("payer_family_id")) == str(carpenter.family_id)), None)
+                       if str(f.construction_order.get("payer_family_id")) == str(builder.family_id)), None)
         if active is None:
             for candidate in awaiting_orders:
                 payer_family_id = candidate.construction_order.get("payer_family_id")
-                household_carpenter = next((worker for worker in villager_manager.get_all_villagers()
-                                            if getattr(worker, "job", None) == "Carpenter"
+                household_builder = next((worker for worker in villager_manager.get_all_villagers()
+                                            if getattr(worker, "job", None) == "Builder"
                                             and getattr(worker, "is_alive", True)
                                             and str(getattr(worker, "family_id", "")) == str(payer_family_id)), None) if villager_manager else None
-                if household_carpenter and str(household_carpenter.id) != str(carpenter.id):
+                if household_builder and str(household_builder.id) != str(builder.id):
                     continue
                 active = candidate
                 break
         return active
 
     @classmethod
-    def _claim_awaiting_order(cls, carpenter, order_furniture, villager_manager, furniture_manager, stockpile_manager):
-        """Assign an awaiting order to this carpenter and start its payment flow.
+    def _claim_awaiting_order(cls, builder, order_furniture, villager_manager, furniture_manager, stockpile_manager):
+        """Assign an awaiting order to this builder and start its payment flow.
 
         Own-household orders skip the service fee entirely (free labor —
         materials are still drawn from the family as usual).
         """
         order = order_furniture.construction_order
-        order["carpenter_id"] = str(carpenter.id)
-        order["carpenter_family_id"] = str(getattr(carpenter, "family_id", "") or "")
+        order["builder_id"] = str(builder.id)
+        order["builder_family_id"] = str(getattr(builder, "family_id", "") or "")
         order["artisan_job"] = cls._artisan_job(order)
-        if cls._is_own_household_order(order, carpenter):
+        if cls._is_own_household_order(order, builder):
             order["status"] = "PAID"
             order["commission_paid"] = True
             order["paid_by_id"] = "household"
             order["paid_amount_copper"] = 0
             cls._ensure_paid_seq(order, furniture_manager, building_manager=None)
-            if not getattr(carpenter, "speech_text", None):
-                carpenter.say("Family commission — no fee, straight to work.", duration=2.5)
-            carpenter.task = "IDLE"
+            if not getattr(builder, "speech_text", None):
+                builder.say("Family commission — no fee, straight to work.", duration=2.5)
+            builder.task = "IDLE"
             return
         if not cls._assign_payment(order_furniture, villager_manager, furniture_manager, stockpile_manager):
             order["_claim_retry_at"] = time.time() + COMMISSION_CLAIM_RETRY_SECONDS
-            if not getattr(carpenter, "speech_text", None):
-                carpenter.say("Waiting for the household commission.", duration=2.5)
-            carpenter.task = "IDLE"
+            if not getattr(builder, "speech_text", None):
+                builder.say("Waiting for the household commission.", duration=2.5)
+            builder.task = "IDLE"
             return
         if order.get("status") == "LANDLORD_PAYMENT_PENDING":
             # Landlord storage is servant-only: mark the order for the public
             # commission dispatcher, which sends a servant to the treasury.
             order["payer_type"] = "landlord"
             order["payer_id"] = "landlord"
-            carpenter.task = "IDLE"
+            builder.task = "IDLE"
             return
-        carpenter.say("Commission requested from the household.", duration=2.0)
-        carpenter.task = "IDLE"
+        builder.say("Commission requested from the household.", duration=2.0)
+        builder.task = "IDLE"
 
     @classmethod
-    def update_worker(cls, carpenter, dt, schedule_activity, building_manager, furniture_manager,
+    def update_worker(cls, builder, dt, schedule_activity, building_manager, furniture_manager,
                       villager_manager, all_entities, player, day_cycle,
                       stockpile_manager=None, permit_manager=None):
-        if getattr(carpenter, "job", None) != "Carpenter" or not furniture_manager:
+        if getattr(builder, "job", None) != "Builder" or not furniture_manager:
             return False
         if schedule_activity != "WORK":
             return False
 
-        if carpenter.task.startswith("CARPENTER_RESTOCK_"):
-            return cls._update_restock(carpenter, dt, building_manager, furniture_manager,
+        if builder.task.startswith("BUILDER_RESTOCK_"):
+            return cls._update_restock(builder, dt, building_manager, furniture_manager,
                                        villager_manager, all_entities, player,
                                        stockpile_manager, permit_manager)
 
         work_orders = cls._order_subjects(furniture_manager, building_manager)
         has_commission_work = any(
             isinstance(getattr(subject, "construction_order", None), dict)
-            and str(subject.construction_order.get("carpenter_id")) == str(carpenter.id)
+            and str(subject.construction_order.get("builder_id")) == str(builder.id)
             and subject.construction_order.get("status") in ("PAID", "BUILDING", "AWAITING_MATERIAL")
             for subject in work_orders
         )
         # Accept new commissions into the FIFO queue even while busy: payment
         # errands resolve independently (servant courier / household rep), and
         # the artisan works PAID orders in paid_seq order during WORK hours.
-        awaiting = cls._select_awaiting_order(carpenter, furniture_manager, villager_manager)
+        awaiting = cls._select_awaiting_order(builder, furniture_manager, villager_manager)
         if awaiting is not None:
-            cls._claim_awaiting_order(carpenter, awaiting, villager_manager,
+            cls._claim_awaiting_order(builder, awaiting, villager_manager,
                                       furniture_manager, stockpile_manager)
 
         if not has_commission_work:
             # Own-household commissions are free labor — claim them before
             # restocking so family orders never queue behind material runs.
-            awaiting = cls._select_awaiting_order(carpenter, furniture_manager, villager_manager)
+            awaiting = cls._select_awaiting_order(builder, furniture_manager, villager_manager)
             if awaiting is not None and cls._is_own_household_order(
-                    awaiting.construction_order, carpenter):
-                cls._claim_awaiting_order(carpenter, awaiting, villager_manager,
+                    awaiting.construction_order, builder):
+                cls._claim_awaiting_order(builder, awaiting, villager_manager,
                                           furniture_manager, stockpile_manager)
                 return False
-            _, stored_materials = cls._materials_in_storage(carpenter, furniture_manager, stockpile_manager)
-            stock_targets = DEDICATED_JOBS.get("Carpenter", {}).get("material_stock_target", {})
+            _, stored_materials = cls._materials_in_storage(builder, furniture_manager, stockpile_manager)
+            stock_targets = DEDICATED_JOBS.get("Builder", {}).get("material_stock_target", {})
             low_stock = {
                 material: max(0, int(target) - int(stored_materials.get(material, 0)))
                 for material, target in stock_targets.items()
                 if int(stored_materials.get(material, 0)) < int(target)
             }
             if low_stock and cls._begin_restock(
-                    carpenter, low_stock, building_manager, furniture_manager, villager_manager):
-                carpenter.active_tool = None
+                    builder, low_stock, building_manager, furniture_manager, villager_manager):
+                builder.active_tool = None
                 return True
 
         # Payment-transit housekeeping: stale household payment errands get
         # released back to AWAITING_PAYMENT, but payment-in-flight orders must
-        # NOT freeze the carpenter — his queued PAID orders keep him working.
+        # NOT freeze the builder — his queued PAID orders keep him working.
         for subject in work_orders:
             order = getattr(subject, "construction_order", None)
             if not isinstance(order, dict):
                 continue
-            if str(order.get("carpenter_id")) != str(carpenter.id):
+            if str(order.get("builder_id")) != str(builder.id):
                 continue
             if order.get("payer_type") == "landlord":
                 continue  # servant courier owns landlord payment transit
             if order.get("status") not in ("PAYMENT_REQUESTED", "PAYMENT_TRAVELING"):
                 continue
             waiting_order = order
-            expected_task = ("CARPENTER_FEE_RETRIEVE" if waiting_order.get("status") == "PAYMENT_REQUESTED"
-                             else "CARPENTER_FEE_TRAVEL")
+            expected_task = ("BUILDER_FEE_RETRIEVE" if waiting_order.get("status") == "PAYMENT_REQUESTED"
+                             else "BUILDER_FEE_TRAVEL")
             payer = next((villager for villager in villager_manager.get_all_villagers()
                           if str(villager.id) == str(waiting_order.get("payer_id"))), None) if villager_manager else None
             pending_data = getattr(payer, "pending_commission_data", {}) if payer else {}
             from game.systems.work.commission_schedule import CommissionScheduleSystem
             pending_this_order = bool(payer and CommissionScheduleSystem.is_queued(
-                payer, expected_task, "carpenter_payment_order_id", subject.id
+                payer, expected_task, "builder_payment_order_id", subject.id
             ))
             payment_task_active = bool(
                 payer and getattr(payer, "is_alive", True) and (
                     (getattr(payer, "task", None) == expected_task
-                     and str(getattr(payer, "carpenter_payment_order_id", None)) == str(subject.id))
+                     and str(getattr(payer, "builder_payment_order_id", None)) == str(subject.id))
                     or pending_this_order
                     or (getattr(payer, "pending_commission_task", None) == expected_task
-                        and str(pending_data.get("carpenter_payment_order_id")) == str(subject.id))
+                        and str(pending_data.get("builder_payment_order_id")) == str(subject.id))
                 )
             )
             if not payment_task_active:
                 waiting_order["status"] = "AWAITING_PAYMENT"
                 waiting_order["payer_id"] = None
-                if payer and str(getattr(payer, "carpenter_payment_order_id", None)) == str(subject.id):
-                    payer.carpenter_payment_order_id = None
-                    payer.carpenter_payment_carpenter_id = None
+                if payer and str(getattr(payer, "builder_payment_order_id", None)) == str(subject.id):
+                    payer.builder_payment_order_id = None
+                    payer.builder_payment_builder_id = None
                     payer._resume_or_idle_after_need()
 
         # FIFO work selection: earliest paid_seq wins across ALL commission
@@ -1502,11 +1502,11 @@ class CarpenterSystem:
             order = getattr(subject, "construction_order", None)
             if not isinstance(order, dict) or order.get("status") not in workable_statuses:
                 continue
-            cid = order.get("carpenter_id")
-            cid_ok = (cid is None or str(cid) == str(carpenter.id))
+            cid = order.get("builder_id")
+            cid_ok = (cid is None or str(cid) == str(builder.id))
             if not cid_ok:
                 continue
-            if cls._artisan_job(order) != str(getattr(carpenter, "job", "")):
+            if cls._artisan_job(order) != str(getattr(builder, "job", "")):
                 continue  # queue is per-artisan: only matching job orders
             is_public_site = (getattr(subject, "building_type", "") != ""
                               and order.get("order_type") == "PUBLIC_BUILD"
@@ -1519,7 +1519,7 @@ class CarpenterSystem:
             if not (is_public_site or is_public_repair or is_furniture):
                 continue
             if order.get("status") == "AWAITING_MATERIAL" and not cls._order_materials_progressable(
-                    carpenter, subject, order, furniture_manager, stockpile_manager,
+                    builder, subject, order, furniture_manager, stockpile_manager,
                     building_manager, villager_manager):
                 continue  # stuck material wait must not freeze the queue head
             cls._ensure_paid_seq(order, furniture_manager, building_manager)
@@ -1534,15 +1534,15 @@ class CarpenterSystem:
 
         if public_site:
             order = public_site.construction_order
-            if order.get("carpenter_id") is None:
-                order["carpenter_id"] = str(carpenter.id)
+            if order.get("builder_id") is None:
+                order["builder_id"] = str(builder.id)
             if order.get("status") in ("LANDLORD_RETRIEVING", "PAYMENT_TRAVELING"):
-                carpenter.task = "IDLE"
+                builder.task = "IDLE"
                 return False
             if order.get("status") in ("PAID", "AWAITING_MATERIAL", "BUILDING"):
                 if not public_site.is_materials_complete():
                     chest, totals = cls._materials_in_storage(
-                        carpenter, furniture_manager, stockpile_manager,
+                        builder, furniture_manager, stockpile_manager,
                         payer_type=order.get("payer_type"),
                         family_id=order.get("payer_family_id"))
                     remaining = {
@@ -1553,37 +1553,37 @@ class CarpenterSystem:
                         material: max(0, amount - max(0, int(totals.get(material, 0))))
                         for material, amount in remaining.items() if amount > 0
                     }
-                    if missing and cls._begin_restock(carpenter, missing, building_manager,
+                    if missing and cls._begin_restock(builder, missing, building_manager,
                                                       furniture_manager, villager_manager,
                                                       payer_type=order.get("payer_type"),
                                                       family_id=order.get("payer_family_id")):
                         order["status"] = "AWAITING_MATERIAL"
                         return True
                     ready = cls._deliver_build_materials(
-                        carpenter, public_site, order, public_site.required_cost, chest, dt,
+                        builder, public_site, order, public_site.required_cost, chest, dt,
                         all_entities, player, building_manager, furniture_manager,
                         stockpile_manager=stockpile_manager,
                     )
                     if not public_site.is_materials_complete():
                         order["status"] = "AWAITING_MATERIAL"
-                        if (missing and carpenter.task != "CARPENTER_COLLECTING_MATERIALS"
+                        if (missing and builder.task != "BUILDER_COLLECTING_MATERIALS"
                                 and not any(int(totals.get(m, 0)) > 0 for m in missing)):
-                            order["carpenter_id"] = None
-                        if missing and not getattr(carpenter, "target_restock_market", None):
-                            carpenter.say("I need building materials, but none are available to buy right now.", duration=2.5)
-                        elif not ready and carpenter.task == "CARPENTER_COLLECTING_MATERIALS":
-                            carpenter.say("I am carrying the building materials from storage.", duration=2.0)
+                            order["builder_id"] = None
+                        if missing and not getattr(builder, "target_restock_market", None):
+                            builder.say("I need building materials, but none are available to buy right now.", duration=2.5)
+                        elif not ready and builder.task == "BUILDER_COLLECTING_MATERIALS":
+                            builder.say("I am carrying the building materials from storage.", duration=2.0)
                         return True
                     order["materials_committed"] = True
-                if cls._block_until_tools_ready(carpenter):
+                if cls._block_until_tools_ready(builder):
                     return True
-                carpenter.task = "CARPENTER_CONSTRUCTING"
+                builder.task = "BUILDER_CONSTRUCTING"
                 target_x, target_y = cls._asset_approach_point(
-                    carpenter, public_site, order, all_entities, building_manager,
+                    builder, public_site, order, all_entities, building_manager,
                 )
-                arrived = cls._within_asset_work_range(carpenter, public_site)
+                arrived = cls._within_asset_work_range(builder, public_site)
                 if not arrived:
-                    carpenter._move_towards(
+                    builder._move_towards(
                         target_x, target_y, dt,
                         arrival_dist=cls._asset_approach_arrival_distance(
                             public_site, target_x, target_y
@@ -1593,7 +1593,7 @@ class CarpenterSystem:
                         recover_blocked_routes=True,
                         interaction_target=public_site,
                     )
-                    arrived = cls._within_asset_work_range(carpenter, public_site)
+                    arrived = cls._within_asset_work_range(builder, public_site)
                 if arrived:
                     order["status"] = "BUILDING"
                     public_site.build_progress += dt
@@ -1602,26 +1602,26 @@ class CarpenterSystem:
                     if public_site.is_complete():
                         order["status"] = "COMPLETE"
                         order["progress_ratio"] = 1.0
-                        carpenter.task = "IDLE"
-                        carpenter.say(f"Finished {public_site.name}.", duration=3.0)
+                        builder.task = "IDLE"
+                        builder.say(f"Finished {public_site.name}.", duration=3.0)
                 return True
 
         if public_repair:
             order = public_repair.construction_order
-            if order.get("carpenter_id") is None:
-                order["carpenter_id"] = str(carpenter.id)
+            if order.get("builder_id") is None:
+                order["builder_id"] = str(builder.id)
             if order.get("status") in ("LANDLORD_RETRIEVING", "PAYMENT_TRAVELING"):
-                carpenter.task = "IDLE"
+                builder.task = "IDLE"
                 return False
             chest, totals = cls._materials_in_storage(
-                carpenter, furniture_manager, stockpile_manager,
+                builder, furniture_manager, stockpile_manager,
                 payer_type=order.get("payer_type"),
                 family_id=order.get("payer_family_id"))
             required = {item: max(0, int(amount))
-                        for item, amount in CARPENTER_REPAIR_MATERIALS.items() if int(amount) > 0}
+                        for item, amount in BUILDER_REPAIR_MATERIALS.items() if int(amount) > 0}
             missing = {item: max(0, amount - int(totals.get(item, 0)))
                        for item, amount in required.items() if int(totals.get(item, 0)) < amount}
-            if missing and cls._begin_restock(carpenter, missing, building_manager,
+            if missing and cls._begin_restock(builder, missing, building_manager,
                                               furniture_manager, villager_manager,
                                               payer_type=order.get("payer_type"),
                                               family_id=order.get("payer_family_id")):
@@ -1629,29 +1629,29 @@ class CarpenterSystem:
                 return True
             if not order.get("materials_committed"):
                 delivered = cls._deliver_build_materials(
-                    carpenter, public_repair, order, required, chest, dt,
+                    builder, public_repair, order, required, chest, dt,
                     all_entities, player, building_manager, furniture_manager,
                     furniture_target=True, stockpile_manager=stockpile_manager,
                 )
                 if not order.get("materials_committed"):
                     order["status"] = "AWAITING_MATERIAL"
-                    if (missing and carpenter.task != "CARPENTER_COLLECTING_MATERIALS"
+                    if (missing and builder.task != "BUILDER_COLLECTING_MATERIALS"
                             and not any(int(totals.get(item, 0)) > 0 for item in missing)):
-                        order["carpenter_id"] = None
-                    if missing and not getattr(carpenter, "target_restock_market", None):
-                        carpenter.say("I need repair materials, but none are available to buy right now.", duration=2.5)
-                    elif not delivered and carpenter.task == "CARPENTER_COLLECTING_MATERIALS":
-                        carpenter.say("I am carrying repair materials from storage.", duration=2.0)
+                        order["builder_id"] = None
+                    if missing and not getattr(builder, "target_restock_market", None):
+                        builder.say("I need repair materials, but none are available to buy right now.", duration=2.5)
+                    elif not delivered and builder.task == "BUILDER_COLLECTING_MATERIALS":
+                        builder.say("I am carrying repair materials from storage.", duration=2.0)
                     return True
-            if cls._block_until_tools_ready(carpenter):
+            if cls._block_until_tools_ready(builder):
                 return True
-            carpenter.task = "CARPENTER_REPAIRING"
-            arrived = cls._within_asset_work_range(carpenter, public_repair)
+            builder.task = "BUILDER_REPAIRING"
+            arrived = cls._within_asset_work_range(builder, public_repair)
             if not arrived:
                 target_x, target_y = cls._asset_approach_point(
-                    carpenter, public_repair, order, all_entities, building_manager,
+                    builder, public_repair, order, all_entities, building_manager,
                 )
-                carpenter._move_towards(
+                builder._move_towards(
                     target_x, target_y, dt,
                     arrival_dist=cls._asset_approach_arrival_distance(
                         public_repair, target_x, target_y
@@ -1661,18 +1661,18 @@ class CarpenterSystem:
                     recover_blocked_routes=True,
                     interaction_target=public_repair,
                 )
-                arrived = cls._within_asset_work_range(carpenter, public_repair)
+                arrived = cls._within_asset_work_range(builder, public_repair)
             if arrived:
                 order["status"] = "BUILDING"
                 public_repair.construction_progress = getattr(public_repair, "construction_progress", 0.0) + dt
-                duration = max(1.0, float(order.get("build_duration_seconds", CARPENTER_BUILD_DURATION_INGAME_HOURS)))
+                duration = max(1.0, float(order.get("build_duration_seconds", BUILDER_BUILD_DURATION_INGAME_HOURS)))
                 order["progress_ratio"] = min(1.0, public_repair.construction_progress / duration)
                 if public_repair.construction_progress >= duration:
                     public_repair.condition = 1.0
                     order["status"] = "COMPLETE"
                     order["progress_ratio"] = 1.0
-                    carpenter.task = "IDLE"
-                    carpenter.say(f"Repaired {public_repair.name}.", duration=3.0)
+                    builder.task = "IDLE"
+                    builder.say(f"Repaired {public_repair.name}.", duration=3.0)
             return True
 
         active = furniture_active
@@ -1680,19 +1680,19 @@ class CarpenterSystem:
             return False
 
         order = active.construction_order
-        order["carpenter_id"] = str(carpenter.id)
+        order["builder_id"] = str(builder.id)
         if order.get("status") not in ("PAID", "BUILDING", "AWAITING_MATERIAL"):
             return True
 
-        cfg = DEDICATED_JOBS.get("Carpenter", {})
+        cfg = DEDICATED_JOBS.get("Builder", {})
         chest, totals = cls._materials_in_storage(
-            carpenter, furniture_manager, stockpile_manager,
+            builder, furniture_manager, stockpile_manager,
             payer_type=order.get("payer_type"),
             family_id=order.get("payer_family_id"))
         target_stock = cfg.get("material_stock_target", {}) if chest else {}
         is_repair = order.get("order_type") == "REPAIR"
         recipe = FURNITURE_TYPES.get(active.furniture_type, {})
-        material_recipe = CARPENTER_REPAIR_MATERIALS if is_repair else recipe.get("materials", {})
+        material_recipe = BUILDER_REPAIR_MATERIALS if is_repair else recipe.get("materials", {})
         required = {item: max(0, int(amount))
                     for item, amount in material_recipe.items() if int(amount) > 0}
         missing = {} if is_repair else {item: max(0, int(target) - int(totals.get(item, 0)))
@@ -1702,42 +1702,42 @@ class CarpenterSystem:
                         if totals.get(item, 0) < amount}
         if short_recipe:
             missing.update({item: max(missing.get(item, 0), amount) for item, amount in short_recipe.items()})
-        if missing and cls._begin_restock(carpenter, missing, building_manager, furniture_manager, villager_manager,
+        if missing and cls._begin_restock(builder, missing, building_manager, furniture_manager, villager_manager,
                                           payer_type=order.get("payer_type"),
                                           family_id=order.get("payer_family_id")):
             return True
         if short_recipe:
-            carpenter.say("I need this furniture's materials, but none are available to buy right now.", duration=2.5)
+            builder.say("I need this furniture's materials, but none are available to buy right now.", duration=2.5)
             return True
 
         if not order.get("materials_committed"):
             delivered = cls._deliver_build_materials(
-                carpenter, active, order, required, chest, dt,
+                builder, active, order, required, chest, dt,
                 all_entities, player, building_manager, furniture_manager,
                 furniture_target=True, stockpile_manager=stockpile_manager,
             )
             if not order.get("materials_committed"):
                 order["status"] = "AWAITING_MATERIAL"
-                if not delivered and carpenter.task == "CARPENTER_COLLECTING_MATERIALS":
-                    carpenter.say("I am carrying the furniture materials from storage.", duration=2.0)
+                if not delivered and builder.task == "BUILDER_COLLECTING_MATERIALS":
+                    builder.say("I am carrying the furniture materials from storage.", duration=2.0)
                 return True
             order["status"] = "BUILDING"
 
-        if cls._block_until_tools_ready(carpenter):
+        if cls._block_until_tools_ready(builder):
             return True
-        carpenter.task = "CARPENTER_REPAIRING" if is_repair else "CARPENTER_CONSTRUCTING"
-        carpenter.active_tool = None if is_repair else (cfg.get("required_tools") or ["Saw"])[0]
+        builder.task = "BUILDER_REPAIRING" if is_repair else "BUILDER_CONSTRUCTING"
+        builder.active_tool = None if is_repair else (cfg.get("required_tools") or ["Saw"])[0]
         target = cls._asset_approach_point(
-            carpenter, active, order, all_entities, building_manager,
+            builder, active, order, all_entities, building_manager,
         )
-        arrived = cls._within_asset_work_range(carpenter, active)
+        arrived = cls._within_asset_work_range(builder, active)
         if arrived:
-            carpenter.is_moving = False
-            carpenter.current_path = []
-            carpenter.path_index = 0
-            carpenter.path_target = None
+            builder.is_moving = False
+            builder.current_path = []
+            builder.path_index = 0
+            builder.path_target = None
         else:
-            carpenter._move_towards(
+            builder._move_towards(
                 target[0], target[1], dt,
                 arrival_dist=cls._asset_approach_arrival_distance(active, target[0], target[1]),
                 all_entities=all_entities, player=player,
@@ -1745,14 +1745,14 @@ class CarpenterSystem:
                 recover_blocked_routes=True,
                 interaction_target=active,
             )
-            arrived = cls._within_asset_work_range(carpenter, active)
-        if not arrived and getattr(carpenter, "route_state", None) == ROUTE_STATE_FAILED:
+            arrived = cls._within_asset_work_range(builder, active)
+        if not arrived and getattr(builder, "route_state", None) == ROUTE_STATE_FAILED:
             previous_target = tuple(target)
-            failed_points = getattr(carpenter, "carpenter_failed_approach_points", set())
+            failed_points = getattr(builder, "builder_failed_approach_points", set())
             failed_points.add(previous_target)
-            carpenter.carpenter_failed_approach_points = failed_points
+            builder.builder_failed_approach_points = failed_points
             alternate = active.get_approach_point(
-                carpenter.x, carpenter.y, worker_id=carpenter.id,
+                builder.x, builder.y, worker_id=builder.id,
                 all_entities=all_entities, tile_size=TILE_SIZE,
                 bm=building_manager, excluded_points=failed_points,
             )
@@ -1760,18 +1760,18 @@ class CarpenterSystem:
                 center = active.get_world_pos(TILE_SIZE)
                 if tuple(center) not in failed_points:
                     alternate = center
-                elif not getattr(carpenter, "speech_text", None):
-                    carpenter.say(f"I cannot reach {active.name}; the route is blocked.", duration=3.0)
+                elif not getattr(builder, "speech_text", None):
+                    builder.say(f"I cannot reach {active.name}; the route is blocked.", duration=3.0)
             if alternate is not None and tuple(alternate) not in failed_points:
-                carpenter.carpenter_target_position = alternate
-                carpenter.path_target = None
-                carpenter.current_path = []
-                carpenter.path_index = 0
-                carpenter.path_retry_timer = 0.0
+                builder.builder_target_position = alternate
+                builder.path_target = None
+                builder.current_path = []
+                builder.path_index = 0
+                builder.path_retry_timer = 0.0
         if arrived:
             day_seconds = day_cycle.day_length_seconds if day_cycle else DAY_LENGTH_OPTIONS[DEFAULT_DAY_LENGTH_INDEX]["seconds"]
             seconds_per_hour = day_seconds / 24
-            duration = seconds_per_hour * CARPENTER_BUILD_DURATION_INGAME_HOURS
+            duration = seconds_per_hour * BUILDER_BUILD_DURATION_INGAME_HOURS
             active.construction_progress += dt
             order["progress_ratio"] = min(1.0, active.construction_progress / max(1.0, duration))
             if active.construction_progress >= duration:
@@ -1779,13 +1779,13 @@ class CarpenterSystem:
                 order["progress_ratio"] = 1.0
                 if is_repair:
                     active.condition = 1.0
-                carpenter.task = "IDLE"
-                carpenter.active_tool = None
-                carpenter.carpenter_payment_order_id = None
-                carpenter.carpenter_target_order_id = None
-                carpenter.carpenter_target_position = None
-                carpenter.carpenter_failed_approach_points = set()
-                carpenter.say(f"Repaired {active.name}." if is_repair else f"Finished {active.name}.", duration=3.0)
+                builder.task = "IDLE"
+                builder.active_tool = None
+                builder.builder_payment_order_id = None
+                builder.builder_target_order_id = None
+                builder.builder_target_position = None
+                builder.builder_failed_approach_points = set()
+                builder.say(f"Repaired {active.name}." if is_repair else f"Finished {active.name}.", duration=3.0)
                 furniture_manager.invalidate_cache()
         return True
 

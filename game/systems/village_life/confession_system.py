@@ -70,7 +70,7 @@ class ConfessionSystem:
     def _prepare_payment(cls, villager, request, dt, building_manager,
                          furniture_manager, all_entities, player):
         """Retrieve up to one day's cheapest-food cost before traveling to the Priest."""
-        from game.systems.work.carpenter_system import CarpenterSystem
+        from game.systems.work.builder_system import BuilderSystem
 
         due = max(0, int(request.get("fee_due", 0)))
         personal_wallet = normalize_wallet(getattr(villager, "inventory", {}))
@@ -120,7 +120,7 @@ class ConfessionSystem:
         request["at_payment_storage"] = True
         withdraw = min(remaining, chest_value)
         if withdraw > 0:
-            if not CarpenterSystem._move_exact_value(source, villager.inventory, withdraw):
+            if not BuilderSystem._move_exact_value(source, villager.inventory, withdraw):
                 return False
             request["payment_chest_id"] = getattr(chest, "id", None)
             request["payment_family_id"] = getattr(villager, "family_id", None)
@@ -648,10 +648,10 @@ class ConfessionSystem:
 
     @classmethod
     def _transfer_offering(cls, confessor, priest, amount):
-        from game.systems.work.carpenter_system import CarpenterSystem
+        from game.systems.work.builder_system import BuilderSystem
         amount = max(0, int(amount))
         if amount:
-            CarpenterSystem._move_exact_value(
+            BuilderSystem._move_exact_value(
                 getattr(confessor, "inventory", {}),
                 getattr(priest, "inventory", {}), amount,
             )
@@ -687,8 +687,8 @@ class ConfessionSystem:
         if not isinstance(destination, dict):
             return False
 
-        from game.systems.work.carpenter_system import CarpenterSystem
-        if not CarpenterSystem._move_exact_value(
+        from game.systems.work.builder_system import BuilderSystem
+        if not BuilderSystem._move_exact_value(
                 getattr(villager, "inventory", {}), destination, amount):
             return False
         request["withdrawn_amount"] = 0
@@ -718,8 +718,8 @@ class ConfessionSystem:
         if was_active and request.get("fee_paid", 0) > 0:
             payer = villager
             if payer and priest:
-                from game.systems.work.carpenter_system import CarpenterSystem
-                CarpenterSystem._move_exact_value(
+                from game.systems.work.builder_system import BuilderSystem
+                BuilderSystem._move_exact_value(
                     getattr(priest, "inventory", {}),
                     getattr(payer, "inventory", {}),
                     request["fee_paid"],

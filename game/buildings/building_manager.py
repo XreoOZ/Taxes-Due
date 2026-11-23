@@ -78,9 +78,9 @@ class BuildingManager:
 
     def can_afford(self, building_type, resources, tile_count):
         b_cfg = BUILDING_TYPES.get(building_type, BUILDING_TYPES["wooden_structure"])
-        # Commissionable public structures are paid for through the Carpenter's
+        # Commissionable public structures are paid for through the Builder's
         # landlord commission, not by consuming the Lord's construction stockpile.
-        if b_cfg.get("carpenter_commissionable"):
+        if b_cfg.get("builder_commissionable"):
             return True
         if b_cfg.get("fixed_cost", False):
             cost_w = b_cfg.get("cost_wood", 5)
@@ -157,17 +157,17 @@ class BuildingManager:
                 continue
             order = getattr(site, "construction_order", None) or {}
             if order.get("order_type") == "PUBLIC_BUILD":
-                # The Carpenter sources and pays for public-build materials from
+                # The Builder sources and pays for public-build materials from
                 # the commission. Servants must not fetch them from the Lord's stockpile.
                 continue
             return site
         return None
 
     def daily_public_maintenance_update(self, days=1):
-        """Apply configured wear to public structures and create carpenter repair orders."""
+        """Apply configured wear to public structures and create builder repair orders."""
         import random
         from game.data.config import BUILDING_TYPES, PUBLIC_STRUCTURE_DAILY_BREAK_CHANCE
-        from game.systems.work.carpenter_system import CarpenterSystem
+        from game.systems.work.builder_system import BuilderSystem
 
         damaged = []
         for _ in range(max(0, int(days))):
@@ -180,7 +180,7 @@ class BuildingManager:
                 if random.random() >= PUBLIC_STRUCTURE_DAILY_BREAK_CHANCE:
                     continue
                 building.condition = 0.0
-                order = CarpenterSystem.create_repair_order(
+                order = BuilderSystem.create_repair_order(
                     building, self, getattr(self, "villager_manager", None)
                 )
                 order.update({
@@ -230,19 +230,19 @@ class BuildingManager:
         if site not in self.construction_sites:
             return False
 
-        # Carpenter-delivered materials go back to the paying household/treasury;
-        # only the non-carpenter portion falls back to the generic pools.
-        carpenter_delivered = {}
+        # Builder-delivered materials go back to the paying household/treasury;
+        # only the non-builder portion falls back to the generic pools.
+        builder_delivered = {}
         order = getattr(site, "construction_order", None)
         if order and order.get("status") != "COMPLETE":
-            from game.systems.work.carpenter_system import CarpenterSystem
-            carpenter_delivered = CarpenterSystem.refund_order_materials(
+            from game.systems.work.builder_system import BuilderSystem
+            builder_delivered = BuilderSystem.refund_order_materials(
                 order, site, furniture_manager, stockpile_manager,
             )
 
         # 1. Refund material yang sudah diantar ke site
         for res, amt in getattr(site, "delivered_cost", {}).items():
-            amt = max(0, int(amt) - int(carpenter_delivered.get(res, 0)))
+            amt = max(0, int(amt) - int(builder_delivered.get(res, 0)))
             if amt > 0:
                 if resources is not None and res in resources:
                     resources[res] += amt

@@ -69,7 +69,7 @@ class StarterPresetSystem:
                     building_manager, furniture_manager=furniture_manager)
                 cls._spawn_family_at_door(family, (hx + hw // 2, hy + hh - 1))
 
-            # Interior furniture: family chest + carpenter workbench, both
+            # Interior furniture: family chest + builder workbench, both
             # installed (never blueprints). Avoid the door tile.
             door_tile = (hx + hw // 2, hy + hh - 1)
             interior = [(hx + 1, hy + 1), (hx + 3, hy + 1), (hx + 1, hy),
@@ -83,7 +83,7 @@ class StarterPresetSystem:
                         permit_manager, villager_manager, building_manager)
                     if chest is not None:
                         break
-            if preset.get("carpenter_workbench"):
+            if preset.get("builder_workbench"):
                 for tx, ty in interior:
                     # workbench is 2x1 — needs tx and tx+1 free of the chest
                     if (tx, ty) == door_tile or (tx + 1, ty) == door_tile:
@@ -93,7 +93,7 @@ class StarterPresetSystem:
                     if any((tx + dx, ty) in occupied for dx in range(2)):
                         continue
                     wb = cls._install_furniture(
-                        furniture_manager, "carpenter_workbench", tx, ty,
+                        furniture_manager, "builder_workbench", tx, ty,
                         permit_manager, villager_manager, building_manager)
                     if wb is not None:
                         break
@@ -407,7 +407,7 @@ class StarterPresetSystem:
     def _install_furniture(cls, furniture_manager, f_type, gx, gy,
                            permit_manager, villager_manager, building_manager):
         """Place furniture as a COMPLETED structure — starter presets never
-        leave blueprints awaiting a carpenter commission."""
+        leave blueprints awaiting a builder commission."""
         f, msg = furniture_manager.add_furniture(
             f_type, gx, gy, permit_manager, villager_manager,
             building_manager=building_manager)

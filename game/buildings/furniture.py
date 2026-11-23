@@ -445,7 +445,7 @@ class Furniture:
                 pygame.draw.rect(surface, (15, 23, 42, 210), (bb_x, bb_y, bb_w, bb_h), border_radius=3)
                 surface.blit(badge_txt, (bb_x + 3, bb_y + 1))
 
-        elif self.furniture_type == "carpenter_workbench":
+        elif self.furniture_type == "builder_workbench":
             inset = max(2, int(scaled_t * 0.09))
             top_h = max(6, int(scaled_t * 0.24))
             if self.rotation % 180:
@@ -537,25 +537,88 @@ class Furniture:
             inset = max(3, int(scaled_t * 0.07))
             pad = pygame.Rect(sx + inset, sy + inset,
                               max(4, scaled_w - inset * 2), max(4, scaled_h - inset * 2))
-            frame_col = self.type_cfg.get("color_frame", (100, 116, 139))
-            panel_col = self.type_cfg.get("color_roof", (51, 65, 85))
-            pygame.draw.rect(surface, (0, 0, 0, 70), pad.move(2, 3), border_radius=6)
-            pygame.draw.rect(surface, frame_col, pad, border_radius=6)
-            pygame.draw.rect(surface, panel_col,
-                             pad.inflate(-max(4, int(scaled_t * 0.18)),
-                                         -max(4, int(scaled_t * 0.18))), border_radius=4)
-            pygame.draw.rect(surface, frame_col, pad, width=2, border_radius=6)
 
-            # Center emblem: tree for the lodge, pick head for the mine station.
-            cx, cy = pad.center
-            r = max(6, int(scaled_t * 0.22))
             if self.furniture_type == "woodsman_lodge":
-                pygame.draw.rect(surface, (101, 67, 33),
-                                 (cx - max(1, r // 10), cy - r // 6,
-                                  max(2, r // 5), r), border_radius=1)
-                pygame.draw.circle(surface, (34, 197, 94), (cx, cy - r // 3), r)
-                pygame.draw.circle(surface, (21, 128, 61), (cx - r // 4, cy - r // 2), max(2, r // 3))
+                # ===== Forest camp: clearing, canvas tents, campfire, log pile =====
+                u = max(4, int(min(pad.width, pad.height) * 0.14))
+
+                pygame.draw.rect(surface, (0, 0, 0, 70), pad.move(2, 3), border_radius=8)
+                pygame.draw.rect(surface, (96, 74, 52), pad, border_radius=8)
+                pygame.draw.rect(surface, (74, 56, 40), pad, width=max(1, u // 5), border_radius=8)
+                inner = pad.inflate(-u, -u)
+                pygame.draw.rect(surface, (104, 80, 56), inner, border_radius=6)
+
+                def _tent(tx, ty, tw, th):
+                    # guy ropes
+                    for rx, ry in ((tx + tw // 2, ty + th - u // 3), (tx + tw // 5, ty + th - u // 4)):
+                        pygame.draw.line(surface, (60, 45, 30), (rx, ry),
+                                         (rx + (u if rx < pad.centerx else -u), pad.bottom - u // 2),
+                                         max(1, u // 8))
+                    pygame.draw.polygon(surface, (52, 38, 26),
+                                        [(tx - u // 6, ty + th), (tx + tw // 2, ty - u // 3), (tx + tw + u // 6, ty + th)])
+                    pygame.draw.polygon(surface, (216, 190, 142),
+                                        [(tx, ty + th), (tx + tw // 2, ty), (tx + tw, ty + th)])
+                    pygame.draw.polygon(surface, (172, 142, 98),
+                                        [(tx + tw // 2 - tw // 7, ty + th), (tx + tw // 2, ty + th // 4),
+                                         (tx + tw // 2 + tw // 7, ty + th)])
+                    pygame.draw.line(surface, (140, 112, 76), (tx, ty + th), (tx + tw, ty + th), max(1, u // 6))
+
+                # Big tent (left), small tent (top-right)
+                _tent(pad.left + u, pad.top + u, int(pad.width * 0.52), int(pad.height * 0.62))
+                _tent(pad.left + int(pad.width * 0.56), pad.top + u,
+                      int(pad.width * 0.36), int(pad.height * 0.44))
+
+                # Campfire (center-bottom): stone ring + logs + flame
+                fx = pad.centerx + u // 2
+                fy = pad.bottom - u * 1.6
+                fr = u * 0.95
+                for i in range(6):
+                    a = i * math.pi / 3
+                    pygame.draw.circle(surface, (110, 106, 100),
+                                       (fx + int(math.cos(a) * fr), fy + int(math.sin(a) * fr * 0.55)),
+                                       max(2, u // 5))
+                pygame.draw.line(surface, (88, 58, 32), (fx - fr * 0.5, fy), (fx + fr * 0.5, fy + u // 4), max(2, u // 4))
+                pygame.draw.line(surface, (88, 58, 32), (fx + fr * 0.5, fy), (fx - fr * 0.5, fy + u // 4), max(2, u // 4))
+                pygame.draw.circle(surface, (220, 90, 30), (fx, fy - u // 5), max(3, u // 3))
+                pygame.draw.circle(surface, (250, 180, 60), (fx, fy - u // 6), max(2, u // 5))
+                pygame.draw.circle(surface, (255, 235, 160), (fx, fy - u // 8), max(1, u // 8))
+
+                # Log pile (right of fire)
+                lx = pad.right - u * 1.9
+                ly = pad.bottom - u * 0.9
+                for row in range(3):
+                    for col in range(2 - (row % 2)):
+                        rr = u * 0.22
+                        pygame.draw.rect(surface, (96, 64, 36),
+                                         (lx + col * u * 0.5 - row * u * 0.12,
+                                          ly - row * u * 0.34, int(u * 0.52), int(rr * 1.7)),
+                                         border_radius=max(1, int(rr * 0.5)))
+                        pygame.draw.circle(surface, (176, 132, 82),
+                                           (lx + col * u * 0.5 - row * u * 0.12 + int(u * 0.5),
+                                            ly - row * u * 0.34 + int(rr * 0.85)), max(1, int(rr * 0.45)))
+
+                # Supply crate beside the fire
+                cwx, cwy = fx - u * 1.5, fy + u * 0.7
+                cw = u * 0.9
+                pygame.draw.rect(surface, (0, 0, 0, 60), (cwx + u // 8, cwy + u // 6, cw, cw), border_radius=2)
+                pygame.draw.rect(surface, (126, 88, 48), (cwx, cwy, cw, cw), border_radius=2)
+                pygame.draw.rect(surface, (150, 108, 62), (cwx, cwy, cw, cw), width=max(1, u // 8), border_radius=2)
+                pygame.draw.line(surface, (96, 66, 36), (cwx, cwy), (cwx + cw, cwy + cw), max(1, u // 10))
+                pygame.draw.line(surface, (96, 66, 36), (cwx + cw, cwy), (cwx, cwy + cw), max(1, u // 10))
+
             else:
+                frame_col = self.type_cfg.get("color_frame", (100, 116, 139))
+                panel_col = self.type_cfg.get("color_roof", (51, 65, 85))
+                pygame.draw.rect(surface, (0, 0, 0, 70), pad.move(2, 3), border_radius=6)
+                pygame.draw.rect(surface, frame_col, pad, border_radius=6)
+                pygame.draw.rect(surface, panel_col,
+                                 pad.inflate(-max(4, int(scaled_t * 0.18)),
+                                             -max(4, int(scaled_t * 0.18))), border_radius=4)
+                pygame.draw.rect(surface, frame_col, pad, width=2, border_radius=6)
+
+                # Center emblem: pick head for the mine station.
+                cx, cy = pad.center
+                r = max(6, int(scaled_t * 0.22))
                 pygame.draw.circle(surface, self.type_cfg.get("color_rock", (100, 116, 139)),
                                    (cx, cy), r)
                 pygame.draw.circle(surface, (15, 23, 42), (cx, cy), r, max(1, int(camera.zoom * 2)))
@@ -625,7 +688,7 @@ class FurnitureManager:
 
     def check_breaks_by_time(self, current_day, current_hour):
         """Check furniture breaks at their scheduled random time during the day."""
-        from game.systems.work.carpenter_system import CarpenterSystem
+        from game.systems.work.builder_system import BuilderSystem
 
         newly_broken = []
         for furniture in self.furnitures:
@@ -656,7 +719,7 @@ class FurnitureManager:
                 continue
             furniture.condition = 0.0
             furniture.construction_progress = 0.0
-            furniture.construction_order = CarpenterSystem.create_repair_order(
+            furniture.construction_order = BuilderSystem.create_repair_order(
                 furniture, self.building_manager, self.villager_manager
             )
             if is_public_maintainable:
@@ -848,8 +911,8 @@ class FurnitureManager:
         if cfg.get("instant_place"):
             f.construction_order = None
         else:
-            from game.systems.work.carpenter_system import CarpenterSystem
-            f.construction_order = CarpenterSystem.create_order(f, bm, vm)
+            from game.systems.work.builder_system import BuilderSystem
+            f.construction_order = BuilderSystem.create_order(f, bm, vm)
         self.furnitures.append(f)
         self.invalidate_cache()
         from game.world.natural_resources import get_natural_resources
@@ -1189,8 +1252,8 @@ class FurnitureManager:
 
         order = getattr(f, "construction_order", None)
         if order and order.get("status") != "COMPLETE":
-            from game.systems.work.carpenter_system import CarpenterSystem
-            CarpenterSystem.refund_order_materials(order, f, self, stockpile_manager)
+            from game.systems.work.builder_system import BuilderSystem
+            BuilderSystem.refund_order_materials(order, f, self, stockpile_manager)
 
         f.destroy(stockpile_manager=stockpile_manager, resources=resources)
         was_placed = not f.is_dropped and f.stored_in_id is None

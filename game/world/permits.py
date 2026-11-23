@@ -751,7 +751,7 @@ def find_closest_unassigned_household_worker(
     - Must be alive.
     - Belongs to a household.
     - Not assigned to any active workplace permit.
-    - Not holding another active dedicated job (Priest, Gravedigger, Blacksmith, Carpenter, etc.).
+    - Not holding another active dedicated job (Priest, Gravedigger, Blacksmith, Builder, etc.).
     - Adults (age >= 16) prioritized.
     - Distance measured from household residence (home permit lot or chest/bed),
       so relocating a household dynamically updates proximity for all subsequent assignments.

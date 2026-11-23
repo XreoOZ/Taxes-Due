@@ -11,8 +11,8 @@ from game.config import (
     VILLAGER_RADIUS,
     VILLAGER_SPEED,
     VILLAGER_INVENTORY_CAPACITY,
-    CARPENTER_TOOL_SWING_SPEED,
-    CARPENTER_TOOL_SWING_ANGLE,
+    BUILDER_TOOL_SWING_SPEED,
+    BUILDER_TOOL_SWING_ANGLE,
     WATERING_DURATION_SECONDS,
     DOORWAY_WAYPOINT_DISTANCE,
     TILE_SIZE,
@@ -289,8 +289,8 @@ class Villager:
         self.gravedigger_timer = 0.0
         self.burial_payment_target_corpse_id = None
         self.burial_payment_gravedigger_id = None
-        self.carpenter_payment_order_id = None
-        self.carpenter_payment_carpenter_id = None
+        self.builder_payment_order_id = None
+        self.builder_payment_builder_id = None
         self.target_restock_market = None
         self.target_restock_mat = None
         self.target_restock_qty = 0
@@ -431,20 +431,20 @@ class Villager:
             return "Walking to market for grave supplies" if getattr(self, "is_moving", False) else "Buying grave supplies"
         elif task == "GRAVEDIGGER_RESTOCK_HAULING_HOME":
             return "Carrying grave supplies home"
-        elif task.startswith("CARPENTER_FEE_"):
-            return "Delivering Carpenter commission" if task.endswith("TRAVEL") else "Collecting furniture commission"
-        elif task == "WAITING_FOR_CARPENTER_COMMISSION":
+        elif task.startswith("BUILDER_FEE_"):
+            return "Delivering Builder commission" if task.endswith("TRAVEL") else "Collecting furniture commission"
+        elif task == "WAITING_FOR_BUILDER_COMMISSION":
             return "Waiting for furniture commission"
-        elif task == "CARPENTER_CONSTRUCTING":
+        elif task == "BUILDER_CONSTRUCTING":
             return "Building furniture"
-        elif task == "CARPENTER_COLLECTING_MATERIALS":
+        elif task == "BUILDER_COLLECTING_MATERIALS":
             return "Collecting building materials from household storage"
-        elif task == "CARPENTER_DELIVERING_MATERIALS":
+        elif task == "BUILDER_DELIVERING_MATERIALS":
             return "Carrying building materials to the work site"
-        elif task == "CARPENTER_REPAIRING":
+        elif task == "BUILDER_REPAIRING":
             return "Repairing furniture"
-        elif task.startswith("CARPENTER_RESTOCK_"):
-            return "Restocking Carpenter materials"
+        elif task.startswith("BUILDER_RESTOCK_"):
+            return "Restocking Builder materials"
         elif task == "HAULING_STALL_COINS_FETCH":
             return "Collecting market stall earnings"
         elif task == "HAULING_STALL_COINS_DELIVER":
@@ -1506,36 +1506,36 @@ class Villager:
                          or farm.get_untilled_tiles()
                          or farm.get_unwatered_tiles())
                 )
-            elif self.job == "Carpenter" and furniture_manager:
-                from game.systems.work.carpenter_system import CarpenterSystem
+            elif self.job == "Builder" and furniture_manager:
+                from game.systems.work.builder_system import BuilderSystem
                 order_subjects = (
                     list(getattr(furniture_manager, "furnitures", []))
                     + list(getattr(building_manager, "buildings", []) if building_manager else [])
                     + list(getattr(building_manager, "construction_sites", []) if building_manager else [])
                 )
-                # Only statuses where the Carpenter can act count as work.
+                # Only statuses where the Builder can act count as work.
                 # PAYMENT_REQUESTED / PAYMENT_TRAVELING / LANDLORD_* mean he is
                 # just waiting on someone else, so he should do needs instead.
                 # AWAITING_MATERIAL is the same kind of wait: it only counts as
-                # work while the Carpenter can still progress it (materials on
+                # work while the Builder can still progress it (materials on
                 # hand, or a market that can supply them for the payer). When
                 # the order is genuinely stuck waiting on materials, the
-                # carpenter gets normal free time — needs and leisure — instead
+                # builder gets normal free time — needs and leisure — instead
                 # of standing idle forever; he resumes the order automatically
                 # once materials become available.
                 actionable = ("AWAITING_PAYMENT", "PAID", "BUILDING")
                 has_order = any(
                     isinstance(getattr(s, "construction_order", None), dict)
                     and s.construction_order.get("status") in actionable
-                    and str(s.construction_order.get("carpenter_id") or "") in ("", str(self.id))
+                    and str(s.construction_order.get("builder_id") or "") in ("", str(self.id))
                     for s in order_subjects
                 )
                 if not has_order:
-                    has_order = CarpenterSystem.material_order_progressable(
+                    has_order = BuilderSystem.material_order_progressable(
                         self, order_subjects, furniture_manager, stockpile_manager,
                         building_manager, villager_manager,
                     )
-                _, totals = CarpenterSystem._materials_in_storage(self, furniture_manager, stockpile_manager)
+                _, totals = BuilderSystem._materials_in_storage(self, furniture_manager, stockpile_manager)
                 targets = job_cfg.get("material_stock_target", {})
                 needs_stock = any(
                     int(totals.get(mat, 0)) < int(target)
@@ -1661,9 +1661,9 @@ class Villager:
                     day_number=getattr(day_cycle, "day_number", 1),
                 ):
             return
-        from game.systems.work.carpenter_system import CarpenterSystem
+        from game.systems.work.builder_system import BuilderSystem
         if ((sched_activity in FREE_TIME_SCHEDULE_ACTIVITIES or sched_activity == "WORK")
-                and CarpenterSystem.update_payment_task(
+                and BuilderSystem.update_payment_task(
                     self, dt, building_manager, furniture_manager, stockpile_manager,
                     all_entities, player, villager_manager,
                     day_number=getattr(day_cycle, "day_number", 1),
@@ -2831,10 +2831,10 @@ class Villager:
                         self.job_tool_purchase_items = purchase_items
                         self.task = "BUYING_JOB_TOOLS_RETRIEVE_COINS"
                         return
-                    if self.job == "Carpenter":
-                        # Carpenter commission errands (claiming orders, payment
+                    if self.job == "Builder":
+                        # Builder commission errands (claiming orders, payment
                         # requests, material hauling) do not need the saw/adze.
-                        # CarpenterSystem gates only the actual build phase, so
+                        # BuilderSystem gates only the actual build phase, so
                         # fall through to update_worker instead of dead-ending.
                         pass
                     else:
@@ -2846,7 +2846,7 @@ class Villager:
         # -------------------------------------------------------------
         # Rutinitas 2: Jam Kerja (WORK / ANY)
         # -------------------------------------------------------------
-        if CarpenterSystem.update_worker(
+        if BuilderSystem.update_worker(
             self, dt, sched_activity, building_manager, furniture_manager,
             villager_manager, all_entities, player, day_cycle,
             stockpile_manager=stockpile_manager, permit_manager=permit_manager,
@@ -4148,9 +4148,9 @@ class Villager:
                 pygame.draw.arc(surface, (226, 232, 240), (hx - arc_r // 2, hy - arc_r, arc_r * 2, arc_r * 2), self.facing_angle, self.facing_angle + math.pi * 0.9, max(2, int(2 * camera.zoom)))
 
         elif active_t in ("Saw", "Adze"):
-            is_carpenter_working = self.task in ("CARPENTER_CONSTRUCTING", "CARPENTER_REPAIRING") and not self.is_moving
-            phase = time.time() * CARPENTER_TOOL_SWING_SPEED
-            swing = math.sin(phase) * CARPENTER_TOOL_SWING_ANGLE if is_carpenter_working else 0.0
+            is_builder_working = self.task in ("BUILDER_CONSTRUCTING", "BUILDER_REPAIRING") and not self.is_moving
+            phase = time.time() * BUILDER_TOOL_SWING_SPEED
+            swing = math.sin(phase) * BUILDER_TOOL_SWING_ANGLE if is_builder_working else 0.0
             tool_angle = self.facing_angle - 0.55 + swing
             tool_len = max(9, int(15 * camera.zoom))
             tool_end = (hx + int(math.cos(tool_angle) * tool_len),
@@ -4171,7 +4171,7 @@ class Villager:
                                  max(3, int(5 * camera.zoom)))
                 pygame.draw.line(surface, (100, 116, 139), tool_end, blade_end,
                                  max(1, int(camera.zoom)))
-            if is_carpenter_working and math.sin(phase) < -0.65:
+            if is_builder_working and math.sin(phase) < -0.65:
                 dust_x = tool_end[0] + int(math.cos(self.facing_angle) * camera.zoom * 3)
                 dust_y = tool_end[1] + int(math.sin(self.facing_angle) * camera.zoom * 3)
                 pygame.draw.circle(surface, (217, 149, 44), (dust_x, dust_y),

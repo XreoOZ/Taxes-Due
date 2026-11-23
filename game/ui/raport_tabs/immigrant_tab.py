@@ -29,7 +29,7 @@ class ImmigrantMixin:
         if not boards:
             msg = self.font_body.render(
                 "No Notice Board placed. Build one via Buildings > Public Structure "
-                "(Wood x10, ~1h carpenter build, max 1 per village).", True, COLOR_TEXT_MUTED)
+                "(Wood x10, ~1h builder build, max 1 per village).", True, COLOR_TEXT_MUTED)
             surface.blit(msg, (mx + 24, cy + 34))
             return
 

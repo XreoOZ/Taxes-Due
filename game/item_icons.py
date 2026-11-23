@@ -156,7 +156,7 @@ def draw_item_icon(surface, item_name, cx, cy, size=12):
         # Bone marrow circle
         pygame.draw.circle(surface, (254, 242, 242), (cx + int(size * 0.3), cy), max(1, int(size * 0.3)))
 
-    # Carpenter's tools: recognizable medieval hand tools.
+    # Builder's tools: recognizable medieval hand tools.
     elif "saw" in name_low:
         pygame.draw.line(surface, (125, 82, 44), (cx - size + 2, cy + size - 3), (cx + size - 2, cy - size + 3), max(2, size // 5))
         blade = [(cx - size + 1, cy + size - 4), (cx + size - 2, cy - size + 2), (cx + size, cy - size + 5)]

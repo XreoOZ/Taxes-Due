@@ -12,13 +12,50 @@ from game.config import TILE_SIZE, HAPPINESS_INITIAL_VALUE, SLEEP_INITIAL_VALUE
 
 SAVE_DIR = "saves"
 
+_LEGACY_BUILDER_RENAMES = [
+    ("CarpenterSystem", "BuilderSystem"),
+    ("carpenter_catalog_modal", "builder_catalog_modal"),
+    ("carpenter_system", "builder_system"),
+    ("Carpenter Workbench", "Builder Workbench"),
+    ("carpenter_workbench", "builder_workbench"),
+    ("carpenter_commissionable", "builder_commissionable"),
+    ("CARPENTER_", "BUILDER_"),
+    ("CARPENTER", "BUILDER"),
+    ("Carpenter", "Builder"),
+    ("carpenter", "builder"),
+]
+
+def _migrate_legacy_builder_names(obj):
+    """Rename legacy 'carpenter' job identifiers in loaded save data to 'builder'."""
+    if isinstance(obj, dict):
+        return {_migrate_legacy_builder_names(k): _migrate_legacy_builder_names(v)
+                for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_migrate_legacy_builder_names(v) for v in obj]
+    if isinstance(obj, str):
+        for old, new in _LEGACY_BUILDER_RENAMES:
+            if old in obj:
+                obj = obj.replace(old, new)
+    return obj
+
 def ensure_save_dir():
     if not os.path.exists(SAVE_DIR):
         os.makedirs(SAVE_DIR, exist_ok=True)
 
+def _sanitize_save_name(name):
+    """Save names become filenames: keep alnum/-/_ only, never empty."""
+    safe = "".join(c if c.isalnum() or c in "-_" else "_" for c in str(name)).strip("_-")
+    return safe or "save"
+
+def autosave_slot_name(day_number):
+    return f"autosave-day{int(day_number):02d}"
+
 def get_slot_path(slot_id):
     ensure_save_dir()
-    return os.path.join(SAVE_DIR, f"save_slot_{slot_id}.json")
+    if isinstance(slot_id, int):
+        # Legacy numbered slots keep their original filenames.
+        return os.path.join(SAVE_DIR, f"save_slot_{slot_id}.json")
+    return os.path.join(SAVE_DIR, f"{_sanitize_save_name(slot_id)}.json")
 
 def get_slot_meta(slot_id):
     path = get_slot_path(slot_id)
@@ -41,7 +78,29 @@ def get_slot_meta(slot_id):
         return {"slot_id": slot_id, "is_empty": True}
 
 def get_all_slots_meta():
-    return [get_slot_meta(i) for i in (1, 2, 3)]
+    """List every save file in the save dir — unlimited named saves."""
+    ensure_save_dir()
+    metas = []
+    for fn in os.listdir(SAVE_DIR):
+        if not fn.endswith(".json"):
+            continue
+        metas.append(get_slot_meta(fn[:-5]))
+    metas.sort(key=lambda m: (m.get("day_number", 0), m.get("timestamp", "")), reverse=True)
+    return metas
+
+def delete_save(slot_id):
+    """Permanently delete a save file. Returns (success, message)."""
+    path = get_slot_path(slot_id)
+    if not os.path.exists(path):
+        return False, f"Save \"{slot_id}\" not found."
+    try:
+        os.remove(path)
+        tmp = path + ".tmp"
+        if os.path.exists(tmp):
+            os.remove(tmp)
+        return True, f"Save \"{slot_id}\" deleted."
+    except Exception as e:
+        return False, f"Failed to delete save: {e}"
 
 def serialize_game_state(day_cycle, resources, player, permit_manager, building_manager, stockpile_manager, furniture_manager, villager_manager, servant_manager, schedule_manager):
     """Gathers all dynamic game state into a clean JSON-serializable dictionary"""
@@ -297,8 +356,8 @@ def serialize_game_state(day_cycle, resources, player, permit_manager, building_
                     "carrying_corpse_id": getattr(m, "carrying_corpse_id", None),
                     "burial_payment_target_corpse_id": getattr(m, "burial_payment_target_corpse_id", None),
                     "burial_payment_gravedigger_id": getattr(m, "burial_payment_gravedigger_id", None),
-                    "carpenter_payment_order_id": getattr(m, "carpenter_payment_order_id", None),
-                    "carpenter_payment_carpenter_id": getattr(m, "carpenter_payment_carpenter_id", None),
+                    "builder_payment_order_id": getattr(m, "builder_payment_order_id", None),
+                    "builder_payment_builder_id": getattr(m, "builder_payment_builder_id", None),
                     "is_buried": getattr(m, "is_buried", False),
                     "is_picked_up": getattr(m, "is_picked_up", False)
                 } for m in fam.members
@@ -317,12 +376,12 @@ def serialize_game_state(day_cycle, resources, player, permit_manager, building_
             "carrying_furniture_id": getattr(s.carrying_furniture, "id", None) if getattr(s, "carrying_furniture", None) else None,
             "state": getattr(s, "state", "IDLE"),
             "inventory": dict(getattr(s, "inventory", {})),
-            "carpenter_commission_order_id": getattr(s, "carpenter_commission_order_id", None),
-            "carpenter_commission_carpenter_id": getattr(s, "carpenter_commission_carpenter_id", None),
-            "carpenter_commission_fee_copper": getattr(s, "carpenter_commission_fee_copper", 0),
-            "carpenter_commission_remaining_copper": getattr(s, "carpenter_commission_remaining_copper", 0),
-            "carpenter_commission_storage_tile": getattr(s, "carpenter_commission_storage_tile", None),
-            "carpenter_commission_treasury_id": getattr(s, "carpenter_commission_treasury_id", None)
+            "builder_commission_order_id": getattr(s, "builder_commission_order_id", None),
+            "builder_commission_builder_id": getattr(s, "builder_commission_builder_id", None),
+            "builder_commission_fee_copper": getattr(s, "builder_commission_fee_copper", 0),
+            "builder_commission_remaining_copper": getattr(s, "builder_commission_remaining_copper", 0),
+            "builder_commission_storage_tile": getattr(s, "builder_commission_storage_tile", None),
+            "builder_commission_treasury_id": getattr(s, "builder_commission_treasury_id", None)
         })
 
     # 9. Schedules
@@ -706,8 +765,8 @@ def deserialize_game_state(data, day_cycle, resources, player, permit_manager, b
             v.carrying_corpse_id = m_d.get("carrying_corpse_id", None)
             v.burial_payment_target_corpse_id = m_d.get("burial_payment_target_corpse_id", None)
             v.burial_payment_gravedigger_id = m_d.get("burial_payment_gravedigger_id", None)
-            v.carpenter_payment_order_id = m_d.get("carpenter_payment_order_id", None)
-            v.carpenter_payment_carpenter_id = m_d.get("carpenter_payment_carpenter_id", None)
+            v.builder_payment_order_id = m_d.get("builder_payment_order_id", None)
+            v.builder_payment_builder_id = m_d.get("builder_payment_builder_id", None)
             v.is_buried = bool(m_d.get("is_buried", False))
             v.is_picked_up = bool(m_d.get("is_picked_up", False))
             v.assigned_permit_id = fam.assigned_permit_id
@@ -753,12 +812,12 @@ def deserialize_game_state(data, day_cycle, resources, player, permit_manager, b
                 if "work_priorities" in s_d:
                     s.work_priorities = dict(s_d["work_priorities"])
                 s.inventory = dict(s_d.get("inventory", getattr(s, "inventory", {})))
-                s.carpenter_commission_order_id = s_d.get("carpenter_commission_order_id")
-                s.carpenter_commission_carpenter_id = s_d.get("carpenter_commission_carpenter_id")
-                s.carpenter_commission_fee_copper = int(s_d.get("carpenter_commission_fee_copper", 0))
-                s.carpenter_commission_remaining_copper = int(s_d.get("carpenter_commission_remaining_copper", 0))
-                s.carpenter_commission_storage_tile = s_d.get("carpenter_commission_storage_tile")
-                s.carpenter_commission_treasury_id = s_d.get("carpenter_commission_treasury_id")
+                s.builder_commission_order_id = s_d.get("builder_commission_order_id")
+                s.builder_commission_builder_id = s_d.get("builder_commission_builder_id")
+                s.builder_commission_fee_copper = int(s_d.get("builder_commission_fee_copper", 0))
+                s.builder_commission_remaining_copper = int(s_d.get("builder_commission_remaining_copper", 0))
+                s.builder_commission_storage_tile = s_d.get("builder_commission_storage_tile")
+                s.builder_commission_treasury_id = s_d.get("builder_commission_treasury_id")
                 
                 # Reconnect carrying furniture if applicable
                 scf_id = s_d.get("carrying_furniture_id", None)
@@ -768,7 +827,7 @@ def deserialize_game_state(data, day_cycle, resources, player, permit_manager, b
                     s.carrying_furniture = None
                 
                 # Reconnect the public commission courier task by its stable order IDs.
-                if s_d.get("state") in ("CARPENTER_COMMISSION_RETRIEVE", "CARPENTER_COMMISSION_DELIVER") and s.carpenter_commission_order_id:
+                if s_d.get("state") in ("BUILDER_COMMISSION_RETRIEVE", "BUILDER_COMMISSION_DELIVER") and s.builder_commission_order_id:
                     s.state = s_d["state"]
                 # Reset other in-progress tasks to prevent stale references.
                 elif not s.carrying_furniture:
@@ -876,6 +935,7 @@ def load_from_slot(slot_id, day_cycle, resources, player, permit_manager, buildi
     except Exception as e:
         return False, f"Failed to read slot {slot_id}: {e}"
 
+    data = _migrate_legacy_builder_names(data)
     deserialize_game_state(data, day_cycle, resources, player, permit_manager, building_manager, stockpile_manager, furniture_manager, villager_manager, servant_manager, schedule_manager)
     furniture_manager.ensure_lord_treasury_chest(
         permit_manager, villager_manager, building_manager, stockpile_manager,
