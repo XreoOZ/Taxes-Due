@@ -180,6 +180,18 @@ class RaportUI(
         self.check_wealth_detail_btn_rect = None
         self.close_wealth_dlg_btn_rect = None
 
+        # Item Distribution State (Taxes tab)
+        self.show_item_dist_dialog = False
+        self.item_dist_view = "production"      # "production" | "stock"
+        self.item_dist_checked = set()          # item names with chart expanded
+        self.item_dist_scroll_prod = 0
+        self.item_dist_scroll_stock = 0
+        self.item_dist_close_rect = None
+        self.item_dist_view_btns = {}
+        self.item_dist_check_rects = {}
+        self.item_dist_viewport_rect = None
+        self.check_item_dist_btn_rect = None
+
         # Household Possession State
         self.show_household_possession = False
         self.household_possession_btn_rect = None
@@ -318,6 +330,7 @@ class RaportUI(
         self.show_furniture_menu = False
         self.show_household_possession = False
         self.show_wealth_detail_dialog = False
+        self.show_item_dist_dialog = False
         self.show_grant_dialog = False
         self.show_grant_confirm = False
         self.grant_amounts = {}
@@ -705,6 +718,15 @@ class RaportUI(
             if self.show_grant_dialog and getattr(self, "grant_max_scroll", 0) > 0:
                 self.grant_scroll_y = max(0, min(self.grant_scroll_y - event.y * upx(36), self.grant_max_scroll))
                 return "grant_scroll"
+            if (self.show_item_dist_dialog
+                    and getattr(self, "item_dist_viewport_rect", None)
+                    and self.item_dist_viewport_rect.collidepoint(pygame.mouse.get_pos())):
+                step = event.y * upx(36)
+                if self.item_dist_view == "production":
+                    self.item_dist_scroll_prod = max(0, self.item_dist_scroll_prod - step)
+                else:
+                    self.item_dist_scroll_stock = max(0, self.item_dist_scroll_stock - step)
+                return "item_dist_scroll"
             if (self.is_open and self.active_tab == 5 and self.selected_job_id is None
                     and self.jobs_viewport_rect and self.jobs_viewport_rect.collidepoint(pygame.mouse.get_pos())
                     and self.jobs_max_scroll > 0):
@@ -834,6 +856,7 @@ class RaportUI(
         # Typable number fields: focus on click, commit on outside click
         if not (self.show_grant_dialog or self.show_grant_confirm
                 or self.crop_picker_permit_id or self.show_wealth_detail_dialog
+                or self.show_item_dist_dialog
                 or self.show_household_possession or self.selected_member_inventory_id
                 or self.show_assign_permit_picker):
             hit_key = None
@@ -1463,6 +1486,28 @@ class RaportUI(
 
         # 8.5. Tab 7: Taxation & Tithes
         elif self.active_tab == 7:
+            if self.show_item_dist_dialog:
+                if self.item_dist_close_rect and self.item_dist_close_rect.collidepoint(mouse_pos):
+                    self.show_item_dist_dialog = False
+                    return "close_item_dist_dialog"
+                for view_key, r in getattr(self, "item_dist_view_btns", {}).items():
+                    if r and r.collidepoint(mouse_pos):
+                        self.item_dist_view = view_key
+                        return f"item_dist_view_{view_key}"
+                for item_name, r in getattr(self, "item_dist_check_rects", {}).items():
+                    if r and r.collidepoint(mouse_pos):
+                        if item_name in self.item_dist_checked:
+                            self.item_dist_checked.discard(item_name)
+                        else:
+                            self.item_dist_checked.add(item_name)
+                        return f"item_dist_toggle_{item_name}"
+                return None
+
+            if self.check_item_dist_btn_rect and self.check_item_dist_btn_rect.collidepoint(mouse_pos):
+                self.show_item_dist_dialog = True
+                self.item_dist_view = "production"
+                return "open_item_dist_dialog"
+
             if self.show_wealth_detail_dialog:
                 if self.close_wealth_dlg_btn_rect and self.close_wealth_dlg_btn_rect.collidepoint(mouse_pos):
                     self.show_wealth_detail_dialog = False
@@ -1618,7 +1663,7 @@ class RaportUI(
         elif self.active_tab == 6:
             self._draw_immigrant_tab(surface, mx, content_y, villager_manager, permit_manager, furniture_manager=furniture_manager, day_cycle=day_cycle)
         elif self.active_tab == 7:
-            self._draw_tax_tab(surface, mx, content_y, villager_manager, permit_manager, furniture_manager=furniture_manager, production_system=production_system, resources=resources, building_manager=building_manager, stockpile_manager=stockpile_manager, day_cycle=day_cycle)
+            self._draw_tax_tab(surface, mx, content_y, villager_manager, permit_manager, furniture_manager=furniture_manager, production_system=production_system, resources=resources, building_manager=building_manager, stockpile_manager=stockpile_manager, day_cycle=day_cycle, servant_manager=servant_manager)
         elif self.active_tab == 8:
             self._draw_planning_tab(surface, mx, content_y)
 

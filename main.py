@@ -167,7 +167,7 @@ def furniture_menu_actions(f):
     if ftype == "notice_board":
         acts.append(("immigrants", "Immigrants"))
     if workplace_bases_for("furniture", f):
-        acts.append(("workplace", "Workplace"))
+        acts.append(("workplace", "Workstation"))
     return acts
 
 
@@ -177,7 +177,7 @@ def structure_menu_actions(b):
     if getattr(b, "building_type", "") == "market":
         acts.append(("market", "Market"))
     if workplace_bases_for("building", b):
-        acts.append(("workplace", "Workplace"))
+        acts.append(("workplace", "Workstation"))
     return acts
 
 
@@ -1511,9 +1511,7 @@ def main():
                                         elif act == "immigrants":
                                             raport_ui.open_immigrant_tab()
                                         elif act == "workplace":
-                                            jid = workplace_job_for("furniture", selected_furniture)
-                                            if jid:
-                                                raport_ui.open_workplace_workstations(jid, ("furniture", selected_furniture))
+                                            workplace_popup = {"kind": "furniture", "obj": selected_furniture, "pos": event.pos}
                                         selected_furniture = None
                                         furn_action_hit = True
                                         break
@@ -1565,9 +1563,7 @@ def main():
                                             market_modal.open(s_b)
                                             raport_ui.close()
                                         elif act == "workplace":
-                                            jid = workplace_job_for("building", s_b)
-                                            if jid:
-                                                raport_ui.open_workplace_workstations(jid, ("building", s_b))
+                                            workplace_popup = {"kind": "building", "obj": s_b, "pos": event.pos}
                                         elif act == "destroy":
                                             building_manager.start_demolition(s_b)
                                         selected_structure = None

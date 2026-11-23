@@ -10,7 +10,7 @@ from game.ui.ui_theme import upx
 
 
 class TaxMixin:
-    def _draw_tax_tab(self, surface, mx, cy, villager_manager, permit_manager, furniture_manager=None, production_system=None, resources=None, building_manager=None, stockpile_manager=None, day_cycle=None):
+    def _draw_tax_tab(self, surface, mx, cy, villager_manager, permit_manager, furniture_manager=None, production_system=None, resources=None, building_manager=None, stockpile_manager=None, day_cycle=None, servant_manager=None):
         """Tax System UI, Church Tithes & Village Wealth Distribution (AGENT 2)"""
         ps = production_system or ProductionDistributionSystem.get_instance()
         mouse_pos = pygame.mouse.get_pos()
@@ -151,6 +151,198 @@ class TaxMixin:
         # 5. Wealth Detail & Pie Chart Dialog Modal (if active)
         if self.show_wealth_detail_dialog:
             self._draw_wealth_pie_chart_dialog(surface, mx, cy, wealth_data, mouse_pos)
+
+        # 6. Item Distribution card + dialog
+        item_card = pygame.Rect(mx + upx(24), cy + upx(288), self.modal_w - upx(48), upx(52))
+        pygame.draw.rect(surface, (24, 34, 52), item_card, border_radius=upx(6))
+        pygame.draw.rect(surface, (56, 189, 248), item_card, width=1, border_radius=upx(6))
+        surface.blit(self.font_sub.render("Item Distribution:", True, (147, 197, 253)),
+                     (item_card.x + upx(14), item_card.y + upx(8)))
+        surface.blit(self.font_body.render(
+            "10-day production charts per item + full village item census with owners.",
+            True, COLOR_TEXT_MUTED), (item_card.x + upx(14), item_card.y + upx(28)))
+        self.check_item_dist_btn_rect = pygame.Rect(item_card.right - upx(170), item_card.y + upx(11), upx(156), upx(30))
+        id_hov = self.check_item_dist_btn_rect.collidepoint(mouse_pos)
+        pygame.draw.rect(surface, (37, 99, 235) if id_hov else (29, 78, 216), self.check_item_dist_btn_rect, border_radius=upx(5))
+        pygame.draw.rect(surface, (96, 165, 250), self.check_item_dist_btn_rect, width=1, border_radius=upx(5))
+        id_txt = self.font_badge.render("Check Item Detail", True, (255, 255, 255))
+        surface.blit(id_txt, (self.check_item_dist_btn_rect.centerx - id_txt.get_width() // 2,
+                              self.check_item_dist_btn_rect.centery - id_txt.get_height() // 2))
+
+        if self.show_item_dist_dialog:
+            self._draw_item_dist_dialog(
+                surface, villager_manager, furniture_manager, building_manager,
+                stockpile_manager, production_system, day_cycle, mouse_pos,
+                servant_manager=servant_manager)
+
+    def _draw_item_dist_dialog(self, surface, villager_manager, furniture_manager,
+                               building_manager, stockpile_manager, production_system,
+                               day_cycle, mouse_pos, servant_manager=None):
+        """Item Distribution dialog: 10-day production bar charts (checklist)
+        and full village item census with owners."""
+        from game.systems.economy.item_distribution import (
+            production_last_days, village_item_census)
+
+        sw, sh = surface.get_size()
+        overlay = pygame.Surface((sw, sh), pygame.SRCALPHA)
+        overlay.fill((0, 0, 0, 160))
+        surface.blit(overlay, (0, 0))
+
+        dlg_w = min(upx(720), sw - upx(48))
+        dlg_h = min(upx(500), sh - upx(48))
+        dlg_x = (sw - dlg_w) // 2
+        dlg_y = (sh - dlg_h) // 2
+
+        pygame.draw.rect(surface, (15, 23, 42), (dlg_x, dlg_y, dlg_w, dlg_h), border_radius=upx(10))
+        pygame.draw.rect(surface, (56, 189, 248), (dlg_x, dlg_y, dlg_w, dlg_h), width=2, border_radius=upx(10))
+        surface.blit(self.font_title.render("Item Distribution", True, (147, 197, 253)),
+                     (dlg_x + upx(24), dlg_y + upx(14)))
+        surface.blit(self.font_body.render(
+            "Check items to expand their 10-day production chart.", True, COLOR_TEXT_MUTED),
+            (dlg_x + upx(24), dlg_y + upx(38)))
+
+        # Close [X]
+        self.item_dist_close_rect = pygame.Rect(dlg_x + dlg_w - upx(36), dlg_y + upx(12), upx(22), upx(22))
+        pygame.draw.rect(surface, (51, 65, 85), self.item_dist_close_rect, border_radius=upx(4))
+        surface.blit(self.font_badge.render("X", True, (255, 255, 255)),
+                     (self.item_dist_close_rect.x + upx(6), self.item_dist_close_rect.y + 3))
+
+        # View toggle buttons
+        self.item_dist_view_btns = {}
+        vx = dlg_x + dlg_w - upx(300)
+        vy = dlg_y + upx(12)
+        for key, label in (("production", "PRODUCTION 10d"), ("stock", "VILLAGE STOCK")):
+            r = pygame.Rect(vx, vy, upx(140), upx(24))
+            self.item_dist_view_btns[key] = r
+            vx += upx(148)
+            active = self.item_dist_view == key
+            pygame.draw.rect(surface, (37, 99, 235) if active else (30, 41, 59), r, border_radius=upx(5))
+            pygame.draw.rect(surface, (96, 165, 250) if active else (71, 85, 105), r, width=1, border_radius=upx(5))
+            t = self.font_badge.render(label, True, (255, 255, 255) if active else COLOR_TEXT_MUTED)
+            surface.blit(t, (r.centerx - t.get_width() // 2, r.centery - t.get_height() // 2))
+
+        # Viewport
+        vp = pygame.Rect(dlg_x + upx(16), dlg_y + upx(66), dlg_w - upx(32), dlg_h - upx(86))
+        self.item_dist_viewport_rect = vp
+        pygame.draw.rect(surface, (10, 15, 29), vp, border_radius=upx(6))
+        pygame.draw.rect(surface, (51, 65, 85), vp, width=1, border_radius=upx(6))
+        old_clip = surface.get_clip()
+        surface.set_clip(vp)
+
+        self.item_dist_check_rects = {}
+        content_x = vp.x + upx(10)
+        content_w = vp.width - upx(20)
+
+        current_day = int(getattr(day_cycle, "day_number", 1)) if day_cycle else 1
+        start_day = max(1, current_day - 9)
+
+        if self.item_dist_view == "production":
+            ps = production_system or __import__(
+                "game.systems.economy.production_distribution",
+                fromlist=["ProductionDistributionSystem"]).ProductionDistributionSystem.get_instance()
+            data = production_last_days(ps, current_day, window=10)
+            items = sorted(data.keys(), key=lambda k: -data[k].get("total", 0))
+            # Precompute content height, clamp scroll, then draw offset
+            content_h = upx(40) if not items else sum(
+                upx(30) + (upx(52) if it in self.item_dist_checked else 0)
+                for it in items)
+            max_scroll = max(0, content_h - vp.height + upx(16))
+            self.item_dist_scroll_prod = max(0, min(self.item_dist_scroll_prod, max_scroll))
+            cy = vp.y + upx(8) - self.item_dist_scroll_prod
+            if not items:
+                surface.blit(self.font_body.render(
+                    "No villager production recorded in the last 10 days yet.", True, COLOR_TEXT_MUTED),
+                    (content_x + upx(8), cy + upx(8)))
+            else:
+                max_q = 1
+                for it in items:
+                    for d in range(start_day, current_day + 1):
+                        max_q = max(max_q, data[it].get(d, 0))
+                for it in items:
+                    slot = data[it]
+                    checked = it in self.item_dist_checked
+                    row_h = upx(30) + (upx(52) if checked else 0)
+                    # Row background
+                    pygame.draw.rect(surface, (24, 34, 52),
+                                     (content_x, cy, content_w, row_h - upx(4)),
+                                     border_radius=upx(5))
+                    # Checkbox
+                    cb = pygame.Rect(content_x + upx(8), cy + upx(7), upx(16), upx(16))
+                    self.item_dist_check_rects[it] = cb
+                    pygame.draw.rect(surface, (15, 23, 42), cb, border_radius=upx(3))
+                    pygame.draw.rect(surface, (96, 165, 250) if checked else (71, 85, 105),
+                                     cb, width=2 if checked else 1, border_radius=upx(3))
+                    if checked:
+                        pygame.draw.rect(surface, (56, 189, 248),
+                                         (cb.x + upx(4), cb.y + upx(4), upx(8), upx(8)),
+                                         border_radius=upx(1))
+                    # Name + total
+                    surface.blit(self.font_sub.render(it, True, (241, 245, 249)),
+                                 (cb.right + upx(10), cy + upx(5)))
+                    total_txt = self.font_badge.render(f"total: {slot.get('total', 0)}",
+                                                       True, (250, 204, 21))
+                    surface.blit(total_txt, (content_x + content_w - total_txt.get_width() - upx(10),
+                                             cy + upx(7)))
+                    if checked:
+                        # 10-day bar chart
+                        chart_x = cb.right + upx(10)
+                        chart_w = content_w - upx(140)
+                        chart_y = cy + upx(32)
+                        chart_h = upx(40)
+                        slot_w = chart_w / 10.0
+                        for i, d in enumerate(range(start_day, current_day + 1)):
+                            q = slot.get(d, 0)
+                            bh = int(chart_h * (q / max_q)) if q else 0
+                            bx = chart_x + i * slot_w + upx(1)
+                            if bh > 0:
+                                pygame.draw.rect(surface, (56, 189, 248),
+                                                 (bx, chart_y + chart_h - bh, slot_w - upx(3), bh),
+                                                 border_radius=upx(1))
+                            # Day tick label
+                            dl = self.font_badge.render(str(d % 100), True, COLOR_TEXT_MUTED)
+                            surface.blit(dl, (bx + slot_w / 2 - dl.get_width() / 2,
+                                              chart_y + chart_h + upx(1)))
+                        # Day range caption
+                        cap = self.font_badge.render(f"Day {start_day} → {current_day}", True, COLOR_TEXT_MUTED)
+                        surface.blit(cap, (content_x + content_w - cap.get_width() - upx(10),
+                                           cy + upx(36)))
+                    cy += row_h
+        else:
+            # VILLAGE STOCK view — full physical census
+            census = village_item_census(
+                villager_manager, furniture_manager, building_manager,
+                stockpile_manager, servant_manager=servant_manager)
+            items = sorted(census.keys(), key=lambda k: -census[k]["total"])
+            content_h = upx(40) if not items else sum(
+                upx(26) + len(census[it]["owners"]) * upx(20) + upx(6)
+                for it in items)
+            max_scroll = max(0, content_h - vp.height + upx(16))
+            self.item_dist_scroll_stock = max(0, min(self.item_dist_scroll_stock, max_scroll))
+            cy = vp.y + upx(8) - self.item_dist_scroll_stock
+            if not items:
+                surface.blit(self.font_body.render(
+                    "No items found anywhere in the village.", True, COLOR_TEXT_MUTED),
+                    (content_x + upx(8), cy + upx(8)))
+            else:
+                for it in items:
+                    entry = census[it]
+                    # Item header row
+                    pygame.draw.rect(surface, (30, 41, 59),
+                                     (content_x, cy, content_w, upx(26)),
+                                     border_radius=upx(4))
+                    surface.blit(self.font_sub.render(it, True, (241, 245, 249)),
+                                 (content_x + upx(10), cy + upx(4)))
+                    tt = self.font_badge.render(f"{entry['total']}", True, (250, 204, 21))
+                    surface.blit(tt, (content_x + content_w - tt.get_width() - upx(10), cy + upx(5)))
+                    cy += upx(26)
+                    for o in entry["owners"]:
+                        line = self.font_body.render(
+                            f"{o['owner']} — {o['qty']}  ({o['where']})", True, COLOR_TEXT_MUTED)
+                        surface.blit(line, (content_x + upx(24), cy + upx(2)))
+                        cy += upx(20)
+                    cy += upx(6)
+
+        surface.set_clip(old_clip)
 
     def _draw_wealth_pie_chart_dialog(self, surface, mx, cy, wealth_data, mouse_pos):
         """Displays procedural Pie Chart & Breakdown Dialog for Village Wealth (AGENT 2)"""

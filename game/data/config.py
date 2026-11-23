@@ -374,9 +374,6 @@ STARTER_PRESETS = [
             "Tongs": 1,
             "Saw": 1,
             "Adze": 1,
-            "Rolling_Pin": 1,
-            "Peel": 1,
-            "Fishing_Rod": 1,
             "Felling_Axe": 1,
             "Spade": 1,
             "Pickaxe": 1,
@@ -469,7 +466,9 @@ DEDICATED_JOBS = {
         "wip": True,
         "workplace_permit": "bakery",
         "desc": "Mills grain and bakes daily bread loaves for villagers.",
-        "required_tools": ["Rolling_Pin", "Peel"]
+        # "Rolling_Pin"/"Peel"/"Fishing_Rod" disabled — reserved for WIP
+        # Baker/Fisherman jobs; uncomment when those mechanics ship.
+        "required_tools": []
     },
     "Fisherman": {
         "id": "Fisherman",
@@ -479,7 +478,7 @@ DEDICATED_JOBS = {
         "wip": True,
         "workplace_permit": "fishery",
         "desc": "Catches fish and gathers seafood at village docks and shores.",
-        "required_tools": ["Fishing_Rod"]
+        "required_tools": []
     },
     "Priest": {
         "id": "Priest",
@@ -878,9 +877,9 @@ ITEM_CATEGORIES = {
     "Tongs": "TOOL",
     "Saw": "TOOL",
     "Adze": "TOOL",
-    "Rolling_Pin": "TOOL",
-    "Peel": "TOOL",
-    "Fishing_Rod": "TOOL",
+    # "Rolling_Pin": "TOOL",   # disabled — WIP Baker job
+    # "Peel": "TOOL",          # disabled — WIP Baker job
+    # "Fishing_Rod": "TOOL",   # disabled — WIP Fisherman job
     "Felling_Axe": "TOOL",
     "Spade": "TOOL",
     "Pickaxe": "TOOL",
@@ -1021,27 +1020,28 @@ TOOL_TYPES = {
         "color": (180, 83, 9),
         "desc": "Curved woodworking adze for dressing beams and shaping wood."
     },
-    "Rolling_Pin": {
-        "id": "Rolling_Pin",
-        "name": "Rolling Pin",
-        "icon": "🥖",
-        "color": (245, 158, 11),
-        "desc": "Hardwood rolling pin for flattening dough in the bakery."
-    },
-    "Peel": {
-        "id": "Peel",
-        "name": "Baker's Peel",
-        "icon": "🍞",
-        "color": (217, 119, 6),
-        "desc": "Broad wooden paddle for loading and removing loaves from the stone oven."
-    },
-    "Fishing_Rod": {
-        "id": "Fishing_Rod",
-        "name": "Fishing Rod",
-        "icon": "🎣",
-        "color": (14, 165, 233),
-        "desc": "Flexible ash-wood rod with line and hook for catching fish."
-    },
+    # Disabled until Baker/Fisherman jobs ship — uncomment to re-enable.
+    # "Rolling_Pin": {
+    #     "id": "Rolling_Pin",
+    #     "name": "Rolling Pin",
+    #     "icon": "🥖",
+    #     "color": (245, 158, 11),
+    #     "desc": "Hardwood rolling pin for flattening dough in the bakery."
+    # },
+    # "Peel": {
+    #     "id": "Peel",
+    #     "name": "Baker's Peel",
+    #     "icon": "🍞",
+    #     "color": (217, 119, 6),
+    #     "desc": "Broad wooden paddle for loading and removing loaves from the stone oven."
+    # },
+    # "Fishing_Rod": {
+    #     "id": "Fishing_Rod",
+    #     "name": "Fishing Rod",
+    #     "icon": "🎣",
+    #     "color": (14, 165, 233),
+    #     "desc": "Flexible ash-wood rod with line and hook for catching fish."
+    # },
     "Felling_Axe": {
         "id": "Felling_Axe",
         "name": "Felling Axe",
