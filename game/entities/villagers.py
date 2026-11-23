@@ -1694,6 +1694,8 @@ class Villager:
                 no_work_available = (
                     ScheduledActivitySystem.task_schedule(getattr(self, "task", "IDLE")) != "WORK"
                 )
+            if self.get_irrelevant_tools() or self.get_missing_job_tools():
+                no_work_available = False
             if no_work_available:
                 sched_activity = "LEISURE"
                 is_free_time_schedule = True
@@ -3514,21 +3516,9 @@ class Villager:
                     self.target_restock_mat = None
                     self.target_restock_qty = 0
 
-                # Buy any missing tools before starting burial work. Process each
-                # missing tool through the same physical market workflow.
-                missing_tools = self.get_missing_job_tools()
-                if missing_tools and self.task not in restock_tasks:
-                    tool_name, tool_qty = missing_tools[0]
-                    market, _, buy_qty = AIMarketPurchasingSystem.find_nearest_market_for_material(
-                        self, tool_name, tool_qty, building_manager, furniture_manager, villager_manager
-                    )
-                    if market and buy_qty > 0:
-                        self.target_restock_market = market
-                        self.target_restock_mat = tool_name
-                        self.target_restock_qty = buy_qty
-                        self.task = "GRAVEDIGGER_RESTOCK_RETRIEVE_COINS"
-                    elif not getattr(self, "speech_text", None):
-                        self.say(f"I need {tool_name} to work, but no market has it in stock.", duration=2.5)
+                # If missing tools, the universal tool pipeline handles equipping,
+                # purchasing, or commissioning them.
+                if self.get_missing_job_tools():
                     return
 
                 cemetery_p = CemeterySystem.get_cemetery_permit(permit_manager)
@@ -3642,7 +3632,7 @@ class Villager:
                     return
 
                 # D. Cek apakah ada jenazah yang belum dimakamkan
-                all_vils = villager_manager.get_all_villagers()
+                all_vils = villager_manager.get_all_villagers() if villager_manager else []
                 ready_overflow = CemeterySystem.release_ready_overflow_corpse(cemetery_p, cur_day)
                 overflow_ids = CemeterySystem.get_overflow_corpse_ids()
                 unburied_corpses = [

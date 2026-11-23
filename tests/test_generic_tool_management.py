@@ -36,6 +36,8 @@ class TestGenericWorkToolManagement(unittest.TestCase):
         self.sm = StockpileManager()
         self.vm = VillagerManager()
         self.day_cycle = DayCycleSystem()
+        # Set to 10:00 AM (scheduled WORK hours)
+        self.day_cycle.time_seconds = 10.0 * (1440.0 / 24.0)
 
         # Create home house with household storage chest for fam_ward
         tiles = set((x, y) for x in range(5, 9) for y in range(5, 9))
@@ -83,6 +85,8 @@ class TestGenericWorkToolManagement(unittest.TestCase):
         self.assertEqual(self.chest.inventory.get("Sickle"), 1)
 
     def test_2_never_return_temporarily_unused_tools_during_job(self):
+        self.worker.job = "Farmer"
+        self.worker.inventory = {"Hoe": 1, "Watering_Can": 1, "Sickle": 1}
         """Tools must remain in worker inventory even when task does not require them."""
         # Equip Arthur with all 3 tools
         self.worker.job = "Farmer"
@@ -128,8 +132,9 @@ class TestGenericWorkToolManagement(unittest.TestCase):
         self.worker.job = "Farmer"
         self.worker.inventory = {"Hoe": 1, "Watering_Can": 1, "Sickle": 1}
 
-        # Chest has a Hammer for builders
-        self.chest.inventory["Hammer"] = 1
+        # Chest has Saw and Adze for builders
+        self.chest.inventory["Saw"] = 1
+        self.chest.inventory["Adze"] = 1
 
         # Reassign Arthur to Builder
         self.worker.set_job("Builder")
@@ -142,7 +147,7 @@ class TestGenericWorkToolManagement(unittest.TestCase):
         self.assertIn("Watering_Can", irrel_names)
         self.assertIn("Sickle", irrel_names)
 
-        # Run update: Arthur is near chest, so he deposits irrelevant tools and equips Hammer
+        # Run update: Arthur is near chest, so he deposits irrelevant tools and equips Saw and Adze
         self.worker.update(0.1, self.pm, self.bm, [self.worker], player=None,
                            stockpile_manager=self.sm, furniture_manager=self.fm,
                            day_cycle=self.day_cycle)
@@ -152,53 +157,55 @@ class TestGenericWorkToolManagement(unittest.TestCase):
         self.assertEqual(self.chest.inventory.get("Watering_Can"), 1)
         self.assertEqual(self.chest.inventory.get("Sickle"), 1)
 
-        # Worker inventory now has Hammer and NO farming tools!
+        # Worker inventory now has Saw & Adze and NO farming tools!
         self.assertEqual(self.worker.inventory.get("Hoe", 0), 0)
         self.assertEqual(self.worker.inventory.get("Watering_Can", 0), 0)
         self.assertEqual(self.worker.inventory.get("Sickle", 0), 0)
-        self.assertEqual(self.worker.inventory.get("Hammer"), 1)
+        self.assertEqual(self.worker.inventory.get("Saw"), 1)
+        self.assertEqual(self.worker.inventory.get("Adze"), 1)
 
     def test_5_shared_tools_retained_across_jobs(self):
-        """If two jobs share a tool (e.g. Builder and Blacksmith both use Hammer), Hammer is retained without return."""
-        self.worker.job = "Builder"
-        self.worker.inventory = {"Hammer": 1}
-        self.chest.inventory["Tongs"] = 1
+        """If two jobs share a tool (e.g. Farmer and Gravedigger both use Hoe), Hoe is retained without return."""
+        self.worker.job = "Farmer"
+        self.worker.inventory = {"Hoe": 1, "Watering_Can": 1, "Sickle": 1}
 
-        # Switch Builder -> Blacksmith (both require Hammer; Blacksmith also requires Tongs)
-        self.worker.set_job("Blacksmith")
+        # Switch Farmer -> Gravedigger (both require Hoe)
+        self.worker.set_job("Gravedigger")
 
-        # Hammer is NOT irrelevant because Blacksmith requires Hammer!
-        irrelevant = self.worker.get_irrelevant_tools()
-        self.assertEqual(irrelevant, [], "Shared tool Hammer must be retained!")
+        # Hoe is NOT irrelevant because Gravedigger requires Hoe! Watering_Can & Sickle ARE irrelevant.
+        irrelevant = sorted(self.worker.get_irrelevant_tools())
+        self.assertEqual(irrelevant, [("Sickle", 1), ("Watering_Can", 1)], "Only Sickle & Watering Can are irrelevant; Hoe is retained!")
 
-        # Missing tool is Tongs
+        # Missing tool is empty because Arthur already has Hoe
         missing = get_missing_tools_for_worker(self.worker)
-        self.assertEqual(missing, [("Tongs", 1)])
+        self.assertEqual(missing, [])
 
-        # Run update: Arthur retains Hammer and collects Tongs
+        # Run update: Arthur retains Hoe and deposits Watering_Can & Sickle
         self.worker.update(0.1, self.pm, self.bm, [self.worker], player=None,
                            stockpile_manager=self.sm, furniture_manager=self.fm,
-                           day_cycle=self.day_cycle)
+                           day_cycle=self.day_cycle, villager_manager=self.vm)
 
-        self.assertEqual(self.worker.inventory.get("Hammer"), 1)
-        self.assertEqual(self.worker.inventory.get("Tongs"), 1)
+        self.assertEqual(self.worker.inventory.get("Hoe"), 1)
+        self.assertEqual(self.worker.inventory.get("Watering_Can", 0), 0)
+        self.assertEqual(self.worker.inventory.get("Sickle", 0), 0)
 
     def test_6_servant_implements_generic_tool_interface(self):
         """Servant entities implement the identical generic tool management methods."""
         servant = Servant("serv_1", "Alden", 100.0, 100.0)
         self.assertEqual(servant.job, "Builder")
-        self.assertEqual(servant.get_job_required_tools(), {"Hammer": 1})
-        self.assertEqual(servant.get_missing_job_tools(), [("Hammer", 1)])
+        self.assertEqual(servant.get_job_required_tools(), {"Saw": 1, "Adze": 1})
+        self.assertEqual(sorted(servant.get_missing_job_tools()), [("Adze", 1), ("Saw", 1)])
 
-        # Give hammer to servant
-        servant.inventory["Hammer"] = 1
+        # Give tools to servant
+        servant.inventory["Saw"] = 1
+        servant.inventory["Adze"] = 1
         self.assertEqual(servant.get_missing_job_tools(), [])
         self.assertEqual(servant.get_irrelevant_tools(), [])
 
         # Switch servant job to Farmer
         servant.set_job("Farmer")
-        irrelevant = servant.get_irrelevant_tools()
-        self.assertEqual(irrelevant, [("Hammer", 1)])
+        irrelevant = sorted(servant.get_irrelevant_tools())
+        self.assertEqual(irrelevant, [("Adze", 1), ("Saw", 1)])
 
 if __name__ == "__main__":
     unittest.main()

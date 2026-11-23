@@ -119,7 +119,7 @@ class MarketService:
             # Family instance
             family_obj = household
             family_id = str(household.id)
-        elif hasattr(household, "family_id") and hasattr(household, "first_name"):
+        elif hasattr(household, "family_id"):
             # Villager instance
             villager_obj = household
             family_id = str(household.family_id)

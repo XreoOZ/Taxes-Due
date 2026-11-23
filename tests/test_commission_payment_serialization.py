@@ -215,10 +215,9 @@ class TestAssignPaymentSerialization(unittest.TestCase):
                             for e in rep_b.pending_commission_tasks))
         self.assertEqual(len(rep_a.pending_commission_tasks), 0)
 
-    def test_second_family_member_pays_in_parallel(self):
-        """Anti-oscillation is per member: a second living member MAY run a
-        parallel errand for the same family — orders only wait when every
-        able member is already mid-flight."""
+    def test_second_family_member_waits_for_first(self):
+        """Single representative rule: a household serializes commission payments.
+        A second order must wait in AWAITING_PAYMENT until the first errand finishes."""
         rep1 = make_payer("v1", "fam_p")
         rep2 = make_payer("v2", "fam_p")
         fam = make_family("fam_p", [rep1, rep2])
@@ -231,28 +230,30 @@ class TestAssignPaymentSerialization(unittest.TestCase):
         CommissionScheduleSystem.activate(rep1, "LEISURE")
         self.assertEqual(rep1.task, "BUILDER_FEE_RETRIEVE")
 
-        # rep1 is busy — the order must go to the OTHER free member.
+        # rep1 is busy on a fee errand — the second order must WAIT, not dispatch rep2
         o2 = make_order("m2", "fam_p")
-        self.assertTrue(BuilderSystem._assign_payment(
+        self.assertFalse(BuilderSystem._assign_payment(
             make_order_subject(o2, "fm2"), vm, fm, None))
-        self.assertEqual(o2.construction_order["status"], "PAYMENT_REQUESTED")
-        self.assertEqual(o2.construction_order["payer_id"], "v2")
-        self.assertTrue(any(e["task"] == "BUILDER_FEE_RETRIEVE"
-                            for e in rep2.pending_commission_tasks))
+        self.assertEqual(o2.construction_order["status"], "AWAITING_PAYMENT")
 
     def test_order_waits_when_all_members_busy(self):
-        """With every able member mid-flight, the next order stays
-        AWAITING_PAYMENT instead of double-booking a payer."""
+        """With an active representative errand, subsequent orders stay
+        AWAITING_PAYMENT instead of double-booking payers."""
         rep1 = make_payer("v1", "fam_p")
         rep2 = make_payer("v2", "fam_p")
         fam = make_family("fam_p", [rep1, rep2])
         vm = make_villager_manager({"fam_p": fam}, [rep1, rep2])
         fm = make_furniture_manager()
 
-        for i in range(2):
-            o = make_order(f"m{i}", "fam_p")
-            self.assertTrue(BuilderSystem._assign_payment(
-                make_order_subject(o, f"fm{i}"), vm, fm, None))
+        o0 = make_order("m0", "fam_p")
+        self.assertTrue(BuilderSystem._assign_payment(
+            make_order_subject(o0, "fm0"), vm, fm, None))
+
+        o1 = make_order("m1", "fam_p")
+        self.assertFalse(BuilderSystem._assign_payment(
+            make_order_subject(o1, "fm1"), vm, fm, None))
+        self.assertEqual(o1.construction_order["status"], "AWAITING_PAYMENT")
+
         # Both members now have queued/in-flight fee errands.
         rep1.pending_commission_tasks.append({"task": "BUILDER_FEE_RETRIEVE"})
         rep2.pending_commission_tasks.append({"task": "BUILDER_FEE_RETRIEVE"})

@@ -502,12 +502,23 @@ class BuilderSystem:
 
     @classmethod
     def _family_coin_total_copper(cls, family_id, chest, stockpile_manager, villager_manager=None):
-        """Total coin value a household can spend: chest + loose stacks + abstract wallets."""
+        """Total physical coin value a household can spend:
+        - Household chest (if present)
+        - Family loose ground coin stacks
+        - Family purse (if no chest / homeless)
+        - Living members' carried pocket coins
+        """
         total = to_copper(normalize_wallet(getattr(chest, "inventory", {}) if chest else {}))
         for stack in cls._family_coin_stacks(family_id, stockpile_manager):
             total += to_copper({canonical_denomination(stack.resource_type): int(stack.amount)})
-        for wallet in cls._family_abstract_wallets(family_id, villager_manager):
-            total += to_copper(normalize_wallet(wallet))
+        if villager_manager and family_id is not None:
+            fam = villager_manager.get_family_by_id(family_id)
+            if fam is not None:
+                if isinstance(getattr(fam, "currency", None), dict):
+                    total += to_copper(normalize_wallet(fam.currency))
+                for m in getattr(fam, "members", []) or []:
+                    if getattr(m, "is_alive", True):
+                        total += to_copper(normalize_wallet(getattr(m, "inventory", {})))
         return total
 
     @staticmethod
@@ -553,37 +564,27 @@ class BuilderSystem:
             if cls._family_coin_total_copper(family_id, chest, stockpile_manager, villager_manager) < fee:
                 order["status"] = "AWAITING_PAYMENT"
                 return False
-            # Anti-oscillation is per MEMBER, not per family: a household may
-            # run several commission payments in parallel as long as each
-            # errand belongs to a different member. Orders only wait when
-            # EVERY able member is already mid-flight on a fee errand.
-            builder_id = str(order.get("builder_id"))
-            free_members = [m for m in survivors if not cls._member_fee_errand_active(m)]
-            if not free_members:
+            # STRICT RULE: Exactly ONE representative per household may run a
+            # commission payment errand at a time. Other orders for the same
+            # family must wait until this errand physically completes.
+            if cls._family_fee_errand_active(family):
                 order["status"] = "AWAITING_PAYMENT"
                 return False
+            builder_id = str(order.get("builder_id"))
             available = [
-                m for m in free_members
-                if getattr(m, "task", "") not in ("SEEKING_FOOD", "SEEKING_WATER", "SEEKING_TOILET", "RECOVER_DEATH_ITEMS")
+                m for m in survivors
+                if not cls._member_fee_errand_active(m)
+                and getattr(m, "task", "") not in ("SEEKING_FOOD", "SEEKING_WATER", "SEEKING_TOILET", "RECOVER_DEATH_ITEMS")
                 and getattr(m, "hunger", 100.0) > 20.0
                 and getattr(m, "thirst", 100.0) > 20.0
                 and getattr(m, "need_toilet", 100.0) > 20.0
             ]
-            pool = available or free_members
+            pool = available or [m for m in survivors if not cls._member_fee_errand_active(m)]
+            if not pool:
+                order["status"] = "AWAITING_PAYMENT"
+                return False
             non_builder = [m for m in pool if str(getattr(m, "id", "")) != builder_id]
             payer = (non_builder or pool)[0]
-            builder = next((member for member in survivors
-                               if str(getattr(member, "id", "")) == builder_id), None)
-            if str(getattr(payer, "id", "")) == builder_id and builder:
-                order["payer_id"] = str(payer.id)
-                order["status"] = "PAYMENT_REQUESTED"
-                from game.systems.work.commission_schedule import CommissionScheduleSystem
-                CommissionScheduleSystem.queue(
-                    payer, "BUILDER_FEE_RETRIEVE",
-                    builder_payment_order_id=order["id"],
-                    builder_payment_builder_id=order.get("builder_id"),
-                )
-                return True
             order["payer_id"] = str(payer.id)
             order["status"] = "PAYMENT_REQUESTED"
             from game.systems.work.commission_schedule import CommissionScheduleSystem
@@ -701,16 +702,13 @@ class BuilderSystem:
             if still_needed_copper <= 0:
                 cls._finalize_fee_payment(villager, order, builder, fee, villager_manager, day_number)
                 return True
-            # Abstract household wallets (family purse + member pockets) can cover
-            # the remainder instantly — no walking to physical coins required.
-            for wallet in cls._family_abstract_wallets(villager.family_id, villager_manager):
-                if still_needed_copper <= 0:
-                    break
-                if wallet is villager.inventory:
-                    continue  # own pockets already counted via carried_copper
-                ok, _ = transfer_currency_value(wallet, villager.inventory, still_needed_copper)
-                if ok:
-                    still_needed_copper = max(0, fee - to_copper(normalize_wallet(villager.inventory)))
+            # If household is homeless / has no chest, physical purse at home:
+            if not chest and villager_manager and villager.family_id is not None:
+                fam = villager_manager.get_family_by_id(villager.family_id)
+                if fam is not None and isinstance(getattr(fam, "currency", None), dict):
+                    ok, _ = transfer_currency_value(fam.currency, villager.inventory, still_needed_copper)
+                    if ok:
+                        still_needed_copper = max(0, fee - to_copper(normalize_wallet(villager.inventory)))
             if still_needed_copper <= 0:
                 cls._finalize_fee_payment(villager, order, builder, fee, villager_manager, day_number)
                 return True
@@ -1154,9 +1152,16 @@ class BuilderSystem:
     def _begin_restock(cls, builder, missing, building_manager, furniture_manager, villager_manager,
                        payer_type=None, family_id=None):
         from game.systems.economy.market_purchasing import AIMarketPurchasingSystem
+        from game.data.catalog import DEDICATED_JOBS
+        from game.data.config import DEFAULT_MATERIAL_RESTOCK_BATCH, VILLAGER_INVENTORY_CAPACITY
+        job = getattr(builder, "job", "")
+        stock_targets = DEDICATED_JOBS.get(job, {}).get("material_stock_target", {})
         for material, quantity in missing.items():
+            # Desired batch: buy in bulk up to stock target or needed quantity (max bag capacity 50)
+            target_stock = stock_targets.get(material, DEFAULT_MATERIAL_RESTOCK_BATCH)
+            desired_batch = min(VILLAGER_INVENTORY_CAPACITY, max(int(quantity), int(target_stock)))
             market, _, affordable = AIMarketPurchasingSystem.find_nearest_market_for_material(
-                builder, material, quantity, building_manager, furniture_manager, villager_manager)
+                builder, material, desired_batch, building_manager, furniture_manager, villager_manager)
             if market and affordable:
                 builder.target_restock_market = market
                 builder.target_restock_mat = material

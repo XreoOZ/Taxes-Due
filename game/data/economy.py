@@ -34,6 +34,8 @@ MAX_STACK_SIZE = 100
 MAX_TILE_CAPACITY = 1000  # Up to 10 stacks of 100 per tile (kotak)
 
 VILLAGER_INVENTORY_CAPACITY = 50
+DEFAULT_MATERIAL_RESTOCK_BATCH = 10
+MAX_MATERIAL_RESTOCK_BATCH = 50
 
 
 # Currency & Economy System Settings (Config-Driven, Zero Hardcode)

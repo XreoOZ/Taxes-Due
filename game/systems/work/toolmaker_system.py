@@ -185,22 +185,27 @@ class ToolmakerSystem:
     # ------------------------------------------------------------------
     @classmethod
     def _smelt_step(cls, toolmaker, dt, furniture_manager, building_manager,
-                    villager_manager, all_entities, player, day_cycle):
+                    villager_manager, all_entities, player, day_cycle, for_order=False):
         """One smelting cycle at the nearest workbench. Returns True while busy."""
         day_number = getattr(day_cycle, "day_number", 1) if day_cycle else 1
         chest = cls._family_chest(toolmaker, furniture_manager)
+        if chest is None:
+            return False
         bars_in_chest = cls._chest_qty(chest, "Iron Bar")
-        if chest is None or bars_in_chest >= TOOLMAKER_BAR_STOCK_TARGET:
-            return False
-        if cls._bars_today(toolmaker, day_number) >= TOOLMAKER_BAR_DAILY_CAP:
-            return False
+        if not for_order:
+            if bars_in_chest >= TOOLMAKER_BAR_STOCK_TARGET:
+                return False
+            if cls._bars_today(toolmaker, day_number) >= TOOLMAKER_BAR_DAILY_CAP:
+                return False
         # Need ore + wood in the household chest.
-        missing = {
-            item: int(amount)
-            for item, amount in TOOLMAKER_BAR_RECIPE.items()
-            if cls._chest_qty(chest, item) < int(amount)
-        }
-        wood_target = int((DEDICATED_JOBS.get("Toolmaker", {}).get("material_stock_target", {}) or {}).get("Wood", 0))
+        stock_targets = DEDICATED_JOBS.get("Toolmaker", {}).get("material_stock_target", {}) or {}
+        missing = {}
+        for item, amount in TOOLMAKER_BAR_RECIPE.items():
+            curr = cls._chest_qty(chest, item)
+            tgt = int(stock_targets.get(item, amount))
+            if curr < int(amount):
+                missing[item] = max(int(amount) - curr, tgt - curr)
+        wood_target = int(stock_targets.get("Wood", 0))
         if wood_target > cls._chest_qty(chest, "Wood"):
             missing["Wood"] = max(missing.get("Wood", 0), wood_target - cls._chest_qty(chest, "Wood"))
         if missing:
@@ -333,19 +338,35 @@ class ToolmakerSystem:
             if wood_target > cls._chest_qty(chest, "Wood"):
                 missing["Wood"] = max(missing.get("Wood", 0), wood_target - cls._chest_qty(chest, "Wood"))
             if "Iron Bar" in missing:
-                # Bars are produced, not bought: try smelting one now.
+                # 1. First priority: try smelting Iron Bar (bypass daily cap for active paid order)
                 if cls._smelt_step(toolmaker, dt, furniture_manager, building_manager,
-                                   villager_manager, all_entities, player, day_cycle):
+                                   villager_manager, all_entities, player, day_cycle, for_order=True):
                     order["status"] = "AWAITING_MATERIAL"
                     return True
-                missing.pop("Iron Bar")
+                # If smelting could not start because chest lacks ore/wood, restock ore/wood in bulk to smelt:
+                ore_missing = {}
+                stock_targets = DEDICATED_JOBS.get("Toolmaker", {}).get("material_stock_target", {}) or {}
+                for r_item, r_amt in TOOLMAKER_BAR_RECIPE.items():
+                    c_qty = cls._chest_qty(chest, r_item)
+                    if c_qty < int(r_amt):
+                        ore_missing[r_item] = max(int(r_amt) - c_qty, int(stock_targets.get(r_item, 10)) - c_qty)
+                if ore_missing and cls._begin_material_restock(toolmaker, ore_missing, building_manager,
+                                                               furniture_manager, villager_manager):
+                    order["status"] = "AWAITING_MATERIAL"
+                    return True
+                # 2. Second priority: if raw ore is not sold at market, can we buy Iron Bar directly?
+                if cls._begin_material_restock(toolmaker, {"Iron Bar": missing["Iron Bar"]}, building_manager,
+                                               furniture_manager, villager_manager):
+                    order["status"] = "AWAITING_MATERIAL"
+                    return True
+                missing.pop("Iron Bar", None)
             if missing and cls._begin_material_restock(toolmaker, missing, building_manager,
                                                        furniture_manager, villager_manager):
                 order["status"] = "AWAITING_MATERIAL"
                 return True
             order["status"] = "AWAITING_MATERIAL"
             if not getattr(toolmaker, "speech_text", None):
-                toolmaker.say("I need wood and iron bars before I can forge more tools.", duration=2.5)
+                toolmaker.say("I need wood and iron before I can forge more tools.", duration=2.5)
             return True
         order["status"] = "CRAFTING"
 
