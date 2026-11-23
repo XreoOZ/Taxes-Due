@@ -148,11 +148,8 @@ class TaxMixin:
 
         # Active tax settings replace the old inactive WIP policy placeholders.
 
-        # 5. Wealth Detail & Pie Chart Dialog Modal (if active)
-        if self.show_wealth_detail_dialog:
-            self._draw_wealth_pie_chart_dialog(surface, mx, cy, wealth_data, mouse_pos)
-
-        # 6. Item Distribution card + dialog
+        # 5. Item Distribution card (drawn BEFORE modal dialogs so any open
+        # dialog always renders on top of it)
         item_card = pygame.Rect(mx + upx(24), cy + upx(288), self.modal_w - upx(48), upx(52))
         pygame.draw.rect(surface, (24, 34, 52), item_card, border_radius=upx(6))
         pygame.draw.rect(surface, (56, 189, 248), item_card, width=1, border_radius=upx(6))
@@ -168,6 +165,11 @@ class TaxMixin:
         id_txt = self.font_badge.render("Check Item Detail", True, (255, 255, 255))
         surface.blit(id_txt, (self.check_item_dist_btn_rect.centerx - id_txt.get_width() // 2,
                               self.check_item_dist_btn_rect.centery - id_txt.get_height() // 2))
+
+        # 6. Wealth Detail & Pie Chart Dialog Modal (if active — always on
+        # top of the cards below/above it)
+        if self.show_wealth_detail_dialog:
+            self._draw_wealth_pie_chart_dialog(surface, mx, cy, wealth_data, mouse_pos)
 
         # Item Distribution never renders on top of the Wealth dialog —
         # whichever opened last owns the modal layer.

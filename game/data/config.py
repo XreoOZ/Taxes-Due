@@ -804,6 +804,8 @@ DEFAULT_ITEM_PRICES = {
     "Spade": 8,
     "Pickaxe": 14,
     "Sledgehammer": 10,
+    "Hammer": 12,
+    "Tongs": 10,
     "Iron Ore": 4,      # Raw ore; base for smelting cost
     "Iron Bar": 10,     # Smelted bar: ore + wood + labor priced in
 }
@@ -824,6 +826,8 @@ MARKET_TRADEABLE_ITEMS = {
     "Spade": "Spade",
     "Pickaxe": "Pickaxe",
     "Sledgehammer": "Sledgehammer",
+    "Hammer": "Hammer",
+    "Tongs": "Tongs",
     "Iron Ore": "Iron Ore",
     "Iron Bar": "Iron Bar",
 }
