@@ -9,6 +9,7 @@ from game.config import (
     COLOR_WATER_DEEP, COLOR_WATER_SHALLOW, COLOR_SAND,
 )
 from game.world.island import get_terrain
+from game.ui.ui_theme import ui_font, upx
 
 class World:
     def __init__(self, tile_size=TILE_SIZE):
@@ -25,7 +26,7 @@ class World:
 
     def _ensure_font(self):
         if self.font is None:
-            self.font = pygame.font.SysFont("Segoe UI", 14)
+            self.font = ui_font(14)
 
     def draw(self, surface, camera):
         self._ensure_font()

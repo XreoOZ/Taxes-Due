@@ -6,6 +6,7 @@ deposited into storage (Chest or Storage Permit Stockpile) and overflow drops
 on the ground near storage when full.
 Zero hardcoding, config-driven.
 """
+from game.ui.ui_theme import ui_font, upx
 
 import pygame
 from game.config import (
@@ -65,12 +66,12 @@ class AddItemModal:
 
     def _ensure_fonts(self):
         if self.font_title is None:
-            self.font_title = pygame.font.SysFont("Segoe UI", 18, bold=True)
-            self.font_sub = pygame.font.SysFont("Segoe UI", 13, bold=True)
-            self.font_body = pygame.font.SysFont("Segoe UI", 11)
-            self.font_badge = pygame.font.SysFont("Segoe UI", 10, bold=True)
-            self.font_btn = pygame.font.SysFont("Segoe UI", 13, bold=True)
-            self.font_qty = pygame.font.SysFont("Segoe UI", 16, bold=True)
+            self.font_title = ui_font(18, bold=True)
+            self.font_sub = ui_font(13, bold=True)
+            self.font_body = ui_font(11)
+            self.font_badge = ui_font(10, bold=True)
+            self.font_btn = ui_font(13, bold=True)
+            self.font_qty = ui_font(16, bold=True)
 
     def open(self, target_storage=None):
         """Opens the modal and initializes items and entry state"""
@@ -390,7 +391,7 @@ class AddItemModal:
         pygame.draw.rect(surface, (51, 65, 85), list_rect, width=1, border_radius=6)
 
         filtered_items = self._filtered_items()
-        row_h = 30
+        row_h = upx(30)
         rows_visible = max(1, list_rect.height // row_h)
         max_scroll = max(0, len(filtered_items) - rows_visible)
         self.scroll_offset = min(self.scroll_offset, max_scroll)

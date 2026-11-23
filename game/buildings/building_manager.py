@@ -22,6 +22,7 @@ from game.config import (
 from game.buildings.construction_site import ConstructionSite
 from game.buildings.building import Building
 from game.buildings.demolition_site import DemolitionSite
+from game.ui.ui_theme import ui_font, upx
 
 class BuildingManager:
     def __init__(self):
@@ -74,7 +75,7 @@ class BuildingManager:
 
     def _ensure_font(self):
         if self.font is None:
-            self.font = pygame.font.SysFont("Segoe UI", 11, bold=True)
+            self.font = ui_font(11, bold=True)
 
     def can_afford(self, building_type, resources, tile_count):
         b_cfg = BUILDING_TYPES.get(building_type, BUILDING_TYPES["wooden_structure"])

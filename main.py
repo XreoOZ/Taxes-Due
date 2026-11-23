@@ -110,6 +110,7 @@ from game.systems.economy.wealth_system import VillageWealthSystem
 from game.systems.core.cheat_system import apply_add_item_cheat, clean_resources_dictionary, spawn_item_physically
 from game.systems.work.activity_preview import ActivityPreviewSystem
 from game.systems.village_life.happiness_system import HappinessSystem
+from game.ui.ui_theme import ui_font, upx
 
 STATE_MENU = "menu"
 STATE_PLAYING = "playing"
@@ -199,11 +200,11 @@ def main():
     pygame.display.set_caption(WINDOW_TITLE)
 
     clock = pygame.time.Clock()
-    font_hud = pygame.font.SysFont("Segoe UI", 12, bold=True)
-    font_card = pygame.font.SysFont("Segoe UI", 13, bold=True)
-    font_btn = pygame.font.SysFont("Segoe UI", 12, bold=True)
-    font_badge = pygame.font.SysFont("Segoe UI", 10, bold=True)
-    font_body = pygame.font.SysFont("Segoe UI", 11)
+    font_hud = ui_font(12, bold=True)
+    font_card = ui_font(13, bold=True)
+    font_btn = ui_font(12, bold=True)
+    font_badge = ui_font(10, bold=True)
+    font_body = ui_font(11)
 
     # Inisialisasi Game Objects, Menu, Resources & Building System
     current_state = STATE_MENU

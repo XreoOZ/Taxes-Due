@@ -2,6 +2,7 @@
 
 import pygame
 from game.config import BUILDING_TYPES, COLOR_TEXT_MAIN, COLOR_TEXT_MUTED, COLOR_TEXT_TITLE, COST_PER_BLOCK_STONE, COST_PER_BLOCK_WOOD, DEMOLITION_REFUND_RATIO, FURNITURE_TYPES, ROAD_TYPES, get_building_categories
+from game.ui.ui_theme import ui_font, upx
 
 
 class BuildingMixin:
@@ -49,7 +50,7 @@ class BuildingMixin:
             owner_rows = [(str(family.id), f"The {family.surname} Household") for family in families]
             owner_rows.append(("__public__", "Public / Unassigned"))
             row_top = cy + 48
-            row_step = 52
+            row_step = upx(52)
             card_height = 82
             modal_bottom = (surface.get_height() + self.modal_h) // 2 - 18
             card_top = modal_bottom - card_height

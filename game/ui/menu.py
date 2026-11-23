@@ -1,6 +1,7 @@
 """
 Main Menu System (Dynamic & Responsive)
 """
+from game.ui.ui_theme import ui_font, upx
 
 import pygame
 from game.config import (
@@ -65,10 +66,10 @@ class MainMenu:
 
     def _init_fonts(self):
         if self.title_font is None:
-            self.title_font = pygame.font.SysFont("Segoe UI", 48, bold=True)
-            self.btn_font = pygame.font.SysFont("Segoe UI", 20, bold=True)
-            self.sub_font = pygame.font.SysFont("Segoe UI", 16, bold=True)
-            self.body_font = pygame.font.SysFont("Segoe UI", 13)
+            self.title_font = ui_font(48, bold=True)
+            self.btn_font = ui_font(20, bold=True)
+            self.sub_font = ui_font(16, bold=True)
+            self.body_font = ui_font(13)
 
     def _compute_layout(self, screen_w, screen_h):
         """Menghitung posisi tombol secara dinamis di tengah layar"""
@@ -284,7 +285,7 @@ class MainMenu:
 
             # Action Buttons: [Begin Settlement] and [Cancel]
             btn_w = 190
-            btn_h = 42
+            btn_h = upx(42)
             by = my + mh - 58
 
             self.modal_start_btn_rect = pygame.Rect(mx + mw - btn_w - 28, by, btn_w, btn_h)
@@ -365,7 +366,7 @@ class MainMenu:
                 card_y += 84
 
             btn_w = 190
-            btn_h = 42
+            btn_h = upx(42)
             by = my + mh - 58
 
             self.modal_map_start_btn_rect = pygame.Rect(mx + mw - btn_w - 28, by, btn_w, btn_h)
@@ -454,7 +455,7 @@ class MainMenu:
                 card_y += 108
 
             btn_w = 190
-            btn_h = 42
+            btn_h = upx(42)
             by = my + mh - 58
 
             self.modal_starter_start_btn_rect = pygame.Rect(mx + mw - btn_w - 28, by, btn_w, btn_h)

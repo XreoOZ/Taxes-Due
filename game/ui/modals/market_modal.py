@@ -37,6 +37,7 @@ from game.systems.economy.market_service import MarketService
 from game.systems.economy.household_stall_system import HouseholdStallSystem
 from game.ui.item_icons import draw_item_icon
 from game.ui.number_input import NumberInputState
+from game.ui.ui_theme import ui_font, upx
 
 class MarketProfileModal:
     def __init__(self):
@@ -111,11 +112,11 @@ class MarketProfileModal:
 
     def _ensure_fonts(self):
         if self.font_title is None:
-            self.font_title = pygame.font.SysFont("Segoe UI", 16, bold=True)
-            self.font_sub = pygame.font.SysFont("Segoe UI", 12, bold=True)
-            self.font_body = pygame.font.SysFont("Segoe UI", 11)
-            self.font_badge = pygame.font.SysFont("Segoe UI", 10, bold=True)
-            self.font_btn = pygame.font.SysFont("Segoe UI", 11, bold=True)
+            self.font_title = ui_font(16, bold=True)
+            self.font_sub = ui_font(12, bold=True)
+            self.font_body = ui_font(11)
+            self.font_badge = ui_font(10, bold=True)
+            self.font_btn = ui_font(11, bold=True)
 
     def open(self, market_building):
         """Opens market profile modal for the selected market building"""
@@ -684,7 +685,7 @@ class MarketProfileModal:
         self.goods_page = max(0, min(getattr(self, "goods_page", 0), total_pages - 1))
         page_items = tradeable_items[self.goods_page * items_per_page:(self.goods_page + 1) * items_per_page]
         row_y = row_top + 28
-        row_h = 58 if assigned else 38
+        row_h = upx(58) if assigned else upx(38)
         for item_name in page_items:
             card = pygame.Rect(mx + 24, row_y, self.modal_w - 48, row_h)
             pygame.draw.rect(surface, (15, 23, 42), card, border_radius=5)
@@ -803,7 +804,7 @@ class MarketProfileModal:
             surface.blit(self.font_body.render("No sales recorded in this 10-day period.", True, COLOR_TEXT_MUTED),
                          (report_rect.x + 10, report_rect.y + 27))
         else:
-            row_height = 16
+            row_height = upx(16)
             rows_per_column = max(1, (report_rect.height - 28) // row_height)
             visible_count = min(len(sold_items), rows_per_column * 2)
             column_width = (report_rect.width - 20) // 2
@@ -857,7 +858,7 @@ class MarketProfileModal:
             surface.blit(count_txt, (self.picker_dialog_rect.right - 16 - count_txt.get_width(), dlg_y + 16))
 
             # Scrollable clipped item list with icons + checkboxes
-            row_h = 40
+            row_h = upx(40)
             list_x = dlg_x + 16
             list_y = dlg_y + 46
             list_w = dlg_w - 32

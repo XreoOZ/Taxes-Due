@@ -6,6 +6,7 @@ from game.systems.economy.household_inventory import canonical_item_name, get_ho
 from game.systems.economy.production_distribution import ProductionDistributionSystem
 from game.ui.item_icons import draw_item_icon
 from game.ui.raport_tabs.common import GRANTABLE_ITEMS
+from game.ui.ui_theme import ui_font, upx
 
 
 class VillagersMixin:
@@ -26,7 +27,7 @@ class VillagersMixin:
             # Button: [+ Add Family (Cheat)] — only visible when cheats unlocked via ESC menu
             if self.cheats_active:
                 btn_w = 175
-                btn_h = 30
+                btn_h = upx(30)
                 self.add_family_cheat_btn_rect = pygame.Rect(mx + self.modal_w - btn_w - 24, cy - 4, btn_w, btn_h)
                 btn_hover = self.add_family_cheat_btn_rect.collidepoint(mouse_pos)
                 btn_col = (126, 34, 206) if btn_hover else (107, 33, 168)
@@ -60,7 +61,7 @@ class VillagersMixin:
                 surface.blit(msg2, (empty_card.x + 20, empty_card.y + 42))
 
             else:
-                card_h = 78
+                card_h = upx(78)
                 for fam in families:
                     card_rect = pygame.Rect(mx + 24, y_cur, self.modal_w - 48, card_h)
                     pygame.draw.rect(surface, (24, 34, 52), card_rect, border_radius=8)
@@ -694,7 +695,7 @@ class VillagersMixin:
         # Layout metrics
         header_h = 76
         footer_h = 66
-        row_h = 44
+        row_h = upx(44)
         row_gap = 8
         row_step = row_h + row_gap
         num_items = len(grantable)

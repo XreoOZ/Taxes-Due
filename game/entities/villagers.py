@@ -1,6 +1,7 @@
 """
 Villagers & Family Clan System (Dedicated Jobs, Multi-Generation Family Rosters & Tenant Land Deeds)
 """
+from game.ui.ui_theme import ui_font, upx
 
 import math
 import random
@@ -4546,7 +4547,7 @@ class VillagerManager:
 
     def _ensure_font(self):
         if self.font_bubble is None:
-            self.font_bubble = pygame.font.SysFont("Segoe UI", 11, bold=True)
+            self.font_bubble = ui_font(11, bold=True)
 
     def get_all_villagers(self):
         if self._all_villagers_cache is None:

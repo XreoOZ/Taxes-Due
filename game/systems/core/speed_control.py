@@ -11,6 +11,7 @@ from game.config import (
     COLOR_HUD_BORDER,
     SPEED_CONTROL_UI,
 )
+from game.ui.ui_theme import ui_font
 
 class SpeedController:
     def __init__(self):
@@ -28,9 +29,9 @@ class SpeedController:
 
     def _init_fonts(self):
         if self.font_btn is None:
-            self.font_btn = pygame.font.SysFont("Segoe UI", SPEED_CONTROL_UI["font_button"], bold=True)
-            self.font_sub = pygame.font.SysFont("Segoe UI", SPEED_CONTROL_UI["font_sub"], bold=True)
-            self.font_paused = pygame.font.SysFont("Segoe UI", SPEED_CONTROL_UI["font_paused"], bold=True)
+            self.font_btn = ui_font(SPEED_CONTROL_UI["font_button"], bold=True)
+            self.font_sub = ui_font(SPEED_CONTROL_UI["font_sub"], bold=True)
+            self.font_paused = ui_font(SPEED_CONTROL_UI["font_paused"], bold=True)
 
     def get_multiplier(self):
         """Mengembalikan pengali kecepatan game aktual (0.0 jika pause)"""

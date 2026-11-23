@@ -52,6 +52,7 @@ from game.data.config import (
 )
 from game.world.island import get_terrain
 from game.world.natural_resources import get_natural_resources
+from game.ui.ui_theme import ui_font, upx
 
 
 class MapOverlay:
@@ -70,9 +71,9 @@ class MapOverlay:
     def _ensure_fonts(self):
         if self._fonts_ready:
             return
-        self._font_title = pygame.font.SysFont("Segoe UI", MAP_OVERLAY_FONT_SIZE_TITLE, bold=True)
-        self._font_btn = pygame.font.SysFont("Segoe UI", MAP_OVERLAY_FONT_SIZE_BTN, bold=True)
-        self._font_hint = pygame.font.SysFont("Segoe UI", MAP_OVERLAY_FONT_SIZE_HINT)
+        self._font_title = ui_font(MAP_OVERLAY_FONT_SIZE_TITLE, bold=True)
+        self._font_btn = ui_font(MAP_OVERLAY_FONT_SIZE_BTN, bold=True)
+        self._font_hint = ui_font(MAP_OVERLAY_FONT_SIZE_HINT)
         self._fonts_ready = True
 
     def toggle(self):

@@ -3,6 +3,7 @@
 Index view lists all topics; clicking one opens its detailed page with a
 Back button. Content lives in HELP_SECTIONS below for easy editing.
 """
+from game.ui.ui_theme import ui_font, upx
 
 import pygame
 
@@ -291,10 +292,10 @@ class HelpModal:
     def _ensure_fonts(self):
         if self._fonts_ready:
             return
-        self.font_title = pygame.font.SysFont("Segoe UI", 20, bold=True)
-        self.font_head = pygame.font.SysFont("Segoe UI", 15, bold=True)
-        self.font_body = pygame.font.SysFont("Segoe UI", 13)
-        self.font_small = pygame.font.SysFont("Segoe UI", 11)
+        self.font_title = ui_font(20, bold=True)
+        self.font_head = ui_font(15, bold=True)
+        self.font_body = ui_font(13)
+        self.font_small = ui_font(11)
         self._fonts_ready = True
 
     def open(self):
@@ -330,7 +331,7 @@ class HelpModal:
                 self._kb_cursor = getattr(self, "_kb_cursor", 0) + direction
                 self._kb_cursor = max(0, min(self._kb_cursor, len(HELP_SECTIONS) - 1))
                 # Keep cursor row visible.
-                row_h = 44
+                row_h = upx(44)
                 row_top = self._kb_cursor * row_h
                 if row_top < self.scroll_y:
                     self.scroll_y = row_top
@@ -445,7 +446,7 @@ class HelpModal:
     # ------------------------------------------------------------------
     def _draw_index(self, surface):
         self.topic_rects = []
-        row_h = 44
+        row_h = upx(44)
         mouse_pos = pygame.mouse.get_pos()
         for i, (sec_title, _paras) in enumerate(HELP_SECTIONS):
             row_y = self.viewport_rect.y + i * row_h - self.scroll_y
@@ -470,7 +471,7 @@ class HelpModal:
 
     def _draw_detail(self, surface):
         _title, paras = HELP_SECTIONS[self.detail_index]
-        line_h = 18
+        line_h = upx(18)
         content_h = len(paras) * line_h + 10
         cy = self.viewport_rect.y + 8 - self.scroll_y
         for para in paras:

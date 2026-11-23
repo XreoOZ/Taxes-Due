@@ -3,6 +3,7 @@
 import pygame
 from game.config import COLOR_TEXT_MUTED, DEFAULT_JOB_SCHEDULE, SCHEDULE_TYPES
 from game.systems.work.schedule import UNIVERSAL_SCHEDULE_ID
+from game.ui.ui_theme import ui_font, upx
 
 
 class ScheduleMixin:
@@ -118,7 +119,7 @@ class ScheduleMixin:
         grid_bar_y = grid_y + 24
         avail_grid_w = self.modal_w - 48
         cell_w = avail_grid_w // 24
-        cell_h = 54
+        cell_h = upx(54)
 
         self.schedule_hour_cell_rects = {}
         for h in range(24):

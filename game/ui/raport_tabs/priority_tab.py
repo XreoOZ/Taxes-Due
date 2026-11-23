@@ -2,6 +2,7 @@
 
 import pygame
 from game.config import COLOR_BADGE_WIP, COLOR_MODAL_BORDER, COLOR_TEXT_MUTED, COLOR_TEXT_TITLE, PRIORITY_COLORS, WORK_TYPES
+from game.ui.ui_theme import ui_font, upx
 
 
 class PriorityMixin:
@@ -22,7 +23,7 @@ class PriorityMixin:
         table_y = cy + 48
         name_col_w = 150
         cell_w = 110
-        row_h = 36
+        row_h = upx(36)
 
         self.priority_cell_rects = {}
 

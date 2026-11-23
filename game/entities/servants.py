@@ -1,6 +1,7 @@
 """
 Servant AI System (RimWorld-style Autonomous Hauling, Work Priorities, Construction, Door Navigation & Entity Collision)
 """
+from game.ui.ui_theme import ui_font, upx
 
 import math
 import random
@@ -2197,7 +2198,7 @@ class ServantManager:
 
     def _ensure_font(self):
         if self.font_bubble is None:
-            self.font_bubble = pygame.font.SysFont("Segoe UI", 11, bold=True)
+            self.font_bubble = ui_font(11, bold=True)
 
     def update(self, dt, building_manager, permit_manager, stockpile_manager, resources, player, furniture_manager=None, villager_manager=None, run_ai_scheduler=True, ai_dt=None, day_cycle=None):
         all_vils = villager_manager.get_all_villagers() if villager_manager else []

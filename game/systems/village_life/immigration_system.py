@@ -42,6 +42,7 @@ from game.data.config import (
     IMMIGRATION_DEFAULT_REWARD_GOLD,
 )
 from game.entities.villagers import Family, Villager
+from game.ui.ui_theme import ui_font
 from game.world.island import is_land_tile
 
 STATE_TRAVELING = "TRAVELING"
@@ -402,7 +403,7 @@ class ImmigrationSystem:
 
     def _ensure_font(self):
         if self.font_bubble is None:
-            self.font_bubble = pygame.font.Font(None, 16)
+            self.font_bubble = ui_font(16)
 
     # ------------------------------------------------------------------
     # Save / Load

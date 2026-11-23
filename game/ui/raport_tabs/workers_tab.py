@@ -4,6 +4,7 @@ import pygame
 from game.config import COLOR_BADGE_WIP, COLOR_TEXT_MUTED, COLOR_TEXT_TITLE, DEDICATED_JOBS
 from game.systems.economy.production_distribution import ProductionDistributionSystem
 from game.systems.work.schedule import UNIVERSAL_SCHEDULE_ID
+from game.ui.ui_theme import ui_font, upx
 
 
 class WorkersMixin:
@@ -266,7 +267,7 @@ class WorkersMixin:
             old_clip = surface.get_clip()
             surface.set_clip(self.jobs_viewport_rect)
             for job_id, job_cfg in visible_jobs:
-                card_h = 58
+                card_h = upx(58)
                 card_rect = pygame.Rect(mx + 24, y_cur, self.modal_w - 48, card_h)
                 is_wip = job_cfg.get("wip", False)
 
@@ -321,7 +322,7 @@ class WorkersMixin:
                     # Action Buttons: Workstations & roster (per-job schedules removed —
                     # the Universal Schedule button above edits every job at once)
                     btn_w = 104
-                    btn_h = 30
+                    btn_h = upx(30)
                     btn_y = card_rect.y + 14
                     action_gap = 6
                     ws_rect = pygame.Rect(card_rect.right - 14 - btn_w, btn_y, btn_w, btn_h)

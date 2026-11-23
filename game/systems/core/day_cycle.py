@@ -1,6 +1,7 @@
 """
 Day & Night Cycle System (Configurable In-Game Day Length & Ambient Lighting)
 """
+from game.ui.ui_theme import ui_font, upx
 
 import math
 import time
@@ -53,8 +54,8 @@ class DayCycleSystem:
 
     def _init_fonts(self):
         if self.font_clock is None:
-            self.font_clock = pygame.font.SysFont("Segoe UI", 13, bold=True)
-            self.font_sub = pygame.font.SysFont("Segoe UI", 11, bold=True)
+            self.font_clock = ui_font(13, bold=True)
+            self.font_sub = ui_font(11, bold=True)
 
     def set_day_length_index(self, index):
         """Mengubah durasi hari secara dinamis (10 menit, 20 menit, 30 menit)"""

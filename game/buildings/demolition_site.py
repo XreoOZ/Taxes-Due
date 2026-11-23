@@ -9,6 +9,7 @@ from game.config import (
     DEMOLISH_DURATION_SECONDS,
     DEMOLITION_REFUND_RATIO,
 )
+from game.ui.ui_theme import ui_font, upx
 
 class DemolitionSite:
     def __init__(self, building):
@@ -32,7 +33,7 @@ class DemolitionSite:
 
     def _ensure_font(self):
         if self.font is None:
-            self.font = pygame.font.SysFont("Segoe UI", 10, bold=True)
+            self.font = ui_font(10, bold=True)
 
     def is_complete(self):
         return self.progress >= self.duration

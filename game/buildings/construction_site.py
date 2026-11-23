@@ -11,6 +11,7 @@ from game.config import (
     DEFAULT_COMMISSION_ARTISAN_JOB,
 )
 from game.permits import get_exterior_edges_for_tile
+from game.ui.ui_theme import ui_font, upx
 
 class ConstructionSite:
     def __init__(self, building_type, tiles, door_pos=None, door_side=None, rotation=0):
@@ -95,7 +96,7 @@ class ConstructionSite:
 
     def _ensure_font(self):
         if self.font is None:
-            self.font = pygame.font.SysFont("Segoe UI", 10, bold=True)
+            self.font = ui_font(10, bold=True)
 
     @property
     def rotation(self):

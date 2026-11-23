@@ -8,6 +8,7 @@ import pygame
 from game.config import FURNITURE_TYPES, TILE_SIZE, FURNITURE_CLAIM_BED_SEARCH_RADIUS
 from game.data.config import FURNITURE_DAILY_BREAK_CHANCE
 from game.render_cache import alpha_fill_surface
+from game.ui.ui_theme import ui_font, upx
 
 class Furniture:
     def __init__(self, furniture_id, furniture_type, gx, gy, permit_id=None, family_id=None, assigned_villager_id=None, rotation=0):
@@ -107,7 +108,7 @@ class Furniture:
 
     def _ensure_font(self):
         if self.font is None:
-            self.font = pygame.font.SysFont("Segoe UI", 9, bold=True)
+            self.font = ui_font(9, bold=True)
 
     @property
     def total_stored(self):

@@ -17,6 +17,7 @@ from game.config import (
     TILE_SIZE,
 )
 from game.world.permits import PERMIT_TYPES  # Assume a dict mapping permit ids to metadata
+from game.ui.ui_theme import ui_font, upx
 
 
 class PermitsModal:
@@ -32,8 +33,8 @@ class PermitsModal:
 
     def _init_fonts(self):
         if self.font_title is None:
-            self.font_title = pygame.font.SysFont("Segoe UI", 28, bold=True)
-            self.font_body = pygame.font.SysFont("Segoe UI", 18)
+            self.font_title = ui_font(28, bold=True)
+            self.font_body = ui_font(18)
 
     def open(self, permit_id=None):
         self.show = True
@@ -89,7 +90,7 @@ class PermitsModal:
         list_h = mh - 80
         list_x = mx + 20
         list_y = my + 60
-        item_h = 40
+        item_h = upx(40)
         self.permit_rects.clear()
         for idx, (pid, pinfo) in enumerate(PERMIT_TYPES.items()):
             rect = pygame.Rect(list_x, list_y + idx * (item_h + 8), list_w, item_h)

@@ -13,6 +13,7 @@ from game.config import (
     COLOR_TEXT_MUTED
 )
 from game.save_system import get_all_slots_meta, _sanitize_save_name
+from game.ui.ui_theme import ui_font, upx
 
 CARD_H = 86
 CARD_GAP = 12
@@ -55,11 +56,11 @@ class SaveLoadModal:
 
     def _ensure_fonts(self):
         if self.font_title is None:
-            self.font_title = pygame.font.SysFont("Segoe UI", 20, bold=True)
-            self.font_sub = pygame.font.SysFont("Segoe UI", 14, bold=True)
-            self.font_body = pygame.font.SysFont("Segoe UI", 12)
-            self.font_badge = pygame.font.SysFont("Segoe UI", 11, bold=True)
-            self.font_btn = pygame.font.SysFont("Segoe UI", 13, bold=True)
+            self.font_title = ui_font(20, bold=True)
+            self.font_sub = ui_font(14, bold=True)
+            self.font_body = ui_font(12)
+            self.font_badge = ui_font(11, bold=True)
+            self.font_btn = ui_font(13, bold=True)
 
     def refresh_slots(self, message="Progress saved successfully!"):
         self.status_message = message
@@ -397,7 +398,7 @@ class SaveLoadModal:
 
             # Buttons
             btn_w = 150
-            btn_h = 36
+            btn_h = upx(36)
             btn_y = dy + dialog_h - btn_h - 20
 
             # 1. Yes, Overwrite Button
@@ -443,7 +444,7 @@ class SaveLoadModal:
             surface.blit(line2, (dx + 20, dy + 72))
 
             btn_w = 150
-            btn_h = 36
+            btn_h = upx(36)
             btn_y = dy + dialog_h - btn_h - 20
 
             # 1. Yes, Delete Button

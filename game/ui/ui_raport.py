@@ -70,6 +70,7 @@ from game.ui.raport_tabs.tax_tab import TaxMixin
 from game.ui.raport_tabs.planning_tab import PlanningMixin
 
 from game.ui.raport_tabs.common import GRANTABLE_ITEMS
+from game.ui.ui_theme import ui_font, upx
 
 class RaportUI(
     BuildingMixin,
@@ -294,13 +295,13 @@ class RaportUI(
 
     def _init_fonts(self):
         if not self.fonts_loaded:
-            self.font_btn = pygame.font.SysFont("Segoe UI", 12, bold=True)
-            self.font_title = pygame.font.SysFont("Segoe UI", 16, bold=True)
-            self.font_tab = pygame.font.SysFont("Segoe UI", 12, bold=True)
-            self.font_body = pygame.font.SysFont("Segoe UI", 12)
-            self.font_badge = pygame.font.SysFont("Segoe UI", 10, bold=True)
-            self.font_sub = pygame.font.SysFont("Segoe UI", 12, bold=True)
-            self.font_priority = pygame.font.SysFont("Segoe UI", 14, bold=True)
+            self.font_btn = ui_font(12, bold=True)
+            self.font_title = ui_font(16, bold=True)
+            self.font_tab = ui_font(12, bold=True)
+            self.font_body = ui_font(12)
+            self.font_badge = ui_font(10, bold=True)
+            self.font_sub = ui_font(12, bold=True)
+            self.font_priority = ui_font(14, bold=True)
             self.fonts_loaded = True
 
     def open(self):

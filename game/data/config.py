@@ -1721,14 +1721,12 @@ FURNITURE_TYPES = {
         "id": "toolmaker_workbench",
         "name": "Toolmaker Workbench",
         "category_id": "workplace",
-        "desc": "Smithy bench with anvil, tongs, and moulds. Smelts iron bars and forges tools to order.",
+        "desc": "Smithy bench with anvil, tongs, and moulds. Place inside a household or house.",
         "capacity": 0,
         "materials": {"Wood": 15, "Stone": 10},
         "width_tiles": 2,
         "height_tiles": 1,
         "max_workers": 2,
-        "household_owned": False,
-        "placement_anywhere": True,
         "maintainable": False,
         "color_frame": (70, 55, 38),
         "color_top": (112, 85, 48),
@@ -2021,3 +2019,7 @@ MAP_OVERLAY_ZOOM_STEP = 0.15
 # Autosave: writes saves/autosave-dayNN.json every interval (real seconds).
 AUTOSAVE_INTERVAL_SECONDS = 300.0
 AUTOSAVE_KEEP_COUNT = 3
+
+# Global UI scale: multiplies every UI font/pixel metric. 1.35 = ~35%
+# larger text than the original compact sizes; resolution ratio on top.
+UI_FONT_BOOST = 1.35

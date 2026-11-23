@@ -13,6 +13,7 @@ from game.config import (
     RES_HUD_MARGIN
 )
 from game.ui.item_icons import draw_item_icon
+from game.ui.ui_theme import ui_font, upx
 
 class ResourceHUD:
     def __init__(self):
@@ -28,9 +29,9 @@ class ResourceHUD:
 
     def _init_fonts(self):
         if self.font_title is None:
-            self.font_title = pygame.font.SysFont("Segoe UI", 12, bold=True)
-            self.font_item = pygame.font.SysFont("Segoe UI", 13)
-            self.font_val = pygame.font.SysFont("Consolas", 13, bold=True)
+            self.font_title = ui_font(12, bold=True)
+            self.font_item = ui_font(13)
+            self.font_val = ui_font(13, bold=True)
 
     def draw(self, surface, resources, weekday=None, furniture_manager=None):
         self._init_fonts()

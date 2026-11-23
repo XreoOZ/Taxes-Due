@@ -1,6 +1,7 @@
 """
 Settings Modal System (Configurable Day Length & Mockup Feature Settings)
 """
+from game.ui.ui_theme import ui_font, upx
 
 import pygame
 from game.config import (
@@ -51,11 +52,11 @@ class SettingsModal:
 
     def _init_fonts(self):
         if self.font_title is None:
-            self.font_title = pygame.font.SysFont("Segoe UI", 16, bold=True)
-            self.font_sub = pygame.font.SysFont("Segoe UI", 13, bold=True)
-            self.font_body = pygame.font.SysFont("Segoe UI", 11)
-            self.font_badge = pygame.font.SysFont("Segoe UI", 10, bold=True)
-            self.font_btn = pygame.font.SysFont("Segoe UI", 12, bold=True)
+            self.font_title = ui_font(16, bold=True)
+            self.font_sub = ui_font(13, bold=True)
+            self.font_body = ui_font(11)
+            self.font_badge = ui_font(10, bold=True)
+            self.font_btn = ui_font(12, bold=True)
 
     def open(self, is_ingame=False):
         self.is_open = True

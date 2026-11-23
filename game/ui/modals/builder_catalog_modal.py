@@ -6,6 +6,7 @@ from game.data.config import BUILDING_TYPES, FURNITURE_TYPES, COLOR_MODAL_BG, CO
 from game.systems.work.builder_system import BuilderSystem
 from game.systems.economy.currency import from_copper
 from game.config import TILE_SIZE
+from game.ui.ui_theme import ui_font, upx
 
 
 class BuilderCatalogModal:
@@ -35,11 +36,11 @@ class BuilderCatalogModal:
 
     def _ensure_fonts(self):
         if self.font_title is None:
-            self.font_title = pygame.font.SysFont("Segoe UI", 19, bold=True)
-            self.font_sub = pygame.font.SysFont("Segoe UI", 12)
-            self.font_body = pygame.font.SysFont("Segoe UI", 13)
-            self.font_badge = pygame.font.SysFont("Segoe UI", 11, bold=True)
-            self.font_btn = pygame.font.SysFont("Segoe UI", 12, bold=True)
+            self.font_title = ui_font(19, bold=True)
+            self.font_sub = ui_font(12)
+            self.font_body = ui_font(13)
+            self.font_badge = ui_font(11, bold=True)
+            self.font_btn = ui_font(12, bold=True)
 
     def handle_event(self, event):
         if not self.is_open:
@@ -105,7 +106,7 @@ class BuilderCatalogModal:
         item_types = [(key, cfg, "furniture") for key, cfg in FURNITURE_TYPES.items()]
         item_types.extend((key, cfg, "building") for key, cfg in BUILDING_TYPES.items()
                           if cfg.get("builder_commissionable"))
-        row_h = 90
+        row_h = upx(90)
         row_step = row_h + 8
         content_h = len(item_types) * row_step
         self.max_scroll = max(0, content_h - self.viewport_rect.height)

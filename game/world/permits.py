@@ -1,6 +1,7 @@
 """
 Area Permit System (Free-form Landlord Zoning Deeds, Multi-drag & Arbitrary Connected Lots)
 """
+from game.ui.ui_theme import ui_font, upx
 
 import math
 import random
@@ -830,7 +831,7 @@ class PermitManager:
 
     def _ensure_font(self):
         if self.font is None:
-            self.font = pygame.font.SysFont("Segoe UI", 11, bold=True)
+            self.font = ui_font(11, bold=True)
 
     def add_permit(self, name, permit_type, tiles):
         permit_id = f"permit_{self.permit_counter}"

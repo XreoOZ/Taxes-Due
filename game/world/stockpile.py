@@ -5,6 +5,7 @@ Physical Stockpile & Ground Item System (RimWorld-style Dropped Items & Hauling)
 import pygame
 from game.config import MAX_STACK_SIZE, MAX_TILE_CAPACITY, DEFAULT_STARTER_TOOLS, is_food_item, is_water_item
 from game.item_icons import draw_item_icon
+from game.ui.ui_theme import ui_font, upx
 
 class ResourceStack:
     def __init__(self, resource_type, amount, grid_x, grid_y, owner_type="landlord", owner_id=None):
@@ -77,7 +78,7 @@ class StockpileManager:
 
     def _ensure_font(self):
         if self.font is None:
-            self.font = pygame.font.SysFont("Segoe UI", 10, bold=True)
+            self.font = ui_font(10, bold=True)
 
     def initialize_starter_stockpile(self, initial_resources, permit_manager, starter_tools=None):
         """Menempatkan item awal di atas tanah pada lot storage starter"""
