@@ -48,6 +48,7 @@ from game.data.config import (
     MAP_OVERLAY_ZOOM_MAX,
     MAP_OVERLAY_ZOOM_STEP,
     MINE_SIZE_TILES,
+    MINE_TYPE_TABLE,
     COLOR_WATER_DEEP,
 )
 from game.world.island import get_terrain
@@ -443,7 +444,9 @@ class MapOverlay:
             pygame.draw.rect(surface, (30, 41, 59), rect, width=1)
             # Small pick-head dot at the center when zoomed in enough.
             if rect.width >= MAP_OVERLAY_ICON_MIN_PX * 2:
-                pygame.draw.circle(surface, (203, 213, 225), rect.center,
+                kind_color = MINE_TYPE_TABLE.get(mine.get("kind"), {}).get(
+                    "color", (203, 213, 225))
+                pygame.draw.circle(surface, kind_color, rect.center,
                                    max(1, rect.width // 5))
 
     def _draw_grid(self, surface, cr, player, scale, ox, oy):

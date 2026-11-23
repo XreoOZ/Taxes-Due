@@ -667,6 +667,12 @@ class NaturalResourceManager:
         color = tier_colors.get(int(mine.get("tier", 3)), rock)
         pygame.draw.circle(surface, color, (cx, cy), r)
         pygame.draw.circle(surface, (15, 23, 42), (cx, cy), r, max(1, int(camera.zoom * 2)))
+        # Kind-colored gem at the center so ore types are visually distinct.
+        kind_color = MINE_TYPE_TABLE.get(mine.get("kind"), {}).get("color", rock)
+        gr = max(3, int(r * 0.45))
+        gem = [(cx, cy - gr), (cx + gr, cy), (cx, cy + gr), (cx - gr, cy)]
+        pygame.draw.polygon(surface, kind_color, gem)
+        pygame.draw.polygon(surface, (15, 23, 42), gem, 1)
         # Pickaxe glyph: handle + curved head (no unicode/emoji glyphs).
         lw = max(2, int(camera.zoom * 2.5))
         handle = (cx - r // 2, cy + r // 2, cx + r // 2, cy - r // 2)

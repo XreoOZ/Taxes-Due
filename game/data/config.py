@@ -267,8 +267,8 @@ MINE_YIELD_PER_INGAME_HOUR = {
     5: {"name": "Abundant", "min": 6, "max": 10},
 }
 MINE_TYPE_TABLE = {
-    "Stone Mine": {"output_item": "Stone", "weight": 1},
-    "Iron Mine": {"output_item": "Iron Ore", "weight": 2},
+    "Stone Mine": {"output_item": "Stone", "weight": 1, "color": (203, 213, 225)},
+    "Iron Mine": {"output_item": "Iron Ore", "weight": 2, "color": (249, 115, 22)},
 }
 BUILDER_DEFAULT_LIVING_HOUSEHOLD_SIZE = 1
 FURNITURE_DAILY_BREAK_CHANCE = 0.05
