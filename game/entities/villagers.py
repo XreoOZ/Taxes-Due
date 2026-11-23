@@ -18,6 +18,8 @@ from game.config import (
     DOORWAY_WAYPOINT_DISTANCE,
     TILE_SIZE,
     CROP_TYPES,
+    DEFAULT_CROP_NAME,
+    WELL_WATER_ITEM_NAME,
     COLOR_VILLAGER_OUTLINE,
     COLOR_SHADOW,
     VILLAGER_SURNAMES,
@@ -198,6 +200,7 @@ class Villager:
         self.pending_schedule_tasks = []
         self.current_schedule_activity = None
         self.carrying_crop = 0
+        self.carrying_crop_name = None
         self.watering_timer = 0.0
         self.tilling_timer = 0.0
         self.has_water = False
@@ -504,6 +507,7 @@ class Villager:
             "watering_timer": self.watering_timer,
             "well_draw_timer": self.well_draw_timer,
             "carrying_crop": self.carrying_crop,
+            "carrying_crop_name": getattr(self, "carrying_crop_name", None),
             "carrying_res": self.carrying_res,
             "carrying_amount": self.carrying_amount,
             "carrying_furniture": self.carrying_furniture,
@@ -561,6 +565,7 @@ class Villager:
         self.watering_timer = state.get("watering_timer", 0.0)
         self.well_draw_timer = state.get("well_draw_timer", 0.0)
         self.carrying_crop = state.get("carrying_crop", 0)
+        self.carrying_crop_name = state.get("carrying_crop_name")
         self.carrying_res = state.get("carrying_res")
         self.carrying_amount = state.get("carrying_amount", 0)
         self.carrying_furniture = state.get("carrying_furniture")
@@ -575,6 +580,7 @@ class Villager:
             "watering_timer": self.watering_timer,
             "well_draw_timer": self.well_draw_timer,
             "carrying_crop": self.carrying_crop,
+            "carrying_crop_name": getattr(self, "carrying_crop_name", None),
             "carrying_res": self.carrying_res,
             "carrying_amount": self.carrying_amount,
         }
@@ -601,6 +607,7 @@ class Villager:
         self.watering_timer = state.get("watering_timer", 0.0)
         self.well_draw_timer = state.get("well_draw_timer", 0.0)
         self.carrying_crop = state.get("carrying_crop", 0)
+        self.carrying_crop_name = state.get("carrying_crop_name")
         self.carrying_res = state.get("carrying_res")
         self.carrying_amount = state.get("carrying_amount", 0)
         self.current_path = []
@@ -701,7 +708,8 @@ class Villager:
             if getattr(self, "active_tool", None) and self.inventory.get(self.active_tool, 0) == 0:
                 sm.drop_resource(self.active_tool, 1, cur_gx, cur_gy, owner_type="villager", owner_id=fam_str)
             if getattr(self, "carrying_crop", 0) > 0:
-                sm.drop_resource("Potato", self.carrying_crop, cur_gx, cur_gy, owner_type="villager", owner_id=fam_str)
+                sm.drop_resource(getattr(self, "carrying_crop_name", None) or DEFAULT_CROP_NAME,
+                                 self.carrying_crop, cur_gx, cur_gy, owner_type="villager", owner_id=fam_str)
             if getattr(self, "carrying_res", None) and getattr(self, "carrying_amount", 0) > 0:
                 sm.drop_resource(self.carrying_res, self.carrying_amount, cur_gx, cur_gy, owner_type="villager", owner_id=fam_str)
             if hasattr(self, "currency") and isinstance(self.currency, dict):
@@ -713,6 +721,7 @@ class Villager:
         self.inventory = {}
         self.active_tool = None
         self.carrying_crop = 0
+        self.carrying_crop_name = None
         self.carrying_res = None
         self.carrying_amount = 0
 
@@ -1985,12 +1994,12 @@ class Villager:
             # Dukungan backward-compatibility jika ada custom mock market_service yang di-inject (misal unit test Agent 1)
             ms = getattr(self, "market_service", None)
             if ms is not None and not building_manager and hasattr(ms, "purchase_food"):
-                bought, food_name, amt = ms.purchase_food(self.family_id, self, "Potato", 1)
+                bought, food_name, amt = ms.purchase_food(self.family_id, self, DEFAULT_CROP_NAME, 1)
                 if bought and amt > 0:
                     self.hunger = min(AI_NEED_MAX, self.hunger + AI_NEED_FOOD_RESTORE)
                     self.hunger_death_timer = None
                     self.daily_food_consumed += 1
-                    HappinessSystem.record_food_eaten(self, food_name or "Potato", cur_day)
+                    HappinessSystem.record_food_eaten(self, food_name or DEFAULT_CROP_NAME, cur_day)
                     self.say(f"Purchased {food_name or 'Food'} from Market and ate!", duration=2.5)
                     self._resume_or_idle_after_need()
                     return
@@ -2246,7 +2255,7 @@ class Villager:
                                    if getattr(b, "building_type", "") == "market"
                                    and (getattr(b, "grid_x", None), getattr(b, "grid_y", None)) == tuple(target_location)), None)
 
-            food_item = getattr(self, "purchase_food_item", "Potato")
+            food_item = getattr(self, "purchase_food_item", None) or DEFAULT_CROP_NAME
             requested_qty = max(1, int(getattr(self, "purchase_target_qty", 1)))
             if (market is None
                     or not AIFoodPurchasingSystem.is_market_available(market, food_item, requested_qty)):
@@ -2295,7 +2304,7 @@ class Villager:
             approach_pt = market.get_approach_point((self.x, self.y), TILE_SIZE, building_manager)
             arrived = self._move_towards(approach_pt[0], approach_pt[1], dt, arrival_dist=32, all_entities=all_entities, player=player, building_manager=building_manager, furniture_manager=furniture_manager, exclusive_target=False, interaction_target=market)
             if arrived:
-                food_item = getattr(self, "purchase_food_item", "Potato")
+                food_item = getattr(self, "purchase_food_item", None) or DEFAULT_CROP_NAME
                 ok, msg = AIFoodPurchasingSystem.execute_market_transaction(
                     self, market, food_item, building_manager=building_manager,
                     quantity=getattr(self, "purchase_target_qty", 1),
@@ -2772,8 +2781,9 @@ class Villager:
         # -------------------------------------------------------------
         if sched_activity in FREE_TIME_SCHEDULE_ACTIVITIES and stockpile_manager:
             # A. Jika sedang membawa barang hasil pungut / panen menuju rumah (HAULING_HOME)
-            carried_res = getattr(self, "carrying_res", None) or ("Potato" if (self.carrying_crop > 0 or self.inventory.get("Potato", 0) > 0) else None)
-            carried_amt = getattr(self, "carrying_amount", 0) or (self.carrying_crop if self.carrying_crop > 0 else self.inventory.get("Potato", 0))
+            crop_name = getattr(self, "carrying_crop_name", None) or DEFAULT_CROP_NAME
+            carried_res = getattr(self, "carrying_res", None) or (crop_name if (self.carrying_crop > 0 or self.inventory.get(crop_name, 0) > 0) else None)
+            carried_amt = getattr(self, "carrying_amount", 0) or (self.carrying_crop if self.carrying_crop > 0 else self.inventory.get(crop_name, 0))
 
             if self.task == "HAULING_POSSESSION_HOME" and carried_res and carried_amt > 0:
                 self.active_tool = None
@@ -2808,6 +2818,7 @@ class Villager:
                     self.carrying_res = None
                     self.carrying_amount = 0
                     self.carrying_crop = 0
+                    self.carrying_crop_name = None
                     self.task = "IDLE"
                 return
 
@@ -2836,6 +2847,7 @@ class Villager:
                             self.inventory[res_name] = self.inventory.get(res_name, 0) + actual
                             if is_food_item(res_name):
                                 self.carrying_crop = actual
+                                self.carrying_crop_name = res_name
                             self.say(f"Retrieved our {res_name} (x{actual})!", duration=2.0)
                             self.task = "HAULING_POSSESSION_HOME"
                         elif self.get_inventory_room() <= 0:
@@ -2872,14 +2884,14 @@ class Villager:
                     cx, cy = chest.get_world_pos(TILE_SIZE)
                     arrived = self._move_towards(cx, cy, dt, arrival_dist=CHEST_INTERACTION_RADIUS, all_entities=all_entities, player=player, building_manager=building_manager, furniture_manager=furniture_manager, exclusive_target=False, interaction_target=chest)
                     if arrived:
-                        amt = self.inventory.get("Water", 0)
+                        amt = self.inventory.get(WELL_WATER_ITEM_NAME, 0)
                         if amt > 0:
-                            chest.store_item("Water", amt)
-                            del self.inventory["Water"]
+                            chest.store_item(WELL_WATER_ITEM_NAME, amt)
+                            del self.inventory[WELL_WATER_ITEM_NAME]
                         self.say("Stored fresh water in household chest!", duration=2.5)
                         self.task = "IDLE"
                 elif stockpile_manager:
-                    amt = self.inventory.get("Water", 0)
+                    amt = self.inventory.get(WELL_WATER_ITEM_NAME, 0)
                     if amt <= 0:
                         self.task = "IDLE"
                         return
@@ -2891,8 +2903,8 @@ class Villager:
                         # remains drinkable via household item sources.
                         cur_gx = int(math.floor(self.x / TILE_SIZE))
                         cur_gy = int(math.floor(self.y / TILE_SIZE))
-                        stockpile_manager.drop_resource("Water", amt, cur_gx, cur_gy, owner_type="villager", owner_id=self.family_id)
-                        del self.inventory["Water"]
+                        stockpile_manager.drop_resource(WELL_WATER_ITEM_NAME, amt, cur_gx, cur_gy, owner_type="villager", owner_id=self.family_id)
+                        del self.inventory[WELL_WATER_ITEM_NAME]
                         self.say("Stored fresh water at home!", duration=2.5)
                         self.task = "IDLE"
                         return
@@ -2908,8 +2920,8 @@ class Villager:
                         building_manager=building_manager, furniture_manager=furniture_manager,
                         exclusive_target=False)
                     if arrived:
-                        stockpile_manager.drop_resource("Water", amt, drop_tile[0], drop_tile[1], owner_type="villager", owner_id=self.family_id)
-                        del self.inventory["Water"]
+                        stockpile_manager.drop_resource(WELL_WATER_ITEM_NAME, amt, drop_tile[0], drop_tile[1], owner_type="villager", owner_id=self.family_id)
+                        del self.inventory[WELL_WATER_ITEM_NAME]
                         self.say("Stored fresh water at home!", duration=2.5)
                         self.task = "IDLE"
                     return
@@ -2928,7 +2940,7 @@ class Villager:
                         self._activity_total = 1.0
                         if self.well_draw_timer >= 1.0:
                             draw_amt = getattr(self, "water_collect_amount", 1) or 1
-                            self.inventory["Water"] = self.inventory.get("Water", 0) + draw_amt
+                            self.inventory[WELL_WATER_ITEM_NAME] = self.inventory.get(WELL_WATER_ITEM_NAME, 0) + draw_amt
                             self.task = "HAULING_HOUSEHOLD_WATER"
                             self.well_draw_timer = 0.0
                             self.say(f"Drew {draw_amt}x water, hauling home to storage!", duration=2.0)
@@ -3163,18 +3175,27 @@ class Villager:
                     self.path_target_tile = None
                     self.is_waiting_for_path = False
                     GlobalPathRegistry.get_instance().release_reservation(self.id)
+                    crop_name = getattr(self, "carrying_crop_name", None) or DEFAULT_CROP_NAME
                     if chest:
-                        chest.store_item("Potato", self.carrying_crop)
-                        self.say(f"Stored {self.carrying_crop} potatoes in household chest.", duration=2.5)
+                        chest.store_item(crop_name, self.carrying_crop)
+                        self.say(f"Stored {self.carrying_crop} {crop_name.lower()} in household chest.", duration=2.5)
                     elif stockpile_manager:
                         drop_tile = self._get_household_loose_drop_tile(
                             permit_manager, building_manager, furniture_manager)
                         cur_gx = drop_tile[0] if drop_tile else int(math.floor(self.x / TILE_SIZE))
                         cur_gy = drop_tile[1] if drop_tile else int(math.floor(self.y / TILE_SIZE))
-                        stockpile_manager.drop_resource("Food", self.carrying_crop, cur_gx, cur_gy, owner_type="villager", owner_id=self.family_id)
-                        self.say(f"Stored {self.carrying_crop} potatoes at home.", duration=2.5)
+                        stockpile_manager.drop_resource(crop_name, self.carrying_crop, cur_gx, cur_gy, owner_type="villager", owner_id=self.family_id)
+                        self.say(f"Stored {self.carrying_crop} {crop_name.lower()} at home.", duration=2.5)
+                    # The carried units already sit in inventory under the real
+                    # crop name — remove exactly carrying_crop of them, never
+                    # wipe unrelated stock of the same item.
+                    inv_left = int(self.inventory.get(crop_name, 0) or 0) - int(self.carrying_crop)
+                    if inv_left > 0:
+                        self.inventory[crop_name] = inv_left
+                    else:
+                        self.inventory.pop(crop_name, None)
                     self.carrying_crop = 0
-                    self.inventory["Potato"] = 0
+                    self.carrying_crop_name = None
                 return
 
             # Cek apakah ada sisa hasil panen keluarga di ladang yang belum diangkut
@@ -3197,9 +3218,11 @@ class Villager:
                         amt = stockpile_manager.take_from_stack(
                             target_stack, self.get_inventory_room()
                         )
+                        stack_crop = target_stack.resource_type
                         self.carrying_crop = amt
-                        self.inventory["Potato"] = self.inventory.get("Potato", 0) + amt
-                        self.say(f"Carrying {amt} potatoes home...", duration=2.0)
+                        self.carrying_crop_name = stack_crop
+                        self.inventory[stack_crop] = self.inventory.get(stack_crop, 0) + amt
+                        self.say(f"Carrying {amt} {stack_crop.lower()} home...", duration=2.0)
                     return
 
             # Auto-sync job if worker is assigned to a workplace permit
@@ -3282,7 +3305,7 @@ class Villager:
                                         if not participating_workers:
                                             participating_workers = [self.id]
 
-                                        crop_name = getattr(assigned_farm, "crop", "Potato") or "Potato"
+                                        crop_name = getattr(assigned_farm, "crop", None) or DEFAULT_CROP_NAME
                                         dist_res = ps.distribute_production(
                                             resource_name=crop_name,
                                             amount=yield_amt,
@@ -3313,6 +3336,7 @@ class Villager:
 
                                         # Harvester carries own household's share home
                                         self.carrying_crop = my_share
+                                        self.carrying_crop_name = crop_name if my_share > 0 else None
                                         if my_share > 0:
                                             self.inventory[crop_name] = self.inventory.get(crop_name, 0) + my_share
                                             self.active_tool = None
@@ -3771,10 +3795,10 @@ class Villager:
                 living_count = len(all_family_members)
                 if living_count > 0:
                     required_water = living_count * DAILY_WATER_REQUIREMENT
-                    current_stock = chest.inventory.get("Water", 0) if chest else 0
+                    current_stock = chest.inventory.get(WELL_WATER_ITEM_NAME, 0) if chest else 0
                     if stockpile_manager:
                         for s in getattr(stockpile_manager, "stacks", []):
-                            if getattr(s, "owner_type", None) == "villager" and str(getattr(s, "owner_id", "")) == fam_str and s.resource_type == "Water":
+                            if getattr(s, "owner_type", None) == "villager" and str(getattr(s, "owner_id", "")) == fam_str and s.resource_type == WELL_WATER_ITEM_NAME:
                                 current_stock += getattr(s, "amount", 0)
                     shortage = required_water - current_stock
                     if shortage > 0:

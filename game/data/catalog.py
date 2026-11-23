@@ -449,7 +449,7 @@ SCHEDULE_ACTIVITY_STRICT_TASKS = frozenset({
 
 SCHEDULE_ACTIVITY_TASK_STATE_FIELDS = (
     "current_work_tile", "tilling_timer", "watering_timer", "well_draw_timer",
-    "has_water", "water_day", "water_charges", "carrying_crop",
+    "has_water", "water_day", "water_charges", "carrying_crop", "carrying_crop_name",
     "carrying_res", "carrying_amount", "water_collect_amount",
     "station_work_timer", "station_target_tile", "station_phase", "station_carry",
 )
@@ -763,4 +763,10 @@ CROP_TYPES = {
         "desc": "Tall sweet maize stalks."
     }
 }
+
+# Canonical item identities derived from catalog data — never hardcode these
+# strings at call sites; import the constants instead.
+DEFAULT_CROP_ID = "potato"
+DEFAULT_CROP_NAME = CROP_TYPES[DEFAULT_CROP_ID]["name"]
+WELL_WATER_ITEM_NAME = "Water"
 
