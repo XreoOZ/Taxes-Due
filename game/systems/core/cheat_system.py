@@ -5,18 +5,21 @@ with full physical world representation and overflow drops near storage when ful
 Zero hardcoding, config-driven.
 """
 
-from game.data.config import MARKET_CURRENCY_DENOMINATIONS, MARKET_TRADEABLE_ITEMS
+from game.data.config import MARKET_CURRENCY_DENOMINATIONS, MARKET_TRADEABLE_ITEMS, TOOL_TYPES
 from game.world.stockpile import MAX_TILE_CAPACITY, is_food_item, is_water_item
 
 CORE_RESOURCE_KEYS = ["Wood", "Food", "Stone", "Water", "Copper", "Silver", "Gold"]
 
 def get_registered_item_types():
     """
-    Return canonical items with active market/storage behavior for the cheat UI.
-    Using the trade catalog keeps WIP and unimplemented item definitions out.
+    Return canonical items with active market/storage/tool behavior for the cheat UI.
+    Union of the market trade catalog, currency denominations, and every
+    defined tool type — TOOL_TYPES only contains implemented tools, so WIP
+    gear stays out automatically.
     """
     return list(dict.fromkeys((
         *MARKET_TRADEABLE_ITEMS.keys(),
+        *TOOL_TYPES.keys(),
         *MARKET_CURRENCY_DENOMINATIONS,
     )))
 

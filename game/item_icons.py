@@ -8,6 +8,52 @@ Zero reliance on emoji fonts; 100% vector-rendered across all platforms and disp
 import math
 import pygame
 
+# --- Medieval tool icon helpers -------------------------------------------
+# Consistent material palette: dark wood outline, warm wood core,
+# forged steel (dark base / mid / bright edge), iron collar bands.
+
+_HAFT_DARK = (74, 45, 18)
+_HAFT_WOOD = (139, 90, 43)
+_HAFT_WOOD_LT = (176, 122, 62)
+_STEEL_DARK = (51, 65, 85)
+_STEEL_MID = (100, 116, 139)
+_STEEL_LT = (203, 213, 225)
+_STEEL_HI = (241, 245, 249)
+_IRON_BAND = (71, 85, 105)
+
+
+def _haft(surface, x1, y1, x2, y2, width=3, wrap=True):
+    """Draws a wooden tool haft: dark outline, warm core, pale top edge,
+    and a dark grip-wrap band near the lower (held) end."""
+    pygame.draw.line(surface, _HAFT_DARK, (x1, y1), (x2, y2), width + 1)
+    pygame.draw.line(surface, _HAFT_WOOD, (x1, y1), (x2, y2), width)
+    # Subtle lit edge along the haft
+    pygame.draw.line(surface, _HAFT_WOOD_LT, (x1 - 1, y1 - 1), (x2 - 1, y2 - 1), 1)
+    if wrap:
+        # Grip wrap: two dark bands a third of the way up from the grip end
+        dx, dy = x2 - x1, y2 - y1
+        length = max(1.0, math.hypot(dx, dy))
+        for frac in (0.22, 0.34):
+            t = frac
+            wx, wy = x1 + dx * t, y1 + dy * t
+            nx, ny = -dy / length, dx / length
+            pygame.draw.line(surface, _STEEL_DARK,
+                             (wx - nx, wy - ny), (wx + nx, wy + ny), width + 1)
+
+
+def _steel_line(surface, x1, y1, x2, y2, width=3):
+    """Forged steel stroke: dark edge, mid body, bright edge highlight."""
+    pygame.draw.line(surface, _STEEL_DARK, (x1, y1), (x2, y2), width + 1)
+    pygame.draw.line(surface, _STEEL_MID, (x1, y1), (x2, y2), width)
+    pygame.draw.line(surface, _STEEL_LT, (x1 - 1, y1 - 1), (x2 - 1, y2 - 1), max(1, width - 2))
+
+
+def _collar(surface, cx, cy, radius=3):
+    """Iron collar band where a steel head meets the wooden haft."""
+    pygame.draw.circle(surface, _IRON_BAND, (cx, cy), radius)
+    pygame.draw.circle(surface, _STEEL_DARK, (cx, cy), radius, 1)
+
+
 def draw_item_icon(surface, item_name, cx, cy, size=12):
     """
     Renders a unified procedural vector icon for any item.
@@ -114,34 +160,47 @@ def draw_item_icon(surface, item_name, cx, cy, size=12):
         pygame.draw.line(surface, (180, 83, 9), (cx - bot_w // 2, bot_y - 1),
                          (cx + bot_w // 2, bot_y - 1), 1)
 
-    # 8. TOOL: Hoe
+    # 8. TOOL: Hoe — haft with angled steel blade plate
     elif "hoe" in name_low:
-        # Wooden shaft
-        pygame.draw.line(surface, (139, 90, 43), (cx - size + 2, cy + size - 2), (cx + 4, cy - 4), 2)
-        # Iron hoe blade
-        pygame.draw.line(surface, (170, 175, 185), (cx + 1, cy - 8), (cx + 8, cy - 2), 3)
-        pygame.draw.line(surface, (220, 225, 235), (cx + 2, cy - 7), (cx + 7, cy - 3), 1)
+        hx, hy = cx + size - 4, cy - size + 4
+        _haft(surface, cx - size + 2, cy + size - 2, hx, hy)
+        # Blade plate swept back from the haft head
+        pygame.draw.polygon(surface, _STEEL_DARK,
+                            [(hx - 1, hy - 6), (hx + 8, hy - 1), (hx + 6, hy + 5), (hx - 2, hy + 1)])
+        pygame.draw.polygon(surface, _STEEL_MID,
+                            [(hx, hy - 5), (hx + 7, hy - 1), (hx + 5, hy + 4), (hx - 1, hy)])
+        pygame.draw.line(surface, _STEEL_HI, (hx + 1, hy - 4), (hx + 6, hy - 1), 1)
+        _collar(surface, hx - 1, hy - 2, 2)
 
-    # 9. TOOL: Sickle
+    # 9. TOOL: Sickle — haft with crescent blade
     elif "sickle" in name_low:
-        # Wooden handle
-        pygame.draw.line(surface, (139, 90, 43), (cx - 4, cy + 2), (cx - 7, cy + size - 2), 2)
-        # Crescent steel blade
-        arc_rect = pygame.Rect(cx - 6, cy - size + 2, size * 2 - 2, size * 2 - 2)
-        pygame.draw.arc(surface, (200, 210, 225), arc_rect, 0.4, 3.2, 2)
+        hx, hy = cx - 2, cy + 2
+        _haft(surface, hx, cy + size - 1, hx - 3, hy + 3, width=3)
+        # Crescent blade: layered arcs for forged edge
+        arc_rect = pygame.Rect(cx - 7, cy - size + 2, size * 2 - 2, size * 2 - 2)
+        pygame.draw.arc(surface, _STEEL_DARK, arc_rect, 0.5, 3.0, 4)
+        pygame.draw.arc(surface, _STEEL_MID, arc_rect, 0.5, 3.0, 3)
+        pygame.draw.arc(surface, _STEEL_LT, arc_rect, 0.7, 2.8, 1)
+        _collar(surface, hx - 2, hy + 2, 2)
 
-    # 10. TOOL: Watering Can / Pot
+    # 10. TOOL: Watering Can — medieval copper chantepleure pot
     elif "can" in name_low or "watering" in name_low or "pot" in name_low:
-        # Medieval terracotta chantepleure pot
-        pot_r = max(3, int(size * 0.7))
-        pygame.draw.circle(surface, (180, 105, 55), (cx, cy + 2), pot_r)
-        pygame.draw.circle(surface, (120, 65, 30), (cx, cy + 2), pot_r, 1)
-        # Spout neck and handle
-        pygame.draw.rect(surface, (160, 90, 45), (cx - 2, cy - int(size * 0.7), 4, int(size * 0.5)))
-        pygame.draw.arc(surface, (100, 50, 20), (cx - int(size * 0.8), cy - int(size * 0.7), int(size * 1.6), int(size * 1.3)), 0.3, 2.8, 2)
-        # Sprinkler rose head
-        pygame.draw.line(surface, (190, 120, 60), (cx + int(size * 0.4), cy), (cx + size, cy - int(size * 0.5)), 2)
-        pygame.draw.circle(surface, (217, 149, 44), (cx + size, cy - int(size * 0.5)), 2)
+        pot_r = max(4, int(size * 0.62))
+        body = pygame.Rect(cx - pot_r, cy - pot_r // 2, pot_r * 2, pot_r * 2)
+        # Pot body with shaded base
+        pygame.draw.ellipse(surface, (140, 80, 35), body)
+        pygame.draw.ellipse(surface, (180, 105, 55), (body.left + 2, body.top - 2, body.width - 4, body.height - 4))
+        pygame.draw.ellipse(surface, (217, 149, 44), (body.left + 4, body.top, body.width - 8, body.height // 2 - 2))
+        pygame.draw.ellipse(surface, (120, 65, 30), body, 1)
+        # Rim + arched handle
+        pygame.draw.ellipse(surface, (160, 90, 45), (cx - 4, cy - pot_r - 3, 8, 6), 1)
+        pygame.draw.arc(surface, (100, 50, 20),
+                        (cx - int(size * 0.85), cy - int(size * 0.75), int(size * 1.7), int(size * 1.35)),
+                        0.3, 2.8, 2)
+        # Spout + sprinkler rose
+        pygame.draw.line(surface, (160, 90, 45), (cx + pot_r - 1, cy - 2), (cx + size, cy - int(size * 0.5)), 2)
+        pygame.draw.circle(surface, (190, 120, 60), (cx + size, cy - int(size * 0.5)), 2)
+        pygame.draw.circle(surface, (120, 65, 30), (cx + size, cy - int(size * 0.5)), 2, 1)
 
     # 11. FOOD: Bread
     elif "bread" in name_low or "loaf" in name_low:
@@ -186,69 +245,131 @@ def draw_item_icon(surface, item_name, cx, cy, size=12):
         # Bone marrow circle
         pygame.draw.circle(surface, (254, 242, 242), (cx + int(size * 0.3), cy), max(1, int(size * 0.3)))
 
-    # Builder's tools: recognizable medieval hand tools.
+    # Medieval frame saw: wooden bowed frame + tensioned toothed blade.
     elif "saw" in name_low:
-        pygame.draw.line(surface, (125, 82, 44), (cx - size + 2, cy + size - 3), (cx + size - 2, cy - size + 3), max(2, size // 5))
-        blade = [(cx - size + 1, cy + size - 4), (cx + size - 2, cy - size + 2), (cx + size, cy - size + 5)]
-        pygame.draw.polygon(surface, (203, 213, 225), blade)
-        pygame.draw.line(surface, (100, 116, 139), blade[0], blade[1], 1)
-        for tooth in range(3):
-            x = cx + size - 5 - tooth * 3
-            y = cy - size + 7 + tooth * 3
-            pygame.draw.line(surface, (71, 85, 105), (x, y), (x + 2, y + 3), 1)
-    elif "adze" in name_low:
-        pygame.draw.line(surface, (125, 82, 44), (cx - size + 1, cy + size - 2), (cx + 3, cy - 2), max(2, size // 5))
-        blade = [(cx + 1, cy - 5), (cx + size, cy - size + 1), (cx + size - 1, cy + 1), (cx + 4, cy + 2)]
-        pygame.draw.polygon(surface, (203, 213, 225), blade)
-        pygame.draw.polygon(surface, (100, 116, 139), blade, 1)
-        pygame.draw.line(surface, (241, 245, 249), (cx + 5, cy - 4), (cx + size - 2, cy - size + 2), 1)
+        fx1, fy1 = cx - size + 2, cy - int(size * 0.9)   # top-left corner
+        fx2, fy2 = cx + size - 2, cy + int(size * 0.9)   # bottom-right corner
+        # Frame rails (wood)
+        _haft(surface, fx1, fy1, fx2, fy1 + int(size * 0.5), width=2, wrap=False)
+        _haft(surface, fx1 + int(size * 0.4), fy2, fx2, fy2 - int(size * 0.5), width=2, wrap=False)
+        # Crossbars
+        pygame.draw.line(surface, _HAFT_WOOD, (fx1 + int(size * 0.2), fy1 + int(size * 0.1)),
+                         (fx1 + int(size * 0.2), fy1 + int(size * 0.8)), 2)
+        pygame.draw.line(surface, _HAFT_WOOD, (fx2 - int(size * 0.2), fy2 - int(size * 0.8)),
+                         (fx2 - int(size * 0.2), fy2 - int(size * 0.1)), 2)
+        # Blade: thin steel line with saw teeth
+        bx1, by1 = fx1 + int(size * 0.55), fy1 + int(size * 0.55)
+        bx2, by2 = fx2 - int(size * 0.55), fy2 - int(size * 0.55)
+        pygame.draw.line(surface, _STEEL_DARK, (bx1, by1), (bx2, by2), 2)
+        pygame.draw.line(surface, _STEEL_LT, (bx1, by1), (bx2, by2), 1)
+        length = math.hypot(bx2 - bx1, by2 - by1)
+        for i in range(1, 5):
+            t = i / 5.0
+            tx, ty = bx1 + (bx2 - bx1) * t, by1 + (by2 - by1) * t
+            nx, ny = -(by2 - by1) / length, (bx2 - bx1) / length
+            pygame.draw.line(surface, _STEEL_MID,
+                             (tx - nx, ty - ny), (tx + nx * 0.4, ty + ny * 0.4), 1)
 
-    # Field & mining tools: haft + perpendicular steel head (axe/pick/sledge) or forward blade (spade).
+    # Medieval adze: haft with curved blade head perpendicular at top.
+    elif "adze" in name_low:
+        hx, hy = cx + size - 4, cy - size + 4
+        _haft(surface, cx - size + 2, cy + size - 2, hx, hy)
+        # Curved adze blade sweeping forward-down from the head
+        pygame.draw.polygon(surface, _STEEL_DARK,
+                            [(hx - 2, hy - 5), (hx + size - 2, hy - size + 3),
+                             (hx + size - 4, hy - size + 8), (hx - 1, hy + 1)])
+        pygame.draw.polygon(surface, _STEEL_MID,
+                            [(hx - 1, hy - 4), (hx + size - 4, hy - size + 4),
+                             (hx + size - 5, hy - size + 7), (hx, hy)])
+        pygame.draw.line(surface, _STEEL_HI, (hx + 1, hy - 3), (hx + size - 5, hy - size + 4), 1)
+        _collar(surface, hx, hy - 1, 2)
+
+    # Felling axe: haft + forged wedge head with poll and blade edge.
     elif "felling axe" in name_low or name_low == "axe" or "hatchet" in name_low:
         hx, hy = cx + size - 4, cy - size + 4
-        pygame.draw.line(surface, (139, 90, 43), (cx - size + 2, cy + size - 2), (hx, hy), 2)
-        # Head bar across the haft + wedge blade on the forward end
-        pygame.draw.line(surface, (100, 116, 139), (hx - 4, hy - 4), (hx + 4, hy + 4), 4)
-        pygame.draw.polygon(surface, (203, 213, 225), [(hx + 2, hy + 2), (hx + 7, hy + 7), (hx + 4, hy + 5)])
-        pygame.draw.line(surface, (226, 232, 240), (hx + 3, hy + 3), (hx + 6, hy + 6), 1)
+        _haft(surface, cx - size + 2, cy + size - 2, hx, hy)
+        # Axe head: back poll + top bar + wedge blade
+        pygame.draw.polygon(surface, _STEEL_DARK,
+                            [(hx - 6, hy - 5), (hx + 6, hy - 6), (hx + 6, hy + 1),
+                             (hx + 2, hy + 2), (hx - 6, hy + 1)])
+        pygame.draw.polygon(surface, _STEEL_MID,
+                            [(hx - 5, hy - 4), (hx + 5, hy - 5), (hx + 5, hy),
+                             (hx + 2, hy + 1), (hx - 5, hy)])
+        # Blade bevel + edge
+        pygame.draw.line(surface, _STEEL_HI, (hx + 2, hy - 3), (hx + 5, hy - 4), 1)
+        pygame.draw.line(surface, _STEEL_HI, (hx + 2, hy - 1), (hx + 5, hy), 1)
+        _collar(surface, hx, hy, 2)
+
+    # Pickaxe: haft + pick head — curved point one side, blunt face other.
     elif "pickaxe" in name_low or "pick axe" in name_low:
         hx, hy = cx + size - 4, cy - size + 4
-        pygame.draw.line(surface, (139, 90, 43), (cx - size + 2, cy + size - 2), (hx, hy), 2)
-        # Double-pointed head: straight bar across the haft with tapered tips
-        pygame.draw.line(surface, (100, 116, 139), (hx - 5, hy - 5), (hx + 5, hy + 5), 4)
-        pygame.draw.line(surface, (203, 213, 225), (hx - 4, hy - 4), (hx + 4, hy + 4), 2)
-        pygame.draw.circle(surface, (139, 90, 43), (hx, hy), 2)
+        _haft(surface, cx - size + 2, cy + size - 2, hx, hy)
+        # Head bar across the haft
+        pygame.draw.line(surface, _STEEL_DARK, (hx - 6, hy - 6), (hx + 6, hy + 6), 6)
+        pygame.draw.line(surface, _STEEL_MID, (hx - 6, hy - 6), (hx + 6, hy + 6), 4)
+        # Curved pick point (upper-left tip)
+        pygame.draw.arc(surface, _STEEL_LT,
+                        pygame.Rect(hx - size + 2, hy - size + 2, size, size),
+                        3.6, 5.6, 2)
+        # Blunt hammer face (lower-right tip)
+        pygame.draw.line(surface, _STEEL_HI, (hx + 3, hy + 3), (hx + 7, hy + 7), 3)
+        _collar(surface, hx, hy, 2)
+
+    # Sledgehammer: haft + heavy double-face maul head.
     elif "sledge" in name_low or "sledgehammer" in name_low:
         hx, hy = cx + size - 4, cy - size + 4
-        pygame.draw.line(surface, (139, 90, 43), (cx - size + 2, cy + size - 2), (hx, hy), 2)
-        # Wide double-face head
-        pygame.draw.line(surface, (71, 85, 105), (hx - 5, hy - 5), (hx + 5, hy + 5), 5)
-        pygame.draw.line(surface, (148, 163, 184), (hx - 4, hy - 4), (hx - 1, hy - 1), 1)
-        pygame.draw.line(surface, (148, 163, 184), (hx + 4, hy + 4), (hx + 1, hy + 1), 1)
+        _haft(surface, cx - size + 2, cy + size - 2, hx, hy)
+        # Long perpendicular maul head with two flat striking faces
+        pygame.draw.line(surface, _STEEL_DARK, (hx - 7, hy - 7), (hx + 7, hy + 7), 7)
+        pygame.draw.line(surface, _STEEL_MID, (hx - 6, hy - 6), (hx + 6, hy + 6), 5)
+        pygame.draw.line(surface, _STEEL_HI, (hx - 5, hy - 5), (hx - 2, hy - 2), 1)
+        pygame.draw.line(surface, _STEEL_HI, (hx + 5, hy + 5), (hx + 2, hy + 2), 1)
+        _collar(surface, hx, hy, 2)
+
+    # Spade: haft + leaf-shaped digging blade.
     elif "spade" in name_low:
         hx, hy = cx + size - 4, cy - size + 4
-        pygame.draw.line(surface, (139, 90, 43), (cx - size + 2, cy + size - 2), (hx, hy), 2)
-        # Flat steel blade pointing forward along the haft
-        pygame.draw.polygon(surface, (203, 213, 225), [(hx - 2, hy + 2), (hx + 2, hy - 2), (hx + 6, hy - 5)])
-        pygame.draw.line(surface, (100, 116, 139), (hx - 2, hy + 2), (hx + 6, hy - 5), 1)
-        pygame.draw.line(surface, (226, 232, 240), (hx + 1, hy - 2), (hx + 4, hy - 4), 1)
+        _haft(surface, cx - size + 2, cy + size - 2, hx, hy)
+        # Leaf blade pointing forward along the haft
+        pygame.draw.polygon(surface, _STEEL_DARK,
+                            [(hx - 2, hy + 2), (hx + 2, hy - 2), (hx + 7, hy - 6),
+                             (hx + 4, hy - 8), (hx - 1, hy - 3)])
+        pygame.draw.polygon(surface, _STEEL_MID,
+                            [(hx - 1, hy + 1), (hx + 1, hy - 1), (hx + 6, hy - 5),
+                             (hx + 3, hy - 7), (hx, hy - 2)])
+        pygame.draw.line(surface, _STEEL_HI, (hx + 2, hy - 2), (hx + 5, hy - 5), 1)
+        _collar(surface, hx, hy, 2)
 
-    # Toolmaker-forge tools: hammer, tongs, rolling pin, peel, fishing rod.
+    # Smith's hammer: haft + peen-and-face head block.
     elif "hammer" in name_low:
-        pygame.draw.line(surface, (139, 90, 43), (cx - size + 2, cy + size - 2), (cx + size - 4, cy - size + 4), 2)
         hx, hy = cx + size - 4, cy - size + 4
-        pygame.draw.line(surface, (100, 116, 139), (hx - 4, hy - 4), (hx + 5, hy + 5), 5)
-        pygame.draw.line(surface, (203, 213, 225), (hx - 3, hy - 3), (hx - 1, hy - 1), 1)
+        _haft(surface, cx - size + 2, cy + size - 2, hx, hy)
+        # Head: perpendicular bar with flat face (right) and peen taper (left)
+        pygame.draw.polygon(surface, _STEEL_DARK,
+                            [(hx - 7, hy - 4), (hx - 2, hy - 6), (hx + 6, hy - 5),
+                             (hx + 7, hy - 2), (hx + 6, hy + 3), (hx - 2, hy + 5),
+                             (hx - 7, hy + 3)])
+        pygame.draw.polygon(surface, _STEEL_MID,
+                            [(hx - 6, hy - 3), (hx - 2, hy - 5), (hx + 5, hy - 4),
+                             (hx + 6, hy - 1), (hx + 5, hy + 2), (hx - 2, hy + 4),
+                             (hx - 6, hy + 2)])
+        pygame.draw.line(surface, _STEEL_HI, (hx + 1, hy - 3), (hx + 5, hy - 3), 1)
+        pygame.draw.line(surface, _STEEL_HI, (hx + 1, hy + 1), (hx + 5, hy + 1), 1)
+        _collar(surface, hx, hy, 2)
+
+    # Smith's tongs: two riveted arms with scalloped grips.
     elif "tongs" in name_low:
-        # Two curved steel arms pinching at the tips
-        pygame.draw.arc(surface, (203, 213, 225),
-                        pygame.Rect(cx - size + 1, cy - int(size * 0.6), int(size * 1.4), int(size * 1.3)),
-                        0.2, 1.6, 2)
-        pygame.draw.arc(surface, (148, 163, 184),
-                        pygame.Rect(cx - int(size * 0.4), cy - int(size * 0.6), int(size * 1.4), int(size * 1.3)),
-                        4.4, 5.9, 2)
-        pygame.draw.circle(surface, (139, 90, 43), (cx - int(size * 0.5), cy + int(size * 0.55)), 2)
-        pygame.draw.circle(surface, (139, 90, 43), (cx + int(size * 0.45), cy + int(size * 0.55)), 2)
+        # Arms from grip ends up to the pivot rivet
+        _steel_line(surface, cx - size + 1, cy + size - 2, cx - 1, cy - 1, 2)
+        _steel_line(surface, cx + size - 3, cy + size - 3, cx + 2, cy - 2, 2)
+        # Pivot rivet
+        pygame.draw.circle(surface, _STEEL_DARK, (cx, cy), 3)
+        pygame.draw.circle(surface, _STEEL_HI, (cx, cy), 1)
+        # Wooden grip wraps on both handles
+        pygame.draw.line(surface, _HAFT_DARK, (cx - size + 1, cy + size - 2), (cx - size + 4, cy + size - 5), 3)
+        pygame.draw.line(surface, _HAFT_WOOD, (cx - size + 2, cy + size - 3), (cx - size + 3, cy + size - 6), 1)
+        pygame.draw.line(surface, _HAFT_DARK, (cx + size - 3, cy + size - 3), (cx + size - 6, cy + size - 6), 3)
+        pygame.draw.line(surface, _HAFT_WOOD, (cx + size - 4, cy + size - 4), (cx + size - 5, cy + size - 7), 1)
     elif "rolling" in name_low or "pin" in name_low:
         # Horizontal flour-dusted cylinder
         pin_rect = pygame.Rect(cx - size + 1, cy - int(size * 0.4), int(size * 2 - 2), int(size * 0.8))
