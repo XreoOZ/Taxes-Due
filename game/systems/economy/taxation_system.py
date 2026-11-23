@@ -16,7 +16,10 @@ from game.data.config import (
     SOCAGE_TAX_HAPPINESS_REPLIES,
     SCHEDULE_WORK,
 )
-from game.systems.economy.currency import normalize_wallet, to_copper, transfer_exact_value
+from game.systems.economy.currency import (
+    CURRENCY_DENOMINATIONS, EXCHANGE_RATES,
+    normalize_wallet, to_copper, transfer_exact_value,
+)
 from game.world.navigation.navigation import distance_to_object
 
 
@@ -482,14 +485,40 @@ class TaxationSystem:
                 or str(state.get("target_family_id")) != str(getattr(villager, "family_id", ""))):
             prepared = max(0, int(getattr(villager, "socage_tax_prepared_amount", 0)))
             if prepared:
-                chest, _ = cls.household_chest_wallet(furniture_manager, villager.family_id)
-                if chest:
-                    refunded, _ = transfer_exact_value(villager.inventory, chest.inventory, prepared)
-                    if refunded:
-                        villager.socage_tax_prepared_amount = 0
-                        villager.socage_tax_prepared_cycle = None
-                        from game.systems.economy.wealth_system import VillageWealthSystem
-                        VillageWealthSystem.mark_dirty()
+                # Physical return: take back exactly `prepared` copper worth
+                # of real coins from the representative's pocket, then send
+                # them home (chest or owner-tagged permit-tile drop).
+                from game.systems.economy.currency import EXCHANGE_RATES
+                remaining = prepared
+                coin_items = {}
+                for denom in sorted(CURRENCY_DENOMINATIONS,
+                                    key=lambda d: EXCHANGE_RATES.get(d, 0), reverse=True):
+                    rate = EXCHANGE_RATES.get(denom, 1)
+                    avail = int(villager.inventory.get(denom, 0) or 0)
+                    take = min(avail, (remaining + rate - 1) // rate)
+                    if take > 0:
+                        coin_items[denom] = take
+                        villager.inventory[denom] = avail - take
+                        if villager.inventory[denom] <= 0:
+                            villager.inventory.pop(denom, None)
+                        remaining -= take * rate
+                    if remaining <= 0:
+                        break
+                if coin_items:
+                    from game.systems.economy.transactions import deliver_goods
+                    deliver_goods(
+                        villager, villager.family_id, coin_items,
+                        furniture_manager=furniture_manager,
+                        stockpile_manager=getattr(villager, "stockpile_manager", None),
+                        permit_manager=getattr(villager, "permit_manager", None),
+                        building_manager=getattr(villager, "building_manager", None),
+                        ref_x=villager.x, ref_y=villager.y,
+                    )
+                villager.socage_tax_prepared_amount = 0
+                villager.socage_tax_prepared_cycle = None
+                villager.socage_tax_phase = None
+                from game.systems.economy.wealth_system import VillageWealthSystem
+                VillageWealthSystem.mark_dirty()
             if getattr(villager, "task", None) == "PAYING_SOCAGE_TAX":
                 villager.task = "IDLE"
                 villager._resume_or_idle_after_need()
@@ -507,21 +536,56 @@ class TaxationSystem:
         if villager.task not in ("PAYING_SOCAGE_TAX", "IDLE", "LEISURE", "STROLLING", "ATTENDING_PRAYER"):
             villager.interrupt_task("SOCAGE_TAX")
         villager.task = "PAYING_SOCAGE_TAX"
+        from game.data.config import TILE_SIZE, CHEST_INTERACTION_RADIUS
         cycle = int(state.get("cycle", 0))
+        phase = getattr(villager, "socage_tax_phase", None)
         if getattr(villager, "socage_tax_prepared_cycle", None) != cycle:
-            chest, wallet = cls.household_chest_wallet(furniture_manager, villager.family_id)
-            due = to_copper(wallet) * cls.get_socage_percent() // 100
-            prepared = 0
-            if chest and due > 0:
-                if not isinstance(getattr(villager, "inventory", None), dict):
-                    villager.inventory = {}
-                success, _ = transfer_exact_value(chest.inventory, villager.inventory, due)
-                if success:
-                    prepared = due
-                    from game.systems.economy.wealth_system import VillageWealthSystem
-                    VillageWealthSystem.mark_dirty()
+            # Universal physical tax: assess against ALL household coin
+            # sources, then the representative must physically collect the
+            # coins (walk to chest / reachable stacks / nearby members)
+            # before delivering them to the collector.
+            from game.systems.economy.transactions import household_coin_total_copper
+            total = household_coin_total_copper(
+                villager.family_id, furniture_manager, villager_manager,
+                getattr(villager, "stockpile_manager", None))
+            due = total * cls.get_socage_percent() // 100
+            villager.socage_tax_due_amount = due
+            villager.socage_tax_phase = "COLLECT"
             villager.socage_tax_prepared_cycle = cycle
-            villager.socage_tax_prepared_amount = prepared
+            villager.socage_tax_prepared_amount = 0
+            phase = "COLLECT"
+
+        if phase == "COLLECT":
+            due = max(0, int(getattr(villager, "socage_tax_due_amount", 0) or 0))
+            chest = (furniture_manager.get_storage_for_family(str(villager.family_id))
+                     if furniture_manager else None)
+            approach = getattr(chest, "get_approach_point", None)
+            if approach is not None:
+                pos = approach(
+                    villager.x, villager.y, worker_id=villager.id,
+                    all_entities=all_entities, tile_size=TILE_SIZE, bm=building_manager,
+                )
+                arrived = villager._move_towards(
+                    pos[0], pos[1], dt, arrival_dist=CHEST_INTERACTION_RADIUS,
+                    all_entities=all_entities, player=player,
+                    building_manager=building_manager, furniture_manager=furniture_manager,
+                    interaction_target=chest,
+                )
+                if not arrived:
+                    return True
+            from game.systems.economy.transactions import collect_coins
+            ok, _ = collect_coins(
+                villager, villager.family_id, due,
+                furniture_manager=furniture_manager,
+                villager_manager=villager_manager,
+                stockpile_manager=getattr(villager, "stockpile_manager", None),
+                building_manager=building_manager,
+                permit_manager=permit_manager,
+            )
+            villager.socage_tax_prepared_amount = due if ok else 0
+            villager.socage_tax_phase = "DELIVER"
+            return True
+
         contact = max(1.0, float(getattr(villager, "radius", 20))
                       + float(getattr(collector, "radius", 20)) + 8.0)
         arrived = villager._move_towards(
@@ -531,13 +595,16 @@ class TaxationSystem:
         )
         if arrived or math.hypot(villager.x - collector.x, villager.y - collector.y) <= contact:
             due = max(0, int(getattr(villager, "socage_tax_prepared_amount", 0)))
+            from game.systems.economy.transactions import pay_coins
             success = due <= 0 or bool(
-                transfer_exact_value(villager.inventory, collector.inventory, due)[0]
+                pay_coins(villager, getattr(collector, "inventory", {}), due)[0]
             )
             if success:
                 state["household_paid"] = True
                 villager.socage_tax_prepared_amount = 0
                 villager.socage_tax_prepared_cycle = None
+                villager.socage_tax_phase = None
+                villager.socage_tax_due_amount = 0
                 cls.record_socage_tax_collected(due, day_number)
                 cls.apply_tax_unhappiness(
                     villager.family_id, "tax_socage", cls.socage_happiness_effect(),

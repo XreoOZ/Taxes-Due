@@ -417,7 +417,7 @@ class Villager:
             if getattr(self, "is_moving", False):
                 return "Walking to Cemetery grave"
             return "Digging grave with Hoe"
-        elif task == "BURYING_CORPSE":
+        elif task in ("BURYING_GRAVE", "BURYING_CORPSE"):
             if getattr(self, "is_moving", False):
                 return "Walking to grave site"
             return "Burying deceased in Cemetery"

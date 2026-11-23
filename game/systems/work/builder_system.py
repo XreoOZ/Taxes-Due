@@ -854,10 +854,11 @@ class BuilderSystem:
                 family_id if family_id is not None else builder.family_id
             )
         totals = dict(getattr(builder, "inventory", {}))
-        material_types = DEDICATED_JOBS.get("Builder", {}).get("material_stock_target", {})
         if chest:
-            for item in material_types:
-                totals[item] = totals.get(item, 0) + chest.inventory.get(item, 0)
+            # Universal: the chest contributes EVERY item it holds — any
+            # recipe material counts, not just the job's stock_target keys.
+            for item, amount in (getattr(chest, "inventory", {}) or {}).items():
+                totals[item] = totals.get(item, 0) + int(amount or 0)
         # Loose stacks owned by the paying party also count as materials.
         for stack in cls._order_loose_stacks(builder, stockpile_manager, payer_type, family_id):
             totals[stack.resource_type] = totals.get(stack.resource_type, 0) + int(stack.amount)

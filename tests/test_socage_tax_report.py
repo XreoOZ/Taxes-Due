@@ -85,11 +85,17 @@ class TestSocageTaxReport(unittest.TestCase):
             get_storage_for_family=lambda _family_id: chest,
         )
 
-        handled = TaxationSystem.update_household_representative(
-            representative, 0.1, manager, None, None, furniture_manager,
-            [collector, representative], None, day_number=4,
-            collector_activity="WORK", villager_activity="WORK",
-        )
+        # Universal physical flow: tick 1 = representative collects coins
+        # from household storage, tick 2 = delivers payment to collector.
+        handled = False
+        for _ in range(3):
+            handled = TaxationSystem.update_household_representative(
+                representative, 0.1, manager, None, None, furniture_manager,
+                [collector, representative], None, day_number=4,
+                collector_activity="WORK", villager_activity="WORK",
+            )
+            if to_copper(collector.inventory) >= 10:
+                break
 
         self.assertTrue(handled)
         self.assertEqual(to_copper(collector.inventory), 10)
