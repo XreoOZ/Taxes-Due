@@ -131,6 +131,9 @@ HELP_SECTIONS = [
         "DAMAGED > BROKEN. Every 2 days each unit rolls a 30% chance to",
         "drop one stage; BROKEN tools are destroyed. This applies to ALL",
         "tools everywhere — stock up or re-forge regularly.",
+        "Condition does NOT reduce tool performance and there is no",
+        "repair — worn tools work the same until they break. It exists",
+        "purely to keep the iron supply chain alive.",
     ]),
     ("BUILDER COMMISSIONS", [
         "Builders take COMMISSIONS: furniture and public structures are",
