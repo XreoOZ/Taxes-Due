@@ -255,7 +255,7 @@ class PermitMixin:
             btn_gap = upx(8)
 
             # Row 1 (4 buttons: Housing, Storage, Market, Farm)
-            w4 = (total_avail_w - (3 * btn_gap)) // upx(4)
+            w4 = (total_avail_w - (3 * btn_gap)) // 4
             housing_btn = pygame.Rect(mx + upx(24) + 0 * (w4 + btn_gap), btn_y + upx(24), w4, upx(30))
             storage_btn = pygame.Rect(mx + upx(24) + 1 * (w4 + btn_gap), btn_y + upx(24), w4, upx(30))
             market_btn = pygame.Rect(mx + upx(24) + 2 * (w4 + btn_gap), btn_y + upx(24), w4, upx(30))
@@ -379,7 +379,7 @@ class PermitMixin:
 
             avail_w = self.modal_w - upx(48)
             k = len(cat_types)
-            c_btn_w = min(180, (avail_w - ((k - 1) * upx(8))) // max(1, k))
+            c_btn_w = min(upx(180), (avail_w - ((k - 1) * upx(8))) // max(1, k))
             for idx, p_type in enumerate(cat_types):
                 p_cfg = PERMIT_TYPES.get(p_type, {})
                 p_btn = pygame.Rect(mx + upx(24) + idx * (c_btn_w + upx(8)), btn_y + upx(26), c_btn_w, upx(36))

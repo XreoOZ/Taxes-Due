@@ -23,8 +23,8 @@ from game.systems.core.cheat_system import (
     spawn_item_physically
 )
 
-MAX_QTY_PER_ITEM = upx(5000)
-MAX_QTY_DIGITS = upx(4)
+MAX_QTY_PER_ITEM = 5000
+MAX_QTY_DIGITS = 4
 
 
 class AddItemModal:

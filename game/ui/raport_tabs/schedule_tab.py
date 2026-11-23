@@ -118,7 +118,7 @@ class ScheduleMixin:
         sched = schedule_manager.get_schedule_view(self.selected_schedule_job_id) if schedule_manager else list(DEFAULT_JOB_SCHEDULE)
         grid_bar_y = grid_y + upx(24)
         avail_grid_w = self.modal_w - upx(48)
-        cell_w = avail_grid_w // upx(24)
+        cell_w = avail_grid_w // 24
         cell_h = upx(54)
 
         self.schedule_hour_cell_rects = {}

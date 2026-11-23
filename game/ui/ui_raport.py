@@ -338,7 +338,7 @@ class RaportUI(
     def open_household_directly(self, family_id):
         """Contextual View: Opens Town Ledger directly to the specified family's View Family screen"""
         self.is_open = True
-        self.active_tab = upx(4)  # Tab Household
+        self.active_tab = 4  # Tab Household
         self.selected_family_id = family_id
         self.show_household_possession = False
         self.show_wealth_detail_dialog = False
@@ -349,7 +349,7 @@ class RaportUI(
     def open_possession_directly(self, family_id):
         """Contextual View: Opens Town Ledger directly to the specified household's Possession screen"""
         self.is_open = True
-        self.active_tab = upx(4)  # Tab Household
+        self.active_tab = 4  # Tab Household
         self.selected_family_id = family_id
         self.show_household_possession = True
         self.show_grant_dialog = False
@@ -373,7 +373,7 @@ class RaportUI(
         """Contextual View: Opens Town Ledger Workers tab focused on a job's Workstations,
         optionally highlighting one specific workplace card."""
         self.is_open = True
-        self.active_tab = upx(5)  # Tab Workers
+        self.active_tab = 5  # Tab Workers
         self.selected_job_id = None
         self.selected_workstation_job_id = job_id
         self.highlight_workplace_key = self._workplace_key(workplace) if workplace else None
@@ -385,7 +385,7 @@ class RaportUI(
         """Contextual View: Opens Town Ledger directly to the Immigrant tab
         (used when the player clicks a Notice Board)."""
         self.is_open = True
-        self.active_tab = upx(6)  # Tab Immigrant
+        self.active_tab = 6  # Tab Immigrant
         self.selected_building_category = None
         self.selected_permit_category = None
         self.show_build_menu = False
