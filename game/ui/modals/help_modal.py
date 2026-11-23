@@ -1,7 +1,7 @@
-"""Help / Codex modal — full mechanics guide, CK2-style categorized manual.
+"""Help / Codex modal — two-level mechanics guide.
 
-Opened from the ESC menu (cheat_modal "Help" button). Scrollable list of
-sections; content lives in HELP_SECTIONS below so it stays easy to edit.
+Index view lists all topics; clicking one opens its detailed page with a
+Back button. Content lives in HELP_SECTIONS below for easy editing.
 """
 
 import pygame
@@ -12,8 +12,7 @@ from game.data.config import (
 )
 
 # ---------------------------------------------------------------------------
-# Codex content. Each section: (title, [paragraph strings]). Keep wording
-# accurate to real mechanics — this is the player's manual.
+# Codex content. Each section: (title, [paragraph strings]).
 # ---------------------------------------------------------------------------
 HELP_SECTIONS = [
     ("HOW TO START", [
@@ -238,7 +237,8 @@ HELP_SECTIONS = [
     ("SAVING & LOADING", [
         "ESC -> Save Game / Load Game. Saves are unlimited named",
         "files in the saves/ folder — name them anything.",
-        "Autosave runs every 5 real-time minutes as autosave-dayNN.",
+        "Autosave runs every 5 real-time minutes as autosave-dayNN,",
+        "keeping only the 3 newest files.",
         "Delete any save from the Load screen (with confirmation).",
         "Old saves auto-migrate: Carpenter was renamed Builder and all",
         "saved references upgrade on load.",
@@ -265,13 +265,19 @@ HELP_SECTIONS = [
 
 
 class HelpModal:
+    """Two-level codex: index list -> per-topic detail page."""
+
     def __init__(self):
         self.is_open = False
-        self.scroll_y = 0
-        self.max_scroll = 0
+        self.view = "index"          # "index" | "detail"
+        self.detail_index = 0
+        self.scroll_y = 0.0
+        self.max_scroll = 0.0
         self.modal_rect = None
         self.viewport_rect = None
         self.close_rect = None
+        self.back_rect = None
+        self.topic_rects = []         # (rect, section_index) rebuilt each draw
         self._fonts_ready = False
         self.font_title = None
         self.font_head = None
@@ -282,50 +288,99 @@ class HelpModal:
         if self._fonts_ready:
             return
         self.font_title = pygame.font.SysFont("Segoe UI", 20, bold=True)
-        self.font_head = pygame.font.SysFont("Segoe UI", 14, bold=True)
+        self.font_head = pygame.font.SysFont("Segoe UI", 15, bold=True)
         self.font_body = pygame.font.SysFont("Segoe UI", 13)
         self.font_small = pygame.font.SysFont("Segoe UI", 11)
         self._fonts_ready = True
 
     def open(self):
         self.is_open = True
-        self.scroll_y = 0
+        self.view = "index"
+        self.detail_index = 0
+        self.scroll_y = 0.0
+        self._kb_cursor = 0
 
     def close(self):
         self.is_open = False
+        self.view = "index"
+        self.scroll_y = 0.0
+        self._kb_cursor = 0
+
+    def _clamp_scroll(self):
+        self.scroll_y = max(0.0, min(self.scroll_y, self.max_scroll))
 
     def handle_event(self, event):
         if not self.is_open:
             return None
         if event.type == pygame.KEYDOWN:
             if event.key == pygame.K_ESCAPE:
-                self.close()
+                if self.view == "detail":
+                    self.view = "index"
+                    self.scroll_y = 0.0
+                else:
+                    self.close()
                 return "close"
-            if event.key in (pygame.K_UP, pygame.K_DOWN, pygame.K_PAGEUP, pygame.K_PAGEDOWN):
-                step = 60 if event.key in (pygame.K_PAGEUP, pygame.K_PAGEDOWN) else 24
-                direction = -1 if event.key in (pygame.K_UP, pygame.K_PAGEUP) else 1
-                self.scroll_y = max(0, min(self.scroll_y + direction * step, self.max_scroll))
+            if self.view == "index" and event.key in (pygame.K_UP, pygame.K_DOWN):
+                # Keyboard cursor through the topic list.
+                direction = 1 if event.key == pygame.K_DOWN else -1
+                self._kb_cursor = getattr(self, "_kb_cursor", 0) + direction
+                self._kb_cursor = max(0, min(self._kb_cursor, len(HELP_SECTIONS) - 1))
+                # Keep cursor row visible.
+                row_h = 44
+                row_top = self._kb_cursor * row_h
+                if row_top < self.scroll_y:
+                    self.scroll_y = row_top
+                elif row_top + row_h > self.scroll_y + self.viewport_rect.height:
+                    self.scroll_y = row_top + row_h - self.viewport_rect.height
+                self._clamp_scroll()
                 return "scroll"
+            if self.view == "index" and event.key in (pygame.K_RETURN, pygame.K_KP_ENTER):
+                idx = getattr(self, "_kb_cursor", 0)
+                self.view = "detail"
+                self.detail_index = idx
+                self.scroll_y = 0.0
+                return "open_topic"
+            step = 48 if event.key in (pygame.K_PAGEUP, pygame.K_PAGEDOWN) else 24
+            direction = -1 if event.key in (pygame.K_UP, pygame.K_PAGEUP) else 1
+            self.scroll_y += direction * step
+            self._clamp_scroll()
+            return "scroll"
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             if self.close_rect and self.close_rect.collidepoint(event.pos):
                 self.close()
                 return "close"
+            if self.view == "detail" and self.back_rect and self.back_rect.collidepoint(event.pos):
+                self.view = "index"
+                self.scroll_y = 0.0
+                return "back"
+            if self.view == "index":
+                for rect, idx in self.topic_rects:
+                    if rect.collidepoint(event.pos):
+                        self.view = "detail"
+                        self.detail_index = idx
+                        self.scroll_y = 0.0
+                        return "open_topic"
+                if self.viewport_rect and self.viewport_rect.collidepoint(event.pos):
+                    return "scroll_area"
+                return "blocked"
             if self.viewport_rect and self.viewport_rect.collidepoint(event.pos):
                 return "scroll_area"
             return "blocked"
         if event.type == pygame.MOUSEWHEEL:
             if self.viewport_rect and self.viewport_rect.collidepoint(pygame.mouse.get_pos()):
-                self.scroll_y = max(0, min(self.scroll_y - event.y * 36, self.max_scroll))
+                self.scroll_y -= event.y * 36
+                self._clamp_scroll()
                 return "scroll"
         return None
 
+    # ------------------------------------------------------------------
     def draw(self, surface):
         if not self.is_open:
             return
         self._ensure_fonts()
         screen_w, screen_h = surface.get_size()
-        modal_w = min(760, screen_w - 40)
-        modal_h = min(640, screen_h - 40)
+        modal_w = min(720, screen_w - 40)
+        modal_h = min(600, screen_h - 40)
         mx = (screen_w - modal_w) // 2
         my = (screen_h - modal_h) // 2
         self.modal_rect = pygame.Rect(mx, my, modal_w, modal_h)
@@ -336,10 +391,14 @@ class HelpModal:
         pygame.draw.rect(surface, COLOR_MODAL_BG, self.modal_rect, border_radius=12)
         pygame.draw.rect(surface, COLOR_MODAL_BORDER, self.modal_rect, width=2, border_radius=12)
 
-        title = self.font_title.render("VILLAGE CODEX", True, COLOR_TEXT_TITLE)
+        title_txt = ("VILLAGE CODEX" if self.view == "index"
+                     else HELP_SECTIONS[self.detail_index][0])
+        title = self.font_title.render(title_txt, True, COLOR_TEXT_TITLE)
         surface.blit(title, (mx + 24, my + 16))
-        sub = self.font_small.render("Complete mechanics guide — scroll to read", True, COLOR_TEXT_MUTED)
-        surface.blit(sub, (mx + 26, my + 44))
+        sub_txt = ("Select a topic to read the details" if self.view == "index"
+                   else "Mechanics guide")
+        sub = self.font_small.render(sub_txt, True, COLOR_TEXT_MUTED)
+        surface.blit(sub, (mx + 26, my + 46))
 
         self.close_rect = pygame.Rect(mx + modal_w - 40, my + 14, 26, 26)
         pygame.draw.rect(surface, (30, 41, 59), self.close_rect, border_radius=5)
@@ -347,51 +406,92 @@ class HelpModal:
         surface.blit(x_txt, (self.close_rect.centerx - x_txt.get_width() // 2,
                              self.close_rect.centery - x_txt.get_height() // 2))
 
-        # Build content height for scrolling.
         pad = 20
-        line_h = 17
-        head_gap = 26
-        sec_gap = 14
-        content_h = 0
-        for _t, paras in HELP_SECTIONS:
-            content_h += head_gap + len(paras) * line_h + sec_gap
         self.viewport_rect = pygame.Rect(mx + pad, my + 70, modal_w - pad * 2,
                                          modal_h - 70 - 14)
-        self.max_scroll = max(0, content_h - self.viewport_rect.height)
-        self.scroll_y = max(0, min(self.scroll_y, self.max_scroll))
-
         old_clip = surface.get_clip()
         surface.set_clip(self.viewport_rect)
-        cy = self.viewport_rect.y - self.scroll_y
-        for sec_title, paras in HELP_SECTIONS:
-            head = self.font_head.render(sec_title, True, (250, 204, 21))
-            if cy + head_gap > self.viewport_rect.bottom and cy < self.viewport_rect.y:
-                cy += head_gap + len(paras) * line_h + sec_gap
-                continue
-            surface.blit(head, (self.viewport_rect.x + 4, cy))
-            cy += head_gap
-            for para in paras:
-                if para == "":
-                    cy += line_h // 2
-                    continue
-                txt = self.font_body.render(para, True, COLOR_TEXT_MAIN)
-                surface.blit(txt, (self.viewport_rect.x + 14, cy))
-                cy += line_h
-            cy += sec_gap
+
+        if self.view == "index":
+            self._draw_index(surface)
+        else:
+            self._draw_detail(surface)
+
         surface.set_clip(old_clip)
 
-        # Scrollbar hint
-        if self.max_scroll > 0:
-            track = pygame.Rect(self.viewport_rect.right + 4, self.viewport_rect.y, 6,
-                                self.viewport_rect.height)
-            pygame.draw.rect(surface, (30, 41, 59), track, border_radius=3)
-            ratio = self.viewport_rect.height / max(1, content_h)
-            thumb_h = max(24, int(self.viewport_rect.height * ratio))
-            thumb_y = self.viewport_rect.y + int(
-                (self.viewport_rect.height - thumb_h) * (self.scroll_y / self.max_scroll))
-            pygame.draw.rect(surface, (100, 116, 139),
-                             (track.x, thumb_y, 6, thumb_h), border_radius=3)
+        # Back button pinned in the header (detail view only).
+        self.back_rect = None
+        if self.view == "detail":
+            self.back_rect = pygame.Rect(mx + modal_w - 130, my + 12, 84, 30)
+            b_hover = self.back_rect.collidepoint(pygame.mouse.get_pos())
+            pygame.draw.rect(surface, (55, 65, 81) if b_hover else (30, 41, 59),
+                             self.back_rect, border_radius=6)
+            pygame.draw.rect(surface, (71, 85, 105), self.back_rect, width=1, border_radius=6)
+            b_txt = self.font_small.render("< Topics", True, COLOR_TEXT_MAIN)
+            surface.blit(b_txt, (self.back_rect.centerx - b_txt.get_width() // 2,
+                                 self.back_rect.centery - b_txt.get_height() // 2))
 
-        hint = self.font_small.render("ESC / X to close — mouse wheel or arrows to scroll",
-                                      True, COLOR_TEXT_MUTED)
+        self._draw_scrollbar(surface)
+
+        hint = self.font_small.render(
+            "ESC to go back/close — mouse wheel or arrows to scroll",
+            True, COLOR_TEXT_MUTED)
         surface.blit(hint, (mx + 24, my + modal_h - 26))
+
+    # ------------------------------------------------------------------
+    def _draw_index(self, surface):
+        self.topic_rects = []
+        row_h = 44
+        mouse_pos = pygame.mouse.get_pos()
+        for i, (sec_title, _paras) in enumerate(HELP_SECTIONS):
+            row_y = self.viewport_rect.y + i * row_h - self.scroll_y
+            if row_y + row_h < self.viewport_rect.y or row_y > self.viewport_rect.bottom:
+                continue
+            row = pygame.Rect(self.viewport_rect.x, row_y,
+                              self.viewport_rect.width, row_h - 6)
+            self.topic_rects.append((row, i))
+            kb_sel = (self.view == "index" and i == getattr(self, "_kb_cursor", 0))
+            hover = row.collidepoint(mouse_pos) or kb_sel
+            pygame.draw.rect(surface, (30, 58, 95) if hover else (15, 23, 42),
+                             row, border_radius=8)
+            pygame.draw.rect(surface, (71, 85, 105) if not hover else (125, 211, 252),
+                             row, width=2 if kb_sel else 1, border_radius=8)
+            txt = self.font_head.render(sec_title, True,
+                                        COLOR_TEXT_TITLE if hover else COLOR_TEXT_MAIN)
+            surface.blit(txt, (row.x + 16, row.centery - txt.get_height() // 2))
+            arrow = self.font_body.render(">", True, COLOR_TEXT_MUTED if not hover else (125, 211, 252))
+            surface.blit(arrow, (row.right - 26, row.centery - arrow.get_height() // 2))
+        self.max_scroll = max(0.0, len(HELP_SECTIONS) * row_h - self.viewport_rect.height)
+        self._clamp_scroll()
+
+    def _draw_detail(self, surface):
+        _title, paras = HELP_SECTIONS[self.detail_index]
+        line_h = 18
+        content_h = len(paras) * line_h + 10
+        cy = self.viewport_rect.y + 8 - self.scroll_y
+        for para in paras:
+            if para == "":
+                cy += line_h // 2
+                continue
+            txt = self.font_body.render(para, True, COLOR_TEXT_MAIN)
+            surface.blit(txt, (self.viewport_rect.x + 8, cy))
+            cy += line_h
+        self.max_scroll = max(0.0, content_h - self.viewport_rect.height)
+        self._clamp_scroll()
+
+    def _draw_scrollbar(self, surface):
+        if self.max_scroll <= 0 or not self.viewport_rect:
+            return
+        track = pygame.Rect(self.viewport_rect.right + 4, self.viewport_rect.y, 6,
+                            self.viewport_rect.height)
+        pygame.draw.rect(surface, (30, 41, 59), track, border_radius=3)
+        if self.view == "index":
+            content_h = len(HELP_SECTIONS) * 44
+        else:
+            content_h = len(HELP_SECTIONS[self.detail_index][1]) * 18 + 10
+        ratio = min(1.0, self.viewport_rect.height / max(1.0, content_h))
+        thumb_h = max(24, int(self.viewport_rect.height * ratio))
+        thumb_y = self.viewport_rect.y + int(
+            (self.viewport_rect.height - thumb_h) * (self.scroll_y / self.max_scroll))
+        pygame.draw.rect(surface, (100, 116, 139),
+                         (track.x, thumb_y, 6, thumb_h), border_radius=3)
