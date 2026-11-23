@@ -878,6 +878,13 @@ class Villager:
         home_p = next((p for p in permit_manager.permits if p.id == self.assigned_permit_id), None) if (self.assigned_permit_id and permit_manager) else None
         home_b = self._get_home_building(permit_manager, building_manager) if (permit_manager and building_manager) else None
 
+        # Tanpa chest, rumah, maupun lot permit tidak ada definisi "aman di
+        # rumah" — mengambil barang hanya akan mengulang siklus pungut-letak
+        # (dan tujuan haul-nya jatuh ke koordinat (0,0)). Barang tetap bisa
+        # dikonsumsi lewat _find_nearest_household_item_source.
+        if not chest and home_p is None and home_b is None:
+            return None
+
         # 2. Cari tumpukan barang milik keluarga di tanah
         candidates = []
         for s in list(stockpile_manager.stacks):
@@ -1265,6 +1272,19 @@ class Villager:
             if p:
                 return (p.grid_x + p.tiles_w / 2.0) * TILE_SIZE, (p.grid_y + p.tiles_h / 2.0) * TILE_SIZE
         return 0.0, 0.0
+
+    def _get_household_loose_drop_tile(self, permit_manager, building_manager,
+                                       furniture_manager=None):
+        """Tile inside this household's permit for chestless owner-tagged drops.
+
+        Returns (gx, gy) or None when no household permit resolves — callers
+        keep their own-tile fallback in that case."""
+        from game.world.permits import resolve_household_ground_drop_tile
+        return resolve_household_ground_drop_tile(
+            getattr(self, "assigned_permit_id", None), permit_manager,
+            building_manager, furniture_manager=furniture_manager,
+            ref_x=self.x, ref_y=self.y,
+        )
 
     def deposit_item_to_chest(self, item_name, amount, furniture_manager):
         """Memindahkan item dari Inventory individu ke Chest keluarga tanpa mengubah total Household Possession"""
@@ -2760,8 +2780,10 @@ class Villager:
                         chest.store_item(carried_res, carried_amt)
                         self.say(f"Stored {carried_amt}x {carried_res} in household chest.", duration=2.5)
                     else:
-                        cur_gx = int(math.floor(self.x / TILE_SIZE))
-                        cur_gy = int(math.floor(self.y / TILE_SIZE))
+                        drop_tile = self._get_household_loose_drop_tile(
+                            permit_manager, building_manager, furniture_manager)
+                        cur_gx = drop_tile[0] if drop_tile else int(math.floor(self.x / TILE_SIZE))
+                        cur_gy = drop_tile[1] if drop_tile else int(math.floor(self.y / TILE_SIZE))
                         stockpile_manager.drop_resource(carried_res, carried_amt, cur_gx, cur_gy, owner_type="villager", owner_id=self.family_id)
                         self.say(f"Stored {carried_amt}x {carried_res} safely at home.", duration=2.5)
 
@@ -2842,14 +2864,40 @@ class Villager:
                         self.say("Stored fresh water in household chest!", duration=2.5)
                         self.task = "IDLE"
                 elif stockpile_manager:
-                    cur_gx = int(math.floor(self.x / TILE_SIZE))
-                    cur_gy = int(math.floor(self.y / TILE_SIZE))
                     amt = self.inventory.get("Water", 0)
-                    if amt > 0:
+                    if amt <= 0:
+                        self.task = "IDLE"
+                        return
+                    drop_tile = self._get_household_loose_drop_tile(
+                        permit_manager, building_manager, furniture_manager)
+                    if drop_tile is None:
+                        # No household area to secure goods into (e.g. still
+                        # homeless): keep the legacy at-feet drop — the stack
+                        # remains drinkable via household item sources.
+                        cur_gx = int(math.floor(self.x / TILE_SIZE))
+                        cur_gy = int(math.floor(self.y / TILE_SIZE))
                         stockpile_manager.drop_resource("Water", amt, cur_gx, cur_gy, owner_type="villager", owner_id=self.family_id)
                         del self.inventory["Water"]
-                    self.say("Stored fresh water at home!", duration=2.5)
-                    self.task = "IDLE"
+                        self.say("Stored fresh water at home!", duration=2.5)
+                        self.task = "IDLE"
+                        return
+                    # No chest: physically haul the water home first, then
+                    # drop it on a tile inside the household permit so the
+                    # "safe at home" check stops re-retrieval loops.
+                    dest_x, dest_y = self._get_home_storage_dest(
+                        permit_manager, building_manager, furniture_manager,
+                        all_entities=all_entities)
+                    arrived = self._move_towards(
+                        dest_x, dest_y, dt, arrival_dist=CHEST_INTERACTION_RADIUS,
+                        all_entities=all_entities, player=player,
+                        building_manager=building_manager, furniture_manager=furniture_manager,
+                        exclusive_target=False)
+                    if arrived:
+                        stockpile_manager.drop_resource("Water", amt, drop_tile[0], drop_tile[1], owner_type="villager", owner_id=self.family_id)
+                        del self.inventory["Water"]
+                        self.say("Stored fresh water at home!", duration=2.5)
+                        self.task = "IDLE"
+                    return
                 else:
                     self.task = "IDLE"
                 return
@@ -3104,8 +3152,10 @@ class Villager:
                         chest.store_item("Potato", self.carrying_crop)
                         self.say(f"Stored {self.carrying_crop} potatoes in household chest.", duration=2.5)
                     elif stockpile_manager:
-                        cur_gx = int(math.floor(self.x / TILE_SIZE))
-                        cur_gy = int(math.floor(self.y / TILE_SIZE))
+                        drop_tile = self._get_household_loose_drop_tile(
+                            permit_manager, building_manager, furniture_manager)
+                        cur_gx = drop_tile[0] if drop_tile else int(math.floor(self.x / TILE_SIZE))
+                        cur_gy = drop_tile[1] if drop_tile else int(math.floor(self.y / TILE_SIZE))
                         stockpile_manager.drop_resource("Food", self.carrying_crop, cur_gx, cur_gy, owner_type="villager", owner_id=self.family_id)
                         self.say(f"Stored {self.carrying_crop} potatoes at home.", duration=2.5)
                     self.carrying_crop = 0

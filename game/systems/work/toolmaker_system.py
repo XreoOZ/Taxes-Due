@@ -310,7 +310,8 @@ class ToolmakerSystem:
         if order.get("status") == "DELIVERING":
             return cls._deliver_step(toolmaker, subject, dt, furniture_manager,
                                      building_manager, all_entities, player,
-                                     stockpile_manager=stockpile_manager)
+                                     stockpile_manager=stockpile_manager,
+                                     villager_manager=villager_manager)
 
         if order.get("status") == "PAID":
             order["status"] = "CRAFTING"
@@ -389,7 +390,7 @@ class ToolmakerSystem:
     @classmethod
     def _deliver_step(cls, toolmaker, subject, dt, furniture_manager,
                       building_manager, all_entities, player,
-                      stockpile_manager=None):
+                      stockpile_manager=None, villager_manager=None):
         order = subject.construction_order
         tool_name = order.get("tool_name")
         qty = int(order.get("qty_total", 1))
@@ -409,14 +410,48 @@ class ToolmakerSystem:
             dest_chest = furniture_manager.get_storage_for_family(str(payer_family))
 
         if dest_chest is None:
-            # No household chest: drop the tools as owner-tagged loose stacks
-            # at the toolmaker's feet so the family can still collect them.
+            # No household chest: deliver the tools as owner-tagged loose
+            # stacks. Household payers get the drop placed on a tile inside
+            # their own permit (physically hauled there first) so the
+            # family's "safe at home" check stops retrieve/drop loops;
+            # landlord orders keep the at-feet fallback.
             if stockpile_manager is not None:
-                gx = int(toolmaker.x // TILE_SIZE)
-                gy = int(toolmaker.y // TILE_SIZE)
                 owner_type = "landlord" if order.get("payer_type") == "landlord" else "villager"
                 owner_id = None if order.get("payer_type") == "landlord" else str(payer_family)
                 amount = min(carried, qty)
+                drop_tile = None
+                if owner_type == "villager":
+                    permit_manager = getattr(toolmaker, "permit_manager", None)
+                    vm = villager_manager or getattr(toolmaker, "villager_manager", None)
+                    fam = None
+                    if permit_manager is not None and vm is not None:
+                        try:
+                            fam = vm.get_family_by_id(str(payer_family))
+                        except Exception:
+                            fam = None
+                    permit_id = getattr(fam, "assigned_permit_id", None)
+                    if permit_id is not None:
+                        from game.world.permits import resolve_household_ground_drop_tile
+                        drop_tile = resolve_household_ground_drop_tile(
+                            permit_id, permit_manager, building_manager,
+                            furniture_manager=furniture_manager,
+                            ref_x=toolmaker.x, ref_y=toolmaker.y)
+                if drop_tile is not None:
+                    dx = (drop_tile[0] + 0.5) * TILE_SIZE
+                    dy = (drop_tile[1] + 0.5) * TILE_SIZE
+                    arrived = toolmaker._move_towards(
+                        dx, dy, dt, arrival_dist=CHEST_INTERACTION_RADIUS,
+                        all_entities=all_entities, player=player,
+                        building_manager=building_manager,
+                        furniture_manager=furniture_manager,
+                        exclusive_target=False)
+                    toolmaker.task = "TOOLMAKER_DELIVERING"
+                    if not arrived:
+                        return True
+                    gx, gy = drop_tile
+                else:
+                    gx = int(toolmaker.x // TILE_SIZE)
+                    gy = int(toolmaker.y // TILE_SIZE)
                 stockpile_manager.drop_resource(
                     tool_name, amount, gx, gy,
                     owner_type=owner_type, owner_id=owner_id)

@@ -161,7 +161,14 @@ class ProductionDistributionSystem:
                 if assigned_pid:
                     p = next((p for p in permit_manager.permits if p.id == assigned_pid), None)
                     if p:
-                        gx, gy = p.grid_x, p.grid_y
+                        # Prefer an open tile inside the permit (not buried
+                        # under the home building footprint) so family
+                        # members can actually reach the stack.
+                        from game.world.permits import resolve_household_ground_drop_tile
+                        resolved = resolve_household_ground_drop_tile(
+                            assigned_pid, permit_manager, None,
+                            furniture_manager=furniture_manager)
+                        gx, gy = resolved if resolved else (p.grid_x, p.grid_y)
             stockpile_manager.drop_resource(resource_name, amount, gx, gy, owner_type="villager", owner_id=fam_str)
             return True, "ground", (gx, gy)
 

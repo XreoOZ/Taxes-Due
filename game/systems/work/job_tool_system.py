@@ -117,9 +117,26 @@ def deposit_irrelevant_tools(worker, furniture_manager, stockpile_manager):
                 del worker.inventory[tool_name]
             deposited.append((tool_name, actual))
         elif stockpile_manager:
-            cur_gx = int(math.floor(worker.x / TILE_SIZE))
-            cur_gy = int(math.floor(worker.y / TILE_SIZE))
-            stockpile_manager.drop_resource(tool_name, actual, cur_gx, cur_gy, owner_type="villager", owner_id=fam_str)
+            # Chestless household: drop on a tile inside the household
+            # permit (resolved via the worker's live manager refs) so the
+            # "safe at home" check stops retrieve/drop loops; fall back to
+            # the worker's own tile when no permit resolves.
+            drop_gx = drop_gy = None
+            permit_manager = getattr(worker, "permit_manager", None)
+            building_manager = getattr(worker, "building_manager", None)
+            permit_id = getattr(worker, "assigned_permit_id", None)
+            if permit_manager is not None and building_manager is not None and permit_id is not None:
+                from game.world.permits import resolve_household_ground_drop_tile
+                drop_tile = resolve_household_ground_drop_tile(
+                    permit_id, permit_manager, building_manager,
+                    furniture_manager=furniture_manager,
+                    ref_x=worker.x, ref_y=worker.y)
+                if drop_tile is not None:
+                    drop_gx, drop_gy = drop_tile
+            if drop_gx is None:
+                drop_gx = int(math.floor(worker.x / TILE_SIZE))
+                drop_gy = int(math.floor(worker.y / TILE_SIZE))
+            stockpile_manager.drop_resource(tool_name, actual, drop_gx, drop_gy, owner_type="villager", owner_id=fam_str)
             worker.inventory[tool_name] -= actual
             if worker.inventory[tool_name] <= 0:
                 del worker.inventory[tool_name]

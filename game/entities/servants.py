@@ -832,13 +832,33 @@ class Servant:
                     chest.store_item(self.carried_res, self.carried_amount)
                     deposited = True
                 if not deposited:
-                    # Drop on the nearest villager-reachable tile to the
-                    # household — never on water, inside solid structures, or
-                    # on furniture footprints members cannot path to.
-                    drop_gx, drop_gy = self._nearest_walkable_drop_tile(
-                        self.target_grant_dest[0], self.target_grant_dest[1],
-                        building_manager, furniture_manager,
-                    )
+                    # Prefer a tile inside the household's own permit so the
+                    # family's "safe at home" retrieval check recognizes the
+                    # stack; otherwise fall back to the nearest
+                    # villager-reachable tile to the household — never on
+                    # water, inside solid structures, or on furniture
+                    # footprints members cannot path to.
+                    drop_gx = drop_gy = None
+                    if villager_manager is not None and permit_manager is not None:
+                        try:
+                            fam = villager_manager.get_family_by_id(self.target_grant_fam_id)
+                            permit_id = getattr(fam, "assigned_permit_id", None)
+                        except Exception:
+                            permit_id = None
+                        if permit_id is not None:
+                            from game.world.permits import resolve_household_ground_drop_tile
+                            drop_tile = resolve_household_ground_drop_tile(
+                                permit_id, permit_manager, building_manager,
+                                furniture_manager=furniture_manager,
+                                ref_x=self.target_grant_dest[0],
+                                ref_y=self.target_grant_dest[1])
+                            if drop_tile is not None:
+                                drop_gx, drop_gy = drop_tile
+                    if drop_gx is None:
+                        drop_gx, drop_gy = self._nearest_walkable_drop_tile(
+                            self.target_grant_dest[0], self.target_grant_dest[1],
+                            building_manager, furniture_manager,
+                        )
                     stockpile_manager.drop_resource(self.carried_res, self.carried_amount, drop_gx, drop_gy, owner_type="villager", owner_id=str(self.target_grant_fam_id))
 
                 if self.target_grant_order:

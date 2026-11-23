@@ -396,6 +396,52 @@ class AIFoodPurchasingSystem:
         return True, f"Successfully purchased {quantity}x {food_item} for {total_price} Copper."
 
     @classmethod
+    def _household_ground_drop_tile(cls, villager, furniture_manager=None):
+        """Resolve a tile inside the household's permit for chestless drops.
+
+        Chestless households store purchased goods/change as owner-tagged
+        loose stacks; they must land inside the household permit or the
+        family's "safe at home" retrieval check will keep fetching and
+        re-dropping them forever. Returns (gx, gy) or None."""
+        permit_manager = getattr(villager, "permit_manager", None)
+        building_manager = getattr(villager, "building_manager", None)
+        if permit_manager is None or building_manager is None:
+            return None
+        fam = None
+        vm = getattr(villager, "villager_manager", None)
+        fam_id = getattr(villager, "family_id", None)
+        if vm is not None and fam_id is not None:
+            try:
+                fam = vm.get_family_by_id(fam_id)
+            except Exception:
+                fam = None
+        permit_id = (getattr(fam, "assigned_permit_id", None)
+                     or getattr(villager, "assigned_permit_id", None))
+        from game.world.permits import resolve_household_ground_drop_tile
+        return resolve_household_ground_drop_tile(
+            permit_id, permit_manager, building_manager,
+            furniture_manager=furniture_manager,
+            ref_x=getattr(villager, "x", 0.0), ref_y=getattr(villager, "y", 0.0))
+
+    @classmethod
+    def _drop_loose_at_home(cls, villager, stockpile_manager, item_name, amount,
+                            furniture_manager=None):
+        """Drop an owner-tagged stack on a household-permit tile when possible,
+        falling back to the villager's own tile (never voids the goods)."""
+        tile = cls._household_ground_drop_tile(villager, furniture_manager)
+        if tile is not None:
+            gx, gy = tile
+        else:
+            gx = int(math.floor(getattr(villager, "x", 0.0) / TILE_SIZE))
+            gy = int(math.floor(getattr(villager, "y", 0.0) / TILE_SIZE))
+        stockpile_manager.drop_resource(
+            item_name, amount, gx, gy,
+            owner_type="villager",
+            owner_id=str(getattr(villager, "family_id", "") or ""),
+        )
+        return True
+
+    @classmethod
     def deliver_and_consume_food(cls, villager, furniture_manager=None, stockpile_manager=None,
                                  day_number=1):
         """
@@ -412,13 +458,9 @@ class AIFoodPurchasingSystem:
         def _drop_loose(item_name, amount):
             if not ground_drop or amount <= 0:
                 return False
-            gx = int(math.floor(getattr(villager, "x", 0.0) / TILE_SIZE))
-            gy = int(math.floor(getattr(villager, "y", 0.0) / TILE_SIZE))
-            stockpile_manager.drop_resource(
-                item_name, amount, gx, gy,
-                owner_type="villager", owner_id=fam_str,
-            )
-            return True
+            return cls._drop_loose_at_home(
+                villager, stockpile_manager, item_name, amount,
+                furniture_manager=furniture_manager)
 
         # 1. Return any coins (change or leftover funds) back to household storage
         if chest and hasattr(chest, "inventory") and isinstance(chest.inventory, dict):
@@ -487,15 +529,12 @@ class AIFoodPurchasingSystem:
                     del villager.inventory[denom]
             compact_currency_wallet(chest.inventory)
         elif stockpile_manager is not None and fam_str:
-            gx = int(math.floor(getattr(villager, "x", 0.0) / TILE_SIZE))
-            gy = int(math.floor(getattr(villager, "y", 0.0) / TILE_SIZE))
             for denom in CURRENCY_DENOMINATIONS:
                 amt = villager.inventory.get(denom, 0)
                 if amt > 0:
-                    stockpile_manager.drop_resource(
-                        denom, amt, gx, gy,
-                        owner_type="villager", owner_id=fam_str,
-                    )
+                    cls._drop_loose_at_home(
+                        villager, stockpile_manager, denom, amt,
+                        furniture_manager=furniture_manager)
                     del villager.inventory[denom]
 
         villager.purchase_target_market_id = None

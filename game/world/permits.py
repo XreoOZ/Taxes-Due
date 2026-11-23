@@ -737,6 +737,85 @@ def get_villager_home_position(villager, villager_manager=None, permit_manager=N
     return getattr(villager, "x", 0.0), getattr(villager, "y", 0.0)
 
 
+def resolve_household_ground_drop_tile(assigned_permit_id, permit_manager,
+                                       building_manager, furniture_manager=None,
+                                       ref_x=0.0, ref_y=0.0, tile_size=TILE_SIZE):
+    """
+    Picks a grid tile INSIDE the household's own permit for chestless
+    owner-tagged ground drops (food surplus, coin change, tool deliveries,
+    grant goods, hauled resources).
+
+    Chestless households have no chest tile to absorb stacks, so drops land
+    on the ground. The household "safe at home" check
+    (Villager._find_family_loose_stack_to_retrieve) only treats stacks on the
+    home building's tiles or inside the household permit as safe — anything
+    dropped at a doorstep/approach tile outside the permit gets retrieved,
+    carried home, and dropped at the same wrong tile forever. Resolving the
+    drop tile inside the permit breaks that loop while keeping goods
+    reachable to family members.
+
+    Preference order (all still inside the permit, so always "safe at home"):
+      1. Land tiles not occupied by the home building footprint or furniture
+         (members can actually path next to them).
+      2. Any remaining permit tile nearest to the reference point.
+
+    Returns (gx, gy) or None when no household permit can be resolved —
+    callers must then keep their existing fallback behaviour.
+    """
+    if not assigned_permit_id or not permit_manager:
+        return None
+    p = next((p for p in getattr(permit_manager, "permits", [])
+              if str(getattr(p, "id", "")) == str(assigned_permit_id)), None)
+    if p is None or not getattr(p, "tiles", None):
+        return None
+    tiles = set(p.tiles)
+
+    # Exclude tiles covered by the household's home building footprint:
+    # members cannot stand on solid building tiles, so prefer the open
+    # lot around it. (A stack on a building tile still counts as "safe at
+    # home", but an open tile stays retrievable.)
+    if building_manager:
+        home_b = None
+        for b in getattr(building_manager, "buildings", []):
+            try:
+                if p.overlaps_building(b):
+                    home_b = b
+                    break
+            except Exception:
+                continue
+        if home_b is not None:
+            b_tiles = getattr(home_b, "tiles", None)
+            if b_tiles:
+                tiles -= set(b_tiles)
+            elif hasattr(home_b, "occupies_tile"):
+                tiles = {t for t in tiles if not home_b.occupies_tile(t[0], t[1])}
+    if not tiles:
+        tiles = set(p.tiles)
+
+    from game.world.island import is_land_tile
+    furniture_tiles = set()
+    if furniture_manager and hasattr(furniture_manager, "get_occupied_tiles"):
+        try:
+            furniture_tiles = set(furniture_manager.get_occupied_tiles())
+        except Exception:
+            furniture_tiles = set()
+
+    def _dist(t):
+        return math.hypot((t[0] + 0.5) * tile_size - ref_x,
+                          (t[1] + 0.5) * tile_size - ref_y)
+
+    def _rank(t):
+        gx, gy = t
+        if not is_land_tile(gx, gy):
+            return (2, _dist(t))
+        if (gx, gy) in furniture_tiles:
+            return (1, _dist(t))
+        return (0, _dist(t))
+
+    best = min(tiles, key=_rank)
+    return int(best[0]), int(best[1])
+
+
 def find_closest_unassigned_household_worker(
     target_x,
     target_y,

@@ -197,12 +197,29 @@ class ArtisanCommissionSystem:
         dest_chest = (furniture_manager.get_storage_for_family(to_family)
                       if furniture_manager else None)
         if dest_chest is None:
-            gx = int(villager.x // TILE_SIZE)
-            gy = int(villager.y // TILE_SIZE)
+            # No payer chest: drop coins on a tile inside the paying
+            # household's permit when resolvable, else at the rep's feet.
+            drop_gx = int(villager.x // TILE_SIZE)
+            drop_gy = int(villager.y // TILE_SIZE)
+            permit_manager = getattr(villager, "permit_manager", None)
+            if permit_manager is not None and villager_manager is not None:
+                try:
+                    fam = villager_manager.get_family_by_id(str(to_family))
+                    permit_id = getattr(fam, "assigned_permit_id", None)
+                except Exception:
+                    permit_id = None
+                if permit_id is not None:
+                    from game.world.permits import resolve_household_ground_drop_tile
+                    tile = resolve_household_ground_drop_tile(
+                        permit_id, permit_manager, building_manager,
+                        furniture_manager=furniture_manager,
+                        ref_x=villager.x, ref_y=villager.y)
+                    if tile is not None:
+                        drop_gx, drop_gy = tile
             for denom, value in from_copper(carried).items():
                 if value:
                     stockpile_manager.drop_resource(
-                        denom, value, gx, gy,
+                        denom, value, drop_gx, drop_gy,
                         owner_type="villager", owner_id=str(to_family))
             cls._clear_refund_task(villager)
             villager.say("Commission refund delivered.", duration=2.0)

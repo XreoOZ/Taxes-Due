@@ -113,6 +113,52 @@ class TestHouseholdFoodPurchaseNoChest(unittest.TestCase):
         )
         self.assertGreaterEqual(household_copper, 0)
 
+    def test_04_loose_stack_deposit_lands_inside_permit_no_loop(self):
+        """Chestless household: a family stack outside the lot is retrieved
+        once, then re-deposited on a tile INSIDE the household permit so the
+        'safe at home' check stops the retrieve/drop infinite loop."""
+        # House building inside the housing permit (lot is bigger than the house).
+        house = Building("house", {(5, 5), (6, 5), (5, 6), (6, 6)},
+                         door_pos=(5, 6), door_side="bottom")
+        self.building_manager.buildings.append(house)
+        self.villager.assigned_permit_id = self.permit.id
+        self.villager.x = 5.5 * TILE_SIZE
+        self.villager.y = 8.5 * TILE_SIZE  # just south of the 4x4 lot (y 4..7)
+        self.villager.hunger = 100.0
+        self.villager.thirst = 100.0
+        self.villager.need_toilet = 100.0
+        self.villager.sleep_need = 100.0
+
+        # Family-owned food stack seeded far outside the household tiles.
+        self.stockpile_manager.drop_resource(
+            "Potato", 5, 20, 20, owner_type="villager", owner_id="fam_1")
+
+        fetch_tasks = 0
+        prev_task = None
+        for _ in range(4000):
+            self.villager.update(
+                0.1, self.permit_manager, self.building_manager, [], None,
+                stockpile_manager=self.stockpile_manager,
+                furniture_manager=self.furniture_manager,
+                villager_manager=self.villager_manager,
+            )
+            if self.villager.task == "FETCHING_POSSESSION" and prev_task != "FETCHING_POSSESSION":
+                fetch_tasks += 1
+            prev_task = self.villager.task
+
+        fam_stacks = [s for s in self.stockpile_manager.stacks
+                      if getattr(s, "owner_type", None) == "villager"
+                      and str(getattr(s, "owner_id", "")) == "fam_1"
+                      and getattr(s, "amount", 0) > 0]
+        for s in fam_stacks:
+            self.assertTrue(
+                self.permit.contains_tile(s.grid_x, s.grid_y)
+                or house.occupies_tile(s.grid_x, s.grid_y),
+                f"family stack at ({s.grid_x},{s.grid_y}) is outside household area",
+            )
+        self.assertLessEqual(fetch_tasks, 2,
+                             f"retrieve/drop loop still active ({fetch_tasks} fetches)")
+
     def test_03_retrieve_coins_mixed_chest_and_member_pocket(self):
         """retrieve_coins_from_storage tops up from member pockets when the
         chest alone cannot cover the price."""
