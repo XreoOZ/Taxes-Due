@@ -732,19 +732,23 @@ class BuilderSystem:
             if still_needed_copper <= 0:
                 cls._finalize_fee_payment(villager, order, builder, fee, villager_manager, day_number)
                 return True
-            # Abstract household wallets (family purse + member pockets) can cover
-            # the remainder instantly — no walking to physical coins required.
-            for wallet in cls._family_abstract_wallets(villager.family_id, villager_manager):
-                if still_needed_copper <= 0:
-                    break
-                if wallet is villager.inventory:
-                    continue  # own pockets already counted via carried_copper
-                ok, _ = transfer_currency_value(wallet, villager.inventory, still_needed_copper)
-                if ok:
-                    still_needed_copper = max(0, fee - to_copper(normalize_wallet(villager.inventory)))
-            if still_needed_copper <= 0:
+            # Universal physical collection: coins in member pockets / family
+            # purse are only reachable while the payer is inside the household
+            # permit (transactions.collect_coins enforces this). Anything
+            # unreachable keeps the order pending for a later retry.
+            from game.systems.economy.transactions import collect_coins
+            ok, _ = collect_coins(
+                villager, villager.family_id, still_needed_copper,
+                furniture_manager=furniture_manager,
+                villager_manager=villager_manager,
+                stockpile_manager=stockpile_manager,
+                building_manager=building_manager,
+                permit_manager=getattr(villager, "permit_manager", None),
+            )
+            if ok:
                 cls._finalize_fee_payment(villager, order, builder, fee, villager_manager, day_number)
                 return True
+            # Physical stacks may still cover the remainder — walk and take.
             candidates = [
                 s for s in cls._family_coin_stacks(villager.family_id, stockpile_manager)
                 if int(s.amount) > 0

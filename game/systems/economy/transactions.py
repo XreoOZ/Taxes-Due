@@ -238,7 +238,11 @@ def collect_coins(carrier, family_id, amount_copper, furniture_manager=None,
                 reachable = False
                 if permit_tiles is not None:
                     m_tile = (int(mx // TILE_SIZE), int(my // TILE_SIZE))
-                    reachable = m_tile in permit_tiles
+                    c_tile = (int(cx // TILE_SIZE), int(cy // TILE_SIZE))
+                    # Kedua pihak harus berada di dalam area household —
+                    # carrier di pasar tidak bisa mengambil koin member
+                    # yang sedang di rumah.
+                    reachable = (m_tile in permit_tiles) and (c_tile in permit_tiles)
                 else:
                     reachable = ((mx - cx) ** 2 + (my - cy) ** 2) ** 0.5 <= near_radius
                 if not reachable:
