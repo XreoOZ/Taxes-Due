@@ -365,11 +365,18 @@ STARTER_PRESETS = [
             "Potato": 100,
             "Wood": 500,
             "Stone": 500,
+            "Iron Ore": 50,
+            "Iron Bar": 50,
             "Hoe": 3,
             "Sickle": 3,
             "Watering_Can": 3,
+            "Hammer": 1,
+            "Tongs": 1,
             "Saw": 1,
             "Adze": 1,
+            "Rolling_Pin": 1,
+            "Peel": 1,
+            "Fishing_Rod": 1,
             "Felling_Axe": 1,
             "Spade": 1,
             "Pickaxe": 1,
@@ -2023,4 +2030,4 @@ AUTOSAVE_KEEP_COUNT = 3
 
 # Global UI scale: multiplies every UI font/pixel metric. 1.35 = ~35%
 # larger text than the original compact sizes; resolution ratio on top.
-UI_FONT_BOOST = 1.35
+UI_FONT_BOOST = 1.0
