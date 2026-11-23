@@ -32,9 +32,10 @@ from game.data.config import (
     MINE_SIZE_TILES,
     MINE_SPAWN_COUNT_MIN,
     MINE_SPAWN_COUNT_MAX,
-    MINE_SPAWN_GUARANTEE_TYPE,
+    MINE_SPAWN_GUARANTEE_TYPES,
     MINE_SPAWN_GUARANTEE_DIST_MIN_TILES,
     MINE_SPAWN_GUARANTEE_DIST_MAX_TILES,
+    MINE_SPAWN_KIND_RATIO,
     MINE_TYPE_TABLE,
     MINE_YIELD_PER_INGAME_HOUR,
     TILE_SIZE,
@@ -229,8 +230,6 @@ class NaturalResourceManager:
             tiles = {(ax + dx, ay + dy)
                      for dx in range(MINE_SIZE_TILES)
                      for dy in range(MINE_SIZE_TILES)}
-            if kind is None:
-                kind = self._roll_mine_kind(rng)
             mine = {
                 "id": f"mine_{len(self.mines)}",
                 "kind": kind,
@@ -242,10 +241,25 @@ class NaturalResourceManager:
             occupied.update(tiles)
             return mine
 
-        # Guaranteed Stone Mine 50-100 tiles from the player spawn (0,0).
-        guaranteed = self._place_guaranteed_mine(terrain, rng, occupied, try_place_mine)
-        for _ in range(count - (0 if guaranteed is None else 1)):
-            try_place_mine()
+        # Guaranteed mine of each kind in MINE_SPAWN_GUARANTEE_TYPES,
+        # 50-100 tiles from the player spawn (0,0).
+        placed_guaranteed = 0
+        for kind in MINE_SPAWN_GUARANTEE_TYPES:
+            if self._place_guaranteed_mine(
+                    terrain, rng, occupied, try_place_mine, kind) is not None:
+                placed_guaranteed += 1
+        # Remaining mines follow MINE_SPAWN_KIND_RATIO exactly: build a
+        # shuffled kind bag and reshuffle each cycle so kinds stay spread
+        # randomly across the island instead of clustering by kind.
+        remaining = count - placed_guaranteed
+        if remaining > 0:
+            bag = [kind for kind, n in MINE_SPAWN_KIND_RATIO.items()
+                   for _ in range(n)]
+            rng.shuffle(bag)
+            for i in range(remaining):
+                if i and i % len(bag) == 0:
+                    rng.shuffle(bag)
+                try_place_mine(kind=bag[i % len(bag)])
 
     def _mine_anchor_valid(self, terrain, ax, ay, occupied):
         tiles = {(ax + dx, ay + dy)
@@ -260,12 +274,7 @@ class NaturalResourceManager:
                 return False
         return True
 
-    def _roll_mine_kind(self, rng):
-        kinds = list(MINE_TYPE_TABLE.keys())
-        weights = [MINE_TYPE_TABLE[k].get("weight", 1) for k in kinds]
-        return rng.choices(kinds, weights=weights, k=1)[0]
-
-    def _place_guaranteed_mine(self, terrain, rng, occupied, try_place_mine):
+    def _place_guaranteed_mine(self, terrain, rng, occupied, try_place_mine, kind):
         half = MINE_SIZE_TILES // 2
         for _ in range(400):
             angle = rng.uniform(0, math.tau)
@@ -275,7 +284,7 @@ class NaturalResourceManager:
             cy = int(round(math.sin(angle) * dist))
             ax, ay = cx - half, cy - half
             if self._mine_anchor_valid(terrain, ax, ay, occupied):
-                return try_place_mine(kind=MINE_SPAWN_GUARANTEE_TYPE, anchor=(ax, ay))
+                return try_place_mine(kind=kind, anchor=(ax, ay))
         return None
 
     # ------------------------------------------------------------------

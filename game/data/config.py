@@ -255,9 +255,10 @@ WORKSTATION_QUOTA_STEP = 10
 MINE_SIZE_TILES = 5
 MINE_SPAWN_COUNT_MIN = 10
 MINE_SPAWN_COUNT_MAX = 14
-MINE_SPAWN_GUARANTEE_TYPE = "Stone Mine"
+MINE_SPAWN_GUARANTEE_TYPES = ("Stone Mine", "Iron Mine")  # one of each near spawn
 MINE_SPAWN_GUARANTEE_DIST_MIN_TILES = 50  # nearest guaranteed mine distance band
 MINE_SPAWN_GUARANTEE_DIST_MAX_TILES = 100
+MINE_SPAWN_KIND_RATIO = {"Stone Mine": 3, "Iron Mine": 1}  # exact island-wide ratio
 # Yield per in-game hour by tier (unlimited deposits; tier = speed only).
 MINE_YIELD_PER_INGAME_HOUR = {
     1: {"name": "Scarce", "min": 1, "max": 3},
@@ -267,8 +268,8 @@ MINE_YIELD_PER_INGAME_HOUR = {
     5: {"name": "Abundant", "min": 6, "max": 10},
 }
 MINE_TYPE_TABLE = {
-    "Stone Mine": {"output_item": "Stone", "weight": 1, "color": (203, 213, 225)},
-    "Iron Mine": {"output_item": "Iron Ore", "weight": 2, "color": (249, 115, 22)},
+    "Stone Mine": {"output_item": "Stone", "color": (203, 213, 225)},
+    "Iron Mine": {"output_item": "Iron Ore", "color": (249, 115, 22)},
 }
 BUILDER_DEFAULT_LIVING_HOUSEHOLD_SIZE = 1
 FURNITURE_DAILY_BREAK_CHANCE = 0.05
