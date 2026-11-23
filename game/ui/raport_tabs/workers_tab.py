@@ -34,7 +34,7 @@ class WorkersMixin:
         surface.blit(title, (mx + upx(178), cy - upx(4)))
         workplaces = get_job_workplaces(job_id, permit_manager, furniture_manager, building_manager)
         y = cy + upx(40)
-        bottom = (surface.get_height() + self.modal_h) // 2 - 14
+        bottom = (surface.get_height() + self.modal_h) // 2 - upx(14)
         self.workplace_crop_btn_rects = {}
         self.workplace_plant_btn_rects = {}
         self.jobs_viewport_rect = pygame.Rect(mx + upx(16), y, self.modal_w - upx(32), max(0, bottom - y))
@@ -218,7 +218,7 @@ class WorkersMixin:
                     f"{work_count}h Work  |  {sleep_count}h Sleep  |  Applies to every job, including Unassigned",
                     True, COLOR_TEXT_MUTED,
                 )
-                if summary.get_width() < self.universal_schedule_btn_rect.width - universal_label.get_width() - 40:
+                if summary.get_width() < self.universal_schedule_btn_rect.width - universal_label.get_width() - upx(40):
                     surface.blit(summary, (self.universal_schedule_btn_rect.right - summary.get_width() - upx(12),
                                            self.universal_schedule_btn_rect.centery - summary.get_height() // 2))
 

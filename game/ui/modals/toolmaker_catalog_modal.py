@@ -84,7 +84,7 @@ class ToolmakerCatalogModal:
             return "blocked"
         if event.type == pygame.MOUSEWHEEL and self.viewport_rect:
             if self.viewport_rect.collidepoint(pygame.mouse.get_pos()):
-                self.scroll_y = max(0, min(self.scroll_y - event.y * 38, self.max_scroll))
+                self.scroll_y = max(0, min(self.scroll_y - event.y * upx(38), self.max_scroll))
                 return "scroll"
         return None
 

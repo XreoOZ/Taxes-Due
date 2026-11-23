@@ -29,7 +29,7 @@ class ScheduleMixin:
         job_name = "Universal Schedule (All Jobs)"
 
         # Header & Back Button (Back only exists when embedded in the Workers tab)
-        back_w = 140 if self.active_tab == 5 else 0
+        back_w = upx(140) if self.active_tab == 5 else 0
         title_x = mx + upx(24) + (back_w + upx(14) if back_w else 0)
         if back_w:
             self.schedule_back_btn_rect = pygame.Rect(mx + upx(24), cy - upx(4), back_w, upx(28))

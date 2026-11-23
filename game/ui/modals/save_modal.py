@@ -127,7 +127,7 @@ class SaveLoadModal:
         if event.type == pygame.MOUSEWHEEL:
             area = getattr(self, "_last_list_area", None)
             if area and area.collidepoint(pygame.mouse.get_pos()):
-                self.list_scroll = max(0.0, self.list_scroll - event.y * 60)
+                self.list_scroll = max(0.0, self.list_scroll - event.y * upx(60))
                 return "save_list_scrolled"
             return None
 
@@ -261,7 +261,7 @@ class SaveLoadModal:
             shown_surf = self.font_body.render(shown, True, txt_col)
             surface.blit(shown_surf, (inp.x + upx(10), inp.centery - shown_surf.get_height() // 2))
             if self.name_input_active and (pygame.time.get_ticks() // 500) % 2 == 0:
-                caret_x = inp.x + 10 + shown_surf.get_width()
+                caret_x = inp.x + upx(10) + shown_surf.get_width()
                 pygame.draw.line(surface, (255, 255, 255), (caret_x, inp.y + upx(8)), (caret_x, inp.bottom - upx(8)), 2)
 
             self.new_save_btn_rect = pygame.Rect(inp.right + upx(12), row_y, upx(110), upx(34))

@@ -52,7 +52,7 @@ class BuildingMixin:
             row_top = cy + upx(48)
             row_step = upx(52)
             card_height = upx(82)
-            modal_bottom = (surface.get_height() + self.modal_h) // 2 - 18
+            modal_bottom = (surface.get_height() + self.modal_h) // 2 - upx(18)
             card_top = modal_bottom - card_height
             viewport_bottom = card_top - upx(14)
             viewport_height = max(0, viewport_bottom - row_top)
@@ -207,12 +207,12 @@ class BuildingMixin:
 
             y_cur = cy + upx(54)
 
-            modal_bottom = (surface.get_height() + self.modal_h) // 2 - 16
+            modal_bottom = (surface.get_height() + self.modal_h) // 2 - upx(16)
             action_top = modal_bottom - upx(78)
             viewport_top = cy + upx(50)
             viewport_height = max(0, action_top - viewport_top)
             self.building_viewport_rect = pygame.Rect(mx + upx(20), viewport_top, self.modal_w - upx(40), viewport_height)
-            content_height = len(cat_items) * 26
+            content_height = len(cat_items) * upx(26)
             self.building_max_scroll = max(0, content_height - viewport_height)
             self.building_scroll_y = max(0, min(self.building_scroll_y, self.building_max_scroll))
             y_cur -= self.building_scroll_y
@@ -403,7 +403,7 @@ class BuildingMixin:
 
             if grid_items:
                 avail_w = self.modal_w - upx(48)
-                columns = max(1, min(len(grid_items), avail_w // 180))
+                columns = max(1, min(len(grid_items), avail_w // upx(180)))
                 item_btn_w = (avail_w - ((columns - 1) * upx(8))) // columns
                 for idx, (item_kind, item_id) in enumerate(grid_items):
                     row, col = divmod(idx, columns)

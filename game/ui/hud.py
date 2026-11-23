@@ -73,7 +73,7 @@ class ResourceHUD:
         surface.blit(title_surf, (card_x + self.padding, card_y + upx(10)))
         if weekday:
             weekday_surf = self.font_title.render(weekday, True, COLOR_TEXT_MAIN)
-            weekday_rect = weekday_surf.get_rect(right=card_x + self.card_width - self.padding, top=card_y + 10)
+            weekday_rect = weekday_surf.get_rect(right=card_x + self.card_width - self.padding, top=card_y + upx(10))
             surface.blit(weekday_surf, weekday_rect)
 
         # Garis pemisah tipis di bawah header

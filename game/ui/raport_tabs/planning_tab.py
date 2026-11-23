@@ -34,7 +34,7 @@ class PlanningMixin:
             is_sel = (self.planning_filter_status == key)
             c_text = f"{label} ({count})"
             c_surf = self.font_badge.render(c_text, True, (255, 255, 255) if is_sel else COLOR_TEXT_MUTED)
-            c_w = c_surf.get_width() + 18
+            c_w = c_surf.get_width() + upx(18)
             c_h = upx(24)
             cr = pygame.Rect(chip_x, chip_y, c_w, c_h)
             self.planning_filter_rects[key] = cr
@@ -94,7 +94,7 @@ class PlanningMixin:
 
             # Status Badge
             b_surf = self.font_badge.render(badge_label, True, badge_txt_col)
-            b_w = b_surf.get_width() + 16
+            b_w = b_surf.get_width() + upx(16)
             b_rect = pygame.Rect(f_rect.right - b_w - upx(12), f_rect.y + upx(7), b_w, upx(20))
             pygame.draw.rect(surface, badge_bg, b_rect, border_radius=upx(4))
             pygame.draw.rect(surface, border_col, b_rect, width=1, border_radius=upx(4))

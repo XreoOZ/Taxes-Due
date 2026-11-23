@@ -903,7 +903,7 @@ class VillagersMixin:
         if not summary_lines:
             summary_lines = ["Items: None"]
 
-        cf_h = 190 + len(summary_lines) * 22
+        cf_h = upx(190) + len(summary_lines) * upx(22)
         cf_x = (screen_w - cf_w) // 2
         cf_y = (screen_h - cf_h) // 2
         cf_rect = pygame.Rect(cf_x, cf_y, cf_w, cf_h)

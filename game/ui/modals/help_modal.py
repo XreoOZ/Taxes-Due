@@ -472,7 +472,7 @@ class HelpModal:
     def _draw_detail(self, surface):
         _title, paras = HELP_SECTIONS[self.detail_index]
         line_h = upx(18)
-        content_h = len(paras) * line_h + 10
+        content_h = len(paras) * line_h + upx(10)
         cy = self.viewport_rect.y + upx(8) - self.scroll_y
         for para in paras:
             if para == "":
@@ -491,9 +491,9 @@ class HelpModal:
                             self.viewport_rect.height)
         pygame.draw.rect(surface, (30, 41, 59), track, border_radius=3)
         if self.view == "index":
-            content_h = len(HELP_SECTIONS) * 44
+            content_h = len(HELP_SECTIONS) * upx(44)
         else:
-            content_h = len(HELP_SECTIONS[self.detail_index][1]) * 18 + 10
+            content_h = len(HELP_SECTIONS[self.detail_index][1]) * upx(18) + upx(10)
         ratio = min(1.0, self.viewport_rect.height / max(1.0, content_h))
         thumb_h = max(upx(24), int(self.viewport_rect.height * ratio))
         thumb_y = self.viewport_rect.y + int(

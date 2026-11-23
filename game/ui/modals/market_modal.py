@@ -472,7 +472,7 @@ class MarketProfileModal:
             mouse_pos = pygame.mouse.get_pos()
             if (self.show_item_picker and self.picker_list_rect
                     and self.picker_list_rect.collidepoint(mouse_pos)):
-                self.picker_scroll = max(0, self.picker_scroll - event.y * 38)
+                self.picker_scroll = max(0, self.picker_scroll - event.y * upx(38))
                 return "market_picker_scrolled"
             if self.goods_list_rect and self.goods_list_rect.collidepoint(mouse_pos):
                 tradeable_count = sum(
@@ -775,7 +775,7 @@ class MarketProfileModal:
             empty_text = self.font_body.render("No goods listed. Choose Add item to sell to begin.", True, COLOR_TEXT_MUTED)
             surface.blit(empty_text, (empty.centerx - empty_text.get_width() // 2, empty.centery - empty_text.get_height() // 2))
 
-        page_y = max(row_y + 4, row_top + 28 + items_per_page * (row_h + 3))
+        page_y = max(row_y + upx(4), row_top + upx(28) + items_per_page * (row_h + upx(3)))
         self.goods_list_rect = pygame.Rect(
             mx + upx(24), row_top + upx(28), self.modal_w - upx(48),
             max(1, page_y - (row_top + upx(28))),

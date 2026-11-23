@@ -700,15 +700,15 @@ class RaportUI(
             if (self.is_open and self.active_tab == 0
                     and self.building_viewport_rect and self.building_viewport_rect.collidepoint(pygame.mouse.get_pos())
                     and self.building_max_scroll > 0):
-                self.building_scroll_y = max(0, min(self.building_scroll_y - event.y * 36, self.building_max_scroll))
+                self.building_scroll_y = max(0, min(self.building_scroll_y - event.y * upx(36), self.building_max_scroll))
                 return "building_scroll"
             if self.show_grant_dialog and getattr(self, "grant_max_scroll", 0) > 0:
-                self.grant_scroll_y = max(0, min(self.grant_scroll_y - event.y * 36, self.grant_max_scroll))
+                self.grant_scroll_y = max(0, min(self.grant_scroll_y - event.y * upx(36), self.grant_max_scroll))
                 return "grant_scroll"
             if (self.is_open and self.active_tab == 5 and self.selected_job_id is None
                     and self.jobs_viewport_rect and self.jobs_viewport_rect.collidepoint(pygame.mouse.get_pos())
                     and self.jobs_max_scroll > 0):
-                self.jobs_scroll_y = max(0, min(self.jobs_scroll_y - event.y * 36, self.jobs_max_scroll))
+                self.jobs_scroll_y = max(0, min(self.jobs_scroll_y - event.y * upx(36), self.jobs_max_scroll))
                 return "jobs_scroll"
             return None
 
@@ -1562,7 +1562,7 @@ class RaportUI(
         tab_y = my + upx(50)
         tab_spacing = upx(8)
         visible_tabs = [t for t in self.tabs if not t.get("hidden", False)]
-        avail_w = self.modal_w - 40 - ((len(visible_tabs) - 1) * tab_spacing)
+        avail_w = self.modal_w - upx(40) - ((len(visible_tabs) - 1) * tab_spacing)
         tab_w = avail_w // len(visible_tabs)
         tab_h = upx(32)
 

@@ -247,7 +247,7 @@ class PermitMixin:
                 card_y += upx(36)
 
             # Bottom: Quick Issue New Landlord Permits
-            btn_y = max(cy + 250, card_y + 4)
+            btn_y = max(cy + upx(250), card_y + upx(4))
             inst_txt = self.font_sub.render("Issue New Landlord Permits (Select, then Click & Drag on Map to Size):", True, (56, 189, 248))
             surface.blit(inst_txt, (mx + upx(24), btn_y))
 
@@ -373,7 +373,7 @@ class PermitMixin:
                     y_cur += upx(26)
 
             # 5. Bottom Action: Issue New Permit for this specific category
-            btn_y = max(y_cur + 20, cy + 220)
+            btn_y = max(y_cur + upx(20), cy + upx(220))
             inst_txt = self.font_sub.render(f"Issue New {cat_name} (Select, then Click & Drag on Map to Size):", True, (56, 189, 248))
             surface.blit(inst_txt, (mx + upx(24), btn_y))
 
