@@ -30,6 +30,8 @@ CAMERA_ZOOM_DEFAULT = 1.0
 CAMERA_ZOOM_MIN = 0.5
 CAMERA_ZOOM_MAX = 2.0
 CAMERA_ZOOM_STEP = 0.1
+# Free-fly pan speed (world px/sec) while picking a starter village location
+STARTER_PLACEMENT_PAN_SPEED = 700.0
 
 # World Type Selection (New Game)
 WORLD_TYPE_INFINITE = "infinite"
@@ -122,6 +124,8 @@ PATH_ROUTE_WAYPOINT_RADIUS = 3
 COLOR_PATH_ROUTE = COLOR_PATH_TARGET_RING
 COLOR_PATH_ROUTE_FAILED = (239, 68, 68)
 PATH_WAYPOINT_TOLERANCE = 14.0           # Waypoint arrival threshold
+PATH_STEER_LOOKAHEAD = 4                 # Waypoints ahead scanned for a clear straight-line shortcut
+PATH_STEER_RESCAN_INTERVAL = 0.08        # Seconds between steering rescans per actor
 PATH_DIAGONAL_STEP_COST = 1.4142135623730951
 PATH_NEIGHBOR_OFFSETS = (
     (1, 0), (-1, 0), (0, 1), (0, -1),
@@ -303,11 +307,30 @@ STARTER_PRESETS = [
         "permit_padding": 0,
         "house": {"building_type": "wooden_structure", "width": 6, "height": 3},
         "market": {"building_type": "market", "width": 3, "height": 2},
+        # Player-picked placement: tile offsets from the HOUSE TOP-LEFT.
+        # House occupies (0,0)-(5,2); market sits left with a 1-tile gap,
+        # storage yard below leaving the door front yard (rows 3-4) clear.
+        "farm": {"width": 6, "height": 4},
+        "cluster": {
+            "house": {"dx": 0, "dy": 0},
+            "market": {"dx": -4, "dy": 0},
+            "storage": {"dx": 0, "dy": 5},
+            "farm": {"dx": 7, "dy": 0},
+            "props": [
+                {"building": "toilet", "dx": 6, "dy": 0},
+                # Well & Toilet are public structures — no permit needed,
+                # they sit on open ground beside the farm tiles.
+                {"building": "well", "dx": 13, "dy": 1},
+            ],
+        },
         "landlord_storage": True,
         "storage_permit_width": 6,
         "storage_permit_height": 6,
         "storage_chest_inside_house": True,
         "carpenter_workbench": True,
+        # Lord Treasury belongs to the landlord — parked on open ground
+        # beside the storage yard, never inside the household home.
+        "treasury_chest_spot": "beside_storage",
         "treasury_items": {"Gold": 10},
         "storage_items": {
             "Potato": 100,
@@ -428,6 +451,7 @@ DEDICATED_JOBS = {
         "title": "Priest",
         "color": (168, 85, 247),
         "wip": False,
+        "auto_sortable": False,
         "workplace_permit": "church",
         "desc": "Conducts daily prayer and collects church taxes at the village church.",
         "required_tools": []

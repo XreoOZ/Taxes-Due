@@ -67,6 +67,10 @@ from game.config import (
     ISLAND_SEED_MIN,
     ISLAND_SEED_MAX,
     ROAD_TYPES,
+    COLOR_MODAL_BG,
+    COLOR_MODAL_BORDER,
+    COLOR_TEXT_TITLE,
+    STARTER_PLACEMENT_PAN_SPEED,
 )
 from game.world.island import set_world
 from game.camera import Camera
@@ -146,6 +150,29 @@ def workplace_bases_for(kind, obj):
     return bases
 
 
+def furniture_menu_actions(f):
+    """Contextual action buttons shown inside the furniture context menu."""
+    acts = []
+    ftype = getattr(f, "furniture_type", "")
+    if ftype == "carpenter_workbench":
+        acts.append(("catalogue", "Catalogue"))
+    if ftype == "notice_board":
+        acts.append(("immigrants", "Immigrants"))
+    if workplace_bases_for("furniture", f):
+        acts.append(("workplace", "Workplace"))
+    return acts
+
+
+def structure_menu_actions(b):
+    """Contextual action buttons shown inside the public-structure menu."""
+    acts = []
+    if getattr(b, "building_type", "") == "market":
+        acts.append(("market", "Market"))
+    if workplace_bases_for("building", b):
+        acts.append(("workplace", "Workplace"))
+    return acts
+
+
 def workplace_job_for(kind, obj):
     """Job id whose workplace definition matches this placed object."""
     for job_id, job_cfg in DEDICATED_JOBS.items():
@@ -182,7 +209,7 @@ def main():
     add_item_modal = AddItemModal()
     cheat_modal = CheatModal()
     carpenter_catalog_modal = CarpenterCatalogModal()
-    path_debug_overlay = PathDebugOverlay(enabled=True)
+    path_debug_overlay = PathDebugOverlay(enabled=False)
     map_overlay = MapOverlay()
     production_system = ProductionDistributionSystem.get_instance()
     speed_controller = SpeedController()
@@ -234,13 +261,22 @@ def main():
     destroy_confirm = None      # pending confirmed-destroy payload while popup open
 
     furn_menu_rect = pygame.Rect(0, 0, 270, 140)
-    btn_furn_move_rect = pygame.Rect(0, 0, 112, 30)
-    btn_furn_destroy_rect = pygame.Rect(0, 0, 112, 30)
+    btn_furn_move_rect = pygame.Rect(0, 0, 112, 28)
+    btn_furn_destroy_rect = pygame.Rect(0, 0, 112, 28)
     btn_furn_close_rect = pygame.Rect(0, 0, 22, 22)
     btn_furn_house_rect = pygame.Rect(0, 0, 116, 26)
     btn_furn_poss_rect = pygame.Rect(0, 0, 116, 26)
     btn_furn_store_rect = pygame.Rect(0, 0, 252, 24)
     btn_furn_pay_carpenter_rect = pygame.Rect(0, 0, 252, 24)
+    furn_action_btns = []     # [{"rect": Rect, "action": str}] contextual actions
+
+    # Public-structure context menu (List / Destroy / special actions)
+    selected_structure = None
+    struct_menu_rect = pygame.Rect(0, 0, 0, 0)
+    struct_action_btns = []   # [{"rect": Rect, "action": str}]
+    btn_struct_list_rect = pygame.Rect(0, 0, 112, 28)
+    btn_struct_destroy_rect = pygame.Rect(0, 0, 112, 28)
+    btn_struct_close_rect = pygame.Rect(0, 0, 22, 22)
 
     # Workplace base popup (Permit vs Structure) shown when clicking a
     # placed job-workplace object on the map.
@@ -263,16 +299,21 @@ def main():
     cheat_notice = ""
     cheat_notice_timer = 0.0
     cheats_active = False
+    pending_starter_id = None
+    starter_confirm_tile = None
+    starter_done_btn_rect = pygame.Rect(0, 0, 0, 0)
+    starter_cancel_btn_rect = pygame.Rect(0, 0, 0, 0)
 
     def start_fresh_game(day_length_index=None, world_map_index=None, starter_index=None):
         nonlocal player, resources, building_manager, permit_manager, stockpile_manager
+        nonlocal pending_starter_id, starter_confirm_tile
         nonlocal servant_manager, villager_manager, furniture_manager, day_cycle, schedule_manager
         nonlocal planning_mode, planning_permit_type, planning_building_type, planning_furniture_type
         nonlocal planning_building_rotation, planning_furniture_rotation
         nonlocal planning_road_type, planning_road_tiles, road_drag_start
         nonlocal destroy_marks, destroy_confirm
         nonlocal session_planned_furniture, selected_planned_furniture
-        nonlocal editing_permit_id, original_permit_tiles, selected_furniture, moving_furniture, selected_entity
+        nonlocal editing_permit_id, original_permit_tiles, selected_furniture, moving_furniture, selected_entity, selected_structure
 
         # Activate the chosen world terrain before any entity/manager setup.
         map_option = WORLD_TYPE_OPTIONS[world_map_index] if world_map_index is not None else WORLD_TYPE_OPTIONS[0]
@@ -314,20 +355,17 @@ def main():
             permit_manager, villager_manager, building_manager,
             preferred_tile=LORD_TREASURY_START_TILE,
         )
-        # Starter preset (Nepo Baby etc.) materializes family, permits,
-        # buildings, furniture, stocked storage yard, and treasury coins.
-        # Without one, the world starts empty with just the default family.
-        starter_applied = False
+        # Starter preset (Nepo Baby etc.) is deferred: the player picks the
+        # drop location in-game, then StarterPresetSystem.apply() materializes
+        # family, permits, buildings, furniture, storage yard, and treasury.
+        # Without a preset, the world starts empty with the default family.
+        pending_starter_id = None
+        starter_confirm_tile = None
         if starter_index is not None:
             from game.data.config import STARTER_PRESETS
-            from game.systems.starter_preset import StarterPresetSystem
             if 0 <= int(starter_index) < len(STARTER_PRESETS):
-                starter_applied = StarterPresetSystem.apply(
-                    STARTER_PRESETS[int(starter_index)]["id"],
-                    villager_manager, furniture_manager,
-                    building_manager, permit_manager,
-                    stockpile_manager=stockpile_manager)
-        if not starter_applied:
+                pending_starter_id = STARTER_PRESETS[int(starter_index)]["id"]
+        if pending_starter_id is None:
             villager_manager.generate_starter_family()
         day_cycle = DayCycleSystem()
         if day_length_index is not None:
@@ -350,6 +388,7 @@ def main():
         selected_planned_furniture = None
         editing_permit_id = None
         selected_furniture = None
+        selected_structure = None
         moving_furniture = None
         carpenter_catalog_modal.close()
         original_permit_tiles.clear()
@@ -1223,6 +1262,86 @@ def main():
                         continue
 
                 # -------------------------------------------------------------
+                # 4.8. STARTER PLACEMENT MODE (pick drop location → confirm)
+                # -------------------------------------------------------------
+                elif pending_starter_id is not None:
+                    from game.systems.starter_preset import StarterPresetSystem
+                    if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+                        if starter_confirm_tile is not None:
+                            starter_confirm_tile = None
+                        else:
+                            pending_starter_id = None
+                            starter_confirm_tile = None
+                            villager_manager.generate_starter_family()
+                            cheat_notice = "Starter placement cancelled — plain start."
+                            cheat_notice_timer = 4.0
+                    elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 3:
+                        if starter_confirm_tile is not None:
+                            starter_confirm_tile = None
+                        else:
+                            pending_starter_id = None
+                            starter_confirm_tile = None
+                            villager_manager.generate_starter_family()
+                            cheat_notice = "Starter placement cancelled — plain start."
+                            cheat_notice_timer = 4.0
+                    elif event.type == pygame.MOUSEWHEEL:
+                        camera.handle_zoom(event.y)
+                    elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                        if starter_confirm_tile is not None:
+                            if starter_done_btn_rect.collidepoint(event.pos):
+                                ok = StarterPresetSystem.apply(
+                                    pending_starter_id, villager_manager,
+                                    furniture_manager, building_manager,
+                                    permit_manager,
+                                    stockpile_manager=stockpile_manager,
+                                    anchor_tile=starter_confirm_tile)
+                                if ok:
+                                    placed_id = pending_starter_id
+                                    placed_anchor = starter_confirm_tile
+                                    pending_starter_id = None
+                                    starter_confirm_tile = None
+                                    # Spawn player & servants at the house door
+                                    _pcfg = StarterPresetSystem.get_preset(placed_id)
+                                    _hc = (_pcfg or {}).get("house") or {}
+                                    _hw = int(_hc.get("width", 0) or 0)
+                                    _hh = int(_hc.get("height", 0) or 0)
+                                    if _hw and _hh and placed_anchor:
+                                        _hx = placed_anchor[0] - _hw // 2
+                                        _hy = placed_anchor[1] - _hh // 2
+                                        _door_tx = _hx + _hw // 2
+                                        _door_ty = _hy + _hh - 1
+                                    else:
+                                        _door_tx, _door_ty = placed_anchor or (0, 0)
+                                    _px = (_door_tx + 0.5) * TILE_SIZE
+                                    _py = (_door_ty + 1.5) * TILE_SIZE
+                                    player.x = _px
+                                    player.y = _py
+                                    for i, s in enumerate(servant_manager.servants):
+                                        s.x = _px + (i - len(servant_manager.servants) / 2) * TILE_SIZE * 0.5
+                                        s.y = _py + TILE_SIZE * 0.5
+                                    camera.x = player.x
+                                    camera.y = player.y
+                                else:
+                                    starter_confirm_tile = None
+                                    cheat_notice = "Could not place starter there."
+                                    cheat_notice_timer = 4.0
+                            elif starter_cancel_btn_rect.collidepoint(event.pos):
+                                starter_confirm_tile = None
+                        else:
+                            wx, wy = camera.screen_to_world(event.pos[0], event.pos[1])
+                            gx = int(math.floor(wx / TILE_SIZE))
+                            gy = int(math.floor(wy / TILE_SIZE))
+                            _, valid = StarterPresetSystem.get_anchor_preview(
+                                pending_starter_id, (gx, gy),
+                                building_manager, permit_manager,
+                                furniture_manager)
+                            if valid:
+                                starter_confirm_tile = (gx, gy)
+                            else:
+                                cheat_notice = "Invalid location for starter village."
+                                cheat_notice_timer = 2.0
+
+                # -------------------------------------------------------------
                 # 5. NORMAL GAMEPLAY
                 # -------------------------------------------------------------
                 else:
@@ -1334,6 +1453,23 @@ def main():
                             # 0A. Klik pada Tombol di Menu Konteks Furniture jika sedang terbuka
                             if selected_furniture is not None:
                                 order = getattr(selected_furniture, "construction_order", None) or {}
+                                furn_action_hit = False
+                                for ab in furn_action_btns:
+                                    if ab["rect"].collidepoint(event.pos):
+                                        act = ab["action"]
+                                        if act == "catalogue":
+                                            carpenter_catalog_modal.open(selected_furniture)
+                                        elif act == "immigrants":
+                                            raport_ui.open_immigrant_tab()
+                                        elif act == "workplace":
+                                            jid = workplace_job_for("furniture", selected_furniture)
+                                            if jid:
+                                                raport_ui.open_workplace_workstations(jid, ("furniture", selected_furniture))
+                                        selected_furniture = None
+                                        furn_action_hit = True
+                                        break
+                                if furn_action_hit:
+                                    continue
                                 if btn_furn_move_rect and btn_furn_move_rect.collidepoint(event.pos):
                                     moving_furniture = selected_furniture
                                     planning_mode = "MOVE_FURNITURE"
@@ -1367,6 +1503,41 @@ def main():
                                     selected_furniture = None
                                     continue
 
+                            # 0A1b. Klik pada Tombol di Menu Konteks Public Structure
+                            if selected_structure is not None:
+                                s_b = selected_structure
+                                struct_hit = False
+                                for ab in struct_action_btns:
+                                    if ab["rect"].collidepoint(event.pos):
+                                        act = ab["action"]
+                                        if act == "list":
+                                            raport_ui.open_building_directly(s_b)
+                                        elif act == "market":
+                                            market_modal.open(s_b)
+                                            raport_ui.close()
+                                        elif act == "workplace":
+                                            jid = workplace_job_for("building", s_b)
+                                            if jid:
+                                                raport_ui.open_workplace_workstations(jid, ("building", s_b))
+                                        elif act == "destroy":
+                                            building_manager.start_demolition(s_b)
+                                        selected_structure = None
+                                        struct_hit = True
+                                        break
+                                if not struct_hit and btn_struct_list_rect and btn_struct_list_rect.collidepoint(event.pos):
+                                    raport_ui.open_building_directly(s_b)
+                                    selected_structure = None
+                                    struct_hit = True
+                                if not struct_hit and btn_struct_destroy_rect and btn_struct_destroy_rect.collidepoint(event.pos):
+                                    building_manager.start_demolition(s_b)
+                                    selected_structure = None
+                                    struct_hit = True
+                                if not struct_hit and btn_struct_close_rect and btn_struct_close_rect.collidepoint(event.pos):
+                                    selected_structure = None
+                                    struct_hit = True
+                                if not struct_hit and struct_menu_rect and not struct_menu_rect.collidepoint(event.pos):
+                                    selected_structure = None
+
                             # 0A2. Cek apakah pemain mengklik tombol close / action pada kartu profil entitas
                             if selected_entity is not None:
                                 if btn_entity_close_rect and btn_entity_close_rect.collidepoint(event.pos):
@@ -1380,19 +1551,18 @@ def main():
                                         selected_entity = None
                                         continue
 
-                            # Let workbenches open their catalogue even when a worker stands on them.
+                            # Furniture with dedicated action UIs (workbench catalogue,
+                            # notice board ledger, job workplaces) still gets the context
+                            # menu first — those UIs are buttons inside the menu. They are
+                            # checked before entities so a worker standing on the tile
+                            # doesn't swallow the click.
                             clicked_f = furniture_manager.get_furniture_at(m_gx, m_gy)
-                            if (clicked_f and clicked_f.furniture_type == "carpenter_workbench"
-                                    and clicked_f.is_available_for_use):
+                            if clicked_f and (clicked_f.furniture_type in ("carpenter_workbench", "notice_board")
+                                              or workplace_bases_for("furniture", clicked_f)):
                                 selected_furniture = clicked_f
                                 selected_entity = None
-                                carpenter_catalog_modal.open(clicked_f)
-                                continue
-                            # Notice Board opens the Town Ledger Immigrant tab.
-                            if clicked_f and clicked_f.furniture_type == "notice_board":
-                                selected_furniture = clicked_f
-                                selected_entity = None
-                                raport_ui.open_immigrant_tab()
+                                selected_structure = None
+                                workplace_popup = None
                                 continue
 
                             # 0A3. Cek apakah pemain mengklik entitas AI di peta (Villager / Servant)
@@ -1424,12 +1594,9 @@ def main():
                             clicked_f = furniture_manager.get_furniture_at(m_gx, m_gy)
                             if clicked_f:
                                 selected_entity = None
-                                if workplace_bases_for("furniture", clicked_f):
-                                    workplace_popup = {"kind": "furniture", "obj": clicked_f, "pos": event.pos}
-                                    selected_furniture = None
-                                else:
-                                    workplace_popup = None
-                                    selected_furniture = clicked_f
+                                selected_structure = None
+                                workplace_popup = None
+                                selected_furniture = clicked_f
                                 continue
                             else:
                                 if selected_furniture is not None and furn_menu_rect and not furn_menu_rect.collidepoint(event.pos):
@@ -1481,16 +1648,19 @@ def main():
                             if clicked_b:
                                 selected_furniture = None
                                 selected_entity = None
-                                if getattr(clicked_b, "building_type", "") == "market":
+                                b_cfg = getattr(clicked_b, "type_cfg", None) or {}
+                                if b_cfg.get("public_structure"):
+                                    # Public structures (well, market, toilet, tax house)
+                                    # get the same context-menu treatment: List /
+                                    # Destroy plus their special action buttons.
                                     workplace_popup = None
-                                    market_modal.open(clicked_b)
-                                    raport_ui.close()
+                                    selected_structure = clicked_b
                                 elif workplace_bases_for("building", clicked_b):
                                     workplace_popup = {"kind": "building", "obj": clicked_b, "pos": event.pos}
-                                    selected_furniture = None
-                                    selected_entity = None
+                                    selected_structure = None
                                 else:
                                     workplace_popup = None
+                                    selected_structure = None
                                     raport_ui.open_building_directly(clicked_b)
                                 continue
 
@@ -1565,7 +1735,7 @@ def main():
             # Substep physics/entities so high speed multiplier (Fast 2x, Very Fast 4x) never tunnels through walls
             MAX_PHYSICS_SUB_DT = 0.02  # Maximum 20ms per physics integration step
             sub_time = game_dt
-            is_modal_open = raport_ui.is_open or settings_modal.is_open or save_modal.is_open or market_modal.is_open or add_item_modal.is_open or cheat_modal.is_open
+            is_modal_open = raport_ui.is_open or settings_modal.is_open or save_modal.is_open or market_modal.is_open or add_item_modal.is_open or cheat_modal.is_open or pending_starter_id is not None
             raport_ui.cheats_active = cheats_active
             keys = pygame.key.get_pressed() if not is_modal_open else None
 
@@ -1613,7 +1783,20 @@ def main():
                     servant_manager=servant_manager, building_manager=building_manager,
                     player=player, all_entities=_imm_ents)
 
-            camera.follow(player)
+            if pending_starter_id is not None:
+                # Starter placement: free-fly camera (nobody spawned yet)
+                fly_keys = pygame.key.get_pressed()
+                pan = STARTER_PLACEMENT_PAN_SPEED * real_dt
+                if fly_keys[pygame.K_w] or fly_keys[pygame.K_UP]:
+                    camera.y -= pan
+                if fly_keys[pygame.K_s] or fly_keys[pygame.K_DOWN]:
+                    camera.y += pan
+                if fly_keys[pygame.K_a] or fly_keys[pygame.K_LEFT]:
+                    camera.x -= pan
+                if fly_keys[pygame.K_d] or fly_keys[pygame.K_RIGHT]:
+                    camera.x += pan
+            else:
+                camera.follow(player)
 
             # 1. World & Ground
             world.draw(screen, camera)
@@ -1634,12 +1817,14 @@ def main():
             # 4.5. Ground items render above home floors and furniture.
             stockpile_manager.draw(screen, camera, TILE_SIZE, permit_manager)
 
-            # 5. Characters (Villagers, Servants & Player)
-            villager_manager.draw(screen, camera)
-            servant_manager.draw(screen, camera)
-            from game.systems.immigration_system import get_immigration_system
-            get_immigration_system().draw(screen, camera, TILE_SIZE)
-            player.draw(screen, camera)
+            # 5. Characters (Villagers, Servants & Player) — none exist yet
+            # while the player is still picking the starter village location.
+            if pending_starter_id is None:
+                villager_manager.draw(screen, camera)
+                servant_manager.draw(screen, camera)
+                from game.systems.immigration_system import get_immigration_system
+                get_immigration_system().draw(screen, camera, TILE_SIZE)
+                player.draw(screen, camera)
 
             # 6. Ambient Day & Night Lighting Overlay
             ambient_surf = day_cycle.get_ambient_overlay(screen.get_width(), screen.get_height())
@@ -2379,6 +2564,11 @@ def main():
                     ch = 152
                 if public_order_pending:
                     ch = max(ch, 112)
+                furn_action_btns.clear()
+                furn_acts = furniture_menu_actions(selected_furniture)
+                act_row_h = 30 if furn_acts else 0
+                if act_row_h:
+                    ch += act_row_h
                 cx = max(12, min(screen.get_width() - cw - 12, fsx + scaled_t // 2 - cw // 2))
                 cy = fsy - ch - 12
                 if cy < 50:
@@ -2439,37 +2629,52 @@ def main():
                     det_txt = f"Location: ({selected_furniture.grid_x}, {selected_furniture.grid_y})"
                 screen.blit(font_hud.render(det_txt, True, (56, 189, 248)), (cx + 14, cy + 54))
 
-                # Contextual buttons for owned furniture: Household and Possession
-                if owner_fam and not is_uninstalled:
+                # Contextual action buttons (Catalogue / Immigrants / Workplace)
+                if furn_acts:
+                    aw = (cw - 28 - 8 * (len(furn_acts) - 1)) // len(furn_acts)
+                    for i, (act, label) in enumerate(furn_acts):
+                        r = pygame.Rect(cx + 14 + i * (aw + 8), cy + 72, aw, 28)
+                        furn_action_btns.append({"rect": r, "action": act})
+                        a_hov = r.collidepoint(m_pos)
+                        pygame.draw.rect(screen, (30, 41, 59) if not a_hov else (45, 58, 82), r, border_radius=6)
+                        pygame.draw.rect(screen, (56, 189, 248), r, width=1, border_radius=6)
+                        a_txt = font_btn.render(label, True, (255, 255, 255))
+                        screen.blit(a_txt, (r.centerx - a_txt.get_width() // 2, r.centery - a_txt.get_height() // 2))
+                row2_y = cy + 76 + act_row_h
+
+                # Contextual buttons — Household/Possessions hanya untuk
+                # household chest; furniture lain cukup Move/Destroy.
+                if (owner_fam and not is_uninstalled
+                        and selected_furniture.furniture_type == "household_storage"):
                     btn_furn_house_rect.x = cx + 14
-                    btn_furn_house_rect.y = cy + 76
+                    btn_furn_house_rect.y = row2_y
                     btn_furn_house_rect.w = 114
-                    btn_furn_house_rect.h = 24
+                    btn_furn_house_rect.h = 28
                     h_hov = btn_furn_house_rect.collidepoint(m_pos)
-                    pygame.draw.rect(screen, (14, 116, 144) if h_hov else (15, 23, 42), btn_furn_house_rect, border_radius=4)
-                    pygame.draw.rect(screen, (56, 189, 248), btn_furn_house_rect, width=1, border_radius=4)
-                    h_txt = font_badge.render("Household", True, (255, 255, 255))
+                    pygame.draw.rect(screen, (14, 116, 144) if h_hov else (15, 23, 42), btn_furn_house_rect, border_radius=6)
+                    pygame.draw.rect(screen, (56, 189, 248), btn_furn_house_rect, width=1, border_radius=6)
+                    h_txt = font_btn.render("Household", True, (255, 255, 255))
                     screen.blit(h_txt, (btn_furn_house_rect.centerx - h_txt.get_width() // 2, btn_furn_house_rect.centery - h_txt.get_height() // 2))
 
                     btn_furn_poss_rect.x = cx + cw - 14 - 114
-                    btn_furn_poss_rect.y = cy + 76
+                    btn_furn_poss_rect.y = row2_y
                     btn_furn_poss_rect.w = 114
-                    btn_furn_poss_rect.h = 24
+                    btn_furn_poss_rect.h = 28
                     p_hov = btn_furn_poss_rect.collidepoint(m_pos)
-                    pygame.draw.rect(screen, (202, 138, 4) if p_hov else (161, 98, 7), btn_furn_poss_rect, border_radius=4)
-                    pygame.draw.rect(screen, (250, 204, 21), btn_furn_poss_rect, width=1, border_radius=4)
-                    p_txt = font_badge.render("Possessions", True, (255, 255, 255))
+                    pygame.draw.rect(screen, (202, 138, 4) if p_hov else (161, 98, 7), btn_furn_poss_rect, border_radius=6)
+                    pygame.draw.rect(screen, (250, 204, 21), btn_furn_poss_rect, width=1, border_radius=6)
+                    p_txt = font_btn.render("Possessions", True, (255, 255, 255))
                     screen.blit(p_txt, (btn_furn_poss_rect.centerx - p_txt.get_width() // 2, btn_furn_poss_rect.centery - p_txt.get_height() // 2))
                 else:
                     btn_furn_house_rect.x = -9999
                     btn_furn_poss_rect.x = -9999
 
                 if is_uninstalled:
-                    btn_furn_store_rect.update(cx + 14, cy + 76, cw - 28, 24)
+                    btn_furn_store_rect.update(cx + 14, row2_y, cw - 28, 28)
                     store_hov = btn_furn_store_rect.collidepoint(m_pos)
-                    pygame.draw.rect(screen, (16, 185, 129) if store_hov else (5, 150, 105), btn_furn_store_rect, border_radius=5)
-                    pygame.draw.rect(screen, (52, 211, 153), btn_furn_store_rect, width=1, border_radius=5)
-                    store_txt = font_badge.render("Store in Household", True, (255, 255, 255))
+                    pygame.draw.rect(screen, (16, 185, 129) if store_hov else (5, 150, 105), btn_furn_store_rect, border_radius=6)
+                    pygame.draw.rect(screen, (52, 211, 153), btn_furn_store_rect, width=1, border_radius=6)
+                    store_txt = font_btn.render("Store in Household", True, (255, 255, 255))
                     screen.blit(store_txt, (btn_furn_store_rect.centerx - store_txt.get_width() // 2, btn_furn_store_rect.centery - store_txt.get_height() // 2))
                 else:
                     btn_furn_store_rect.x = -9999
@@ -2485,7 +2690,7 @@ def main():
                         "AWAITING_MATERIAL": "Carpenter gathering materials",
                     }
                     order_text = font_badge.render(status_labels.get(order_status, "Carpenter order"), True, (56, 189, 248))
-                    screen.blit(order_text, (cx + 14, cy + 82))
+                    screen.blit(order_text, (cx + 14, row2_y + 6))
                 else:
                     btn_furn_pay_carpenter_rect.x = -9999
 
@@ -2505,6 +2710,79 @@ def main():
                 pygame.draw.rect(screen, (248, 113, 113), btn_furn_destroy_rect, width=1, border_radius=6)
                 des_txt = font_btn.render("Destroy", True, (255, 255, 255))
                 screen.blit(des_txt, (btn_furn_destroy_rect.centerx - des_txt.get_width() // 2, btn_furn_destroy_rect.centery - des_txt.get_height() // 2))
+
+            # -------------------------------------------------------------
+            # 7.74. PUBLIC STRUCTURE CONTEXT MENU (List / Destroy / actions)
+            # -------------------------------------------------------------
+            if selected_structure is not None and planning_mode == "NONE" and not raport_ui.is_open:
+                b = selected_structure
+                bxs = [t[0] for t in getattr(b, "tiles", set())]
+                bys = [t[1] for t in getattr(b, "tiles", set())]
+                if bxs and bys:
+                    bwx = ((min(bxs) + max(bxs) + 1) / 2) * TILE_SIZE
+                    bwy = ((min(bys) + max(bys) + 1) / 2) * TILE_SIZE
+                    bsx, bsy = camera.world_to_screen(bwx, bwy)
+                    # Selection outline around the whole footprint
+                    ox0, oy0 = camera.world_to_screen(min(bxs) * TILE_SIZE, min(bys) * TILE_SIZE)
+                    ox1, oy1 = camera.world_to_screen((max(bxs) + 1) * TILE_SIZE, (max(bys) + 1) * TILE_SIZE)
+                    pygame.draw.rect(screen, (250, 204, 21), (ox0, oy0, ox1 - ox0, oy1 - oy0), width=2, border_radius=5)
+
+                    struct_acts = structure_menu_actions(b)
+                    cw, ch = 260, 104 + (30 if struct_acts else 0)
+                    cx = max(12, min(screen.get_width() - cw - 12, bsx - cw // 2))
+                    cy = bsy - ch - 12
+                    if cy < 50:
+                        cy = bsy + int(TILE_SIZE * camera.zoom) + 12
+                    cy = max(50, min(screen.get_height() - ch - 12, cy))
+
+                    struct_menu_rect.update(cx, cy, cw, ch)
+                    struct_action_btns.clear()
+
+                    popup_surf = pygame.Surface((cw, ch), pygame.SRCALPHA)
+                    pygame.draw.rect(popup_surf, (15, 23, 42, 245), (0, 0, cw, ch), border_radius=10)
+                    pygame.draw.rect(popup_surf, (56, 189, 248), (0, 0, cw, ch), width=2, border_radius=10)
+                    screen.blit(popup_surf, (cx, cy))
+
+                    screen.blit(font_card.render(getattr(b, "name", "Structure"), True, (255, 255, 255)), (cx + 14, cy + 10))
+                    st_cfg = getattr(b, "type_cfg", {}) or {}
+                    sub_txt = f"{st_cfg.get('name', b.building_type)} • Public Structure • {len(b.tiles)} tiles"
+                    screen.blit(font_hud.render(sub_txt, True, (148, 163, 184)), (cx + 14, cy + 32))
+
+                    btn_struct_close_rect.x = cx + cw - 26
+                    btn_struct_close_rect.y = cy + 10
+                    c_hov = btn_struct_close_rect.collidepoint(m_pos)
+                    pygame.draw.rect(screen, (220, 38, 38) if c_hov else (30, 41, 59), btn_struct_close_rect, border_radius=4)
+                    x_lbl = font_badge.render("X", True, (255, 255, 255))
+                    screen.blit(x_lbl, (btn_struct_close_rect.centerx - x_lbl.get_width() // 2, btn_struct_close_rect.centery - x_lbl.get_height() // 2))
+
+                    # Contextual action row (Market / Workplace)
+                    if struct_acts:
+                        aw = (cw - 28 - 8 * (len(struct_acts) - 1)) // len(struct_acts)
+                        for i, (act, label) in enumerate(struct_acts):
+                            r = pygame.Rect(cx + 14 + i * (aw + 8), cy + 52, aw, 28)
+                            struct_action_btns.append({"rect": r, "action": act})
+                            a_hov = r.collidepoint(m_pos)
+                            pygame.draw.rect(screen, (30, 41, 59) if not a_hov else (45, 58, 82), r, border_radius=6)
+                            pygame.draw.rect(screen, (56, 189, 248), r, width=1, border_radius=6)
+                            a_txt = font_btn.render(label, True, (255, 255, 255))
+                            screen.blit(a_txt, (r.centerx - a_txt.get_width() // 2, r.centery - a_txt.get_height() // 2))
+
+                    # Bottom row: List (info panel) & Destroy (demolition)
+                    btn_struct_list_rect.x = cx + 14
+                    btn_struct_list_rect.y = cy + ch - 42
+                    l_hov = btn_struct_list_rect.collidepoint(m_pos)
+                    pygame.draw.rect(screen, (37, 99, 235) if l_hov else (29, 78, 216), btn_struct_list_rect, border_radius=6)
+                    pygame.draw.rect(screen, (96, 165, 250), btn_struct_list_rect, width=1, border_radius=6)
+                    l_txt = font_btn.render("List", True, (255, 255, 255))
+                    screen.blit(l_txt, (btn_struct_list_rect.centerx - l_txt.get_width() // 2, btn_struct_list_rect.centery - l_txt.get_height() // 2))
+
+                    btn_struct_destroy_rect.x = cx + cw - 14 - btn_struct_destroy_rect.w
+                    btn_struct_destroy_rect.y = cy + ch - 42
+                    d_hov = btn_struct_destroy_rect.collidepoint(m_pos)
+                    pygame.draw.rect(screen, (220, 38, 38) if d_hov else (185, 28, 28), btn_struct_destroy_rect, border_radius=6)
+                    pygame.draw.rect(screen, (248, 113, 113), btn_struct_destroy_rect, width=1, border_radius=6)
+                    d_txt = font_btn.render("Destroy", True, (255, 255, 255))
+                    screen.blit(d_txt, (btn_struct_destroy_rect.centerx - d_txt.get_width() // 2, btn_struct_destroy_rect.centery - d_txt.get_height() // 2))
 
             # -------------------------------------------------------------
             # 7.75. WORKPLACE BASE POPUP (Permit vs Structure)
@@ -2987,6 +3265,51 @@ def main():
 
             # 11.7. ESC Cheat Menu Modal
             cheat_modal.draw(screen, cheats_active=cheats_active)
+
+            # 11.8. Starter Placement Ghost + Confirm Dialog
+            if pending_starter_id is not None:
+                from game.systems.starter_preset import StarterPresetSystem
+                anchor = starter_confirm_tile if starter_confirm_tile is not None else (m_gx, m_gy)
+                zones, valid = StarterPresetSystem.get_anchor_preview(
+                    pending_starter_id, anchor,
+                    building_manager, permit_manager, furniture_manager)
+                fill_col = (34, 197, 94, 70) if valid else (239, 68, 68, 70)
+                edge_col = (34, 197, 94) if valid else (239, 68, 68)
+                for zname, (zx, zy, zw, zh) in zones.items():
+                    sx1, sy1 = camera.world_to_screen(zx * TILE_SIZE, zy * TILE_SIZE)
+                    sx2, sy2 = camera.world_to_screen((zx + zw) * TILE_SIZE, (zy + zh) * TILE_SIZE)
+                    wpx, hpx = sx2 - sx1, sy2 - sy1
+                    ghost = pygame.Surface((max(1, wpx), max(1, hpx)), pygame.SRCALPHA)
+                    ghost.fill(fill_col)
+                    screen.blit(ghost, (sx1, sy1))
+                    pygame.draw.rect(screen, edge_col, (sx1, sy1, wpx, hpx), 2)
+                    zlabel = zname[5:].capitalize() if zname.startswith("prop_") else zname.capitalize()
+                    zl = font_badge.render(zlabel, True, edge_col)
+                    screen.blit(zl, (sx1 + 3, sy1 + 3))
+
+                hint = font_body.render(
+                    "Click a location for your starter village — LMB confirm, RMB/ESC cancel",
+                    True, (226, 232, 240))
+                screen.blit(hint, hint.get_rect(center=(screen_w // 2, 24)))
+
+                if starter_confirm_tile is not None:
+                    dlg_w, dlg_h = 340, 110
+                    dlg = pygame.Rect(screen_w // 2 - dlg_w // 2, screen.get_height() // 2 - dlg_h // 2, dlg_w, dlg_h)
+                    pygame.draw.rect(screen, COLOR_MODAL_BG, dlg, border_radius=10)
+                    pygame.draw.rect(screen, COLOR_MODAL_BORDER, dlg, width=2, border_radius=10)
+                    q = font_card.render("Place starter village here?", True, COLOR_TEXT_TITLE)
+                    screen.blit(q, (dlg.centerx - q.get_width() // 2, dlg.y + 16))
+                    bw, bh = 110, 34
+                    starter_done_btn_rect = pygame.Rect(dlg.centerx - bw - 8, dlg.bottom - bh - 14, bw, bh)
+                    starter_cancel_btn_rect = pygame.Rect(dlg.centerx + 8, dlg.bottom - bh - 14, bw, bh)
+                    d_hov = starter_done_btn_rect.collidepoint(pygame.mouse.get_pos())
+                    pygame.draw.rect(screen, (16, 185, 129) if d_hov else (5, 150, 105), starter_done_btn_rect, border_radius=6)
+                    dt = font_btn.render("Done", True, (255, 255, 255))
+                    screen.blit(dt, dt.get_rect(center=starter_done_btn_rect.center))
+                    c_hov = starter_cancel_btn_rect.collidepoint(pygame.mouse.get_pos())
+                    pygame.draw.rect(screen, (239, 68, 68) if c_hov else (185, 28, 28), starter_cancel_btn_rect, border_radius=6)
+                    ct = font_btn.render("Cancel", True, (255, 255, 255))
+                    screen.blit(ct, ct.get_rect(center=starter_cancel_btn_rect.center))
 
             # 12. Speed Control HUD (Bottom Right)
             speed_controller.draw(screen)

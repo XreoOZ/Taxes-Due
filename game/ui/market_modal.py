@@ -62,6 +62,13 @@ class MarketProfileModal:
         self.show_coin_dialog = None  # None | "deposit" | "withdraw"
         self.show_item_picker = False
         self.item_picker_rects = {}
+        self.picker_selected = set()   # multi-select checkboxes
+        self.picker_scroll = 0
+        self.picker_items = []         # selectable items from last draw
+        self.picker_dialog_rect = None
+        self.picker_list_rect = None
+        self.picker_done_rect = None
+        self.picker_cancel_rect = None
         self.add_item_btn_rect = None
         self.stock_quantity_rects = {}
         self.quantity_values = {}
@@ -117,6 +124,9 @@ class MarketProfileModal:
             self.is_open = True
             self.show_assign_dialog = False
             self.show_coin_dialog = None
+            self.show_item_picker = False
+            self.picker_selected.clear()
+            self.picker_scroll = 0
             self.status_message = None
 
             # Ensure data integrity & contracts
@@ -150,6 +160,8 @@ class MarketProfileModal:
         self.show_assign_dialog = False
         self.show_coin_dialog = None
         self.show_item_picker = False
+        self.picker_selected.clear()
+        self.picker_scroll = 0
         self.focused_quantity = None
         self.num_input.cancel()
 
@@ -183,6 +195,8 @@ class MarketProfileModal:
             if event.key == pygame.K_ESCAPE:
                 if self.show_item_picker:
                     self.show_item_picker = False
+                    self.picker_selected.clear()
+                    self.picker_scroll = 0
                     return "close_item_picker"
                 if self.show_assign_dialog:
                     self.show_assign_dialog = False
@@ -216,25 +230,34 @@ class MarketProfileModal:
                     return None
 
             if self.show_item_picker:
+                if self.picker_done_rect and self.picker_done_rect.collidepoint(mouse_pos):
+                    added, skipped = self._apply_picker_selection(
+                        mkt, furniture_manager, villager_manager, stockpile_manager)
+                    self.show_item_picker = False
+                    self.picker_selected.clear()
+                    self.picker_scroll = 0
+                    if skipped:
+                        self.status_message = (
+                            f"Added {added} item(s); {skipped} not owned by this household.")
+                    return "market_items_added"
+                if self.picker_cancel_rect and self.picker_cancel_rect.collidepoint(mouse_pos):
+                    self.show_item_picker = False
+                    self.picker_selected.clear()
+                    self.picker_scroll = 0
+                    return "close_item_picker"
                 for item_name, rect in self.item_picker_rects.items():
                     if rect.collidepoint(mouse_pos):
-                        if getattr(mkt, "assigned_family_id", None):
-                            owned_items = HouseholdStallSystem.get_household_owned_sale_items(
-                                mkt.assigned_family_id, furniture_manager,
-                                villager_manager, stockpile_manager
-                            )
-                            if item_name not in owned_items:
-                                self.show_item_picker = False
-                                self.status_message = "This household no longer has that item in storage."
-                                return "market_item_not_owned"
-                        if item_name not in mkt.sale_items:
-                            mkt.sale_items.append(item_name)
-                            mkt.prices.setdefault(item_name, DEFAULT_ITEM_PRICES.get(item_name, 1))
-                            if getattr(mkt, "assigned_family_id", None):
-                                mkt.item_allocations.setdefault(item_name, MARKET_DEFAULT_HOUSEHOLD_SALE_PERCENT)
-                        self.show_item_picker = False
-                        return f"market_item_added_{item_name}"
-                self.show_item_picker = False
+                        if item_name in self.picker_selected:
+                            self.picker_selected.discard(item_name)
+                        else:
+                            self.picker_selected.add(item_name)
+                        return None
+                # Click outside the dialog cancels the whole selection.
+                if self.picker_dialog_rect and not self.picker_dialog_rect.collidepoint(mouse_pos):
+                    self.show_item_picker = False
+                    self.picker_selected.clear()
+                    self.picker_scroll = 0
+                    return "close_item_picker"
                 return None
 
             if not self.show_assign_dialog and not self.show_coin_dialog and self.add_item_btn_rect and self.add_item_btn_rect.collidepoint(mouse_pos):
@@ -446,6 +469,10 @@ class MarketProfileModal:
 
         elif event.type == pygame.MOUSEWHEEL:
             mouse_pos = pygame.mouse.get_pos()
+            if (self.show_item_picker and self.picker_list_rect
+                    and self.picker_list_rect.collidepoint(mouse_pos)):
+                self.picker_scroll = max(0, self.picker_scroll - event.y * 38)
+                return "market_picker_scrolled"
             if self.goods_list_rect and self.goods_list_rect.collidepoint(mouse_pos):
                 tradeable_count = sum(
                     1 for item in getattr(mkt, "sale_items", [])
@@ -796,11 +823,11 @@ class MarketProfileModal:
                 surface.blit(more, (report_rect.right - more.get_width() - 10, report_rect.bottom - more.get_height() - 5))
 
         self.item_picker_rects.clear()
+        self.picker_dialog_rect = None
+        self.picker_list_rect = None
+        self.picker_done_rect = None
+        self.picker_cancel_rect = None
         if self.show_item_picker:
-            picker = pygame.Rect(mx + 170, row_top + 18, self.modal_w - 340, min(300, len(MARKET_TRADEABLE_ITEMS) * 38 + 48))
-            pygame.draw.rect(surface, (15, 23, 42), picker, border_radius=8)
-            pygame.draw.rect(surface, (96, 165, 250), picker, width=2, border_radius=8)
-            surface.blit(self.font_sub.render("Choose a market item", True, COLOR_TEXT_TITLE), (picker.x + 14, picker.y + 12))
             # Each household may list only goods it currently owns. Landlord stalls
             # can list any supported trade good from landlord storage.
             if getattr(mkt, "assigned_family_id", None):
@@ -813,16 +840,123 @@ class MarketProfileModal:
             else:
                 selectable = [it for it in MARKET_TRADEABLE_ITEMS
                               if it not in getattr(mkt, "sale_items", [])]
+            self.picker_items = selectable
+
+            dlg_w = 480
+            dlg_h = min(470, self.modal_h - 70)
+            dlg_x = mx + (self.modal_w - dlg_w) // 2
+            dlg_y = self.modal_top + (self.modal_h - dlg_h) // 2
+            self.picker_dialog_rect = pygame.Rect(dlg_x, dlg_y, dlg_w, dlg_h)
+            pygame.draw.rect(surface, (15, 23, 42), self.picker_dialog_rect, border_radius=10)
+            pygame.draw.rect(surface, (96, 165, 250), self.picker_dialog_rect, width=2, border_radius=10)
+
+            surface.blit(self.font_sub.render("Add items to sell", True, COLOR_TEXT_TITLE),
+                         (dlg_x + 16, dlg_y + 12))
+            sel_count = len(self.picker_selected)
+            count_txt = self.font_badge.render(f"{sel_count} selected", True, COLOR_TEXT_MUTED)
+            surface.blit(count_txt, (self.picker_dialog_rect.right - 16 - count_txt.get_width(), dlg_y + 16))
+
+            # Scrollable clipped item list with icons + checkboxes
+            row_h = 40
+            list_x = dlg_x + 16
+            list_y = dlg_y + 46
+            list_w = dlg_w - 32
+            btn_zone = 52
+            visible_rows = max(1, (dlg_h - (list_y - dlg_y) - btn_zone) // row_h)
+            list_h = visible_rows * row_h
+            self.picker_list_rect = pygame.Rect(list_x, list_y, list_w, list_h)
+            max_scroll = max(0, len(selectable) * row_h - list_h)
+            self.picker_scroll = max(0, min(self.picker_scroll, max_scroll))
+
+            clip = self.picker_list_rect.clip(self.picker_dialog_rect)
+            surface.set_clip(clip)
+            for idx, item_name in enumerate(selectable):
+                ry = list_y + idx * row_h - self.picker_scroll
+                if ry + row_h - 4 < list_y or ry > list_y + list_h:
+                    continue
+                item_rect = pygame.Rect(list_x + 6, ry, list_w - 12, row_h - 5)
+                self.item_picker_rects[item_name] = item_rect
+                checked = item_name in self.picker_selected
+                bg = (30, 58, 138) if checked else (30, 41, 59)
+                border = (96, 165, 250) if checked else (51, 65, 85)
+                pygame.draw.rect(surface, bg, item_rect, border_radius=6)
+                pygame.draw.rect(surface, border, item_rect, width=1, border_radius=6)
+
+                # Checkbox on the right
+                cb = pygame.Rect(item_rect.right - 30, item_rect.centery - 8, 16, 16)
+                pygame.draw.rect(surface, (15, 23, 42), cb, border_radius=3)
+                if checked:
+                    pygame.draw.rect(surface, (59, 130, 246), cb, border_radius=3)
+                    chk = self.font_badge.render("✓", True, (255, 255, 255))
+                    surface.blit(chk, (cb.centerx - chk.get_width() // 2, cb.centery - chk.get_height() // 2))
+                else:
+                    pygame.draw.rect(surface, (96, 165, 250), cb, width=1, border_radius=3)
+
+                # Icon + name
+                draw_item_icon(surface, item_name, item_rect.x + 26, item_rect.centery, size=13)
+                name_txt = self.font_sub.render(item_name.replace("_", " "), True, (241, 245, 249))
+                surface.blit(name_txt, (item_rect.x + 48, item_rect.centery - name_txt.get_height() // 2))
+            surface.set_clip(None)
+
             if not selectable:
                 empty_label = ("No eligible household goods are available in storage."
                                if getattr(mkt, "assigned_family_id", None)
                                else "All supported goods are already listed at this stall.")
-                surface.blit(self.font_body.render(empty_label, True, COLOR_TEXT_MUTED), (picker.x + 14, picker.y + 42))
-            for idx, item_name in enumerate(selectable):
-                item_rect = pygame.Rect(picker.x + 12, picker.y + 38 + idx * 34, picker.width - 24, 30)
-                self.item_picker_rects[item_name] = item_rect
-                pygame.draw.rect(surface, (30, 41, 59), item_rect, border_radius=4)
-                surface.blit(self.font_body.render(item_name.replace("_", " "), True, (241, 245, 249)), (item_rect.x + 10, item_rect.y + 8))
+                surface.blit(self.font_body.render(empty_label, True, COLOR_TEXT_MUTED),
+                             (list_x + 8, list_y + 10))
+            elif max_scroll > 0:
+                # Thin scrollbar indicating scrollable content
+                track = pygame.Rect(list_x + list_w - 8, list_y + 4, 4, list_h - 8)
+                pygame.draw.rect(surface, (30, 41, 59), track, border_radius=2)
+                thumb_h = max(16, int(list_h * list_h / (len(selectable) * row_h)))
+                thumb_y = list_y + 4 + int((list_h - 8 - thumb_h) * (self.picker_scroll / max_scroll))
+                pygame.draw.rect(surface, (96, 165, 250),
+                                 (track.x, thumb_y, 4, thumb_h), border_radius=2)
+
+            # Done / Cancel
+            btn_y = dlg_y + dlg_h - 42
+            self.picker_cancel_rect = pygame.Rect(dlg_x + 16, btn_y, 110, 30)
+            self.picker_done_rect = pygame.Rect(dlg_x + dlg_w - 16 - 150, btn_y, 150, 30)
+            c_hov = self.picker_cancel_rect.collidepoint(m_pos)
+            pygame.draw.rect(surface, (51, 65, 85) if not c_hov else (71, 85, 105),
+                             self.picker_cancel_rect, border_radius=6)
+            c_lbl = self.font_btn.render("Cancel", True, (255, 255, 255))
+            surface.blit(c_lbl, (self.picker_cancel_rect.centerx - c_lbl.get_width() // 2,
+                                 self.picker_cancel_rect.centery - c_lbl.get_height() // 2))
+            d_hov = self.picker_done_rect.collidepoint(m_pos)
+            done_bg = (22, 101, 52) if sel_count else (30, 58, 138)
+            pygame.draw.rect(surface, (20, 83, 45) if d_hov and sel_count else done_bg,
+                             self.picker_done_rect, border_radius=6)
+            d_lbl = self.font_btn.render(f"Done ({sel_count})", True, (255, 255, 255))
+            surface.blit(d_lbl, (self.picker_done_rect.centerx - d_lbl.get_width() // 2,
+                                 self.picker_done_rect.centery - d_lbl.get_height() // 2))
+
+    def _apply_picker_selection(self, mkt, furniture_manager, villager_manager,
+                                stockpile_manager):
+        """Add every checked picker item to the stall's sale list.
+        Household stalls may only list goods the household currently owns;
+        ineligible picks are skipped and counted."""
+        owned = None
+        if getattr(mkt, "assigned_family_id", None):
+            owned = HouseholdStallSystem.get_household_owned_sale_items(
+                mkt.assigned_family_id, furniture_manager,
+                villager_manager, stockpile_manager
+            )
+        added = skipped = 0
+        for item_name in self.picker_items:
+            if item_name not in self.picker_selected:
+                continue
+            if item_name in getattr(mkt, "sale_items", []):
+                continue
+            if owned is not None and item_name not in owned:
+                skipped += 1
+                continue
+            mkt.sale_items.append(item_name)
+            mkt.prices.setdefault(item_name, DEFAULT_ITEM_PRICES.get(item_name, 1))
+            if getattr(mkt, "assigned_family_id", None):
+                mkt.item_allocations.setdefault(item_name, MARKET_DEFAULT_HOUSEHOLD_SALE_PERCENT)
+            added += 1
+        return added, skipped
 
     def _draw_assign_dialog(self, surface, mx, my, mkt, villager_manager, m_pos):
         """Displays modal dialog for assigning stall to a peasant household"""

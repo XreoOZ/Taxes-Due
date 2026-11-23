@@ -61,7 +61,7 @@ from game.data.config import MARKET_TRADEABLE_ITEMS, MARKET_CURRENCY_DENOMINATIO
 from game.systems.ai_simulation_scheduler import AISimulationScheduler
 from game.systems.spatial_entities import SpatialEntityIndex
 from game.world.pathfinding import GlobalPathRegistry, calculate_collision_slide, is_narrow_passage_tile
-from game.world.navigation import find_navigation_path, interaction_arrival_distance
+from game.world.navigation import find_navigation_path, interaction_arrival_distance, resolve_steer_index
 from game.systems.job_tool_system import (
     get_job_required_tools,
     get_missing_tools_for_worker,
@@ -1659,12 +1659,18 @@ class Servant:
             self.is_moving = False
             return False
 
-        # 2. Waypoint stepping
-        target_wp = self.current_path[self.path_index]
+        # 2. Waypoint stepping — steer to the furthest visible waypoint so
+        # the actor cuts corners instead of retracing the stale polyline.
+        steer_idx = resolve_steer_index(
+            self, (self.x, self.y), self.current_path, self.path_index, dt,
+            building_manager, furniture_manager=furniture_manager,
+            tile_size=TILE_SIZE,
+        )
+        target_wp = self.current_path[steer_idx]
         wp_dx = target_wp[0] - self.x
         wp_dy = target_wp[1] - self.y
         dist_to_wp = math.hypot(wp_dx, wp_dy)
-        is_last_wp = (self.path_index == len(self.current_path) - 1)
+        is_last_wp = (steer_idx == len(self.current_path) - 1)
         tol = arrival_dist if is_last_wp else PATH_WAYPOINT_TOLERANCE
 
         if dist_to_wp <= tol:
@@ -1677,7 +1683,7 @@ class Servant:
                 self.route_state = ROUTE_STATE_COMPLETED
                 return True
             else:
-                self.path_index += 1
+                self.path_index = steer_idx + 1
                 if self.path_index >= len(self.current_path):
                     self.is_moving = False
                     self.current_path = []

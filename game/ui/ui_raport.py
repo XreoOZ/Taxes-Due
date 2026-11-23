@@ -269,6 +269,7 @@ class RaportUI:
         self.highlight_workplace_key = None
         self.back_to_jobs_btn_rect = None
         self.auto_sort_all_btn_rect = None
+        self.unassign_all_btn_rect = None
         self.job_select_btn_rects = {}
         self.job_workstation_btn_rects = {}
         self.workplace_crop_btn_rects = {}
@@ -1036,7 +1037,9 @@ class RaportUI:
             for pid, rect in list(self.worker_auto_btn_rects.items()):
                 if rect.collidepoint(mouse_pos):
                     if villager_manager:
-                        permit_manager.auto_sort_workers(villager_manager, furniture_manager=furniture_manager)
+                        from game.systems.workplace_system import auto_sort_all_workers
+                        auto_sort_all_workers(permit_manager, furniture_manager, villager_manager,
+                                              building_manager=building_manager)
                     return f"auto_worker_{pid}"
 
             # Check Edit Permit buttons
@@ -1304,7 +1307,10 @@ class RaportUI:
 
                 if self.auto_sort_all_btn_rect and self.auto_sort_all_btn_rect.collidepoint(mouse_pos):
                     if villager_manager:
-                        permit_manager.auto_sort_workers(villager_manager)
+                        from game.systems.workplace_system import auto_sort_all_workers
+                        auto_sort_all_workers(permit_manager, furniture_manager, villager_manager,
+                                              building_manager=building_manager,
+                                              job_filter=self.selected_job_id)
                     return "auto_sort_job"
 
                 # Unassign worker from its configured station.
@@ -1390,8 +1396,17 @@ class RaportUI:
 
                 if self.auto_sort_all_btn_rect and self.auto_sort_all_btn_rect.collidepoint(mouse_pos):
                     if villager_manager:
-                        permit_manager.auto_sort_workers(villager_manager, furniture_manager=furniture_manager)
+                        from game.systems.workplace_system import auto_sort_all_workers
+                        auto_sort_all_workers(permit_manager, furniture_manager, villager_manager,
+                                              building_manager=building_manager)
                     return "auto_sort_all"
+
+                if self.unassign_all_btn_rect and self.unassign_all_btn_rect.collidepoint(mouse_pos):
+                    if villager_manager:
+                        from game.systems.workplace_system import unassign_all_workers
+                        unassign_all_workers(permit_manager, furniture_manager, villager_manager,
+                                             building_manager=building_manager)
+                    return "unassign_all"
 
                 for job_id, rect in self.job_select_btn_rects.items():
                     if rect.collidepoint(mouse_pos) and self.jobs_viewport_rect and self.jobs_viewport_rect.collidepoint(mouse_pos):
@@ -2827,7 +2842,7 @@ class RaportUI:
                     w_txt = self.font_badge.render(f"Water: {water_stk} ({water_ok}/{living_tot})", True, water_col)
                     surface.blit(w_txt, (water_badge.centerx - w_txt.get_width() // 2, water_badge.centery - w_txt.get_height() // 2))
 
-                    # Dedicated Job & Assigned Deed Status
+                    # Assigned Deed Status
                     if fam.assigned_permit_id:
                         p_deed = next((p for p in permit_manager.permits if p.id == fam.assigned_permit_id), None)
                         deed_label = f"Assigned Deed: {p_deed.name}" if p_deed else "Assigned Deed: Active Lot"
@@ -2836,8 +2851,7 @@ class RaportUI:
                         deed_label = "Deed: Unassigned (Homeless Immigrants at Town Center)"
                         deed_col = (245, 158, 11)
 
-                    sub_line = f"Dedicated Profession: Peasant Farmer   |   {deed_label}"
-                    surface.blit(self.font_body.render(sub_line, True, deed_col), (card_rect.x + 46, card_rect.y + 30))
+                    surface.blit(self.font_body.render(deed_label, True, deed_col), (card_rect.x + 46, card_rect.y + 30))
 
 
                     # Action Button: [👥 View Family]
@@ -3403,6 +3417,10 @@ class RaportUI:
 
     def _draw_workplaces_view(self, surface, mx, cy, villager_manager, permit_manager, furniture_manager, building_manager=None):
         from game.systems.workplace_system import get_job_workplaces, workplace_workers, workplace_job_workers, workplace_capacity
+        # This sub-view draws no sort buttons — clear stale rects so clicks
+        # here can't trigger the directory-level handlers.
+        self.auto_sort_all_btn_rect = None
+        self.unassign_all_btn_rect = None
         job_id = self.selected_workstation_job_id
         job_cfg = DEDICATED_JOBS.get(job_id, {})
         mouse_pos = pygame.mouse.get_pos()
@@ -3447,7 +3465,9 @@ class RaportUI:
             detail = self.font_body.render(detail_txt, True, COLOR_TEXT_MUTED)
             surface.blit(detail, (card.x + 14, card.y + 29))
             wk_key = ("num", "workplace_workers", (job_id, station_key))
-            wk_rect = pygame.Rect(card.right - 48, card.y + 14, 38, 26)
+            # Worker-count input sits right next to its "N / cap workers" label
+            # instead of floating in the top-right corner.
+            wk_rect = pygame.Rect(card.x + 14 + detail.get_width() + 10, card.y + 22, 38, 26)
             self.num_fields[wk_key] = {"rect": wk_rect, "kind": "workplace_workers",
                                        "payload": (job_id, station_key),
                                        "min": 0, "max": station_cap if station_cap is not None else 99}
@@ -3469,7 +3489,9 @@ class RaportUI:
                     crop_name = getattr(obj, "crop", None) or "No crop"
                     crop_lbl = self.font_badge.render(f"Crop: {crop_name}", True, COLOR_TEXT_MUTED)
                     surface.blit(crop_lbl, (card.x + 160, row2_y + 4))
-                    crop_btn = pygame.Rect(card.right - 104, row2_y - 2, 92, 28)
+                    # Select button hugs the Crop label instead of the far
+                    # right edge of the card.
+                    crop_btn = pygame.Rect(card.x + 160 + crop_lbl.get_width() + 10, row2_y - 2, 76, 28)
                     self.workplace_crop_btn_rects[(job_id, self._workplace_key((kind, obj)))] = crop_btn
                     cb_hov = crop_btn.collidepoint(mouse_pos)
                     pygame.draw.rect(surface, (22, 101, 52) if cb_hov else (20, 83, 45), crop_btn, border_radius=5)
@@ -3561,7 +3583,14 @@ class RaportUI:
             w_title = self.font_title.render("VILLAGE WORKFORCE & JOBS DIRECTORY", True, COLOR_TEXT_TITLE)
             surface.blit(w_title, (mx + 24, cy - 4))
 
-            # Auto Sort All Button (Top Right)
+            # Unassign All + Auto Sort All Buttons (Top Right)
+            self.unassign_all_btn_rect = pygame.Rect(mx + self.modal_w - 352, cy - 6, 140, 28)
+            ua_hover = self.unassign_all_btn_rect.collidepoint(mouse_pos)
+            pygame.draw.rect(surface, (122, 72, 48) if ua_hover else (96, 56, 38), self.unassign_all_btn_rect, border_radius=6)
+            pygame.draw.rect(surface, (214, 120, 90), self.unassign_all_btn_rect, width=1, border_radius=6)
+            ua_lbl = self.font_badge.render("Unassign All", True, (255, 255, 255))
+            surface.blit(ua_lbl, (self.unassign_all_btn_rect.centerx - ua_lbl.get_width() // 2, self.unassign_all_btn_rect.centery - ua_lbl.get_height() // 2))
+
             self.auto_sort_all_btn_rect = pygame.Rect(mx + self.modal_w - 200, cy - 6, 176, 28)
             as_hover = self.auto_sort_all_btn_rect.collidepoint(mouse_pos)
             pygame.draw.rect(surface, (16, 185, 129) if as_hover else (5, 150, 105), self.auto_sort_all_btn_rect, border_radius=6)

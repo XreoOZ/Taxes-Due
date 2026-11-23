@@ -108,7 +108,7 @@ from game.config import (
 )
 from game.render_cache import ellipse_surface
 from game.world.pathfinding import GlobalPathRegistry, calculate_collision_slide, is_narrow_passage_tile
-from game.world.navigation import find_navigation_path, interaction_arrival_distance, find_nearest_target
+from game.world.navigation import find_navigation_path, interaction_arrival_distance, find_nearest_target, resolve_steer_index
 from game.systems.market_interface import request_market_food_purchase
 from game.systems.market_purchasing import AIFoodPurchasingSystem, AIMarketPurchasingSystem
 from game.systems.market_service import MarketService
@@ -3757,12 +3757,19 @@ class Villager:
             self.is_moving = False
             return False
 
-        # 2. Waypoint stepping
-        target_wp = self.current_path[self.path_index]
+        # 2. Waypoint stepping — steer to the furthest visible waypoint so
+        # the actor cuts corners instead of retracing the stale polyline.
+        steer_idx = resolve_steer_index(
+            self, (self.x, self.y), self.current_path, self.path_index, dt,
+            building_manager, furniture_manager=furniture_manager,
+            tile_size=TILE_SIZE,
+            avoid_tiles=self.stuck_blocked_tiles if recover_blocked_routes else None,
+        )
+        target_wp = self.current_path[steer_idx]
         wp_dx = target_wp[0] - self.x
         wp_dy = target_wp[1] - self.y
         dist_to_wp = math.hypot(wp_dx, wp_dy)
-        is_last_wp = (self.path_index == len(self.current_path) - 1)
+        is_last_wp = (steer_idx == len(self.current_path) - 1)
         tol = arrival_dist if is_last_wp else PATH_WAYPOINT_TOLERANCE
         if is_last_wp and interaction_target is not None:
             tol = interaction_arrival_distance(
@@ -3779,7 +3786,7 @@ class Villager:
                 self.route_state = ROUTE_STATE_COMPLETED
                 return True
             else:
-                self.path_index += 1
+                self.path_index = steer_idx + 1
                 if self.path_index >= len(self.current_path):
                     self.is_moving = False
                     self.current_path = []

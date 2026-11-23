@@ -1102,65 +1102,11 @@ class PermitManager:
         return False
 
     def auto_sort_workers(self, villager_manager, job_filter=None, furniture_manager=None):
-        """Auto-assigns closest available workers to workplace plots based on distance from household home"""
-        if not villager_manager:
-            return 0
-        all_villagers = villager_manager.get_all_villagers()
-
-        jobs_to_process = [job_filter] if job_filter else list(DEDICATED_JOBS.keys())
-        total_assigned_overall = 0
-        cleared_workplace_permits = set()
-
-        for job_id in jobs_to_process:
-            job_cfg = DEDICATED_JOBS.get(job_id)
-            if not job_cfg:
-                continue
-            permit_type_needed = job_cfg.get("workplace_permit", "farm")
-            workers = [v for v in all_villagers if getattr(v, "is_alive", True) and (getattr(v, "job", "") == job_id or (job_id == "Farmer" and getattr(v, "job", "") in ("Farmer", "Unassigned", "Peasant", None, "")))]
-            work_permits = [p for p in self.permits if getattr(p, "permit_type", "") == permit_type_needed]
-
-            if not work_permits:
-                continue
-
-            # Several jobs can share one workplace type (for example Builder and Carpenter).
-            # Clear each permit once, then let each job add its own workers to the shared roster.
-            for p in work_permits:
-                permit_key = str(getattr(p, "id", id(p)))
-                if permit_key not in cleared_workplace_permits:
-                    if not hasattr(p, "assigned_workers"):
-                        p.assigned_workers = []
-                    p.assigned_workers.clear()
-                    cleared_workplace_permits.add(permit_key)
-
-            if not workers:
-                continue
-
-            # Calculate distance between worker's household home and workplace
-            candidates = []
-            for p in work_permits:
-                p_cx = (p.grid_x + p.tiles_w / 2.0) * TILE_SIZE
-                p_cy = (p.grid_y + p.tiles_h / 2.0) * TILE_SIZE
-                for w in workers:
-                    w_x, w_y = get_villager_home_position(w, villager_manager, self, furniture_manager)
-                    dist = math.hypot(w_x - p_cx, w_y - p_cy)
-                    candidates.append((dist, w, p))
-
-            # Sort by distance (closest home wins!)
-            candidates.sort(key=lambda c: (c[0], str(c[1].id)))
-            assigned_workers_set = set()
-
-            for dist, w, p in candidates:
-                if w.id in assigned_workers_set:
-                    continue
-                worker_cap = permit_worker_cap(p)
-                if worker_cap is None or len(p.assigned_workers) < worker_cap:
-                    p.assigned_workers.append(w.id)
-                    assigned_workers_set.add(w.id)
-                    if getattr(w, "job", "") != job_id:
-                        w.set_job(job_id)
-                    total_assigned_overall += 1
-
-        return total_assigned_overall
+        """Backward-compatible shim — delegates to the workplace-system
+        recalibration which covers permits, furniture, and buildings."""
+        from game.systems.workplace_system import auto_sort_all_workers
+        return auto_sort_all_workers(self, furniture_manager, villager_manager,
+                                     building_manager=None, job_filter=job_filter)
 
     def get_permits_status(self, building_manager):
         """Mengelompokkan permit menjadi Occupied Building atau Empty Area"""

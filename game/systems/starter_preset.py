@@ -13,7 +13,7 @@ Layout rules (per user spec):
 
 import random
 
-from game.data.config import STARTER_PRESETS, MAX_STACK_SIZE, TILE_SIZE
+from game.data.config import STARTER_PRESETS, MAX_STACK_SIZE, TILE_SIZE, BUILDING_TYPES
 from game.world.island import is_land_tile
 
 
@@ -24,10 +24,16 @@ class StarterPresetSystem:
 
     @classmethod
     def apply(cls, preset_id, villager_manager, furniture_manager,
-              building_manager, permit_manager, stockpile_manager=None):
+              building_manager, permit_manager, stockpile_manager=None,
+              anchor_tile=None):
         """Materialize a starter preset on a fresh game world.
 
-        Returns True on success; disabled/unknown presets return False.
+        ``anchor_tile`` = house-center tile picked by the player; when given,
+        zone positions come from the preset's ``cluster`` offsets and every
+        rect must validate or nothing is placed. Without it, zones are
+        auto-scanned outward from the world origin.
+
+        Returns True on success; disabled/unknown/invalid presets return False.
         """
         preset = cls.get_preset(preset_id)
         if not preset or not preset.get("enabled"):
@@ -36,7 +42,10 @@ class StarterPresetSystem:
             return False
 
         pad = int(preset.get("permit_padding", 0) or 0)
-        used_tiles = set()
+        zones = cls._resolve_zones(preset, anchor_tile,
+                                   building_manager, permit_manager, furniture_manager)
+        if zones is None:
+            return False
 
         # 1) Starter household (size comes from the preset).
         family = villager_manager.generate_starter_family(
@@ -44,20 +53,12 @@ class StarterPresetSystem:
 
         # 2) Housing permit (exactly the house footprint) + finished house.
         house_cfg = preset.get("house")
-        hx = hy = hw = hh = None
-        if house_cfg:
+        if house_cfg and "house" in zones:
             hw, hh = int(house_cfg["width"]), int(house_cfg["height"])
-            zx, zy = cls._find_land_origin(
-                hw + pad * 2, hh + pad * 2, used_tiles,
-                building_manager, permit_manager, furniture_manager)
-            if zx is None:
-                return False
+            zx, zy, zw, zh = zones["house"]
             hx, hy = zx + pad, zy + pad
             house_permit = permit_manager.add_permit_rect(
-                "Starter Housing", "housing", zx, zy, hw + pad * 2, hh + pad * 2)
-            used_tiles.update((gx, gy)
-                              for gx in range(zx, zx + hw + pad * 2)
-                              for gy in range(zy, zy + hh + pad * 2))
+                "Starter Housing", "housing", zx, zy, zw, zh)
             cls._place_finished_building(
                 building_manager, house_cfg["building_type"],
                 {(hx + dx, hy + dy) for dx in range(hw) for dy in range(hh)},
@@ -99,35 +100,65 @@ class StarterPresetSystem:
 
         # 3) Market permit (exactly the stall footprint) + finished market.
         market_cfg = preset.get("market")
-        if market_cfg:
+        if market_cfg and "market" in zones:
             mw, mh = int(market_cfg["width"]), int(market_cfg["height"])
-            zx, zy = cls._find_land_origin(
-                mw + pad * 2, mh + pad * 2, used_tiles,
-                building_manager, permit_manager, furniture_manager)
-            if zx is not None:
-                mx, my = zx + pad, zy + pad
-                permit_manager.add_permit_rect(
-                    "Starter Market", "market", zx, zy, mw + pad * 2, mh + pad * 2)
-                used_tiles.update((gx, gy)
-                                  for gx in range(zx, zx + mw + pad * 2)
-                                  for gy in range(zy, zy + mh + pad * 2))
-                cls._place_finished_building(
-                    building_manager, market_cfg["building_type"],
-                    {(mx + dx, my + dy) for dx in range(mw) for dy in range(mh)})
+            zx, zy, zw, zh = zones["market"]
+            mx, my = zx + pad, zy + pad
+            permit_manager.add_permit_rect(
+                "Starter Market", "market", zx, zy, zw, zh)
+            cls._place_finished_building(
+                building_manager, market_cfg["building_type"],
+                {(mx + dx, my + dy) for dx in range(mw) for dy in range(mh)})
+
+        # 3b) Farm permit — bare deed; farmers sow/tend it once assigned.
+        farm_cfg = preset.get("farm")
+        if farm_cfg and "farm" in zones:
+            zx, zy, zw, zh = zones["farm"]
+            permit_manager.add_permit_rect("Starter Farm", "farm", zx, zy, zw, zh)
+
+        # 3c) Extra prop buildings (toilet, well, ...) placed relative to the
+        # house and installed instantly — never blueprints.
+        for prop in ((preset.get("cluster") or {}).get("props")) or []:
+            zkey = f"prop_{prop.get('building')}"
+            if zkey not in zones:
+                continue
+            zx, zy, zw, zh = zones[zkey]
+            cls._place_finished_building(
+                building_manager, prop.get("building"),
+                {(zx + dx, zy + dy) for dx in range(zw) for dy in range(zh)})
 
         # 4) Landlord storage yard: permit-sized area filled with loose
         # landlord-owned item stacks (the player's physical storage).
-        if preset.get("landlord_storage") and stockpile_manager is not None:
-            sw = int(preset.get("storage_permit_width", 6) or 6)
-            sh = int(preset.get("storage_permit_height", 6) or 6)
-            zx, zy = cls._find_land_origin(
-                sw, sh, used_tiles, building_manager, permit_manager, furniture_manager)
-            if zx is not None:
-                permit_manager.add_permit_rect("Starter Storage", "storage",
-                                               zx, zy, sw, sh)
-                cls._scatter_storage_items(
-                    stockpile_manager, preset.get("storage_items") or {},
-                    zx, zy, sw, sh)
+        if preset.get("landlord_storage") and "storage" in zones and stockpile_manager is not None:
+            zx, zy, zw, zh = zones["storage"]
+            permit_manager.add_permit_rect("Starter Storage", "storage",
+                                           zx, zy, zw, zh)
+            # Keep prop-building footprints (e.g. the well) free of item stacks.
+            prop_tiles = set()
+            for prop in ((preset.get("cluster") or {}).get("props")) or []:
+                zkey = f"prop_{prop.get('building')}"
+                if zkey in zones:
+                    px, py, pw, ph = zones[zkey]
+                    prop_tiles.update((px + dx, py + dy)
+                                      for dx in range(pw) for dy in range(ph))
+            cls._scatter_storage_items(
+                stockpile_manager, preset.get("storage_items") or {},
+                zx, zy, zw, zh, exclude_tiles=prop_tiles)
+
+            # Lord Treasury chest belongs to the landlord — park it on open
+            # ground beside the storage yard, never on storage tiles.
+            if preset.get("treasury_chest_spot") == "beside_storage":
+                treasury = furniture_manager.get_lord_treasury_chest()
+                if treasury is not None:
+                    spot = cls._find_free_tile_beside(
+                        zx, zy, zw, zh, building_manager, permit_manager,
+                        furniture_manager)
+                    if spot is not None:
+                        sx, sy = spot
+                        spot_permit = permit_manager.get_permit_at(sx, sy)
+                        treasury.move_to(
+                            sx, sy,
+                            new_permit_id=getattr(spot_permit, "id", None))
 
         # 5) Treasury items (e.g. Gold) into the Lord Treasury chest.
         treasury_items = preset.get("treasury_items") or {}
@@ -140,10 +171,209 @@ class StarterPresetSystem:
         return True
 
     @classmethod
-    def _scatter_storage_items(cls, stockpile_manager, items, ox, oy, w, h):
+    def _resolve_zones(cls, preset, anchor_tile, building_manager,
+                       permit_manager, furniture_manager):
+        """Return {zone_name: (x, y, w, h)} permit rects, or None if the
+        chosen/auto-scanned layout cannot be placed."""
+        if anchor_tile is not None:
+            zones = cls.cluster_zone_rects(preset, anchor_tile)
+            ok, _ = cls.validate_cluster(zones, building_manager,
+                                         permit_manager, furniture_manager)
+            return zones if ok else None
+        return cls._scan_zones(preset, building_manager, permit_manager,
+                               furniture_manager)
+
+    @classmethod
+    def get_anchor_preview(cls, preset_id, anchor_tile,
+                           building_manager, permit_manager, furniture_manager=None):
+        """Ghost-preview helper for the placement UI: returns
+        ({zone_name: (x, y, w, h)}, valid_bool) without mutating the world."""
+        preset = cls.get_preset(preset_id)
+        if not preset or anchor_tile is None:
+            return {}, False
+        zones = cls.cluster_zone_rects(preset, anchor_tile)
+        ok, _ = cls.validate_cluster(zones, building_manager,
+                                     permit_manager, furniture_manager)
+        return zones, ok
+
+    @classmethod
+    def cluster_zone_rects(cls, preset, anchor_tile):
+        """Pure geometry for player-picked placement.
+
+        ``anchor_tile`` is the HOUSE-CENTER tile; the house sits at
+        anchor - (w/2, h/2) and every other zone is offset from the house
+        top-left via the preset's ``cluster`` config block."""
+        house_cfg = preset.get("house") or {}
+        hw, hh = int(house_cfg.get("width", 0) or 0), int(house_cfg.get("height", 0) or 0)
+        if hw <= 0 or hh <= 0:
+            return {}
+        ax, ay = anchor_tile
+        hx, hy = ax - hw // 2, ay - hh // 2
+        cluster = preset.get("cluster") or {}
+        zones = {}
+
+        def _zone(name):
+            off = cluster.get(name) or {}
+            return hx + int(off.get("dx", 0) or 0), hy + int(off.get("dy", 0) or 0)
+
+        zones["house"] = (hx, hy, hw, hh)
+        if preset.get("market"):
+            mc = preset["market"]
+            mx, my = _zone("market")
+            zones["market"] = (mx, my, int(mc["width"]), int(mc["height"]))
+        if preset.get("landlord_storage"):
+            sx, sy = _zone("storage")
+            zones["storage"] = (sx, sy,
+                                int(preset.get("storage_permit_width", 6) or 6),
+                                int(preset.get("storage_permit_height", 6) or 6))
+        if preset.get("farm"):
+            fx, fy = _zone("farm")
+            fc = preset["farm"]
+            zones["farm"] = (fx, fy, int(fc["width"]), int(fc["height"]))
+        for prop in cluster.get("props") or []:
+            bcfg = BUILDING_TYPES.get(prop.get("building")) or {}
+            fw = int(bcfg.get("width_tiles", 1) or 1)
+            fh = int(bcfg.get("height_tiles", 1) or 1)
+            zones[f"prop_{prop.get('building')}"] = (
+                hx + int(prop.get("dx", 0) or 0),
+                hy + int(prop.get("dy", 0) or 0), fw, fh)
+        return zones
+
+    @classmethod
+    def validate_cluster(cls, zones, building_manager, permit_manager,
+                         furniture_manager=None):
+        """All zone rects must be land and clear of existing
+        permits/buildings/furniture. Permit zones may not overlap each
+        other; ``prop_*`` zones (toilet, well, ...) may sit INSIDE a permit
+        zone (e.g. the well inside the storage yard) but not on each other.
+        Returns (ok, bad_zone)."""
+        seen_permits = set()
+        seen_props = set()
+        for name, (x, y, w, h) in zones.items():
+            rect = {(x + dx, y + dy) for dx in range(w) for dy in range(h)}
+            if name.startswith("prop_"):
+                if rect & seen_props:
+                    return False, name
+                seen_props |= rect
+            else:
+                if rect & seen_permits:
+                    return False, name
+                seen_permits |= rect
+            if any(not is_land_tile(tx, ty) for tx, ty in rect):
+                return False, name
+            if cls._rect_blocked(rect, building_manager, permit_manager,
+                                 furniture_manager):
+                return False, name
+        return True, None
+
+    @classmethod
+    def _scan_zones(cls, preset, building_manager, permit_manager,
+                    furniture_manager):
+        """Auto-scan fallback: find each zone independently outward from the
+        world origin (used when the player does not pick a location)."""
+        pad = int(preset.get("permit_padding", 0) or 0)
+        used_tiles = set()
+        zones = {}
+
+        house_cfg = preset.get("house")
+        if house_cfg:
+            hw, hh = int(house_cfg["width"]), int(house_cfg["height"])
+            zx, zy = cls._find_land_origin(
+                hw + pad * 2, hh + pad * 2, used_tiles,
+                building_manager, permit_manager, furniture_manager)
+            if zx is None:
+                return None
+            zones["house"] = (zx, zy, hw + pad * 2, hh + pad * 2)
+            used_tiles.update((gx, gy)
+                              for gx in range(zx, zx + hw + pad * 2)
+                              for gy in range(zy, zy + hh + pad * 2))
+
+        market_cfg = preset.get("market")
+        if market_cfg:
+            mw, mh = int(market_cfg["width"]), int(market_cfg["height"])
+            zx, zy = cls._find_land_origin(
+                mw + pad * 2, mh + pad * 2, used_tiles,
+                building_manager, permit_manager, furniture_manager)
+            if zx is not None:
+                zones["market"] = (zx, zy, mw + pad * 2, mh + pad * 2)
+                used_tiles.update((gx, gy)
+                                  for gx in range(zx, zx + mw + pad * 2)
+                                  for gy in range(zy, zy + mh + pad * 2))
+
+        farm_cfg = preset.get("farm")
+        if farm_cfg:
+            fw, fh = int(farm_cfg["width"]), int(farm_cfg["height"])
+            zx, zy = cls._find_land_origin(
+                fw, fh, used_tiles, building_manager, permit_manager,
+                furniture_manager)
+            if zx is not None:
+                zones["farm"] = (zx, zy, fw, fh)
+                used_tiles.update((gx, gy)
+                                  for gx in range(zx, zx + fw)
+                                  for gy in range(zy, zy + fh))
+
+        if preset.get("landlord_storage"):
+            sw = int(preset.get("storage_permit_width", 6) or 6)
+            sh = int(preset.get("storage_permit_height", 6) or 6)
+            zx, zy = cls._find_land_origin(
+                sw, sh, used_tiles, building_manager, permit_manager,
+                furniture_manager)
+            if zx is not None:
+                zones["storage"] = (zx, zy, sw, sh)
+
+        # Props are defined relative to the house top-left; in scan mode the
+        # house zone is already resolved, so anchor them there and keep only
+        # the ones that land on valid free tiles.
+        if "house" in zones:
+            hx, hy = zones["house"][0] + pad, zones["house"][1] + pad
+            cluster = preset.get("cluster") or {}
+            for prop in cluster.get("props") or []:
+                bcfg = BUILDING_TYPES.get(prop.get("building")) or {}
+                fw = int(bcfg.get("width_tiles", 1) or 1)
+                fh = int(bcfg.get("height_tiles", 1) or 1)
+                px = hx + int(prop.get("dx", 0) or 0)
+                py = hy + int(prop.get("dy", 0) or 0)
+                rect = {(px + dx, py + dy) for dx in range(fw) for dy in range(fh)}
+                if rect & used_tiles:
+                    continue
+                if any(not is_land_tile(tx, ty) for tx, ty in rect):
+                    continue
+                if cls._rect_blocked(rect, building_manager, permit_manager,
+                                     furniture_manager):
+                    continue
+                zones[f"prop_{prop.get('building')}"] = (px, py, fw, fh)
+
+        return zones
+
+    @classmethod
+    def _find_free_tile_beside(cls, zx, zy, zw, zh, building_manager,
+                               permit_manager, furniture_manager):
+        """First free 1x1 tile adjacent to a zone rect, scanning the right
+        edge first, then bottom, left, and top. Used to park the Lord
+        Treasury chest beside the storage yard on open ground."""
+        candidates = (
+            [(zx + zw, y) for y in range(zy, zy + zh)]
+            + [(x, zy + zh) for x in range(zx, zx + zw)]
+            + [(zx - 1, y) for y in range(zy + zh - 1, zy - 1, -1)]
+            + [(x, zy - 1) for x in range(zx + zw - 1, zx - 1, -1)]
+        )
+        for cx, cy in candidates:
+            if not is_land_tile(cx, cy):
+                continue
+            if cls._rect_blocked({(cx, cy)}, building_manager, permit_manager,
+                                 furniture_manager):
+                continue
+            return cx, cy
+        return None
+
+    @classmethod
+    def _scatter_storage_items(cls, stockpile_manager, items, ox, oy, w, h,
+                               exclude_tiles=None):
         """Drop preset goods as loose landlord-owned stacks inside the storage
         yard, split into MAX_STACK_SIZE chunks and spread across tiles."""
-        tiles = [(ox + dx, oy + dy) for dy in range(h) for dx in range(w)]
+        skip = exclude_tiles or set()
+        tiles = [(ox + dx, oy + dy) for dy in range(h) for dx in range(w)
+                 if (ox + dx, oy + dy) not in skip]
         idx = 0
         for item, amount in items.items():
             remaining = int(amount)

@@ -1,6 +1,12 @@
 """Shared workplace discovery and worker assignment helpers."""
 
+import math
+
 from game.data.config import DEDICATED_JOBS, TILE_SIZE
+
+# Jobs a villager may hold while still counting as "available" for auto-sort,
+# mirroring find_closest_unassigned_household_worker semantics.
+AUTO_SORT_AVAILABLE_JOBS = ("Farmer", "Unassigned", "Unemployed", "Peasant", None, "")
 
 
 def get_job_workplaces(job_id, permit_manager, furniture_manager, building_manager=None):
@@ -110,3 +116,127 @@ def unassign_workplace_worker(job_id, workplace, worker_id, villager_manager):
     if worker:
         worker.set_job("Unassigned")
     return worker is not None
+
+
+def _workplace_center_px(kind, obj):
+    """World-pixel center of any workplace kind (permit/furniture/building)."""
+    w = getattr(obj, "tiles_w", getattr(obj, "type_cfg", {}).get("width_tiles", 1))
+    h = getattr(obj, "tiles_h", getattr(obj, "type_cfg", {}).get("height_tiles", 1))
+    return ((obj.grid_x + w / 2.0) * TILE_SIZE,
+            (obj.grid_y + h / 2.0) * TILE_SIZE)
+
+
+def auto_sort_all_workers(permit_manager, furniture_manager, villager_manager,
+                          building_manager=None, job_filter=None):
+    """Full workforce recalibration across every workplace kind (permits,
+    furniture, buildings).
+
+    Clears each dedicated-job workplace roster once (shared workplaces like
+    construction permits serve several jobs), resets those workers to
+    Unassigned, then greedily assigns the closest available villagers to the
+    nearest vacancies. Returns the number of assignments made."""
+    from game.world.permits import get_villager_home_position
+
+    if not villager_manager:
+        return 0
+    all_villagers = villager_manager.get_all_villagers()
+    villager_by_id = {str(v.id): v for v in all_villagers}
+
+    jobs = [job_id for job_id, job_cfg in DEDICATED_JOBS.items()
+            if job_id != "Unassigned"
+            and job_cfg.get("auto_sortable", True)
+            and (not job_filter or job_id == job_filter)]
+
+    # Phase 1: gather workplaces per job and wipe each roster exactly once.
+    workplaces_by_job = {}
+    cleared = set()
+    for job_id in jobs:
+        workplaces = get_job_workplaces(job_id, permit_manager, furniture_manager, building_manager)
+        workplaces_by_job[job_id] = workplaces
+        for kind, obj in workplaces:
+            key = (kind, id(obj))
+            if key in cleared:
+                continue
+            cleared.add(key)
+            workers = workplace_workers((kind, obj))
+            for wid in list(workers):
+                worker = villager_by_id.get(str(wid))
+                if worker is not None:
+                    worker.set_job("Unassigned")
+            workers.clear()
+
+    # Phase 2: global greedy fill — every (worker, workplace) candidate sorted
+    # purely by home-to-workplace distance so the nearest villager wins.
+    assigned_now = set()
+    candidates = []
+    for job_id in jobs:
+        for kind, obj in workplaces_by_job[job_id]:
+            capacity = workplace_capacity((kind, obj))
+            if capacity is not None and capacity <= 0:
+                continue
+            cx, cy = _workplace_center_px(kind, obj)
+            for v in all_villagers:
+                if not getattr(v, "is_alive", True):
+                    continue
+                vid = str(v.id)
+                if vid in assigned_now:
+                    continue
+                cur_job = getattr(v, "job", "Farmer")
+                if cur_job not in AUTO_SORT_AVAILABLE_JOBS and cur_job != job_id:
+                    continue
+                hx, hy = get_villager_home_position(v, villager_manager, permit_manager, furniture_manager)
+                candidates.append((math.hypot(cx - hx, cy - hy), vid, job_id, kind, obj))
+
+    candidates.sort(key=lambda c: (c[0], c[1]))
+    made = 0
+    for _dist, vid, job_id, kind, obj in candidates:
+        if vid in assigned_now:
+            continue
+        workers = workplace_workers((kind, obj))
+        capacity = workplace_capacity((kind, obj))
+        if capacity is not None and len(workers) >= capacity:
+            continue
+        worker = villager_by_id.get(vid)
+        if worker is None:
+            continue
+        worker.set_job(job_id)
+        workers.append(worker.id)
+        assigned_now.add(vid)
+        made += 1
+    return made
+
+
+def unassign_all_workers(permit_manager, furniture_manager, villager_manager,
+                         building_manager=None):
+    """Clears every dedicated-job workplace roster and marks those workers
+    Unassigned, so a following auto-sort can recalibrate from scratch.
+    Church permits are skipped (the Priest has a dedicated assignment flow).
+    Returns the number of workers released."""
+    if not villager_manager:
+        return 0
+    villager_by_id = {str(v.id): v for v in villager_manager.get_all_villagers()}
+    released = 0
+    seen = set()
+    collections = [
+        ("permit", getattr(permit_manager, "permits", [])),
+        ("furniture", getattr(furniture_manager, "furnitures", [])),
+        ("building", getattr(building_manager, "buildings", []) if building_manager else []),
+    ]
+    for kind, objects in collections:
+        for obj in objects:
+            if kind == "permit" and getattr(obj, "permit_type", "") == "church":
+                continue
+            workers = getattr(obj, "assigned_workers", None)
+            if not workers:
+                continue
+            key = (kind, id(obj))
+            if key in seen:
+                continue
+            seen.add(key)
+            for wid in list(workers):
+                worker = villager_by_id.get(str(wid))
+                if worker is not None and getattr(worker, "job", "") in DEDICATED_JOBS:
+                    worker.set_job("Unassigned")
+                released += 1
+            workers.clear()
+    return released

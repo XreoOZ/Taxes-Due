@@ -2,7 +2,13 @@
 
 import math
 
-from game.config import PATH_TARGET_FALLBACK_OFFSETS, TILE_SIZE
+from game.config import (
+    PATH_TARGET_FALLBACK_OFFSETS,
+    PATH_STEER_LOOKAHEAD,
+    PATH_STEER_RESCAN_INTERVAL,
+    TILE_SIZE,
+)
+from game.world.pathfinding import get_tiles_along_segment
 
 
 def distance_to_object(target, x, y, tile_size=TILE_SIZE):
@@ -116,6 +122,61 @@ def find_navigation_path(start, target, building_manager=None, furniture_manager
             best_route = route
             best_route_length = route_length
     return best_route or []
+
+
+def steer_towards_visible_waypoint(pos, path, path_index, building_manager,
+                                  furniture_manager=None, tile_size=TILE_SIZE,
+                                  avoid_tiles=None, max_lookahead=None):
+    """Return the furthest waypoint index reachable by a clear straight
+    segment from ``pos``, scanning forward from ``path_index``.
+
+    A* output is only a plan: an actor bumped off the polyline should cut
+    straight to the next visible corner instead of retracing stale
+    intermediate points. Returns ``path_index`` when nothing is skippable.
+    """
+    remaining = len(path) - path_index
+    if remaining <= 1 or building_manager is None:
+        return path_index
+    pathfinder = getattr(building_manager, "pathfinder", None)
+    if pathfinder is None:
+        return path_index
+    lookahead = min(remaining, int(max_lookahead or PATH_STEER_LOOKAHEAD))
+    avoid = set(avoid_tiles) if avoid_tiles else None
+    for j in range(path_index + lookahead - 1, path_index, -1):
+        cand = path[j]
+        if avoid and get_tiles_along_segment(pos, cand, tile_size) & avoid:
+            continue
+        if pathfinder.is_segment_clear(
+            pos, cand, building_manager,
+            tile_size=tile_size, furniture_manager=furniture_manager,
+        ):
+            return j
+    return path_index
+
+
+def resolve_steer_index(entity, pos, path, path_index, dt, building_manager,
+                       furniture_manager=None, tile_size=TILE_SIZE,
+                       avoid_tiles=None):
+    """Throttled wrapper around steer_towards_visible_waypoint.
+
+    The line-of-sight scan walks every wall/furniture rect, so it is capped
+    per actor by PATH_STEER_RESCAN_INTERVAL and invalidated whenever the
+    actor's path object is replaced."""
+    timer = getattr(entity, "_steer_timer", 0.0) - dt
+    if (timer <= 0.0
+            or getattr(entity, "_steer_path", None) is not path):
+        idx = steer_towards_visible_waypoint(
+            pos, path, path_index, building_manager,
+            furniture_manager=furniture_manager, tile_size=tile_size,
+            avoid_tiles=avoid_tiles,
+        )
+        entity._steer_timer = PATH_STEER_RESCAN_INTERVAL
+        entity._steer_path = path
+        entity._steer_idx = idx
+    else:
+        entity._steer_timer = timer
+        idx = getattr(entity, "_steer_idx", path_index)
+    return max(path_index, min(idx, len(path) - 1))
 
 
 def find_nearest_target(start, candidates, get_position, building_manager=None,
