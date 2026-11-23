@@ -603,7 +603,11 @@ def main():
                         try:
                             wb = toolmaker_catalog_modal.workbench or selected_furniture
                             toolmaker_catalog_modal.close()
-                            _, tool_name, qty_str = tool_action.split("_", 2)
+                            # Format: tool_order_{tool_name}_{qty} — tool names
+                            # contain underscores (e.g. Watering_Can), so split
+                            # from the RIGHT: last _ segment is the quantity.
+                            payload = tool_action[len("tool_order_"):]
+                            tool_name, qty_str = payload.rsplit("_", 1)
                             subject, err = ToolmakerSystem.create_tool_order(
                                 wb, tool_name, int(qty_str), payer_family_id=None,
                                 building_manager=building_manager, villager_manager=villager_manager)
