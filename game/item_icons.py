@@ -84,6 +84,36 @@ def draw_item_icon(surface, item_name, cx, cy, size=12):
         # Ashlar block chamfer lines
         pygame.draw.line(surface, (226, 232, 240), (s_rect.left + 1, s_rect.top + 1), (s_rect.right - 2, s_rect.top + 1), 1)
 
+    # 7b. RESOURCE: Iron Ore — rusty rock chunk with molten flecks
+    elif "ore" in name_low:
+        ore_rect = pygame.Rect(cx - int(size * 0.85), cy - int(size * 0.6),
+                               int(size * 1.7), int(size * 1.2))
+        pygame.draw.rect(surface, (120, 72, 40), ore_rect, border_radius=3)
+        pygame.draw.rect(surface, (80, 45, 20), ore_rect, 1, border_radius=3)
+        # Ore veins
+        pygame.draw.circle(surface, (249, 115, 22), (cx - int(size * 0.3), cy - 1), max(1, int(size * 0.18)))
+        pygame.draw.circle(surface, (249, 115, 22), (cx + int(size * 0.25), cy + 2), max(1, int(size * 0.14)))
+        pygame.draw.circle(surface, (217, 119, 6), (cx + 1, cy - int(size * 0.25)), max(1, int(size * 0.12)))
+        pygame.draw.line(surface, (160, 90, 45), (ore_rect.left + 2, ore_rect.top + 2),
+                         (ore_rect.right - 3, ore_rect.top + 1), 1)
+
+    # 7c. RESOURCE: Iron Bar — cast trapezoid ingot
+    elif "bar" in name_low:
+        top_w = int(size * 0.85)
+        bot_w = int(size * 0.55)
+        bar_h = int(size * 0.9)
+        top_y, bot_y = cy - bar_h // 2, cy + bar_h // 2
+        pts = [(cx - top_w, top_y), (cx + top_w, top_y),
+               (cx + bot_w, bot_y), (cx - bot_w, bot_y)]
+        pygame.draw.polygon(surface, (148, 163, 184), pts)
+        pygame.draw.polygon(surface, (100, 116, 139), pts, 1)
+        # Top face highlight + rust streak
+        pygame.draw.polygon(surface, (203, 213, 225),
+                            [(cx - top_w + 2, top_y + 1), (cx + top_w - 2, top_y + 1),
+                             (cx + bot_w - 1, top_y + bar_h // 3), (cx - bot_w + 1, top_y + bar_h // 3)])
+        pygame.draw.line(surface, (180, 83, 9), (cx - bot_w // 2, bot_y - 1),
+                         (cx + bot_w // 2, bot_y - 1), 1)
+
     # 8. TOOL: Hoe
     elif "hoe" in name_low:
         # Wooden shaft
@@ -137,8 +167,8 @@ def draw_item_icon(surface, item_name, cx, cy, size=12):
         pygame.draw.line(surface, (120, 53, 15), (cx - 1, cy - r), (cx + 1, cy - r - 3), 1)
         pygame.draw.polygon(surface, (34, 197, 94), [(cx + 1, cy - r - 2), (cx + 4, cy - r - 4), (cx + 2, cy - r)])
 
-    # 14. FOOD: Fish
-    elif "fish" in name_low:
+    # 14. FOOD: Fish (exclude "fishing rod" — handled in tools below)
+    elif "fish" in name_low and "rod" not in name_low and "fishing" not in name_low:
         f_rect = pygame.Rect(cx - size + 2, cy - int(size * 0.5), int(size * 1.5), int(size * 1.0))
         pygame.draw.ellipse(surface, (56, 189, 248), f_rect)
         pygame.draw.ellipse(surface, (14, 116, 144), f_rect, 1)
@@ -202,6 +232,46 @@ def draw_item_icon(surface, item_name, cx, cy, size=12):
         pygame.draw.polygon(surface, (203, 213, 225), [(hx - 2, hy + 2), (hx + 2, hy - 2), (hx + 6, hy - 5)])
         pygame.draw.line(surface, (100, 116, 139), (hx - 2, hy + 2), (hx + 6, hy - 5), 1)
         pygame.draw.line(surface, (226, 232, 240), (hx + 1, hy - 2), (hx + 4, hy - 4), 1)
+
+    # Toolmaker-forge tools: hammer, tongs, rolling pin, peel, fishing rod.
+    elif "hammer" in name_low:
+        pygame.draw.line(surface, (139, 90, 43), (cx - size + 2, cy + size - 2), (cx + size - 4, cy - size + 4), 2)
+        hx, hy = cx + size - 4, cy - size + 4
+        pygame.draw.line(surface, (100, 116, 139), (hx - 4, hy - 4), (hx + 5, hy + 5), 5)
+        pygame.draw.line(surface, (203, 213, 225), (hx - 3, hy - 3), (hx - 1, hy - 1), 1)
+    elif "tongs" in name_low:
+        # Two curved steel arms pinching at the tips
+        pygame.draw.arc(surface, (203, 213, 225),
+                        pygame.Rect(cx - size + 1, cy - int(size * 0.6), int(size * 1.4), int(size * 1.3)),
+                        0.2, 1.6, 2)
+        pygame.draw.arc(surface, (148, 163, 184),
+                        pygame.Rect(cx - int(size * 0.4), cy - int(size * 0.6), int(size * 1.4), int(size * 1.3)),
+                        4.4, 5.9, 2)
+        pygame.draw.circle(surface, (139, 90, 43), (cx - int(size * 0.5), cy + int(size * 0.55)), 2)
+        pygame.draw.circle(surface, (139, 90, 43), (cx + int(size * 0.45), cy + int(size * 0.55)), 2)
+    elif "rolling" in name_low or "pin" in name_low:
+        # Horizontal flour-dusted cylinder
+        pin_rect = pygame.Rect(cx - size + 1, cy - int(size * 0.4), int(size * 2 - 2), int(size * 0.8))
+        pygame.draw.rect(surface, (210, 180, 140), pin_rect, border_radius=int(size * 0.3))
+        pygame.draw.rect(surface, (160, 120, 80), pin_rect, 1, border_radius=int(size * 0.3))
+        pygame.draw.line(surface, (255, 255, 255), (pin_rect.left + 3, pin_rect.centery - 1),
+                         (pin_rect.right - 3, pin_rect.centery - 1), 1)
+        pygame.draw.line(surface, (139, 90, 43), (cx - int(size * 0.3), cy - int(size * 0.4)),
+                         (cx - int(size * 0.3), cy - int(size * 0.7)), 2)
+        pygame.draw.line(surface, (139, 90, 43), (cx + int(size * 0.3), cy - int(size * 0.4)),
+                         (cx + int(size * 0.3), cy - int(size * 0.7)), 2)
+    elif "peel" in name_low:
+        # Small peeling knife: angled blade + grip
+        pygame.draw.line(surface, (139, 90, 43), (cx - size + 1, cy + size - 2), (cx + 2, cy - 2), 2)
+        pygame.draw.polygon(surface, (203, 213, 225),
+                            [(cx - 1, cy - 4), (cx + 6, cy - 7), (cx + 8, cy - 3), (cx + 2, cy)])
+        pygame.draw.line(surface, (100, 116, 139), (cx - 1, cy - 4), (cx + 8, cy - 3), 1)
+    elif "fishing" in name_low or "rod" in name_low:
+        # Angled rod, reel, and line with bobber
+        pygame.draw.line(surface, (139, 90, 43), (cx - size + 2, cy + size - 2), (cx + size - 4, cy - size + 4), 2)
+        pygame.draw.circle(surface, (203, 213, 225), (cx + 1, cy + 1), max(2, int(size * 0.22)), 1)
+        pygame.draw.line(surface, (226, 232, 240), (cx + size - 4, cy - size + 4), (cx + size - 1, cy + size - 6), 1)
+        pygame.draw.circle(surface, (239, 68, 68), (cx + size - 1, cy + size - 6), max(1, int(size * 0.18)))
 
     # 16. GENERIC / FALLBACK: Supplies Crate
     else:
