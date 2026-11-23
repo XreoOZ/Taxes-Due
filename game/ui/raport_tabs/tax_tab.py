@@ -66,7 +66,8 @@ class TaxMixin:
             villager_manager=villager_manager,
             furniture_manager=furniture_manager,
             building_manager=building_manager,
-            stockpile_manager=stockpile_manager
+            stockpile_manager=stockpile_manager,
+            permit_manager=permit_manager,
         )
         self.cached_wealth_data = wealth_data
 

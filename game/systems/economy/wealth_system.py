@@ -52,7 +52,8 @@ class VillageWealthSystem:
 
     @classmethod
     def calculate_village_wealth(cls, resources=None, villager_manager=None, furniture_manager=None,
-                                 building_manager=None, stockpile_manager=None, force_recompute=False):
+                                 building_manager=None, stockpile_manager=None, permit_manager=None,
+                                 force_recompute=False):
         """
         Aggregates actual physical coin ownership across the village without duplication.
         Crucial: Household Possession is a mirrored record; we read directly from the
@@ -142,6 +143,34 @@ class VillageWealthSystem:
                             )
                             for denom in CURRENCY_DENOMINATIONS:
                                 fam_wallet[denom] += f_wallet[denom]
+
+                    # A2. Unowned chests physically inside this family's
+                    # permit still belong to the household even when
+                    # family_id was never stamped (e.g. chest placed before
+                    # the household was assigned). Count them once.
+                    fam_permit_id = str(getattr(fam, "assigned_permit_id", "") or "")
+                    permit = next((p for p in getattr(permit_manager, "permits", [])
+                                   if str(getattr(p, "id", "")) == fam_permit_id), None) if fam_permit_id else None
+                    if permit is not None:
+                        for furn in furn_list:
+                            if id(furn) in visited_chests:
+                                continue
+                            if getattr(furn, "furniture_type", "") != "household_storage":
+                                continue
+                            if getattr(furn, "family_id", None):
+                                continue
+                            try:
+                                inside = permit.contains_tile(int(furn.grid_x), int(furn.grid_y))
+                            except Exception:
+                                inside = False
+                            if inside:
+                                visited_chests.add(id(furn))
+                                f_wallet = _wallet_with_mirror_fallback(
+                                    getattr(furn, "inventory", None),
+                                    getattr(furn, "currency", None),
+                                )
+                                for denom in CURRENCY_DENOMINATIONS:
+                                    fam_wallet[denom] += f_wallet[denom]
 
                 # B. Coins physically carried in member pockets / personal inventories
                 for m in getattr(fam, "members", []):
