@@ -408,6 +408,7 @@ FURNITURE_TYPES = {
         "placement_anywhere": True,
         "maintainable": False,
         "rotatable": False,
+        "movable": False,
         "station_inventory_mine_bound": True,
         "color_frame": (71, 85, 105),
         "color_roof": (51, 65, 85),

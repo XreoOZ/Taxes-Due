@@ -15,7 +15,7 @@ from game.systems.economy.currency import (
 )
 from game.systems.economy.market_pricing import MarketPricingSystem
 from game.systems.economy.wealth_system import VillageWealthSystem
-from game.systems.economy.household_inventory import canonical_item_name, get_household_possessions
+from game.systems.economy.household_inventory import canonical_item_name
 from game.config import TILE_SIZE
 from game.data.config import (
     HOUSEHOLD_STALL_HAUL_CAPACITY,
@@ -69,29 +69,126 @@ class HouseholdStallSystem:
         )
         inventory[storage_key] = max(0, int(inventory.get(storage_key, 0))) + int(amount)
 
+    @staticmethod
+    def _family_chests(family_id, furniture_manager):
+        """Every installed household_storage chest owned by the family."""
+        if not family_id or not furniture_manager:
+            return []
+        fam_str = str(family_id)
+        furn_list = getattr(furniture_manager, "furnitures",
+                            getattr(furniture_manager, "furniture_list", []))
+        chests, seen = [], set()
+        for f in furn_list or []:
+            if (getattr(f, "furniture_type", "") == "household_storage"
+                    and str(getattr(f, "family_id", "")) == fam_str
+                    and getattr(f, "is_available_for_use", True)
+                    and id(f) not in seen):
+                chests.append(f)
+                seen.add(id(f))
+        # Include the resolved household storage even if its family_id was
+        # never stamped (get_storage_for_family may claim an unowned chest).
+        if hasattr(furniture_manager, "get_storage_for_family"):
+            st = furniture_manager.get_storage_for_family(fam_str)
+            if st is not None and id(st) not in seen:
+                chests.append(st)
+        return chests
+
+    @staticmethod
+    def _family_member_ids(family_id, villager_manager):
+        """Family id plus every member id — both can own loose ground stacks."""
+        ids = {str(family_id)}
+        if villager_manager and hasattr(villager_manager, "get_family_by_id"):
+            fam = villager_manager.get_family_by_id(family_id)
+            if fam:
+                ids.update(str(m.id) for m in getattr(fam, "members", []))
+        return ids
+
+    @classmethod
+    def _household_loose_stacks(cls, family_id, stockpile_manager, villager_manager=None):
+        """Loose ground stacks owned by the household (family or member id)."""
+        if not stockpile_manager or not family_id:
+            return []
+        owner_ids = cls._family_member_ids(family_id, villager_manager)
+        return [s for s in getattr(stockpile_manager, "stacks", [])
+                if getattr(s, "owner_type", None) == "villager"
+                and str(getattr(s, "owner_id", "")) in owner_ids
+                and getattr(s, "amount", 0) > 0]
+
+    @classmethod
+    def _stall_source_stock(cls, family_id, item_name, furniture_manager,
+                            stockpile_manager=None, villager_manager=None):
+        """Quantity of item_name the stall chore can physically source:
+        household chests plus household-owned loose ground stacks."""
+        total = 0
+        for chest in cls._family_chests(family_id, furniture_manager):
+            total += cls._inventory_item_quantity(getattr(chest, "inventory", None), item_name)
+        target = canonical_item_name(item_name)
+        for stack in cls._household_loose_stacks(family_id, stockpile_manager, villager_manager):
+            if canonical_item_name(getattr(stack, "resource_type", "")) == target:
+                total += max(0, int(getattr(stack, "amount", 0) or 0))
+        return total
+
+    @classmethod
+    def _nearest_goods_source(cls, villager, item_name, furniture_manager,
+                              stockpile_manager=None, villager_manager=None,
+                              tile_size=TILE_SIZE):
+        """Nearest household storage point (chest or owned loose stack) that
+        physically holds item_name. Returns (kind, source, x, y, qty) or None."""
+        fam_id = getattr(villager, "family_id", None)
+        vx, vy = getattr(villager, "x", 0.0), getattr(villager, "y", 0.0)
+        target = canonical_item_name(item_name)
+        best = None
+        for chest in cls._family_chests(fam_id, furniture_manager):
+            qty = cls._inventory_item_quantity(getattr(chest, "inventory", None), item_name)
+            if qty <= 0:
+                continue
+            cx, cy = chest.get_world_pos(tile_size)
+            dist = math.hypot(cx - vx, cy - vy)
+            if best is None or dist < best[0]:
+                best = (dist, "chest", chest, cx, cy, qty)
+        for stack in cls._household_loose_stacks(fam_id, stockpile_manager, villager_manager):
+            if canonical_item_name(getattr(stack, "resource_type", "")) != target:
+                continue
+            qty = max(0, int(getattr(stack, "amount", 0) or 0))
+            if qty <= 0:
+                continue
+            sx = (getattr(stack, "grid_x", 0) + 0.5) * tile_size
+            sy = (getattr(stack, "grid_y", 0) + 0.5) * tile_size
+            dist = math.hypot(sx - vx, sy - vy)
+            if best is None or dist < best[0]:
+                best = (dist, "stack", stack, sx, sy, qty)
+        if best is None:
+            return None
+        return (best[1], best[2], best[3], best[4], best[5])
+
+    @classmethod
+    def _take_goods_source(cls, kind, source, item_name, amount, stockpile_manager=None):
+        """Withdraw up to `amount` of item_name from a picked goods source."""
+        if kind == "stack":
+            if stockpile_manager and hasattr(stockpile_manager, "take_from_stack"):
+                return stockpile_manager.take_from_stack(source, amount)
+            return 0
+        inventory = getattr(source, "inventory", None)
+        if isinstance(inventory, dict):
+            return cls._take_inventory_item(inventory, item_name, amount)
+        return 0
+
     @classmethod
     def get_household_owned_sale_items(cls, family_id, furniture_manager,
                                        villager_manager=None, stockpile_manager=None):
-        """Return tradeable goods possessed by this household using shared inventory accounting."""
+        """Tradeable goods the household stall can physically haul: stock held
+        in household chests or household-owned loose ground stacks. Items only
+        carried in member pockets or in-transit grants are not listed because
+        the stall chore cannot source them."""
         if not family_id or not furniture_manager:
             return set()
-        family = villager_manager.get_family_by_id(family_id) if villager_manager else None
-        if family:
-            possessions = get_household_possessions(
-                family, furniture_manager=furniture_manager,
-                stockpile_manager=stockpile_manager,
-            )
-        else:
-            chest = furniture_manager.get_storage_for_family(str(family_id))
-            inventory = getattr(chest, "inventory", {}) if chest else {}
-            possessions = {
-                canonical_item_name(name): amount
-                for name, amount in inventory.items()
-                if int(amount or 0) > 0
-            }
         return {
-            item_name for item_name, storage_item in MARKET_TRADEABLE_ITEMS.items()
-            if possessions.get(canonical_item_name(storage_item), 0) > 0
+            item_name for item_name in MARKET_TRADEABLE_ITEMS
+            if cls._stall_source_stock(
+                family_id, item_name, furniture_manager,
+                stockpile_manager=stockpile_manager,
+                villager_manager=villager_manager,
+            ) > 0
         }
 
     @classmethod
@@ -190,13 +287,14 @@ class HouseholdStallSystem:
         return list(market.sale_items)
 
     @classmethod
-    def calculate_allocatable_goods(cls, market, family_id, item_name, furniture_manager):
+    def calculate_allocatable_goods(cls, market, family_id, item_name, furniture_manager,
+                                    stockpile_manager=None, villager_manager=None):
         """
         Calculates the maximum quantity of an item that may be hauled to the market.
         Formula:
             alloc_pct = market.item_allocations.get(item_name, 0)
-            chest_stock = total of item_name in household storage chest
-            max_allocatable = floor(chest_stock * (alloc_pct / 100.0))
+            household_stock = total of item_name in household chests + owned loose stacks
+            max_allocatable = floor(household_stock * (alloc_pct / 100.0))
             market_stock = market.inventory.get(item_name, 0)
             in_transit = carried by hauling villager
             available_to_haul = max(0, max_allocatable - (market_stock + in_transit))
@@ -212,11 +310,13 @@ class HouseholdStallSystem:
         if pct <= 0:
             return 0
 
-        chest = furniture_manager.get_storage_for_family(str(family_id))
-        if not chest or not hasattr(chest, "inventory") or not isinstance(chest.inventory, dict):
-            return 0
-
-        chest_stock = cls._inventory_item_quantity(chest.inventory, item_name)
+        # Stock the stall chore can physically reach: every household chest
+        # plus household-owned loose ground stacks (canonical-name matched).
+        chest_stock = cls._stall_source_stock(
+            family_id, item_name, furniture_manager,
+            stockpile_manager=stockpile_manager,
+            villager_manager=villager_manager,
+        )
         if chest_stock <= 0:
             return 0
 
@@ -248,8 +348,12 @@ class HouseholdStallSystem:
         return None
 
     @classmethod
-    def request_goods_restock(cls, market, item_name, amount, furniture_manager):
-        available = cls.calculate_allocatable_goods(market, getattr(market, "assigned_family_id", None), item_name, furniture_manager)
+    def request_goods_restock(cls, market, item_name, amount, furniture_manager,
+                              stockpile_manager=None, villager_manager=None):
+        available = cls.calculate_allocatable_goods(
+            market, getattr(market, "assigned_family_id", None), item_name, furniture_manager,
+            stockpile_manager=stockpile_manager, villager_manager=villager_manager,
+        )
         if available <= 0:
             return 0
         requests = getattr(market, "_stall_requested_qty", None)
@@ -324,7 +428,8 @@ class HouseholdStallSystem:
 
     @classmethod
     def check_and_start_stall_chores(cls, villager, building_manager, furniture_manager,
-                                     all_entities=None, allow_restock=True):
+                                     all_entities=None, allow_restock=True,
+                                     stockpile_manager=None, villager_manager=None):
         """
         Called during villager free time routines:
         1. Check if household stall has earned coins to collect back to chest.
@@ -351,14 +456,19 @@ class HouseholdStallSystem:
                     if o_task.startswith("HAULING_STALL_"):
                         return False
 
+        # Managers are optional; fall back to the references villagers cache on themselves.
+        stockpile_manager = stockpile_manager or getattr(villager, "stockpile_manager", None)
+        villager_manager = villager_manager or getattr(villager, "villager_manager", None)
+
         chest = furniture_manager.get_storage_for_family(fam_str) if furniture_manager else None
-        if not chest:
+        if not chest and not cls._household_loose_stacks(fam_id, stockpile_manager, villager_manager):
             return False
 
         # A. Priority 1: Household Coin Collection from Market
+        # (requires a chest to deliver earnings into)
         mkt_curr = normalize_wallet(getattr(market, "currency", {}))
         total_coins = sum(mkt_curr.values())
-        if total_coins > 0:
+        if total_coins > 0 and chest:
             villager.task = "HAULING_STALL_COINS_FETCH"
             villager.stall_target_market = market
             villager.say("Going to collect stall earnings from Market...", duration=2.5)
@@ -368,7 +478,10 @@ class HouseholdStallSystem:
         if not allow_restock:
             return False
         for item_name in getattr(market, "sale_items", []):
-            alloc_qty = cls.calculate_allocatable_goods(market, fam_id, item_name, furniture_manager)
+            alloc_qty = cls.calculate_allocatable_goods(
+                market, fam_id, item_name, furniture_manager,
+                stockpile_manager=stockpile_manager, villager_manager=villager_manager,
+            )
             if alloc_qty > 0:
                 villager.task = "HAULING_STALL_GOODS_FETCH"
                 villager.stall_target_market = market
@@ -382,7 +495,7 @@ class HouseholdStallSystem:
     @classmethod
     def execute_stall_chores_tick(cls, villager, dt, building_manager, furniture_manager,
                                  all_entities=None, player=None, tile_size=TILE_SIZE,
-                                 stockpile_manager=None):
+                                 stockpile_manager=None, villager_manager=None):
         """
         Executes physical movement and transactions for stall hauling and coin collection.
         Returns True if a stall chore is active, False otherwise.
@@ -485,48 +598,55 @@ class HouseholdStallSystem:
         # 3. GOODS HAULING: FETCH GOODS FROM HOUSEHOLD CHEST
         # -------------------------------------------------------------
         elif task == "HAULING_STALL_GOODS_FETCH":
-            if not chest or not market or market not in getattr(building_manager, "buildings", []):
+            item_name = getattr(villager, "stall_target_item", None)
+            if (not market or market not in getattr(building_manager, "buildings", [])
+                    or not item_name or item_name not in getattr(market, "sale_items", [])):
                 villager.task = "IDLE"
                 villager.stall_target_market = None
+                villager.stall_target_item = None
+                villager.stall_target_qty = 0
                 return False
 
-            cx, cy = chest.get_world_pos(tile_size)
-            arrived = villager._move_towards(cx, cy, dt, arrival_dist=24,
+            # Source can be any household chest or household-owned loose stack;
+            # re-picked every tick so depleted sources are skipped automatically.
+            vm = villager_manager or getattr(villager, "villager_manager", None)
+            source = cls._nearest_goods_source(
+                villager, item_name, furniture_manager,
+                stockpile_manager=stockpile_manager, villager_manager=vm,
+                tile_size=tile_size,
+            )
+            if source is None:
+                villager.task = "IDLE"
+                villager.stall_target_market = None
+                villager.stall_target_item = None
+                villager.stall_target_qty = 0
+                return False
+
+            src_kind, src_obj, src_x, src_y, src_qty = source
+            arrived = villager._move_towards(src_x, src_y, dt, arrival_dist=24,
                                              all_entities=all_entities, player=player,
                                              building_manager=building_manager,
                                              furniture_manager=furniture_manager,
-                                             interaction_target=chest)
+                                             interaction_target=src_obj)
             if arrived:
-                item_name = getattr(villager, "stall_target_item", None)
                 target_qty = getattr(villager, "stall_target_qty", HOUSEHOLD_STALL_HAUL_CAPACITY)
-                if (not item_name or item_name not in getattr(market, "sale_items", [])
-                        or not hasattr(chest, "inventory")):
-                    villager.task = "IDLE"
-                    villager.stall_target_market = None
-                    villager.stall_target_item = None
-                    villager.stall_target_qty = 0
-                    return False
+                take_amt = min(target_qty, src_qty)
+                taken = cls._take_goods_source(src_kind, src_obj, item_name, take_amt, stockpile_manager)
+                if taken <= 0:
+                    # Source raced dry; the next tick re-picks another source.
+                    return True
 
-                avail_in_chest = cls._inventory_item_quantity(chest.inventory, item_name)
-                take_amt = min(target_qty, avail_in_chest)
-                if take_amt <= 0:
-                    villager.task = "IDLE"
-                    villager.stall_target_market = None
-                    return False
-
-                # Withdraw from chest into villager inventory (now in-transit!)
-                cls._take_inventory_item(chest.inventory, item_name, take_amt)
-
-                villager.inventory[item_name] = villager.inventory.get(item_name, 0) + take_amt
+                # Withdraw from source into villager inventory (now in-transit!)
+                villager.inventory[item_name] = villager.inventory.get(item_name, 0) + taken
                 villager.stall_carried_item = item_name
-                villager.stall_carried_qty = take_amt
+                villager.stall_carried_qty = taken
 
                 # Track in-transit quantity on market so allocation does not duplicate
                 if not hasattr(market, "_stall_in_transit"):
                     market._stall_in_transit = {}
-                market._stall_in_transit[item_name] = market._stall_in_transit.get(item_name, 0) + take_amt
+                market._stall_in_transit[item_name] = market._stall_in_transit.get(item_name, 0) + taken
 
-                villager.say(f"Carrying {take_amt} {item_name} to Market stall.", duration=2.5)
+                villager.say(f"Carrying {taken} {item_name} to Market stall.", duration=2.5)
                 villager.task = "HAULING_STALL_GOODS_DELIVER"
             return True
 

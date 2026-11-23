@@ -183,7 +183,8 @@ class RaportUI(
         # Item Distribution State (Taxes tab)
         self.show_item_dist_dialog = False
         self.item_dist_view = "production"      # "production" | "stock"
-        self.item_dist_checked = set()          # item names with chart expanded
+        self.item_dist_checked = set()          # item names with chart expanded (production view)
+        self.item_dist_stock_checked = set()    # item names selected in VILLAGE STOCK view
         self.item_dist_scroll_prod = 0
         self.item_dist_scroll_stock = 0
         self.item_dist_close_rect = None
@@ -1519,10 +1520,13 @@ class RaportUI(
                         return f"item_dist_view_{view_key}"
                 for item_name, r in getattr(self, "item_dist_check_rects", {}).items():
                     if r and r.collidepoint(mouse_pos):
-                        if item_name in self.item_dist_checked:
-                            self.item_dist_checked.discard(item_name)
+                        pool = (getattr(self, "item_dist_stock_checked", set())
+                                if self.item_dist_view == "stock"
+                                else self.item_dist_checked)
+                        if item_name in pool:
+                            pool.discard(item_name)
                         else:
-                            self.item_dist_checked.add(item_name)
+                            pool.add(item_name)
                         return f"item_dist_toggle_{item_name}"
                 return None
 

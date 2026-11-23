@@ -510,6 +510,37 @@ class BuilderSystem:
             total += to_copper(normalize_wallet(wallet))
         return total
 
+    @staticmethod
+    def _member_fee_errand_active(member):
+        """True while this villager is mid-flight or has a queued builder-fee
+        payment errand (retrieve -> deliver -> PAID). ``builder_payment_order_id``
+        is also set by refund-collection errands, which serializes the same way."""
+        if member is None:
+            return False
+        if str(getattr(member, "task", "") or "").startswith("BUILDER_FEE_"):
+            return True
+        if getattr(member, "builder_payment_order_id", None) not in (None, ""):
+            return True
+        for entry in getattr(member, "pending_commission_tasks", []) or []:
+            if isinstance(entry, dict) and str(entry.get("task", "") or "").startswith("BUILDER_FEE_"):
+                return True
+        legacy = getattr(member, "pending_commission_task", None)
+        return bool(legacy) and str(legacy).startswith("BUILDER_FEE_")
+
+    @classmethod
+    def _family_fee_errand_active(cls, family):
+        """True while any living member of the household is mid-flight (or has
+        a queued) builder-commission payment errand.
+
+        Serializes household commission payments per family: one errand runs
+        to completion before the next pending order for the same family is
+        scheduled. Payers of OTHER families are unaffected.
+        """
+        for member in getattr(family, "members", []) or []:
+            if getattr(member, "is_alive", True) and cls._member_fee_errand_active(member):
+                return True
+        return False
+
     @classmethod
     def _assign_payment(cls, order_furniture, villager_manager, furniture_manager, stockpile_manager=None):
         order = order_furniture.construction_order
@@ -520,6 +551,14 @@ class BuilderSystem:
             chest = furniture_manager.get_storage_for_family(family_id)
             fee = int(order["price_copper"])
             if cls._family_coin_total_copper(family_id, chest, stockpile_manager, villager_manager) < fee:
+                order["status"] = "AWAITING_PAYMENT"
+                return False
+            # Serialize household commission payments: while one member is
+            # mid-flight (or queued) on a builder-fee errand, further orders
+            # for THIS family wait for it to finish (retrieve -> deliver ->
+            # PAID). Without this, every pending order queues its own errand
+            # on the same representative and the schedule preempts itself.
+            if cls._family_fee_errand_active(family):
                 order["status"] = "AWAITING_PAYMENT"
                 return False
             payer = family.get_available_recovery_representative() if hasattr(family, "get_available_recovery_representative") else survivors[0]

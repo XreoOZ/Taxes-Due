@@ -201,9 +201,11 @@ class TaxMixin:
         pygame.draw.rect(surface, (56, 189, 248), (dlg_x, dlg_y, dlg_w, dlg_h), width=2, border_radius=upx(10))
         surface.blit(self.font_title.render("Item Distribution", True, (147, 197, 253)),
                      (dlg_x + upx(24), dlg_y + upx(14)))
-        surface.blit(self.font_body.render(
-            "Check items to expand their 10-day production chart.", True, COLOR_TEXT_MUTED),
-            (dlg_x + upx(24), dlg_y + upx(38)))
+        subtitle = ("Check items to expand their 10-day production chart."
+                    if self.item_dist_view == "production"
+                    else "Check items to filter the census; % = share of the selected total.")
+        surface.blit(self.font_body.render(subtitle, True, COLOR_TEXT_MUTED),
+                     (dlg_x + upx(24), dlg_y + upx(38)))
 
         # Close [X]
         self.item_dist_close_rect = pygame.Rect(dlg_x + dlg_w - upx(36), dlg_y + upx(12), upx(22), upx(22))
@@ -312,14 +314,23 @@ class TaxMixin:
                                            cy + upx(36)))
                     cy += row_h
         else:
-            # VILLAGE STOCK view — full physical census
+            # VILLAGE STOCK view — physical census filtered by multi-select.
+            # Every item gets a checkbox row (same pattern as PRODUCTION);
+            # only checked items expand their owner/location breakdown.
             census = village_item_census(
                 villager_manager, furniture_manager, building_manager,
                 stockpile_manager, servant_manager=servant_manager)
             items = sorted(census.keys(), key=lambda k: -census[k]["total"])
-            content_h = upx(40) if not items else sum(
-                upx(26) + len(census[it]["owners"]) * upx(20) + upx(6)
-                for it in items)
+            stock_checked = getattr(self, "item_dist_stock_checked", set())
+            selected_total = sum(census[it]["total"] for it in items
+                                 if it in stock_checked)
+            show_hint = not any(it in stock_checked for it in items)
+            # Precompute content height, clamp scroll, then draw offset
+            content_h = upx(40) if not items else (
+                (upx(26) if show_hint else 0) + sum(
+                    upx(26) + (len(census[it]["owners"]) * upx(20) + upx(6)
+                               if it in stock_checked else upx(0))
+                    for it in items))
             max_scroll = max(0, content_h - vp.height + upx(16))
             self.item_dist_scroll_stock = max(0, min(self.item_dist_scroll_stock, max_scroll))
             cy = vp.y + upx(8) - self.item_dist_scroll_stock
@@ -328,23 +339,52 @@ class TaxMixin:
                     "No items found anywhere in the village.", True, COLOR_TEXT_MUTED),
                     (content_x + upx(8), cy + upx(8)))
             else:
+                if show_hint:
+                    surface.blit(self.font_body.render(
+                        "Select items above to see their stock breakdown "
+                        "(share % of the selected total).", True, COLOR_TEXT_MUTED),
+                        (content_x + upx(8), cy + upx(4)))
+                    cy += upx(26)
                 for it in items:
                     entry = census[it]
-                    # Item header row
+                    checked = it in stock_checked
+                    # Item header row with checkbox (mirrors production rows)
                     pygame.draw.rect(surface, (30, 41, 59),
                                      (content_x, cy, content_w, upx(26)),
                                      border_radius=upx(4))
+                    cb = pygame.Rect(content_x + upx(8), cy + upx(5), upx(16), upx(16))
+                    self.item_dist_check_rects[it] = cb
+                    pygame.draw.rect(surface, (15, 23, 42), cb, border_radius=upx(3))
+                    pygame.draw.rect(surface, (96, 165, 250) if checked else (71, 85, 105),
+                                     cb, width=2 if checked else 1, border_radius=upx(3))
+                    if checked:
+                        pygame.draw.rect(surface, (56, 189, 248),
+                                         (cb.x + upx(4), cb.y + upx(4), upx(8), upx(8)),
+                                         border_radius=upx(1))
                     surface.blit(self.font_sub.render(it, True, (241, 245, 249)),
-                                 (content_x + upx(10), cy + upx(4)))
-                    tt = self.font_badge.render(f"{entry['total']}", True, (250, 204, 21))
+                                 (cb.right + upx(10), cy + upx(4)))
+                    if checked and selected_total > 0:
+                        share = entry["total"] / selected_total * 100.0
+                        tt = self.font_badge.render(
+                            f"{entry['total']} · {share:.1f}%", True, (250, 204, 21))
+                    else:
+                        tt = self.font_badge.render(f"{entry['total']}", True, (250, 204, 21))
                     surface.blit(tt, (content_x + content_w - tt.get_width() - upx(10), cy + upx(5)))
                     cy += upx(26)
-                    for o in entry["owners"]:
-                        line = self.font_body.render(
-                            f"{o['owner']} — {o['qty']}  ({o['where']})", True, COLOR_TEXT_MUTED)
-                        surface.blit(line, (content_x + upx(24), cy + upx(2)))
-                        cy += upx(20)
-                    cy += upx(6)
+                    if checked:
+                        for o in entry["owners"]:
+                            if selected_total > 0:
+                                o_share = o["qty"] / selected_total * 100.0
+                                line = self.font_body.render(
+                                    f"{o['owner']} — {o['qty']}  ({o['where']}) · {o_share:.1f}%",
+                                    True, COLOR_TEXT_MUTED)
+                            else:
+                                line = self.font_body.render(
+                                    f"{o['owner']} — {o['qty']}  ({o['where']})",
+                                    True, COLOR_TEXT_MUTED)
+                            surface.blit(line, (content_x + upx(24), cy + upx(2)))
+                            cy += upx(20)
+                        cy += upx(6)
 
         surface.set_clip(old_clip)
 

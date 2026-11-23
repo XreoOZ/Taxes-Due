@@ -82,6 +82,62 @@ class AIFoodPurchasingSystem:
         return stack
 
     @classmethod
+    def get_household_spendable_wallet(cls, villager, furniture_manager=None,
+                                       villager_manager=None, stockpile_manager=None):
+        """
+        Merged read-only view of every coin source the household can spend on
+        market goods: storage chest + family purse + living members' pockets
+        (same abstract-wallet rule as commission payments) + family-owned
+        ground coin stacks. Used only for affordability checks — physical
+        collection still goes through retrieve_coins_from_storage /
+        BUYING_FOOD_RETRIEVE_GROUND_COINS.
+        """
+        wallet = {"Copper": 0, "Silver": 0, "Gold": 0}
+
+        def _add(source):
+            for denom, count in normalize_wallet(source).items():
+                wallet[denom] = wallet.get(denom, 0) + count
+
+        fam_id = getattr(villager, "family_id", None)
+        fam_str = str(fam_id or "")
+        vm = villager_manager or getattr(villager, "villager_manager", None)
+
+        # 1. Household storage chest
+        chest = furniture_manager.get_storage_for_family(fam_str) if (furniture_manager and fam_str) else None
+        if chest and isinstance(getattr(chest, "inventory", None), dict):
+            _add(chest.inventory)
+
+        # 2. Family purse + every living member's pocket inventory
+        fam = vm.get_family_by_id(fam_str) if (vm and fam_str) else None
+        if fam is not None:
+            if isinstance(getattr(fam, "currency", None), dict):
+                _add(fam.currency)
+            members = getattr(fam, "members", []) or []
+            rep_counted = False
+            for member in members:
+                if getattr(member, "is_alive", True) and isinstance(getattr(member, "inventory", None), dict):
+                    _add(member.inventory)
+                    if member is villager:
+                        rep_counted = True
+            if not rep_counted:
+                _add(getattr(villager, "inventory", {}))
+        else:
+            _add(getattr(villager, "inventory", {}))
+
+        # 3. Family-owned loose coin stacks on the ground
+        _add(cls.get_household_ground_currency(villager, stockpile_manager))
+        return wallet
+
+    @classmethod
+    def _family_abstract_wallets(cls, villager, villager_manager=None):
+        """Lazy delegate to BuilderSystem._family_abstract_wallets (family purse
+        + living member pockets) — identical coin sources to commission payments."""
+        from game.systems.work.builder_system import BuilderSystem
+        fam_id = getattr(villager, "family_id", None)
+        vm = villager_manager or getattr(villager, "villager_manager", None)
+        return BuilderSystem._family_abstract_wallets(fam_id, vm)
+
+    @classmethod
     def check_household_has_food(cls, villager, furniture_manager=None, villager_manager=None, stockpile_manager=None):
         """
         Returns True if the household already possesses at least 1 FOOD-category item.
@@ -106,13 +162,10 @@ class AIFoodPurchasingSystem:
             villager_manager=villager_manager, stockpile_manager=stockpile_manager
         )
         stock = MarketService.get_market_stock(food_item, market)
-        wallet, source = MarketService.get_household_funds_and_source(villager, furniture_manager, villager_manager)
-        if source is not getattr(villager, "inventory", None):
-            for denomination, count in normalize_wallet(getattr(villager, "inventory", {})).items():
-                wallet[denomination] = wallet.get(denomination, 0) + count
-        ground_wallet = cls.get_household_ground_currency(villager, stockpile_manager)
-        for denomination, count in ground_wallet.items():
-            wallet[denomination] = wallet.get(denomination, 0) + count
+        wallet = cls.get_household_spendable_wallet(
+            villager, furniture_manager=furniture_manager,
+            villager_manager=villager_manager, stockpile_manager=stockpile_manager,
+        )
         unit_price = MarketService.get_item_price(food_item, market)
         affordable = to_copper(wallet) // max(1, unit_price)
         return max(0, min(need, stock, affordable))
@@ -168,13 +221,12 @@ class AIFoodPurchasingSystem:
         if not building_manager:
             return None, None, 0
 
-        # Calculate total household funds (pocket + chest)
-        wallet, source = MarketService.get_household_funds_and_source(villager, furniture_manager, villager_manager)
-        if source is not getattr(villager, "inventory", None):
-            for denomination, count in normalize_wallet(getattr(villager, "inventory", {})).items():
-                wallet[denomination] = wallet.get(denomination, 0) + count
-        for denomination, count in cls.get_household_ground_currency(villager, stockpile_manager).items():
-            wallet[denomination] = wallet.get(denomination, 0) + count
+        # Calculate total household funds across every spendable coin source
+        # (chest + family purse + member pockets + family-owned ground stacks)
+        wallet = cls.get_household_spendable_wallet(
+            villager, furniture_manager=furniture_manager,
+            villager_manager=villager_manager, stockpile_manager=stockpile_manager,
+        )
         total_funds_copper = to_copper(wallet)
 
         completed_markets = [
@@ -230,30 +282,59 @@ class AIFoodPurchasingSystem:
         return best_candidate[2], best_candidate[3], best_candidate[0]
 
     @classmethod
-    def retrieve_coins_from_storage(cls, villager, price_in_copper, furniture_manager=None):
+    def retrieve_coins_from_storage(cls, villager, price_in_copper, furniture_manager=None,
+                                    villager_manager=None):
         """
-        Transfers required coins from household chest into villager's pocket.
-        Ensures zero free money creation, conservation of currency, and proper coin withdrawal.
+        Transfers required coins into the villager's pocket from every coin
+        source the household can spend: storage chest first, then the
+        abstract household wallets (family purse + living members' pockets) —
+        the same sources commission payments use. Works without a chest.
+        Ensures zero free money creation, conservation of currency.
         Returns:
             (success: bool, message: str)
         """
-        cur_pocket = normalize_wallet(getattr(villager, "inventory", {}))
-        cur_pocket_val = to_copper(cur_pocket)
-
-        if cur_pocket_val >= price_in_copper:
-            return True, "Villager already carries enough coins in pocket."
-
-        chest = furniture_manager.get_storage_for_family(villager.family_id) if furniture_manager else None
-        if not chest or not hasattr(chest, "inventory") or not isinstance(chest.inventory, dict):
-            return False, "Household has no storage chest to retrieve coins from."
-
-        deficit = price_in_copper - cur_pocket_val
         if not hasattr(villager, "inventory") or not isinstance(villager.inventory, dict):
             villager.inventory = {}
-        ok, message = transfer_currency_value(chest.inventory, villager.inventory, deficit)
-        if not ok:
-            return False, f"Chest has insufficient coins to cover purchase: {message}"
-        return True, "Successfully retrieved coins from household storage."
+
+        def _pocket_copper():
+            return to_copper(normalize_wallet(villager.inventory))
+
+        if _pocket_copper() >= price_in_copper:
+            return True, "Villager already carries enough coins in pocket."
+
+        # 1. Household storage chest (partial withdrawal allowed — the
+        #    remainder is collected from abstract wallets below).
+        chest = furniture_manager.get_storage_for_family(villager.family_id) if furniture_manager else None
+        if chest and hasattr(chest, "inventory") and isinstance(chest.inventory, dict):
+            chest_copper = to_copper(normalize_wallet(chest.inventory))
+            if chest_copper > 0:
+                take = min(price_in_copper - _pocket_copper(), chest_copper)
+                ok, _ = transfer_currency_value(chest.inventory, villager.inventory, take)
+                if ok and _pocket_copper() >= price_in_copper:
+                    return True, "Successfully retrieved coins from household storage."
+
+        # 2. Abstract household wallets: family purse + living members'
+        #    pockets. No chest or physical stack required — identical to the
+        #    commission payment collection rule.
+        deficit = price_in_copper - _pocket_copper()
+        if deficit > 0:
+            for wallet in cls._family_abstract_wallets(villager, villager_manager):
+                if deficit <= 0:
+                    break
+                if wallet is villager.inventory:
+                    continue  # own pocket already counted
+                wallet_copper = to_copper(normalize_wallet(wallet))
+                if wallet_copper <= 0:
+                    continue
+                ok, _ = transfer_currency_value(
+                    wallet, villager.inventory, min(deficit, wallet_copper)
+                )
+                if ok:
+                    deficit = price_in_copper - _pocket_copper()
+
+        if deficit <= 0:
+            return True, "Successfully retrieved coins from household wallets."
+        return False, "Household does not have enough coins for the purchase."
 
     @classmethod
     def execute_market_transaction(cls, villager, market, food_item, building_manager=None, quantity=1, day_number=None):
@@ -318,12 +399,28 @@ class AIFoodPurchasingSystem:
     def deliver_and_consume_food(cls, villager, furniture_manager=None, stockpile_manager=None,
                                  day_number=1):
         """
-        Delivers change back to household chest, consumes purchased food,
+        Delivers change back to household storage, consumes purchased food,
         recovers hunger, and resumes activity.
+        Households without a storage chest receive owner-tagged loose stacks
+        dropped at the villager's feet — the same fallback tool deliveries
+        use — so family members can still collect and consume the goods.
         """
         chest = furniture_manager.get_storage_for_family(villager.family_id) if furniture_manager else None
+        fam_str = str(getattr(villager, "family_id", "") or "")
+        ground_drop = stockpile_manager is not None and bool(fam_str)
 
-        # 1. Return any coins (change or leftover funds) back to household storage chest
+        def _drop_loose(item_name, amount):
+            if not ground_drop or amount <= 0:
+                return False
+            gx = int(math.floor(getattr(villager, "x", 0.0) / TILE_SIZE))
+            gy = int(math.floor(getattr(villager, "y", 0.0) / TILE_SIZE))
+            stockpile_manager.drop_resource(
+                item_name, amount, gx, gy,
+                owner_type="villager", owner_id=fam_str,
+            )
+            return True
+
+        # 1. Return any coins (change or leftover funds) back to household storage
         if chest and hasattr(chest, "inventory") and isinstance(chest.inventory, dict):
             from game.systems.economy.currency import compact_currency_wallet
             for denom in CURRENCY_DENOMINATIONS:
@@ -332,6 +429,11 @@ class AIFoodPurchasingSystem:
                     chest.inventory[denom] = chest.inventory.get(denom, 0) + amt
                     del villager.inventory[denom]
             compact_currency_wallet(chest.inventory)
+        elif ground_drop:
+            for denom in CURRENCY_DENOMINATIONS:
+                amt = villager.inventory.get(denom, 0)
+                if amt > 0 and _drop_loose(denom, amt):
+                    del villager.inventory[denom]
 
         # 2. Consume 1 food item from villager's inventory
         food_it = next((it for it, c in getattr(villager, "inventory", {}).items() if is_food_item(it) and c > 0), None)
@@ -347,11 +449,16 @@ class AIFoodPurchasingSystem:
             HappinessSystem.record_food_eaten(villager, food_it, day_number)
             villager.say(f"Ate hearty meal of {food_it} brought from Market!", duration=2.5)
 
-        # 3. If any extra food remains, store it in the chest
+        # 3. If any extra food remains, store it in the chest — or drop it
+        #    as owner-tagged loose stacks when the household has no chest.
         if chest:
             for it, c in list(getattr(villager, "inventory", {}).items()):
                 if is_food_item(it) and c > 0:
                     chest.store_item(it, c)
+                    del villager.inventory[it]
+        elif ground_drop:
+            for it, c in list(getattr(villager, "inventory", {}).items()):
+                if is_food_item(it) and c > 0 and _drop_loose(it, c):
                     del villager.inventory[it]
 
         # 4. Clear purchasing tracking attributes
@@ -364,11 +471,13 @@ class AIFoodPurchasingSystem:
         villager._resume_or_idle_after_need()
 
     @classmethod
-    def return_coins_to_storage(cls, villager, furniture_manager=None):
+    def return_coins_to_storage(cls, villager, furniture_manager=None, stockpile_manager=None):
         """
-        Safety fallback: returns coins back to chest if purchasing failed or aborted.
+        Safety fallback: returns coins back to household storage if purchasing failed or aborted.
+        Without a chest, coins become owner-tagged loose stacks at the villager's feet.
         """
         chest = furniture_manager.get_storage_for_family(villager.family_id) if furniture_manager else None
+        fam_str = str(getattr(villager, "family_id", "") or "")
         if chest and hasattr(chest, "inventory") and isinstance(chest.inventory, dict):
             from game.systems.economy.currency import compact_currency_wallet
             for denom in CURRENCY_DENOMINATIONS:
@@ -377,6 +486,17 @@ class AIFoodPurchasingSystem:
                     chest.inventory[denom] = chest.inventory.get(denom, 0) + amt
                     del villager.inventory[denom]
             compact_currency_wallet(chest.inventory)
+        elif stockpile_manager is not None and fam_str:
+            gx = int(math.floor(getattr(villager, "x", 0.0) / TILE_SIZE))
+            gy = int(math.floor(getattr(villager, "y", 0.0) / TILE_SIZE))
+            for denom in CURRENCY_DENOMINATIONS:
+                amt = villager.inventory.get(denom, 0)
+                if amt > 0:
+                    stockpile_manager.drop_resource(
+                        denom, amt, gx, gy,
+                        owner_type="villager", owner_id=fam_str,
+                    )
+                    del villager.inventory[denom]
 
         villager.purchase_target_market_id = None
         villager.purchase_target_market_location = None

@@ -58,7 +58,7 @@ from game.config import (
     SERVANT_TELEPORT_SEARCH_RADIUS_TILES,
     SERVANT_MAX_TELEPORTS_PER_TARGET,
 )
-from game.data.config import MARKET_TRADEABLE_ITEMS, MARKET_CURRENCY_DENOMINATIONS, SERVANT_PHASE_THROUGH_OBSTACLES, MARKET_RESTOCK_ORDER_TIMEOUT_SECONDS
+from game.data.config import MARKET_TRADEABLE_ITEMS, MARKET_CURRENCY_DENOMINATIONS, SERVANT_PHASE_THROUGH_OBSTACLES, MARKET_RESTOCK_ORDER_TIMEOUT_SECONDS, SERVANT_SAFE_DROP_SEARCH_RADIUS_TILES
 from game.systems.core.ai_simulation_scheduler import AISimulationScheduler
 from game.systems.core.spatial_entities import SpatialEntityIndex
 from game.world.navigation.pathfinding import GlobalPathRegistry, calculate_collision_slide, is_narrow_passage_tile
@@ -815,6 +815,16 @@ class Servant:
             all_vils = villager_manager.get_all_villagers() if villager_manager else []
             all_ents = list(all_servants or []) + all_vils
 
+            # Homeless households wander while awaiting a permit, so the
+            # accept-time dest_pos goes stale and coins would be dropped
+            # mid-route. Track the household's live position instead.
+            if not chest and villager_manager is not None:
+                fam = villager_manager.get_family_by_id(self.target_grant_fam_id)
+                members = [m for m in getattr(fam, "members", []) if getattr(m, "is_alive", True)] if fam else []
+                if members:
+                    nearest = min(members, key=lambda m: math.hypot(m.x - self.x, m.y - self.y))
+                    self.target_grant_dest = (nearest.x, nearest.y)
+
             if close_to_chest or self._move_towards(self.target_grant_dest[0], self.target_grant_dest[1], dt, arrival_dist=32, all_servants=all_servants, player=player, building_manager=building_manager, all_entities=all_ents, furniture_manager=furniture_manager, exclusive_target=False):
                 # Arrived at family home or chest!
                 deposited = False
@@ -822,9 +832,14 @@ class Servant:
                     chest.store_item(self.carried_res, self.carried_amount)
                     deposited = True
                 if not deposited:
-                    cur_gx = int(math.floor(self.x / TILE_SIZE))
-                    cur_gy = int(math.floor(self.y / TILE_SIZE))
-                    stockpile_manager.drop_resource(self.carried_res, self.carried_amount, cur_gx, cur_gy, owner_type="villager", owner_id=str(self.target_grant_fam_id))
+                    # Drop on the nearest villager-reachable tile to the
+                    # household — never on water, inside solid structures, or
+                    # on furniture footprints members cannot path to.
+                    drop_gx, drop_gy = self._nearest_walkable_drop_tile(
+                        self.target_grant_dest[0], self.target_grant_dest[1],
+                        building_manager, furniture_manager,
+                    )
+                    stockpile_manager.drop_resource(self.carried_res, self.carried_amount, drop_gx, drop_gy, owner_type="villager", owner_id=str(self.target_grant_fam_id))
 
                 if self.target_grant_order:
                     self.target_grant_order["delivered"] = self.target_grant_order.get("delivered", 0) + self.carried_amount
@@ -1633,6 +1648,11 @@ class Servant:
             b = building_manager.get_building_at(tx, ty) if building_manager else None
             if b is not None and (getattr(b, "is_solid", False) or not getattr(b, "door_pos", None)):
                 return True
+            # Phase-through servants legitimately route THROUGH furniture, so a
+            # furniture tile is traversable for them — ejecting them here would
+            # oscillate against the navigator and stall delivery errands.
+            if SERVANT_PHASE_THROUGH_OBSTACLES:
+                return False
             return (tx, ty) in furniture_tiles
 
         # Only intervene when standing on an untraversable tile.
@@ -1977,6 +1997,31 @@ class Servant:
                 if not escapes:
                     return False
         return True
+
+    def _nearest_walkable_drop_tile(self, wx, wy, building_manager, furniture_manager):
+        """Nearest villager-reachable tile to a world point for ground drops.
+
+        Grant/errand goods must never land on water, inside solid structures,
+        or on furniture footprints that household members cannot path to.
+        Falls back to the servant's own tile when nothing nearby qualifies
+        (dropped value is never voided)."""
+        cgx = int(math.floor(wx / TILE_SIZE))
+        cgy = int(math.floor(wy / TILE_SIZE))
+        radius = max(1, int(SERVANT_SAFE_DROP_SEARCH_RADIUS_TILES))
+        best = None
+        best_dist = float("inf")
+        for dy in range(-radius, radius + 1):
+            for dx in range(-radius, radius + 1):
+                gx, gy = cgx + dx, cgy + dy
+                if not self._is_tile_walkable_for_teleport(gx, gy, building_manager, furniture_manager):
+                    continue
+                d = math.hypot((gx + 0.5) * TILE_SIZE - wx, (gy + 0.5) * TILE_SIZE - wy)
+                if d < best_dist:
+                    best_dist = d
+                    best = (gx, gy)
+        if best is not None:
+            return best
+        return (int(math.floor(self.x / TILE_SIZE)), int(math.floor(self.y / TILE_SIZE)))
 
     def _get_site_work_pos(self, site, all_servants=None):
         """Mendapatkan posisi kerja terdistribusi di sekeliling perimeter site/bangunan agar servant tidak bertumpuk"""

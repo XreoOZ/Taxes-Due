@@ -212,8 +212,8 @@ class ToolmakerSystem:
         if not benches:
             return False
         bench = min(benches, key=lambda b: math.hypot(
-            b.get_center_world(TILE_SIZE)[0] - toolmaker.x,
-            b.get_center_world(TILE_SIZE)[1] - toolmaker.y))
+            b.get_world_pos(TILE_SIZE)[0] - toolmaker.x,
+            b.get_world_pos(TILE_SIZE)[1] - toolmaker.y))
         dest = bench.get_approach_point(toolmaker.x, toolmaker.y, worker_id=toolmaker.id,
                                         all_entities=all_entities, tile_size=TILE_SIZE,
                                         bm=building_manager)

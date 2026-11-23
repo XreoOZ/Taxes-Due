@@ -1231,6 +1231,8 @@ class FurnitureManager:
         f = self.get_furniture_by_id(furniture_id)
         if not f:
             return False, "Furniture not found!"
+        if not f.type_cfg.get("movable", True):
+            return False, f"{f.name} cannot be moved!"
 
         # Check the complete configured footprint, while allowing overlap with the furniture's old cells.
         width, height = f.footprint_dimensions

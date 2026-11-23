@@ -35,6 +35,22 @@ class CommissionScheduleSystem:
         villager.pending_commission_data = dict(head.get("data", {}))
 
     @staticmethod
+    def _errand_in_flight(villager):
+        """True while a previously activated commission errand is still
+        executing on this villager.
+
+        Every commission errand payload marks the villager with a tracking
+        attribute (``builder_payment_order_id`` for builder-fee and refund
+        errands, ``burial_payment_target_corpse_id`` for burial fees), and
+        each completion/abort path clears it — so a set attribute reliably
+        means "errand in flight" without hardcoding task names here.
+        """
+        return (
+            getattr(villager, "builder_payment_order_id", None) not in (None, "")
+            or getattr(villager, "burial_payment_target_corpse_id", None) not in (None, "")
+        )
+
+    @staticmethod
     def activate(villager, schedule_activity):
         queue = getattr(villager, "pending_commission_tasks", None)
         if not isinstance(queue, list):
@@ -50,6 +66,12 @@ class CommissionScheduleSystem:
             }]
             villager.pending_commission_tasks = queue
         if not queue:
+            return False
+        # An errand activated earlier must run to completion (coins retrieved
+        # -> delivered -> order PAID) before the next queued commission is
+        # popped. Without this guard the representative re-targets a new
+        # errand every tick and oscillates between orders.
+        if CommissionScheduleSystem._errand_in_flight(villager):
             return False
         head_task = str(queue[0].get("task", ""))
         work_errand = schedule_activity == "WORK" and head_task.startswith("BUILDER_FEE_")

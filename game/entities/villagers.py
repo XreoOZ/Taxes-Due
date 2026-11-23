@@ -65,12 +65,14 @@ from game.config import (
     AI_NEED_TOILET_RESTORE,
     AI_CRITICAL_NEED_THRESHOLD,
     AI_DEATH_COUNTDOWN_HOURS,
+    AI_LETHAL_NEED_OVERRIDE_INGAME_HOURS,
     DAILY_FOOD_REQUIREMENT,
     DAILY_WATER_REQUIREMENT,
     AI_NEED_FOOD_RESTORE,
     AI_NEED_WATER_RESTORE,
     AI_NEED_SEEK_COOLDOWN_SECONDS,
     AI_NEED_PURCHASE_WAIT_COOLDOWN_SECONDS,
+    AI_FOOD_PURCHASE_ERRAND_TIMEOUT_SECONDS,
     HOUSEHOLD_WATER_MAX_COLLECTORS,
     COLOR_NEED_HUNGER_HIGH,
     COLOR_NEED_HUNGER_MED,
@@ -278,6 +280,7 @@ class Villager:
         self.purchase_food_item = None
         self.purchase_target_price = 0
         self.purchase_target_qty = 1
+        self.purchase_errand_timer = 0.0
 
         # Agent 3: Toilet, Church, Priest & Cemetery / Gravedigger
         self.need_toilet = 100.0
@@ -1022,6 +1025,43 @@ class Villager:
         """Mendapatkan daftar alat yang belum dimiliki untuk pekerjaan saat ini"""
         return get_missing_tools_for_worker(self)
 
+    def _lethal_need_task(self):
+        """SEEKING_* task for the need that will kill this villager within
+        AI_LETHAL_NEED_OVERRIDE_INGAME_HOURS, or None when every need is safe.
+
+        Hunger/thirst kill through the 0% -> AI_DEATH_COUNTDOWN_HOURS
+        countdown; a need still above 0% is treated as lethal when it will
+        bottom out inside the override window (the death countdown then
+        becomes unavoidable). Toilet has no death countdown — it counts as
+        lethal only inside the same window. The most lethal need wins."""
+        window = float(AI_LETHAL_NEED_OVERRIDE_INGAME_HOURS)
+        candidates = []
+        specs = (
+            ("need_toilet", AI_NEED_TOILET_DECAY_PER_DAY, "SEEKING_TOILET", None),
+            ("thirst", AI_NEED_THIRST_DECAY_PER_DAY, "SEEKING_WATER", "thirst_death_timer"),
+            ("hunger", AI_NEED_HUNGER_DECAY_PER_DAY, "SEEKING_FOOD", "hunger_death_timer"),
+        )
+        for attr, decay_per_day, seek_task, death_timer_attr in specs:
+            value = float(getattr(self, attr, AI_NEED_MAX) or 0.0)
+            decay_per_hour = float(decay_per_day) / 24.0
+            if decay_per_hour <= 0.0:
+                continue
+            if value <= 0.0:
+                if death_timer_attr is None:
+                    hours = 0.0
+                else:
+                    timer = getattr(self, death_timer_attr, None)
+                    hours = (float(timer) if timer is not None
+                             else float(AI_DEATH_COUNTDOWN_HOURS))
+            else:
+                hours = value / decay_per_hour
+            if hours <= window:
+                candidates.append((hours, seek_task))
+        if not candidates:
+            return None
+        candidates.sort(key=lambda c: c[0])
+        return candidates[0][1]
+
     def _ensure_tool_commissions(self, missing_tools, building_manager, furniture_manager, villager_manager):
         """Queue toolmaker commissions for missing job tools instead of idling.
 
@@ -1606,6 +1646,27 @@ class Villager:
                 from game.systems.work.station_jobs import StationJobSystem
                 no_work_available = not StationJobSystem.has_work(
                     self, self.job, furniture_manager, day_cycle)
+            elif self.job == "Toolmaker" and furniture_manager:
+                # Toolmaker work = claimable/active tool orders plus bar
+                # smelting while the household chest is below stock target.
+                # Without this branch the generic fallback below flips him to
+                # LEISURE whenever his task is neutral, so update_worker
+                # (WORK-only) never runs and commissions sit unclaimed.
+                from game.systems.work.toolmaker_system import ToolmakerSystem
+                from game.data.config import TOOLMAKER_BAR_STOCK_TARGET
+                order_subjects = ToolmakerSystem._tool_order_subjects(furniture_manager)
+                has_order = any(
+                    isinstance(getattr(s, "construction_order", None), dict)
+                    and s.construction_order.get("builder_id") in (None, str(self.id))
+                    and s.construction_order.get("status") not in ("COMPLETE",)
+                    for s in order_subjects
+                )
+                chest = ToolmakerSystem._family_chest(self, furniture_manager)
+                wood_target = int((job_cfg.get("material_stock_target", {}) or {}).get("Wood", 0))
+                needs_wood = chest is not None and wood_target > ToolmakerSystem._chest_qty(chest, "Wood")
+                needs_bars = (chest is not None
+                              and ToolmakerSystem._chest_qty(chest, "Iron Bar") < TOOLMAKER_BAR_STOCK_TARGET)
+                no_work_available = not (has_order or needs_wood or needs_bars)
             else:
                 # Generic fallback for every other job (Priest, WIP jobs, and any
                 # future job): counts as having work only while actually executing
@@ -1618,6 +1679,42 @@ class Villager:
                 is_free_time_schedule = True
                 self.current_schedule_activity = sched_activity
 
+        # Lethal survival override: a need that will kill this villager within
+        # AI_LETHAL_NEED_OVERRIDE_INGAME_HOURS beats every schedule slot and
+        # errand except sleep itself. Treating the slot as free time keeps the
+        # resulting SEEKING_* task from being cancelled by schedule
+        # reconciliation or the WORK-slot need-task cleanup below.
+        survival_need_task = None
+        if sched_activity != "SLEEP" and self.task not in ("SLEEPING", "ZONKED_SLEEP"):
+            survival_need_task = self._lethal_need_task()
+        if survival_need_task:
+            if not is_free_time_schedule:
+                sched_activity = "LEISURE"
+                is_free_time_schedule = True
+                self.current_schedule_activity = sched_activity
+            cooldown_blocks_lethal = (
+                getattr(self, "need_seek_cooldown", 0.0) > 0.0
+                and getattr(self, "need_seek_cooldown_task", None) in (None, survival_need_task)
+            )
+            if (self.task != survival_need_task
+                    and self.task != "DECEASED"
+                    and not (survival_need_task == "SEEKING_FOOD"
+                             and str(getattr(self, "task", "")).startswith("BUYING_FOOD_"))
+                    and not cooldown_blocks_lethal):
+                self.sleeping_recharge_active = False
+                self.interrupt_task("SURVIVAL_NEED", activity_label="Fleeing a lethal need")
+                if self.current_work_tile and permit_manager:
+                    assigned_farm = next((p for p in permit_manager.permits if p.permit_type == "farm" and hasattr(p, "assigned_workers") and self.id in p.assigned_workers), None)
+                    if assigned_farm:
+                        assigned_farm.release_worker_reservations(self.id)
+                    self.current_work_tile = None
+                GlobalPathRegistry.get_instance().release_reservation(self.id)
+                self.current_path = []
+                self.is_waiting_for_path = False
+                if not getattr(self, "previous_task_before_need", None):
+                    self.previous_task_before_need = self.task
+                self.task = survival_need_task
+
         if schedule_manager:
             from game.systems.village_life.confession_system import ConfessionSystem
             ConfessionSystem.cancel_if_schedule_ended(
@@ -1627,7 +1724,8 @@ class Villager:
 
         urgent_need_tasks = (
             "SEEKING_FOOD", "SEEKING_WATER", "SEEKING_TOILET",
-            "BUYING_FOOD_RETRIEVE_COINS", "BUYING_FOOD_TRAVEL_TO_MARKET",
+            "BUYING_FOOD_RETRIEVE_COINS", "BUYING_FOOD_RETRIEVE_GROUND_COINS",
+            "BUYING_FOOD_TRAVEL_TO_MARKET",
             "BUYING_FOOD_HAULING_HOME", "RECOVER_DEATH_ITEMS",
         )
         if (not is_free_time_schedule
@@ -1696,7 +1794,8 @@ class Villager:
         dt = world_dt * HappinessSystem.activity_multiplier(self)
 
         from game.systems.work.commission_schedule import CommissionScheduleSystem
-        CommissionScheduleSystem.activate(self, sched_activity)
+        if not survival_need_task:
+            CommissionScheduleSystem.activate(self, sched_activity)
 
         from game.systems.village_life.cemetery_system import CemeterySystem
         if (sched_activity in FREE_TIME_SCHEDULE_ACTIVITIES
@@ -1765,6 +1864,7 @@ class Villager:
         food_purchase_tasks = (
             "SEEKING_FOOD",
             "BUYING_FOOD_RETRIEVE_COINS",
+            "BUYING_FOOD_RETRIEVE_GROUND_COINS",
             "BUYING_FOOD_TRAVEL_TO_MARKET",
             "BUYING_FOOD_HAULING_HOME",
             "BUYING_JOB_TOOLS_RETRIEVE_COINS",
@@ -1955,35 +2055,90 @@ class Villager:
                     self.task = "BUYING_FOOD_RETRIEVE_COINS"
                     self.say(f"Getting coins from household storage to buy {purchase_qty} {food_item} at Market!", duration=2.0)
                 else:
-                    self._set_need_seek_cooldown(AI_NEED_SEEK_COOLDOWN_SECONDS)
-                    self.say("Household coins could not be collected.", duration=2.5)
-                    HappinessSystem.record_daily_event(self, "purchase_unaffordable", cur_day)
-                    self.task = "IDLE"
-                    self._resume_leisure_after_need_failure(
-                        dt, sched_activity, player, all_entities, building_manager,
-                        permit_manager, furniture_manager,
+                    # No chest and no reachable ground stack: household coins
+                    # may still sit in members' pockets — collect them
+                    # instantly (same abstract-wallet rule as commission payments).
+                    ok, _ = AIFoodPurchasingSystem.retrieve_coins_from_storage(
+                        self, self.purchase_target_price,
+                        furniture_manager=furniture_manager, villager_manager=vm,
                     )
+                    if ok and to_copper(normalize_wallet(self.inventory)) >= self.purchase_target_price:
+                        self.task = "BUYING_FOOD_TRAVEL_TO_MARKET"
+                        self.say(f"Collected household coins, heading to Market for {purchase_qty} {food_item}!", duration=2.0)
+                    else:
+                        self._set_need_seek_cooldown(AI_NEED_SEEK_COOLDOWN_SECONDS)
+                        self.say("Household coins could not be collected.", duration=2.5)
+                        HappinessSystem.record_daily_event(self, "purchase_unaffordable", cur_day)
+                        self.task = "IDLE"
+                        self._resume_leisure_after_need_failure(
+                            dt, sched_activity, player, all_entities, building_manager,
+                            permit_manager, furniture_manager,
+                        )
             return
 
         # -------------------------------------------------------------
         # Eksekusi Belanja Makanan Fisik ke Pasar (Agent 3)
         # -------------------------------------------------------------
+        # Stall watchdog: if any BUYING_FOOD_* step cannot reach its target
+        # (unreachable market/chest/coin stack), abort after a timeout so the
+        # household "already purchasing" flag can never stay stuck forever.
+        _food_purchase_errand_tasks = (
+            "BUYING_FOOD_RETRIEVE_COINS",
+            "BUYING_FOOD_RETRIEVE_GROUND_COINS",
+            "BUYING_FOOD_TRAVEL_TO_MARKET",
+            "BUYING_FOOD_HAULING_HOME",
+        )
+        if self.task in _food_purchase_errand_tasks:
+            self.purchase_errand_timer = getattr(self, "purchase_errand_timer", 0.0) + dt
+            if self.purchase_errand_timer >= AI_FOOD_PURCHASE_ERRAND_TIMEOUT_SECONDS:
+                self.purchase_errand_timer = 0.0
+                if self.task == "BUYING_FOOD_HAULING_HOME":
+                    # Goods were already bought: deliver them (chest or
+                    # owner-tagged loose stacks) instead of stranding them.
+                    AIFoodPurchasingSystem.deliver_and_consume_food(
+                        self, furniture_manager=furniture_manager,
+                        stockpile_manager=stockpile_manager, day_number=cur_day,
+                    )
+                else:
+                    AIFoodPurchasingSystem.return_coins_to_storage(
+                        self, furniture_manager=furniture_manager,
+                        stockpile_manager=stockpile_manager,
+                    )
+                self.say("Market errand took too long — aborting purchase.", duration=2.5)
+                return
+        else:
+            self.purchase_errand_timer = 0.0
+
         if self.task == "BUYING_FOOD_RETRIEVE_COINS":
             self.active_tool = None
             chest = furniture_manager.get_storage_for_family(self.family_id) if furniture_manager else None
             if not chest:
-                self.task = "IDLE"
-                self._set_need_seek_cooldown(AI_NEED_SEEK_COOLDOWN_SECONDS, task="BUYING_FOOD_RETRIEVE_COINS")
-                self._resume_leisure_after_need_failure(
-                    dt, sched_activity, player, all_entities, building_manager,
-                    permit_manager, furniture_manager,
+                # Chest gone mid-errand: household coins may still sit in
+                # members' pockets — try abstract collection before idling.
+                ok, _ = AIFoodPurchasingSystem.retrieve_coins_from_storage(
+                    self, getattr(self, "purchase_target_price", 0),
+                    furniture_manager=furniture_manager,
+                    villager_manager=getattr(self, "villager_manager", None) or villager_manager,
                 )
+                if ok and to_copper(normalize_wallet(self.inventory)) >= getattr(self, "purchase_target_price", 0):
+                    self.task = "BUYING_FOOD_TRAVEL_TO_MARKET"
+                    self.say(f"Collected household coins, heading to Market for {getattr(self, 'purchase_food_item', 'Food')}!", duration=2.0)
+                else:
+                    self.task = "IDLE"
+                    self._set_need_seek_cooldown(AI_NEED_SEEK_COOLDOWN_SECONDS, task="BUYING_FOOD_RETRIEVE_COINS")
+                    self._resume_leisure_after_need_failure(
+                        dt, sched_activity, player, all_entities, building_manager,
+                        permit_manager, furniture_manager,
+                    )
                 return
             cx, cy = chest.get_world_pos(TILE_SIZE)
             arrived = self._move_towards(cx, cy, dt, arrival_dist=CHEST_INTERACTION_RADIUS, all_entities=all_entities, player=player, building_manager=building_manager, furniture_manager=furniture_manager, exclusive_target=False, interaction_target=chest)
             if arrived:
                 price = getattr(self, "purchase_target_price", 3)
-                ok, msg = AIFoodPurchasingSystem.retrieve_coins_from_storage(self, price, furniture_manager=furniture_manager)
+                ok, msg = AIFoodPurchasingSystem.retrieve_coins_from_storage(
+                    self, price, furniture_manager=furniture_manager,
+                    villager_manager=getattr(self, "villager_manager", None) or villager_manager,
+                )
                 if ok:
                     self.task = "BUYING_FOOD_TRAVEL_TO_MARKET"
                     self.say(f"Retrieved coins, heading to Market for {getattr(self, 'purchase_food_item', 'Food')}!", duration=2.0)
@@ -2123,14 +2278,28 @@ class Villager:
             chest = furniture_manager.get_storage_for_family(self.family_id) if furniture_manager else None
             if chest:
                 cx, cy = chest.get_world_pos(TILE_SIZE)
-            elif permit_manager and self.family_id:
-                vm = getattr(self, "villager_manager", None) or villager_manager
-                fam = vm.get_family_by_id(self.family_id) if vm else None
-                pid = getattr(fam, "assigned_permit_id", None)
-                p = next((permit for permit in permit_manager.permits
-                          if str(permit.id) == str(pid)), None) if pid else None
-                cx = (p.grid_x + p.tiles_w / 2.0) * TILE_SIZE if p else self.x
-                cy = (p.grid_y + p.tiles_h / 2.0) * TILE_SIZE if p else self.y
+            elif permit_manager and building_manager:
+                # No chest: haul to the household's home building/lot so the
+                # purchased goods are dropped as owner-tagged loose stacks
+                # near the family (same chestless fallback as tool delivery).
+                home_b = self._get_home_building(permit_manager, building_manager)
+                if home_b is not None:
+                    if hasattr(home_b, "get_approach_point"):
+                        cx, cy = home_b.get_approach_point(
+                            self.x, self.y, worker_id=self.id,
+                            all_entities=all_entities, tile_size=TILE_SIZE,
+                            bm=building_manager,
+                        )
+                    else:
+                        cx, cy = home_b.get_center_world(TILE_SIZE)
+                else:
+                    vm = getattr(self, "villager_manager", None) or villager_manager
+                    fam = vm.get_family_by_id(self.family_id) if vm else None
+                    pid = getattr(fam, "assigned_permit_id", None)
+                    p = next((permit for permit in permit_manager.permits
+                              if str(permit.id) == str(pid)), None) if pid else None
+                    cx = (p.grid_x + p.tiles_w / 2.0) * TILE_SIZE if p else self.x
+                    cy = (p.grid_y + p.tiles_h / 2.0) * TILE_SIZE if p else self.y
             else:
                 cx, cy = (self.x, self.y)
 
@@ -3552,6 +3721,7 @@ class Villager:
         # -------------------------------------------------------------
         # Don't overwrite need tasks when idling
         need_tasks = ("SEEKING_FOOD", "SEEKING_WATER", "SEEKING_TOILET", "BUYING_FOOD_RETRIEVE_COINS",
+                      "BUYING_FOOD_RETRIEVE_GROUND_COINS",
                       "BUYING_FOOD_TRAVEL_TO_MARKET", "BUYING_FOOD_HAULING_HOME", "COLLECTING_HOUSEHOLD_WATER",
                       "HAULING_HOUSEHOLD_WATER", "DEPOSITING_UNUSED_ITEMS")
         if self.task not in need_tasks:
@@ -3582,10 +3752,12 @@ class Villager:
             return
 
         # Evaluasi Kebutuhan Air Rumah Tangga (Household Water Shortage Check)
+        # Chestless households qualify too: drawn water is dropped as
+        # owner-tagged loose stacks at home by HAULING_HOUSEHOLD_WATER.
         if sched_activity in ("LEISURE", "ANY") and furniture_manager:
             chest = furniture_manager.get_storage_for_family(self.family_id)
             well = self._find_nearest_well(building_manager)
-            if chest and well and self.hunger > AI_CRITICAL_NEED_THRESHOLD and self.thirst > AI_CRITICAL_NEED_THRESHOLD:
+            if well and self.hunger > AI_CRITICAL_NEED_THRESHOLD and self.thirst > AI_CRITICAL_NEED_THRESHOLD:
                 fam_str = str(self.family_id)
                 family_entities = (
                     all_entities.by_family(fam_str)
@@ -3597,7 +3769,7 @@ class Villager:
                 living_count = len(all_family_members)
                 if living_count > 0:
                     required_water = living_count * DAILY_WATER_REQUIREMENT
-                    current_stock = chest.inventory.get("Water", 0)
+                    current_stock = chest.inventory.get("Water", 0) if chest else 0
                     if stockpile_manager:
                         for s in getattr(stockpile_manager, "stacks", []):
                             if getattr(s, "owner_type", None) == "villager" and str(getattr(s, "owner_id", "")) == fam_str and s.resource_type == "Water":

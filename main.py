@@ -166,7 +166,9 @@ def furniture_menu_actions(f):
         acts.append(("tool_catalogue", "Forge Catalogue"))
     if ftype == "notice_board":
         acts.append(("immigrants", "Immigrants"))
-    if workplace_bases_for("furniture", f):
+    # Mine-bound workstations enter through the workplace popup directly, so a
+    # "Workstation" button here would just reopen the same popup (navigation loop).
+    if workplace_bases_for("furniture", f) and not furniture_mine_bound(f):
         acts.append(("workplace", "Workstation"))
     return acts
 
@@ -191,6 +193,16 @@ def workplace_job_for(kind, obj):
         if kind == "furniture" and job_cfg.get("workplace_furniture_type") == getattr(obj, "furniture_type", None):
             return job_id
     return None
+
+
+def furniture_mine_bound(f):
+    """Furniture locked to a generated mine deposit (immovable world deposit)."""
+    return bool((getattr(f, "type_cfg", None) or {}).get("station_inventory_mine_bound"))
+
+
+def furniture_movable(f):
+    """Whether the Move action applies to this furniture (config-driven)."""
+    return bool((getattr(f, "type_cfg", None) or {}).get("movable", True))
 
 
 def main():
@@ -1605,10 +1617,16 @@ def main():
                             clicked_f = furniture_manager.get_furniture_at(m_gx, m_gy)
                             if clicked_f and (clicked_f.furniture_type in ("builder_workbench", "notice_board", "toolmaker_workbench")
                                               or workplace_bases_for("furniture", clicked_f)):
-                                selected_furniture = clicked_f
+                                if furniture_mine_bound(clicked_f) and workplace_bases_for("furniture", clicked_f):
+                                    # Mine-head workstations sit on an immovable world
+                                    # deposit: skip the generic furniture card and open
+                                    # the workplace card (STRUCTURE/WORKSTATION) directly.
+                                    workplace_popup = {"kind": "furniture", "obj": clicked_f, "pos": event.pos}
+                                else:
+                                    selected_furniture = clicked_f
+                                    workplace_popup = None
                                 selected_entity = None
                                 selected_structure = None
-                                workplace_popup = None
                                 continue
 
                             # 0A3. Cek apakah pemain mengklik entitas AI di peta (Villager / Servant)
@@ -2781,14 +2799,18 @@ def main():
                 else:
                     btn_furn_pay_builder_rect.x = -upx(9999)
 
-                # Buttons: Move & Destroy
-                btn_furn_move_rect.x = cx + upx(14)
-                btn_furn_move_rect.y = cy + ch - upx(42)
-                m_hov = btn_furn_move_rect.collidepoint(m_pos)
-                pygame.draw.rect(screen, (37, 99, 235) if m_hov else (29, 78, 216), btn_furn_move_rect, border_radius=upx(6))
-                pygame.draw.rect(screen, (96, 165, 250), btn_furn_move_rect, width=1, border_radius=upx(6))
-                mv_txt = ui_font(12, bold=True).render("Move", True, (255, 255, 255))
-                screen.blit(mv_txt, (btn_furn_move_rect.centerx - mv_txt.get_width() // 2, btn_furn_move_rect.centery - mv_txt.get_height() // 2))
+                # Buttons: Move & Destroy (Move hidden for unmovable furniture,
+                # e.g. mine-head workstations bound to a world deposit)
+                if furniture_movable(selected_furniture):
+                    btn_furn_move_rect.x = cx + upx(14)
+                    btn_furn_move_rect.y = cy + ch - upx(42)
+                    m_hov = btn_furn_move_rect.collidepoint(m_pos)
+                    pygame.draw.rect(screen, (37, 99, 235) if m_hov else (29, 78, 216), btn_furn_move_rect, border_radius=upx(6))
+                    pygame.draw.rect(screen, (96, 165, 250), btn_furn_move_rect, width=1, border_radius=upx(6))
+                    mv_txt = ui_font(12, bold=True).render("Move", True, (255, 255, 255))
+                    screen.blit(mv_txt, (btn_furn_move_rect.centerx - mv_txt.get_width() // 2, btn_furn_move_rect.centery - mv_txt.get_height() // 2))
+                else:
+                    btn_furn_move_rect.x = -upx(9999)
 
                 btn_furn_destroy_rect.x = cx + cw - upx(14) - btn_furn_destroy_rect.w
                 btn_furn_destroy_rect.y = cy + ch - upx(42)

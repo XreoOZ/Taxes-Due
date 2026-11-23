@@ -241,13 +241,14 @@ class BuildingMixin:
                         txt = f"• {f.name} at ({f.grid_x}, {f.grid_y}) — Owner: {fam_str} | Status: [{f.status}]"
                         surface.blit(self.font_body.render(txt, True, COLOR_TEXT_MAIN), (mx + upx(36), y_cur + 2))
 
-                        # Move button
-                        mv_btn = pygame.Rect(row_rect.right - upx(270), y_cur - 1, upx(84), upx(22))
-                        self.furniture_move_btn_rects[f] = mv_btn
-                        mv_hov = mv_btn.collidepoint(m_pos)
-                        pygame.draw.rect(surface, (37, 99, 235) if mv_hov else (29, 78, 216), mv_btn, border_radius=upx(4))
-                        m_lbl = self.font_badge.render("Move", True, (255, 255, 255))
-                        surface.blit(m_lbl, (mv_btn.centerx - m_lbl.get_width() // 2, mv_btn.centery - m_lbl.get_height() // 2))
+                        # Move button (hidden for unmovable furniture, e.g. mine-bound workstations)
+                        if f.type_cfg.get("movable", True):
+                            mv_btn = pygame.Rect(row_rect.right - upx(270), y_cur - 1, upx(84), upx(22))
+                            self.furniture_move_btn_rects[f] = mv_btn
+                            mv_hov = mv_btn.collidepoint(m_pos)
+                            pygame.draw.rect(surface, (37, 99, 235) if mv_hov else (29, 78, 216), mv_btn, border_radius=upx(4))
+                            m_lbl = self.font_badge.render("Move", True, (255, 255, 255))
+                            surface.blit(m_lbl, (mv_btn.centerx - m_lbl.get_width() // 2, mv_btn.centery - m_lbl.get_height() // 2))
 
                         if f.status == "INSTALLED" and f.can_be_dropped:
                             drop_btn = pygame.Rect(row_rect.right - upx(180), y_cur - 1, upx(84), upx(22))

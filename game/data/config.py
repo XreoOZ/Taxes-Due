@@ -137,6 +137,10 @@ SERVANT_YIELD_FORCE = 60.0
 # and follow normal A* paths, but skip building collision resolution so a 1-tile
 # gap or wall edge can't permanently stall them. Player & villagers unaffected.
 SERVANT_PHASE_THROUGH_OBSTACLES = True
+# Radius (tiles) searched around an intended ground-drop/delivery point for
+# the nearest villager-reachable tile, so dropped goods never land on water,
+# inside solid structures, or on furniture footprints members cannot path to.
+SERVANT_SAFE_DROP_SEARCH_RADIUS_TILES = 10
 COLOR_SERVANT_BODY = (245, 158, 11)     # Amber orange
 COLOR_SERVANT_OUTLINE = (120, 53, 15)   # Deep brown/amber outline
 
@@ -638,12 +642,19 @@ AI_NEED_HUNGER_DECAY_PER_DAY = 100.0   # Decays by 100% per 1 full in-game day (
 AI_NEED_THIRST_DECAY_PER_DAY = 100.0   # Decays by 100% per 1 full in-game day
 AI_CRITICAL_NEED_THRESHOLD = 20.0      # Critical threshold (<= 20%) triggering task interruption
 AI_DEATH_COUNTDOWN_HOURS = 24.0        # 24 in-game hours before death occurs when a need reaches 0%
+# Survival override: a need that will turn lethal within this many in-game
+# hours overrides every schedule slot and errand (except sleep itself).
+AI_LETHAL_NEED_OVERRIDE_INGAME_HOURS = 2.0
 DAILY_FOOD_REQUIREMENT = 1             # 1 food per day per living individual
 DAILY_WATER_REQUIREMENT = 1            # 1 water per day per living individual
 AI_NEED_FOOD_RESTORE = 100.0           # Need restored when consuming food
 AI_NEED_WATER_RESTORE = 100.0          # Need restored when drinking water
 AI_NEED_SEEK_COOLDOWN_SECONDS = 4.0
 AI_NEED_PURCHASE_WAIT_COOLDOWN_SECONDS = 3.0
+# Max real seconds a villager may spend on the physical market food-purchase
+# errand (coin retrieval -> travel -> hauling home) before it is aborted so
+# the household "already purchasing" flag can never stay stuck forever.
+AI_FOOD_PURCHASE_ERRAND_TIMEOUT_SECONDS = 180.0
 HOUSEHOLD_WATER_MAX_COLLECTORS = 2     # Maximum concurrent household members hauling water
 AI_NEED_FAITH_MAX = 100.0
 AI_NEED_FAITH_DAILY_DECAY_MIN = 10.0

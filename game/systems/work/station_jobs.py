@@ -592,6 +592,15 @@ class StationJobSystem:
                                             day_cycle)
             return False
 
+        # Hard tool gate: production actions (felling, mining, replanting) are
+        # never performed while the job's required tools are missing — e.g.
+        # while a toolmaker commission is still in payment/forge/delivery.
+        # Deposit/leftover hauling above is tool-free and still allowed.
+        from game.systems.work.job_tool_system import get_missing_tools_for_worker
+        if get_missing_tools_for_worker(villager):
+            cls._reset_work_state(villager)
+            return False
+
         if job_id == "Woodsman":
             return cls._woodsman_work(villager, dt, station, nr, day_cycle,
                                       one_game_hour, current_day, quota_left,
@@ -619,6 +628,10 @@ class StationJobSystem:
         day_number = day_cycle.day_number if day_cycle else 1
         _, _, quota_left = StationJobSystem.quota_state(station, day_number)
         if quota_left <= 0:
+            return False
+        # Production needs the job's tools; deposits/leftovers above don't.
+        from game.systems.work.job_tool_system import get_missing_tools_for_worker
+        if get_missing_tools_for_worker(villager):
             return False
         if job_id == "Woodsman":
             nr = get_natural_resources()

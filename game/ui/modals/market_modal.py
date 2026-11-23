@@ -408,7 +408,11 @@ class MarketProfileModal:
                         self.status_message = "Enter a quantity greater than zero."
                         return "restock_invalid_quantity"
                     if getattr(mkt, "assigned_family_id", None):
-                        queued = HouseholdStallSystem.request_goods_restock(mkt, it_name, amount, furniture_manager)
+                        queued = HouseholdStallSystem.request_goods_restock(
+                            mkt, it_name, amount, furniture_manager,
+                            stockpile_manager=stockpile_manager,
+                            villager_manager=villager_manager,
+                        )
                         if queued:
                             self.status_message = f"Household restock queued for {queued} {it_name}."
                             return f"household_restock_order_{it_name}"
@@ -846,18 +850,9 @@ class MarketProfileModal:
         self.picker_done_rect = None
         self.picker_cancel_rect = None
         if self.show_item_picker:
-            # Each household may list only goods it currently owns. Landlord stalls
-            # can list any supported trade good from landlord storage.
-            if getattr(mkt, "assigned_family_id", None):
-                owned_items = HouseholdStallSystem.get_household_owned_sale_items(
-                    mkt.assigned_family_id, furniture_manager,
-                    villager_manager, stockpile_manager
-                )
-                selectable = [it for it in MARKET_TRADEABLE_ITEMS
-                              if it in owned_items and it not in getattr(mkt, "sale_items", [])]
-            else:
-                selectable = [it for it in MARKET_TRADEABLE_ITEMS
-                              if it not in getattr(mkt, "sale_items", [])]
+            selectable = self._get_picker_selectable(
+                mkt, furniture_manager, villager_manager, stockpile_manager
+            )
             self.picker_items = selectable
 
             dlg_w = upx(480)
@@ -948,6 +943,23 @@ class MarketProfileModal:
             d_lbl = self.font_btn.render(f"Done ({sel_count})", True, (255, 255, 255))
             surface.blit(d_lbl, (self.picker_done_rect.centerx - d_lbl.get_width() // 2,
                                  self.picker_done_rect.centery - d_lbl.get_height() // 2))
+
+    def _get_picker_selectable(self, mkt, furniture_manager, villager_manager,
+                               stockpile_manager):
+        """Items the Add Item picker may offer for this stall.
+
+        Household stalls may only list supported trade goods the household can
+        physically source for hauling (chests + owned loose stacks); landlord
+        stalls may list any supported trade good."""
+        if getattr(mkt, "assigned_family_id", None):
+            owned_items = HouseholdStallSystem.get_household_owned_sale_items(
+                mkt.assigned_family_id, furniture_manager,
+                villager_manager, stockpile_manager
+            )
+            return [it for it in MARKET_TRADEABLE_ITEMS
+                    if it in owned_items and it not in getattr(mkt, "sale_items", [])]
+        return [it for it in MARKET_TRADEABLE_ITEMS
+                if it not in getattr(mkt, "sale_items", [])]
 
     def _apply_picker_selection(self, mkt, furniture_manager, villager_manager,
                                 stockpile_manager):
