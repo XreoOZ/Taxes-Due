@@ -3657,6 +3657,11 @@ class RaportUI:
             self.job_schedule_btn_rects = {}
 
             all_vils = villager_manager.get_all_villagers() if villager_manager else []
+            idle_vils = sum(
+                1 for v in all_vils
+                if getattr(v, "is_alive", True)
+                and getattr(v, "job", "") in ("Unassigned", "Unemployed", "Peasant", None, "")
+            )
 
             old_clip = surface.get_clip()
             surface.set_clip(self.jobs_viewport_rect)
@@ -3686,18 +3691,32 @@ class RaportUI:
                     desc = self.font_body.render(job_cfg.get("desc", "Guild profession in development."), True, COLOR_TEXT_MUTED)
                     surface.blit(desc, (card_rect.x + 46, card_rect.y + 30))
                 else:
-                    # Calculate active workers
-                    job_vils = [v for v in all_vils if getattr(v, "is_alive", True) and v.job == job_id]
-                    from game.systems.workplace_system import assigned_ids
-                    workforce_assigned = assigned_ids(permit_manager, furniture_manager, building_manager)
-                    assigned_vils = [v for v in job_vils if str(v.id) in workforce_assigned]
-                    unassigned_count = len(job_vils) - len(assigned_vils)
+                    # Mirror the Workstations view: staffed/capacity aggregated
+                    # across this job's actual workplaces (permits, furniture,
+                    # buildings) instead of raw job-title headcount.
+                    from game.systems.workplace_system import (
+                        get_job_workplaces, workplace_capacity,
+                        workplace_job_workers,
+                    )
+                    workplaces = get_job_workplaces(job_id, permit_manager, furniture_manager, building_manager)
+                    total_cap = 0
+                    filled = 0
+                    for wp in workplaces:
+                        cap = workplace_capacity(wp)
+                        if cap is not None:
+                            total_cap += cap
+                        filled += len(workplace_job_workers(wp, job_id, villager_manager))
 
                     job_desc = job_cfg.get("desc", "Guild duties")
-                    stat_str = f"Workforce: {len(assigned_vils)}/{len(job_vils)} Assigned ({unassigned_count} Idle) — {job_desc}"
+                    if workplaces:
+                        stat_str = f"Workers: {filled}/{total_cap} slots ({idle_vils} idle) — {job_desc}"
+                        stat_col = (34, 197, 94) if total_cap > 0 and filled >= total_cap else (245, 158, 11)
+                    else:
+                        stat_str = f"No workplaces yet — {job_desc}"
+                        stat_col = COLOR_TEXT_MUTED
                     if len(stat_str) > 75:
                         stat_str = stat_str[:72] + "..."
-                    surface.blit(self.font_body.render(stat_str, True, (34, 197, 94) if unassigned_count == 0 else (245, 158, 11)), (card_rect.x + 46, card_rect.y + 30))
+                    surface.blit(self.font_body.render(stat_str, True, stat_col), (card_rect.x + 46, card_rect.y + 30))
 
                     # Action Buttons: Workstations & roster (per-job schedules removed —
                     # the Universal Schedule button above edits every job at once)
