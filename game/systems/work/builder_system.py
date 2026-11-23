@@ -553,26 +553,25 @@ class BuilderSystem:
             if cls._family_coin_total_copper(family_id, chest, stockpile_manager, villager_manager) < fee:
                 order["status"] = "AWAITING_PAYMENT"
                 return False
-            # Serialize household commission payments: while one member is
-            # mid-flight (or queued) on a builder-fee errand, further orders
-            # for THIS family wait for it to finish (retrieve -> deliver ->
-            # PAID). Without this, every pending order queues its own errand
-            # on the same representative and the schedule preempts itself.
-            if cls._family_fee_errand_active(family):
+            # Anti-oscillation is per MEMBER, not per family: a household may
+            # run several commission payments in parallel as long as each
+            # errand belongs to a different member. Orders only wait when
+            # EVERY able member is already mid-flight on a fee errand.
+            builder_id = str(order.get("builder_id"))
+            free_members = [m for m in survivors if not cls._member_fee_errand_active(m)]
+            if not free_members:
                 order["status"] = "AWAITING_PAYMENT"
                 return False
-            payer = family.get_available_recovery_representative() if hasattr(family, "get_available_recovery_representative") else survivors[0]
-            builder_id = str(order.get("builder_id"))
-            if payer and str(getattr(payer, "id", "")) == builder_id:
-                other_members = [member for member in survivors if str(getattr(member, "id", "")) != builder_id]
-                if other_members:
-                    payer = next((member for member in other_members
-                                  if getattr(member, "task", "") not in ("SEEKING_FOOD", "SEEKING_WATER", "SEEKING_TOILET", "RECOVER_DEATH_ITEMS")
-                                  and getattr(member, "hunger", 100.0) > 20.0
-                                  and getattr(member, "thirst", 100.0) > 20.0
-                                  and getattr(member, "need_toilet", 100.0) > 20.0), other_members[0])
-            if not payer:
-                return False
+            available = [
+                m for m in free_members
+                if getattr(m, "task", "") not in ("SEEKING_FOOD", "SEEKING_WATER", "SEEKING_TOILET", "RECOVER_DEATH_ITEMS")
+                and getattr(m, "hunger", 100.0) > 20.0
+                and getattr(m, "thirst", 100.0) > 20.0
+                and getattr(m, "need_toilet", 100.0) > 20.0
+            ]
+            pool = available or free_members
+            non_builder = [m for m in pool if str(getattr(m, "id", "")) != builder_id]
+            payer = (non_builder or pool)[0]
             builder = next((member for member in survivors
                                if str(getattr(member, "id", "")) == builder_id), None)
             if str(getattr(payer, "id", "")) == builder_id and builder:
@@ -1318,7 +1317,19 @@ class BuilderSystem:
                     }
                     for material, amount in remaining_materials.items():
                         retained[material] = max(retained.get(material, 0), amount)
-                drop_tile = (int(home_x // TILE_SIZE), int(home_y // TILE_SIZE))
+                # Chestless households: drop surplus materials on a tile
+                # inside the household permit so the family's "safe at home"
+                # retrieval check recognizes the stack (approach-point tiles
+                # can sit outside the permit and cause retrieve/drop loops).
+                drop_tile = None
+                if permit_manager is not None and home_permit_id is not None:
+                    from game.world.permits import resolve_household_ground_drop_tile
+                    drop_tile = resolve_household_ground_drop_tile(
+                        home_permit_id, permit_manager, building_manager,
+                        furniture_manager=furniture_manager,
+                        ref_x=home_x, ref_y=home_y)
+                if drop_tile is None:
+                    drop_tile = (int(home_x // TILE_SIZE), int(home_y // TILE_SIZE))
                 for material in material_targets:
                     surplus = max(0, int(builder.inventory.get(material, 0)) - int(retained.get(material, 0)))
                     if surplus and stockpile_manager:
