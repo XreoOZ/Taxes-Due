@@ -317,14 +317,28 @@ class ChurchSystem:
             representative.church_tax_prepared_day = day
             representative.church_tax_prepared_amount = 0
             return 0
-        chest = furniture_manager.get_storage_for_family(fam_id) if furniture_manager else None
-        source = getattr(chest, "inventory", None) if chest else None
-        available = to_copper(normalize_wallet(source))
+        # Universal physical collection: tithe coins are gathered from
+        # reachable household sources (chest the rep is standing at, nearby
+        # ground stacks, member pockets inside the same permit). If the rep
+        # is away from home at prayer time, no coins can be collected —
+        # the household simply cannot pay that day (no telepathy).
+        from game.systems.economy.transactions import (
+            household_coin_total_copper, collect_coins)
+        available = household_coin_total_copper(
+            fam_id, furniture_manager, getattr(representative, "villager_manager", None),
+            getattr(representative, "stockpile_manager", None))
         amount = min(due, available)
         if amount > 0:
             if not isinstance(getattr(representative, "inventory", None), dict):
                 representative.inventory = {}
-            success, _ = transfer_exact_value(source, representative.inventory, amount)
+            success, _ = collect_coins(
+                representative, fam_id, amount,
+                furniture_manager=furniture_manager,
+                villager_manager=getattr(representative, "villager_manager", None),
+                stockpile_manager=getattr(representative, "stockpile_manager", None),
+                building_manager=getattr(representative, "building_manager", None),
+                permit_manager=getattr(representative, "permit_manager", None),
+            )
             if not success:
                 amount = 0
         representative.church_tax_prepared_day = day
@@ -397,7 +411,8 @@ class ChurchSystem:
 
         if not isinstance(getattr(priest, "inventory", None), dict):
             priest.inventory = {}
-        transfer_success, _ = transfer_exact_value(representative.inventory, priest.inventory, paid_copper)
+        from game.systems.economy.transactions import pay_coins
+        transfer_success, _ = pay_coins(representative, priest.inventory, paid_copper)
 
         if transfer_success:
             VillageWealthSystem.mark_dirty()

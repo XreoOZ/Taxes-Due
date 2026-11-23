@@ -157,10 +157,22 @@ def collect_coins(carrier, family_id, amount_copper, furniture_manager=None,
 
     fid = str(family_id or getattr(carrier, "family_id", "") or "")
 
-    # 1. Chest keluarga (caller berjalan ke sini)
+    # 1. Chest keluarga — carrier harus benar-benar berada di dekat chest
+    #    (errand sudah berjalan ke sana). Tanpa cek jarak, koin chest
+    #    "teleport" ke carrier yang sedang di pasar.
     chest = household_chest(fid, furniture_manager)
     chest_inv = getattr(chest, "inventory", None) if chest is not None else None
-    if isinstance(chest_inv, dict):
+    chest_near = chest is not None
+    if chest is not None:
+        try:
+            cw = getattr(chest, "get_world_pos", None)
+            if callable(cw):
+                cwx, cwy = cw(TILE_SIZE)
+                chest_near = ((cwx - getattr(carrier, "x", 0)) ** 2
+                              + (cwy - getattr(carrier, "y", 0)) ** 2) ** 0.5 <= TILE_SIZE * 3
+        except Exception:
+            chest_near = True  # chest tanpa posisi (test double) — anggap dekat
+    if isinstance(chest_inv, dict) and chest_near:
         c = to_copper(normalize_wallet(chest_inv))
         if c > 0:
             ok, _ = transfer_currency_value(chest_inv, pocket, min(deficit, c))
@@ -168,8 +180,10 @@ def collect_coins(carrier, family_id, amount_copper, furniture_manager=None,
             if deficit <= 0:
                 return True, "Collected coins from household chest."
 
-    # 2. Loose coin stacks milik keluarga di tanah
+    # 2. Loose coin stacks milik keluarga di tanah — harus terjangkau
+    #    carrier (maks ~3 tile).
     sm = stockpile_manager or getattr(carrier, "stockpile_manager", None)
+    cx0, cy0 = getattr(carrier, "x", 0), getattr(carrier, "y", 0)
     for stack in family_loose_stacks(fid, sm):
         if deficit <= 0:
             break
@@ -178,6 +192,9 @@ def collect_coins(carrier, family_id, amount_copper, furniture_manager=None,
             continue
         avail = int(getattr(stack, "available_amount", getattr(stack, "amount", 0)) or 0)
         if avail <= 0:
+            continue
+        sx, sy = (getattr(stack, "grid_x", 0) + 0.5) * TILE_SIZE, (getattr(stack, "grid_y", 0) + 0.5) * TILE_SIZE
+        if ((sx - cx0) ** 2 + (sy - cy0) ** 2) ** 0.5 > TILE_SIZE * 3:
             continue
         # Ambil denominasi apa adanya — stack.amount dalam unit koin.
         rate = _DENOM_RATE.get(d, 1)
