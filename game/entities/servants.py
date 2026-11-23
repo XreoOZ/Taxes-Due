@@ -58,7 +58,7 @@ from game.config import (
     SERVANT_TELEPORT_SEARCH_RADIUS_TILES,
     SERVANT_MAX_TELEPORTS_PER_TARGET,
 )
-from game.data.config import MARKET_TRADEABLE_ITEMS, MARKET_CURRENCY_DENOMINATIONS, SERVANT_PHASE_THROUGH_OBSTACLES
+from game.data.config import MARKET_TRADEABLE_ITEMS, MARKET_CURRENCY_DENOMINATIONS, SERVANT_PHASE_THROUGH_OBSTACLES, MARKET_RESTOCK_ORDER_TIMEOUT_SECONDS
 from game.systems.core.ai_simulation_scheduler import AISimulationScheduler
 from game.systems.core.spatial_entities import SpatialEntityIndex
 from game.world.navigation.pathfinding import GlobalPathRegistry, calculate_collision_slide, is_narrow_passage_tile
@@ -1194,6 +1194,18 @@ class Servant:
 
         # Royal Decree: Hauling Restock Items to Market (Agent 2)
         if servant_manager and getattr(servant_manager, "restock_orders", None):
+            # Purge zombie orders: market gone, item no longer sellable, or
+            # timed out — otherwise they vacuum matching storage stacks into
+            # the market forever (e.g. right after the Lord withdraws goods).
+            live_buildings = set(getattr(building_manager, "buildings", []) or [])
+            now_ts = time.time()
+            servant_manager.restock_orders[:] = [
+                o for o in servant_manager.restock_orders
+                if o.get("market_building") in live_buildings
+                and not (o.get("item_type") in MARKET_TRADEABLE_ITEMS
+                         and o.get("item_type") not in getattr(o.get("market_building"), "sale_items", []))
+                and now_ts - float(o.get("created_at", now_ts)) <= MARKET_RESTOCK_ORDER_TIMEOUT_SECONDS
+            ]
             for order in servant_manager.restock_orders:
                 remaining = order["amount"] - order.get("in_transit", 0) - order.get("delivered", 0)
                 if remaining > 0:
@@ -2133,20 +2145,25 @@ class ServantManager:
             "delivered": 0
         })
 
-    def add_restock_order(self, market_building, item_type, amount, stockpile_manager=None, resources=None):
+    def add_restock_order(self, market_building, item_type, amount, stockpile_manager=None, resources=None, permit_manager=None):
         """Mendaftarkan tugas restock fisik barang dari storage Landlord ke pasar oleh Servant (Agent 2)"""
         if amount <= 0 or not market_building or (item_type not in MARKET_TRADEABLE_ITEMS and item_type not in MARKET_CURRENCY_DENOMINATIONS):
             return None
         if item_type in MARKET_TRADEABLE_ITEMS and item_type not in getattr(market_building, "sale_items", []):
             return None
 
-        # Cek ketersediaan di Landlord storage
+        # Cek ketersediaan di Landlord storage — hanya stack DI DALAM storage
+        # permit yang bisa di-fetch (fetch logic juga menolak loose stacks),
+        # jadi order tidak boleh dibuat berdasarkan stok yang tidak terjangkau.
         target_res = "Food" if item_type in ("Potato", "potato") else item_type
         avail_stock = 0
         if stockpile_manager:
             for s in getattr(stockpile_manager, "stacks", []):
-                if s.owner_type == "landlord" and s.resource_type in (item_type, target_res):
-                    avail_stock += getattr(s, "available_amount", s.amount)
+                if s.owner_type != "landlord" or s.resource_type not in (item_type, target_res):
+                    continue
+                if permit_manager is not None and not stockpile_manager.is_tile_in_storage(s.grid_x, s.grid_y, permit_manager):
+                    continue
+                avail_stock += getattr(s, "available_amount", s.amount)
         elif resources:
             avail_stock = resources.get(target_res, resources.get(item_type, 0))
 
@@ -2160,7 +2177,8 @@ class ServantManager:
             "item_type": item_type,
             "amount": order_amt,
             "in_transit": 0,
-            "delivered": 0
+            "delivered": 0,
+            "created_at": time.time(),
         }
         self.restock_orders.append(order)
         return order

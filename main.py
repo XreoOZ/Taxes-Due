@@ -564,6 +564,7 @@ def main():
                         servant_manager=servant_manager,
                         villager_manager=villager_manager,
                         furniture_manager=furniture_manager,
+                        permit_manager=permit_manager,
                     )
                     continue
 
@@ -1265,7 +1266,7 @@ def main():
                     if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
                         market_modal.close()
                     else:
-                        market_modal.handle_event(event, resources, stockpile_manager, servant_manager=servant_manager, villager_manager=villager_manager, furniture_manager=furniture_manager)
+                        market_modal.handle_event(event, resources, stockpile_manager, servant_manager=servant_manager, villager_manager=villager_manager, furniture_manager=furniture_manager, permit_manager=permit_manager)
 
                 # -------------------------------------------------------------
                 # 4.6. ADD ITEM CHEAT MODAL OPEN (AGENT 2)

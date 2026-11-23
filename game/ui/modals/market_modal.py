@@ -166,7 +166,7 @@ class MarketProfileModal:
         self.focused_quantity = None
         self.num_input.cancel()
 
-    def handle_event(self, event, resources=None, stockpile_manager=None, servant_manager=None, villager_manager=None, furniture_manager=None):
+    def handle_event(self, event, resources=None, stockpile_manager=None, servant_manager=None, villager_manager=None, furniture_manager=None, permit_manager=None):
         """Handles keyboard and mouse events for Market Profile Modal"""
         if not self.is_open or not self.target_market:
             return None
@@ -336,7 +336,7 @@ class MarketProfileModal:
                             self.status_message = "Enter a quantity greater than zero."
                             return "coin_invalid_quantity"
                         if action == "deposit" and servant_manager:
-                            order = servant_manager.add_restock_order(mkt, denom, amount, stockpile_manager=stockpile_manager, resources=resources)
+                            order = servant_manager.add_restock_order(mkt, denom, amount, stockpile_manager=stockpile_manager, resources=resources, permit_manager=permit_manager)
                             if order:
                                 self.status_message = f"Servant order created for {order['amount']} {denom}."
                                 return f"coin_deposit_order_{denom}_{order['amount']}"
@@ -353,6 +353,13 @@ class MarketProfileModal:
                                 drop_tile = (int(math.floor(approach[0] / TILE_SIZE)), int(math.floor(approach[1] / TILE_SIZE)))
                                 stockpile_manager.drop_resource(denom, actual, drop_tile[0], drop_tile[1], owner_type="landlord")
                                 stockpile_manager.refresh_stacks(resources, None)
+                                # Withdraw wins over any pending restock order
+                                # for the same coin, else it gets sucked back.
+                                if servant_manager is not None:
+                                    servant_manager.restock_orders[:] = [
+                                        o for o in getattr(servant_manager, "restock_orders", [])
+                                        if not (o.get("market_building") is mkt and o.get("item_type") == denom)
+                                    ]
                                 from game.systems.economy.wealth_system import VillageWealthSystem
                                 VillageWealthSystem.mark_dirty()
                                 self.status_message = f"Dropped {actual} {denom} near the market for servant hauling."
@@ -411,7 +418,8 @@ class MarketProfileModal:
                         order = servant_manager.add_restock_order(
                             mkt, it_name, amount,
                             stockpile_manager=stockpile_manager,
-                            resources=resources
+                            resources=resources,
+                            permit_manager=permit_manager
                         )
                         if order:
                             self.status_message = f"Servant order created for {order['amount']} {it_name}."
@@ -460,6 +468,13 @@ class MarketProfileModal:
                                 drop_tile = (int(math.floor(approach[0] / TILE_SIZE)), int(math.floor(approach[1] / TILE_SIZE)))
                                 stockpile_manager.drop_resource(target_res, withdraw_amt, drop_tile[0], drop_tile[1], owner_type="landlord")
                                 stockpile_manager.refresh_stacks(resources, None)
+                                # Withdraw wins over any pending restock order
+                                # for the same item, else it gets sucked back.
+                                if servant_manager is not None:
+                                    servant_manager.restock_orders[:] = [
+                                        o for o in getattr(servant_manager, "restock_orders", [])
+                                        if not (o.get("market_building") is mkt and o.get("item_type") == it_name)
+                                    ]
                             else:
                                 self.status_message = "No stockpile available for physical withdrawal."
                                 mkt.inventory[it_name] = mkt.inventory.get(it_name, 0) + withdraw_amt
