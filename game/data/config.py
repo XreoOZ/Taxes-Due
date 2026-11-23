@@ -531,7 +531,7 @@ DEDICATED_JOBS = {
         "wip": False,
         "workplace_furniture_type": "toolmaker_workbench",
         "desc": "Smelts iron ore into bars and forges tools at the Toolmaker Workbench (hammer, tongs, and moulds).",
-        "required_tools": [],
+        "required_tools": ["Hammer", "Tongs"],
         "material_stock_target": {"Wood": 10}
     }
 }
