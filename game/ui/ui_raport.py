@@ -355,6 +355,7 @@ class RaportUI(
         self.selected_family_id = family_id
         self.show_household_possession = False
         self.show_wealth_detail_dialog = False
+        self.show_item_dist_dialog = False
         self.show_grant_dialog = False
         self.show_grant_confirm = False
         self.show_assign_permit_picker = False
@@ -365,6 +366,8 @@ class RaportUI(
         self.active_tab = 4  # Tab Household
         self.selected_family_id = family_id
         self.show_household_possession = True
+        self.show_wealth_detail_dialog = False
+        self.show_item_dist_dialog = False
         self.show_grant_dialog = False
         self.show_grant_confirm = False
         self.show_assign_permit_picker = False
@@ -374,6 +377,8 @@ class RaportUI(
         target_p = next((p for p in getattr(permit_manager, "permits", []) if p.id == permit_id), None)
         self.is_open = True
         self.active_tab = 1  # Tab Area Permits
+        self.show_wealth_detail_dialog = False
+        self.show_item_dist_dialog = False
         self.selected_permit_inspect_id = permit_id
         if target_p:
             categories = get_permit_categories()
@@ -387,6 +392,8 @@ class RaportUI(
         optionally highlighting one specific workplace card."""
         self.is_open = True
         self.active_tab = 5  # Tab Workers
+        self.show_wealth_detail_dialog = False
+        self.show_item_dist_dialog = False
         self.selected_job_id = None
         self.selected_workstation_job_id = job_id
         self.highlight_workplace_key = self._workplace_key(workplace) if workplace else None
@@ -399,6 +406,8 @@ class RaportUI(
         (used when the player clicks a Notice Board)."""
         self.is_open = True
         self.active_tab = 6  # Tab Immigrant
+        self.show_wealth_detail_dialog = False
+        self.show_item_dist_dialog = False
         self.selected_building_category = None
         self.selected_permit_category = None
         self.show_build_menu = False
@@ -414,6 +423,8 @@ class RaportUI(
             cat_id = b_cfg.get("category_id", getattr(building, "building_type", "wooden_structure"))
             self.is_open = True
             self.active_tab = 0  # Tab Buildings
+            self.show_wealth_detail_dialog = False
+            self.show_item_dist_dialog = False
             self.selected_building_category = cat_id
             self.selected_building_owner = None
             self.building_scroll_y = 0
@@ -895,6 +906,8 @@ class RaportUI(
                 self.show_household_possession = False
                 self.show_grant_dialog = False
                 self.show_grant_confirm = False
+                self.show_wealth_detail_dialog = False
+                self.show_item_dist_dialog = False
                 self.grant_amounts = {}
                 self.active_grant_input_item = None
                 self.show_assign_permit_picker = False
@@ -1486,6 +1499,10 @@ class RaportUI(
 
         # 8.5. Tab 7: Taxation & Tithes
         elif self.active_tab == 7:
+            # Single modal owner: the Wealth dialog always wins over Item
+            # Distribution if both flags ever desync.
+            if self.show_item_dist_dialog and self.show_wealth_detail_dialog:
+                self.show_item_dist_dialog = False
             if self.show_item_dist_dialog:
                 # The wealth card sits outside the dialog — let it switch
                 # dialogs directly instead of being blocked by the overlay.

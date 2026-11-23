@@ -169,7 +169,9 @@ class TaxMixin:
         surface.blit(id_txt, (self.check_item_dist_btn_rect.centerx - id_txt.get_width() // 2,
                               self.check_item_dist_btn_rect.centery - id_txt.get_height() // 2))
 
-        if self.show_item_dist_dialog:
+        # Item Distribution never renders on top of the Wealth dialog —
+        # whichever opened last owns the modal layer.
+        if self.show_item_dist_dialog and not self.show_wealth_detail_dialog:
             self._draw_item_dist_dialog(
                 surface, villager_manager, furniture_manager, building_manager,
                 stockpile_manager, production_system, day_cycle, mouse_pos,
