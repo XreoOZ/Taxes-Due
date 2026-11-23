@@ -488,15 +488,16 @@ class BuilderSystem:
 
     @classmethod
     def _family_abstract_wallets(cls, family_id, villager_manager):
-        """Abstract coin wallets a household can spend: family purse + member pockets."""
+        """Abstract coin wallets a household can spend: family purse + member pockets.
+        Member pockets are their carried inventories (coins only are counted)."""
         fam = villager_manager.get_family_by_id(family_id) if villager_manager and family_id is not None else None
         wallets = []
         if fam is not None:
             if isinstance(getattr(fam, "currency", None), dict):
                 wallets.append(fam.currency)
             for m in getattr(fam, "members", []) or []:
-                if getattr(m, "is_alive", True) and isinstance(getattr(m, "currency", None), dict):
-                    wallets.append(m.currency)
+                if getattr(m, "is_alive", True) and isinstance(getattr(m, "inventory", None), dict):
+                    wallets.append(m.inventory)
         return wallets
 
     @classmethod
@@ -626,7 +627,11 @@ class BuilderSystem:
                 to_copper(normalize_wallet(w))
                 for w in cls._family_abstract_wallets(villager.family_id, villager_manager)
             )
-            if not chest_covers and stack_total + wallet_total < fee:
+            # Coins already collected into this payer's pockets count toward
+            # the fee — otherwise draining the coin stacks aborts the payment
+            # and strands the coins in the villager's inventory.
+            carried_copper = to_copper(normalize_wallet(villager.inventory))
+            if not chest_covers and carried_copper + stack_total + wallet_total < fee:
                 order["status"] = "AWAITING_PAYMENT"
                 villager.builder_payment_order_id = None
                 villager.builder_fee_needed = None
@@ -653,7 +658,7 @@ class BuilderSystem:
             # No chest (or chest can't cover): collect coins from loose household
             # stacks. Any denomination is acceptable as long as total value
             # covers the remaining fee.
-            carried = to_copper(normalize_wallet(villager.inventory))
+            carried = carried_copper
             still_needed_copper = max(0, fee - carried)
             if still_needed_copper <= 0:
                 cls._finalize_fee_payment(villager, order, builder, fee, villager_manager, day_number)
@@ -663,6 +668,8 @@ class BuilderSystem:
             for wallet in cls._family_abstract_wallets(villager.family_id, villager_manager):
                 if still_needed_copper <= 0:
                     break
+                if wallet is villager.inventory:
+                    continue  # own pockets already counted via carried_copper
                 ok, _ = transfer_currency_value(wallet, villager.inventory, still_needed_copper)
                 if ok:
                     still_needed_copper = max(0, fee - to_copper(normalize_wallet(villager.inventory)))
