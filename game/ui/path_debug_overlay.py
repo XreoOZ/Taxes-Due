@@ -20,6 +20,7 @@ from game.data.config import (
     PATH_TOGGLE_BTN_WIDTH,
     ROUTE_STATE_FAILED,
 )
+from game.ui.ui_theme import upx
 
 
 class PathDebugOverlay:
@@ -36,13 +37,15 @@ class PathDebugOverlay:
 
     def draw_toggle(self, surface, anchor_rect, font):
         """Place the switch beside the existing Add Item control, screen-relative."""
+        self.button_rect.size = (upx(PATH_TOGGLE_BTN_WIDTH), upx(PATH_TOGGLE_BTN_HEIGHT))
+        margin = upx(PATH_TOGGLE_BTN_MARGIN)
         x = max(0, min(anchor_rect.x, surface.get_width() - self.button_rect.width))
-        y = min(anchor_rect.bottom + PATH_TOGGLE_BTN_MARGIN,
-                surface.get_height() - self.button_rect.height - PATH_TOGGLE_BTN_MARGIN)
-        self.button_rect.topleft = (x, max(PATH_TOGGLE_BTN_MARGIN, y))
+        y = min(anchor_rect.bottom + margin,
+                surface.get_height() - self.button_rect.height - margin)
+        self.button_rect.topleft = (x, max(margin, y))
         color = COLOR_PATH_TOGGLE_ON if self.enabled else COLOR_PATH_TOGGLE_OFF
-        pygame.draw.rect(surface, color, self.button_rect, border_radius=6)
-        pygame.draw.rect(surface, COLOR_PATH_TOGGLE_BORDER, self.button_rect, width=1, border_radius=6)
+        pygame.draw.rect(surface, color, self.button_rect, border_radius=upx(6))
+        pygame.draw.rect(surface, COLOR_PATH_TOGGLE_BORDER, self.button_rect, width=1, border_radius=upx(6))
         label = font.render(f"AI Routes: {'ON' if self.enabled else 'OFF'}", True, (255, 255, 255))
         surface.blit(label, label.get_rect(center=self.button_rect.center))
 

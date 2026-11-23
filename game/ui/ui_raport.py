@@ -101,7 +101,7 @@ class RaportUI(
         self.selected_market_building = None
 
         # Left HUD Button (Town Ledger)
-        self.btn_left_rect = pygame.Rect(16, 200, 116, 42)
+        self.btn_left_rect = pygame.Rect(upx(16), upx(200), upx(116), upx(42))
 
         # Tabs
         self.tabs = [
@@ -338,7 +338,7 @@ class RaportUI(
     def open_household_directly(self, family_id):
         """Contextual View: Opens Town Ledger directly to the specified family's View Family screen"""
         self.is_open = True
-        self.active_tab = 4  # Tab Household
+        self.active_tab = upx(4)  # Tab Household
         self.selected_family_id = family_id
         self.show_household_possession = False
         self.show_wealth_detail_dialog = False
@@ -349,7 +349,7 @@ class RaportUI(
     def open_possession_directly(self, family_id):
         """Contextual View: Opens Town Ledger directly to the specified household's Possession screen"""
         self.is_open = True
-        self.active_tab = 4  # Tab Household
+        self.active_tab = upx(4)  # Tab Household
         self.selected_family_id = family_id
         self.show_household_possession = True
         self.show_grant_dialog = False
@@ -373,7 +373,7 @@ class RaportUI(
         """Contextual View: Opens Town Ledger Workers tab focused on a job's Workstations,
         optionally highlighting one specific workplace card."""
         self.is_open = True
-        self.active_tab = 5  # Tab Workers
+        self.active_tab = upx(5)  # Tab Workers
         self.selected_job_id = None
         self.selected_workstation_job_id = job_id
         self.highlight_workplace_key = self._workplace_key(workplace) if workplace else None
@@ -385,7 +385,7 @@ class RaportUI(
         """Contextual View: Opens Town Ledger directly to the Immigrant tab
         (used when the player clicks a Notice Board)."""
         self.is_open = True
-        self.active_tab = 6  # Tab Immigrant
+        self.active_tab = upx(6)  # Tab Immigrant
         self.selected_building_category = None
         self.selected_permit_category = None
         self.show_build_menu = False
@@ -604,8 +604,8 @@ class RaportUI(
         active = (self.num_input.active_key == key)
         bg = (15, 23, 42) if not active else (30, 58, 138)
         border = (250, 204, 21) if active else (71, 85, 105)
-        pygame.draw.rect(surface, bg, rect, border_radius=4)
-        pygame.draw.rect(surface, border, rect, width=2 if active else 1, border_radius=4)
+        pygame.draw.rect(surface, bg, rect, border_radius=upx(4))
+        pygame.draw.rect(surface, border, rect, width=2 if active else 1, border_radius=upx(4))
         txt = (self.num_input.text + "_") if active else str(display_value)
         t = self.font_badge.render(txt, True, (255, 255, 255))
         surface.blit(t, (rect.centerx - t.get_width() // 2,
@@ -732,7 +732,7 @@ class RaportUI(
         if event.type == pygame.MOUSEBUTTONDOWN:
             # Handle legacy button 4/5 mouse wheel
             if event.button in (4, 5) and self.show_grant_dialog and getattr(self, "grant_max_scroll", 0) > 0:
-                scroll_step = -36 if event.button == 4 else 36
+                scroll_step = -upx(36) if event.button == 4 else upx(36)
                 self.grant_scroll_y = max(0, min(self.grant_scroll_y + scroll_step, self.grant_max_scroll))
                 return "grant_scroll"
             if event.button != 1:
@@ -1512,16 +1512,18 @@ class RaportUI(
     def draw(self, surface, building_manager, permit_manager, resources, servant_manager=None, villager_manager=None, schedule_manager=None, day_cycle=None, furniture_manager=None, stockpile_manager=None, production_system=None):
         self._init_fonts()
         screen_w, screen_h = surface.get_size()
+        self.modal_w = min(upx(RAPORT_MODAL_WIDTH), screen_w - upx(48))
+        self.modal_h = min(upx(RAPORT_MODAL_HEIGHT), screen_h - upx(48))
 
-        self.btn_left_rect.x = 16
-        self.btn_left_rect.y = (screen_h // 2) - 21
+        self.btn_left_rect.x = upx(16)
+        self.btn_left_rect.y = (screen_h // 2) - upx(21)
 
         # Left HUD Button "Raport"
         mouse_pos = pygame.mouse.get_pos()
         btn_hover = self.btn_left_rect.collidepoint(mouse_pos)
         btn_bg = (40, 56, 80) if btn_hover else COLOR_RAPORT_BTN_BG
-        pygame.draw.rect(surface, btn_bg, self.btn_left_rect, border_radius=6)
-        pygame.draw.rect(surface, COLOR_RAPORT_BTN_BORDER, self.btn_left_rect, width=2, border_radius=6)
+        pygame.draw.rect(surface, btn_bg, self.btn_left_rect, border_radius=upx(6))
+        pygame.draw.rect(surface, COLOR_RAPORT_BTN_BORDER, self.btn_left_rect, width=2, border_radius=upx(6))
 
         btn_txt = self.font_btn.render("Town Ledger", True, COLOR_TEXT_MAIN)
         txt_rect = btn_txt.get_rect(center=self.btn_left_rect.center)
@@ -1539,34 +1541,34 @@ class RaportUI(
         my = (screen_h - self.modal_h) // 2
 
         modal_surf = pygame.Surface((self.modal_w, self.modal_h), pygame.SRCALPHA)
-        pygame.draw.rect(modal_surf, COLOR_MODAL_BG, (0, 0, self.modal_w, self.modal_h), border_radius=12)
-        pygame.draw.rect(modal_surf, COLOR_MODAL_BORDER, (0, 0, self.modal_w, self.modal_h), width=2, border_radius=12)
+        pygame.draw.rect(modal_surf, COLOR_MODAL_BG, (0, 0, self.modal_w, self.modal_h), border_radius=upx(12))
+        pygame.draw.rect(modal_surf, COLOR_MODAL_BORDER, (0, 0, self.modal_w, self.modal_h), width=2, border_radius=upx(12))
         surface.blit(modal_surf, (mx, my))
 
         # Title
         title_surf = self.font_title.render("TOWN LEDGER", True, COLOR_TEXT_TITLE)
-        surface.blit(title_surf, (mx + 20, my + 16))
+        surface.blit(title_surf, (mx + upx(20), my + upx(16)))
 
         # Close (X)
-        self.close_btn_rect = pygame.Rect(mx + self.modal_w - 36, my + 14, 22, 22)
+        self.close_btn_rect = pygame.Rect(mx + self.modal_w - upx(36), my + upx(14), upx(22), upx(22))
         close_hover = self.close_btn_rect.collidepoint(mouse_pos)
         close_col = (239, 68, 68) if close_hover else COLOR_TEXT_MUTED
         close_surf = self.font_btn.render("X", True, close_col)
-        surface.blit(close_surf, (self.close_btn_rect.x + 5, self.close_btn_rect.y + 1))
+        surface.blit(close_surf, (self.close_btn_rect.x + upx(5), self.close_btn_rect.y + 1))
 
         # Tabs
         self.tab_rects = []
-        tab_x = mx + 20
-        tab_y = my + 50
-        tab_spacing = 8
+        tab_x = mx + upx(20)
+        tab_y = my + upx(50)
+        tab_spacing = upx(8)
         visible_tabs = [t for t in self.tabs if not t.get("hidden", False)]
         avail_w = self.modal_w - 40 - ((len(visible_tabs) - 1) * tab_spacing)
         tab_w = avail_w // len(visible_tabs)
-        tab_h = 32
+        tab_h = upx(32)
 
         for i, tab in enumerate(self.tabs):
             if tab.get("hidden", False):
-                self.tab_rects.append(pygame.Rect(-9999, -9999, 0, 0))
+                self.tab_rects.append(pygame.Rect(-upx(9999), -upx(9999), 0, 0))
                 continue
 
             t_rect = pygame.Rect(tab_x, tab_y, tab_w, tab_h)
@@ -1574,29 +1576,29 @@ class RaportUI(
             is_active = (i == self.active_tab)
 
             t_bg = COLOR_TAB_ACTIVE if is_active else COLOR_TAB_INACTIVE
-            pygame.draw.rect(surface, t_bg, t_rect, border_radius=6)
+            pygame.draw.rect(surface, t_bg, t_rect, border_radius=upx(6))
             if is_active:
-                pygame.draw.rect(surface, (96, 165, 250), t_rect, width=1, border_radius=6)
+                pygame.draw.rect(surface, (96, 165, 250), t_rect, width=1, border_radius=upx(6))
 
             txt_c = (255, 255, 255) if is_active else COLOR_TEXT_MUTED
             t_surf = self.font_tab.render(tab["title"], True, txt_c)
 
             if tab["wip"]:
-                wip_w = 26
-                wip_h = 14
-                wip_rect = pygame.Rect(tab_x + tab_w - wip_w - 4, tab_y + (tab_h - wip_h) // 2, wip_w, wip_h)
+                wip_w = upx(26)
+                wip_h = upx(14)
+                wip_rect = pygame.Rect(tab_x + tab_w - wip_w - upx(4), tab_y + (tab_h - wip_h) // 2, wip_w, wip_h)
                 pygame.draw.rect(surface, COLOR_BADGE_WIP, wip_rect, border_radius=3)
                 w_txt = self.font_badge.render("WIP", True, (0, 0, 0))
                 surface.blit(w_txt, (wip_rect.centerx - w_txt.get_width() // 2, wip_rect.centery - w_txt.get_height() // 2))
-                surface.blit(t_surf, (tab_x + 5, tab_y + (tab_h - t_surf.get_height()) // 2))
+                surface.blit(t_surf, (tab_x + upx(5), tab_y + (tab_h - t_surf.get_height()) // 2))
             else:
                 surface.blit(t_surf, (tab_x + (tab_w - t_surf.get_width()) // 2, tab_y + (tab_h - t_surf.get_height()) // 2))
 
             tab_x += tab_w + tab_spacing
 
-        pygame.draw.line(surface, COLOR_MODAL_BORDER, (mx + 20, tab_y + tab_h + 8), (mx + self.modal_w - 20, tab_y + tab_h + 8))
+        pygame.draw.line(surface, COLOR_MODAL_BORDER, (mx + upx(20), tab_y + tab_h + upx(8)), (mx + self.modal_w - upx(20), tab_y + tab_h + upx(8)))
 
-        content_y = tab_y + tab_h + 16
+        content_y = tab_y + tab_h + upx(16)
         self.num_fields = {}
         if self.active_tab == 0:
             self._draw_building_tab(surface, mx, content_y, building_manager, permit_manager, resources, furniture_manager=furniture_manager, villager_manager=villager_manager)

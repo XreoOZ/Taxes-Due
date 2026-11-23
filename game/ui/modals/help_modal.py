@@ -345,7 +345,7 @@ class HelpModal:
                 self.detail_index = idx
                 self.scroll_y = 0.0
                 return "open_topic"
-            step = 48 if event.key in (pygame.K_PAGEUP, pygame.K_PAGEDOWN) else 24
+            step = upx(48) if event.key in (pygame.K_PAGEUP, pygame.K_PAGEDOWN) else upx(24)
             direction = -1 if event.key in (pygame.K_UP, pygame.K_PAGEUP) else 1
             self.scroll_y += direction * step
             self._clamp_scroll()
@@ -373,7 +373,7 @@ class HelpModal:
             return "blocked"
         if event.type == pygame.MOUSEWHEEL:
             if self.viewport_rect and self.viewport_rect.collidepoint(pygame.mouse.get_pos()):
-                self.scroll_y -= event.y * 36
+                self.scroll_y -= event.y * upx(36)
                 self._clamp_scroll()
                 return "scroll"
         return None
@@ -384,8 +384,8 @@ class HelpModal:
             return
         self._ensure_fonts()
         screen_w, screen_h = surface.get_size()
-        modal_w = min(720, screen_w - 40)
-        modal_h = min(600, screen_h - 40)
+        modal_w = min(upx(720), screen_w - upx(40))
+        modal_h = min(upx(600), screen_h - upx(40))
         mx = (screen_w - modal_w) // 2
         my = (screen_h - modal_h) // 2
         self.modal_rect = pygame.Rect(mx, my, modal_w, modal_h)
@@ -393,27 +393,27 @@ class HelpModal:
         shade = pygame.Surface((screen_w, screen_h), pygame.SRCALPHA)
         shade.fill((0, 0, 0, 180))
         surface.blit(shade, (0, 0))
-        pygame.draw.rect(surface, COLOR_MODAL_BG, self.modal_rect, border_radius=12)
-        pygame.draw.rect(surface, COLOR_MODAL_BORDER, self.modal_rect, width=2, border_radius=12)
+        pygame.draw.rect(surface, COLOR_MODAL_BG, self.modal_rect, border_radius=upx(12))
+        pygame.draw.rect(surface, COLOR_MODAL_BORDER, self.modal_rect, width=2, border_radius=upx(12))
 
         title_txt = ("VILLAGE CODEX" if self.view == "index"
                      else HELP_SECTIONS[self.detail_index][0])
         title = self.font_title.render(title_txt, True, COLOR_TEXT_TITLE)
-        surface.blit(title, (mx + 24, my + 16))
+        surface.blit(title, (mx + upx(24), my + upx(16)))
         sub_txt = ("Select a topic to read the details" if self.view == "index"
                    else "Mechanics guide")
         sub = self.font_small.render(sub_txt, True, COLOR_TEXT_MUTED)
-        surface.blit(sub, (mx + 26, my + 46))
+        surface.blit(sub, (mx + upx(26), my + upx(46)))
 
-        self.close_rect = pygame.Rect(mx + modal_w - 40, my + 14, 26, 26)
-        pygame.draw.rect(surface, (30, 41, 59), self.close_rect, border_radius=5)
+        self.close_rect = pygame.Rect(mx + modal_w - upx(40), my + upx(14), upx(26), upx(26))
+        pygame.draw.rect(surface, (30, 41, 59), self.close_rect, border_radius=upx(5))
         x_txt = self.font_head.render("X", True, COLOR_TEXT_MAIN)
         surface.blit(x_txt, (self.close_rect.centerx - x_txt.get_width() // 2,
                              self.close_rect.centery - x_txt.get_height() // 2))
 
-        pad = 20
-        self.viewport_rect = pygame.Rect(mx + pad, my + 70, modal_w - pad * 2,
-                                         modal_h - 70 - 14)
+        pad = upx(20)
+        self.viewport_rect = pygame.Rect(mx + pad, my + upx(70), modal_w - pad * 2,
+                                         modal_h - upx(70) - upx(14))
         old_clip = surface.get_clip()
         surface.set_clip(self.viewport_rect)
 
@@ -427,11 +427,11 @@ class HelpModal:
         # Back button pinned in the header (detail view only).
         self.back_rect = None
         if self.view == "detail":
-            self.back_rect = pygame.Rect(mx + modal_w - 130, my + 12, 84, 30)
+            self.back_rect = pygame.Rect(mx + modal_w - upx(130), my + upx(12), upx(84), upx(30))
             b_hover = self.back_rect.collidepoint(pygame.mouse.get_pos())
             pygame.draw.rect(surface, (55, 65, 81) if b_hover else (30, 41, 59),
-                             self.back_rect, border_radius=6)
-            pygame.draw.rect(surface, (71, 85, 105), self.back_rect, width=1, border_radius=6)
+                             self.back_rect, border_radius=upx(6))
+            pygame.draw.rect(surface, (71, 85, 105), self.back_rect, width=1, border_radius=upx(6))
             b_txt = self.font_small.render("< Topics", True, COLOR_TEXT_MAIN)
             surface.blit(b_txt, (self.back_rect.centerx - b_txt.get_width() // 2,
                                  self.back_rect.centery - b_txt.get_height() // 2))
@@ -441,7 +441,7 @@ class HelpModal:
         hint = self.font_small.render(
             "ESC to go back/close — mouse wheel or arrows to scroll",
             True, COLOR_TEXT_MUTED)
-        surface.blit(hint, (mx + 24, my + modal_h - 26))
+        surface.blit(hint, (mx + upx(24), my + modal_h - upx(26)))
 
     # ------------------------------------------------------------------
     def _draw_index(self, surface):
@@ -453,19 +453,19 @@ class HelpModal:
             if row_y + row_h < self.viewport_rect.y or row_y > self.viewport_rect.bottom:
                 continue
             row = pygame.Rect(self.viewport_rect.x, row_y,
-                              self.viewport_rect.width, row_h - 6)
+                              self.viewport_rect.width, row_h - upx(6))
             self.topic_rects.append((row, i))
             kb_sel = (self.view == "index" and i == getattr(self, "_kb_cursor", 0))
             hover = row.collidepoint(mouse_pos) or kb_sel
             pygame.draw.rect(surface, (30, 58, 95) if hover else (15, 23, 42),
-                             row, border_radius=8)
+                             row, border_radius=upx(8))
             pygame.draw.rect(surface, (71, 85, 105) if not hover else (125, 211, 252),
                              row, width=2 if kb_sel else 1, border_radius=8)
             txt = self.font_head.render(sec_title, True,
                                         COLOR_TEXT_TITLE if hover else COLOR_TEXT_MAIN)
-            surface.blit(txt, (row.x + 16, row.centery - txt.get_height() // 2))
+            surface.blit(txt, (row.x + upx(16), row.centery - txt.get_height() // 2))
             arrow = self.font_body.render(">", True, COLOR_TEXT_MUTED if not hover else (125, 211, 252))
-            surface.blit(arrow, (row.right - 26, row.centery - arrow.get_height() // 2))
+            surface.blit(arrow, (row.right - upx(26), row.centery - arrow.get_height() // 2))
         self.max_scroll = max(0.0, len(HELP_SECTIONS) * row_h - self.viewport_rect.height)
         self._clamp_scroll()
 
@@ -473,13 +473,13 @@ class HelpModal:
         _title, paras = HELP_SECTIONS[self.detail_index]
         line_h = upx(18)
         content_h = len(paras) * line_h + 10
-        cy = self.viewport_rect.y + 8 - self.scroll_y
+        cy = self.viewport_rect.y + upx(8) - self.scroll_y
         for para in paras:
             if para == "":
                 cy += line_h // 2
                 continue
             txt = self.font_body.render(para, True, COLOR_TEXT_MAIN)
-            surface.blit(txt, (self.viewport_rect.x + 8, cy))
+            surface.blit(txt, (self.viewport_rect.x + upx(8), cy))
             cy += line_h
         self.max_scroll = max(0.0, content_h - self.viewport_rect.height)
         self._clamp_scroll()
@@ -487,7 +487,7 @@ class HelpModal:
     def _draw_scrollbar(self, surface):
         if self.max_scroll <= 0 or not self.viewport_rect:
             return
-        track = pygame.Rect(self.viewport_rect.right + 4, self.viewport_rect.y, 6,
+        track = pygame.Rect(self.viewport_rect.right + upx(4), self.viewport_rect.y, upx(6),
                             self.viewport_rect.height)
         pygame.draw.rect(surface, (30, 41, 59), track, border_radius=3)
         if self.view == "index":
@@ -495,8 +495,8 @@ class HelpModal:
         else:
             content_h = len(HELP_SECTIONS[self.detail_index][1]) * 18 + 10
         ratio = min(1.0, self.viewport_rect.height / max(1.0, content_h))
-        thumb_h = max(24, int(self.viewport_rect.height * ratio))
+        thumb_h = max(upx(24), int(self.viewport_rect.height * ratio))
         thumb_y = self.viewport_rect.y + int(
             (self.viewport_rect.height - thumb_h) * (self.scroll_y / self.max_scroll))
         pygame.draw.rect(surface, (100, 116, 139),
-                         (track.x, thumb_y, 6, thumb_h), border_radius=3)
+                         (track.x, thumb_y, upx(6), thumb_h), border_radius=3)

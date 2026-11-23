@@ -106,8 +106,8 @@ class ToolmakerCatalogModal:
             return
         self._ensure_fonts()
         screen_w, screen_h = surface.get_size()
-        modal_w = min(720, screen_w - 32)
-        modal_h = min(600, screen_h - 32)
+        modal_w = min(upx(720), screen_w - upx(32))
+        modal_h = min(upx(600), screen_h - upx(32))
         modal_x = (screen_w - modal_w) // 2
         modal_y = (screen_h - modal_h) // 2
         self.modal_rect = pygame.Rect(modal_x, modal_y, modal_w, modal_h)
@@ -115,23 +115,23 @@ class ToolmakerCatalogModal:
         shade = pygame.Surface((screen_w, screen_h), pygame.SRCALPHA)
         shade.fill((0, 0, 0, 170))
         surface.blit(shade, (0, 0))
-        pygame.draw.rect(surface, COLOR_MODAL_BG, self.modal_rect, border_radius=12)
-        pygame.draw.rect(surface, COLOR_MODAL_BORDER, self.modal_rect, width=2, border_radius=12)
+        pygame.draw.rect(surface, COLOR_MODAL_BG, self.modal_rect, border_radius=upx(12))
+        pygame.draw.rect(surface, COLOR_MODAL_BORDER, self.modal_rect, width=2, border_radius=upx(12))
 
         title = self.font_title.render("TOOLMAKER WORKBENCH", True, COLOR_TEXT_TITLE)
-        surface.blit(title, (modal_x + 24, modal_y + 18))
+        surface.blit(title, (modal_x + upx(24), modal_y + upx(18)))
         subtitle = self.font_sub.render("Forge tools to order: 2 Wood + 3 Iron Bar each, 1-2 hours per tool.", True, COLOR_TEXT_MUTED)
-        surface.blit(subtitle, (modal_x + 26, modal_y + 46))
+        surface.blit(subtitle, (modal_x + upx(26), modal_y + upx(46)))
 
-        self.close_rect = pygame.Rect(modal_x + modal_w - 42, modal_y + 16, 26, 26)
-        pygame.draw.rect(surface, (30, 41, 59), self.close_rect, border_radius=5)
+        self.close_rect = pygame.Rect(modal_x + modal_w - upx(42), modal_y + upx(16), upx(26), upx(26))
+        pygame.draw.rect(surface, (30, 41, 59), self.close_rect, border_radius=upx(5))
         close_label = self.font_badge.render("X", True, COLOR_TEXT_MAIN)
         surface.blit(close_label, (self.close_rect.centerx - close_label.get_width() // 2,
                                    self.close_rect.centery - close_label.get_height() // 2))
 
-        viewport_top = modal_y + 76
-        viewport_bottom = modal_y + modal_h - 16
-        self.viewport_rect = pygame.Rect(modal_x + 20, viewport_top, modal_w - 40,
+        viewport_top = modal_y + upx(76)
+        viewport_bottom = modal_y + modal_h - upx(16)
+        self.viewport_rect = pygame.Rect(modal_x + upx(20), viewport_top, modal_w - upx(40),
                                          max(0, viewport_bottom - viewport_top))
         tools = ToolmakerSystem.craftable_tools()
         row_h = upx(64)
@@ -148,37 +148,37 @@ class ToolmakerCatalogModal:
             row = pygame.Rect(self.viewport_rect.x,
                               self.viewport_rect.y + index * row_step - self.scroll_y,
                               self.viewport_rect.width, row_h)
-            pygame.draw.rect(surface, (15, 23, 42), row, border_radius=7)
-            pygame.draw.rect(surface, (51, 65, 85), row, width=1, border_radius=7)
+            pygame.draw.rect(surface, (15, 23, 42), row, border_radius=upx(7))
+            pygame.draw.rect(surface, (51, 65, 85), row, width=1, border_radius=upx(7))
             name = self.font_body.render(tool_name.replace("_", " "), True, COLOR_TEXT_MAIN)
-            surface.blit(name, (row.x + 14, row.y + 10))
+            surface.blit(name, (row.x + upx(14), row.y + upx(10)))
             mats = ", ".join(f"{a}x {i}" for i, a in TOOLMAKER_TOOL_RECIPE.items())
             mat_label = self.font_sub.render(f"Materials/tool: {mats}", True, COLOR_TEXT_MUTED)
-            surface.blit(mat_label, (row.x + 14, row.y + 32))
+            surface.blit(mat_label, (row.x + upx(14), row.y + upx(32)))
 
             qty = self._qty_for(tool_name)
             quote = ToolmakerSystem.quote_tool_order(tool_name, qty, building_manager, villager_manager)
             price = self._format_price(quote["price_copper"])
             price_label = self.font_badge.render(f"{price} total", True, (250, 204, 21))
-            surface.blit(price_label, (row.x + 14, row.y + 48))
+            surface.blit(price_label, (row.x + upx(14), row.y + upx(48)))
 
             # Qty input
             q_key = tool_name
-            qty_rect = pygame.Rect(row.right - 260, row.y + 14, 46, 26)
+            qty_rect = pygame.Rect(row.right - upx(260), row.y + upx(14), upx(46), upx(26))
             self.qty_rects[tool_name] = qty_rect
             focused = (self._focused_qty == tool_name)
             pygame.draw.rect(surface, (15, 23, 42) if not focused else (30, 58, 138), qty_rect, border_radius=4)
-            pygame.draw.rect(surface, (250, 204, 21) if focused else (71, 85, 105), qty_rect, width=2 if focused else 1, border_radius=4)
+            pygame.draw.rect(surface, (250, 204, 21) if focused else (71, 85, 105), qty_rect, width=2 if focused else 1, border_radius=upx(4))
             q_txt = self.font_badge.render(self.quantity_values.get(tool_name, "1"), True, (255, 255, 255))
             surface.blit(q_txt, (qty_rect.centerx - q_txt.get_width() // 2, qty_rect.centery - q_txt.get_height() // 2))
             q_lbl = self.font_badge.render("QTY", True, COLOR_TEXT_MUTED)
             surface.blit(q_lbl, (qty_rect.centerx - q_lbl.get_width() // 2, qty_rect.bottom + 2))
 
-            order_rect = pygame.Rect(row.right - 190, row.y + 22, 110, 30)
+            order_rect = pygame.Rect(row.right - upx(190), row.y + upx(22), upx(110), upx(30))
             self.order_rects[f"{tool_name}|{qty}"] = order_rect
             hovered = order_rect.collidepoint(pygame.mouse.get_pos())
-            pygame.draw.rect(surface, (16, 185, 129) if hovered else (5, 150, 105), order_rect, border_radius=5)
-            pygame.draw.rect(surface, (52, 211, 153), order_rect, width=1, border_radius=5)
+            pygame.draw.rect(surface, (16, 185, 129) if hovered else (5, 150, 105), order_rect, border_radius=upx(5))
+            pygame.draw.rect(surface, (52, 211, 153), order_rect, width=1, border_radius=upx(5))
             order_label = self.font_badge.render("Forge", True, (255, 255, 255))
             surface.blit(order_label, (order_rect.centerx - order_label.get_width() // 2,
                                        order_rect.centery - order_label.get_height() // 2))
@@ -186,4 +186,4 @@ class ToolmakerCatalogModal:
         surface.set_clip(old_clip)
         if self.status_message:
             status = self.font_badge.render(self.status_message, True, (134, 239, 172))
-            surface.blit(status, (modal_x + 24, modal_y + modal_h - 14))
+            surface.blit(status, (modal_x + upx(24), modal_y + modal_h - upx(14)))

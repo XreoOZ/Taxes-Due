@@ -23,16 +23,16 @@ from game.systems.core.cheat_system import (
     spawn_item_physically
 )
 
-MAX_QTY_PER_ITEM = 5000
-MAX_QTY_DIGITS = 4
+MAX_QTY_PER_ITEM = upx(5000)
+MAX_QTY_DIGITS = upx(4)
 
 
 class AddItemModal:
     def __init__(self):
         self.is_open = False
         self.target_storage = None
-        self.modal_w = 720
-        self.modal_h = 600
+        self.modal_w = upx(720)
+        self.modal_h = upx(600)
 
         self.font_title = None
         self.font_sub = None
@@ -296,6 +296,8 @@ class AddItemModal:
 
         self._ensure_fonts()
         screen_w, screen_h = surface.get_size()
+        self.modal_w = min(upx(720), screen_w - upx(48))
+        self.modal_h = min(upx(600), screen_h - upx(48))
         m_pos = pygame.mouse.get_pos()
 
         # 1. Dimmed Backdrop
@@ -308,29 +310,29 @@ class AddItemModal:
         my = (screen_h - self.modal_h) // 2
         modal_rect = pygame.Rect(mx, my, self.modal_w, self.modal_h)
 
-        pygame.draw.rect(surface, (15, 23, 42), modal_rect, border_radius=10)
-        pygame.draw.rect(surface, (245, 158, 11), modal_rect, width=2, border_radius=10)
+        pygame.draw.rect(surface, (15, 23, 42), modal_rect, border_radius=upx(10))
+        pygame.draw.rect(surface, (245, 158, 11), modal_rect, width=2, border_radius=upx(10))
 
         # 3. Header Bar
-        header_rect = pygame.Rect(mx, my, self.modal_w, 48)
-        pygame.draw.rect(surface, (30, 41, 59), header_rect, border_top_left_radius=10, border_top_right_radius=10)
-        pygame.draw.line(surface, (51, 65, 85), (mx, my + 48), (mx + self.modal_w, my + 48), 1)
+        header_rect = pygame.Rect(mx, my, self.modal_w, upx(48))
+        pygame.draw.rect(surface, (30, 41, 59), header_rect, border_top_left_radius=upx(10), border_top_right_radius=upx(10))
+        pygame.draw.line(surface, (51, 65, 85), (mx, my + upx(48)), (mx + self.modal_w, my + upx(48)), 1)
 
         title_surf = self.font_title.render("ADD ITEMS (BULK GRANT)", True, (251, 191, 36))
-        surface.blit(title_surf, (mx + 20, my + 13))
+        surface.blit(title_surf, (mx + upx(20), my + upx(13)))
 
         # Close [X] Button
-        self.close_btn_rect = pygame.Rect(mx + self.modal_w - 38, my + 10, 28, 28)
+        self.close_btn_rect = pygame.Rect(mx + self.modal_w - upx(38), my + upx(10), upx(28), upx(28))
         c_hov = self.close_btn_rect.collidepoint(m_pos)
-        pygame.draw.rect(surface, (239, 68, 68) if c_hov else (51, 65, 85), self.close_btn_rect, border_radius=6)
+        pygame.draw.rect(surface, (239, 68, 68) if c_hov else (51, 65, 85), self.close_btn_rect, border_radius=upx(6))
         x_lbl = self.font_btn.render("X", True, (255, 255, 255))
         surface.blit(x_lbl, (self.close_btn_rect.centerx - x_lbl.get_width() // 2, self.close_btn_rect.centery - x_lbl.get_height() // 2))
 
         # 4. Storage Destination Banner
-        dest_y = my + 56
-        dest_rect = pygame.Rect(mx + 20, dest_y, self.modal_w - 40, 32)
-        pygame.draw.rect(surface, (30, 41, 59), dest_rect, border_radius=6)
-        pygame.draw.rect(surface, (71, 85, 105), dest_rect, width=1, border_radius=6)
+        dest_y = my + upx(56)
+        dest_rect = pygame.Rect(mx + upx(20), dest_y, self.modal_w - upx(40), upx(32))
+        pygame.draw.rect(surface, (30, 41, 59), dest_rect, border_radius=upx(6))
+        pygame.draw.rect(surface, (71, 85, 105), dest_rect, width=1, border_radius=upx(6))
 
         if self.target_storage:
             cap = getattr(self.target_storage, "type_cfg", {}).get("capacity", 500)
@@ -348,47 +350,47 @@ class AddItemModal:
             dest_col = (250, 204, 21)
 
         d_surf = self.font_sub.render(dest_text, True, dest_col)
-        surface.blit(d_surf, (dest_rect.x + 12, dest_rect.centery - d_surf.get_height() // 2))
+        surface.blit(d_surf, (dest_rect.x + upx(12), dest_rect.centery - d_surf.get_height() // 2))
 
         # 5. Search + Category Filter Row
-        filter_y = dest_y + 40
-        self.search_rect = pygame.Rect(mx + 20, filter_y, 220, 26)
+        filter_y = dest_y + upx(40)
+        self.search_rect = pygame.Rect(mx + upx(20), filter_y, upx(220), upx(26))
         s_hov = self.search_rect.collidepoint(m_pos)
         pygame.draw.rect(surface, (15, 23, 42) if not self.search_active else (10, 15, 29), self.search_rect, border_radius=5)
-        pygame.draw.rect(surface, (56, 189, 248) if (self.search_active or s_hov) else (71, 85, 105), self.search_rect, width=1, border_radius=5)
+        pygame.draw.rect(surface, (56, 189, 248) if (self.search_active or s_hov) else (71, 85, 105), self.search_rect, width=1, border_radius=upx(5))
         search_label = self.search_text if self.search_text else "Search items..."
         search_col = (241, 245, 249) if self.search_text else COLOR_TEXT_MUTED
         search_surf = self.font_body.render(search_label + ("_" if self.search_active else ""), True, search_col)
-        surface.blit(search_surf, (self.search_rect.x + 10, self.search_rect.centery - search_surf.get_height() // 2))
+        surface.blit(search_surf, (self.search_rect.x + upx(10), self.search_rect.centery - search_surf.get_height() // 2))
 
-        cat_x = self.search_rect.right + 12
+        cat_x = self.search_rect.right + upx(12)
         categories = ["ALL"] + list(dict.fromkeys(
             self._get_item_category(item).upper() for item in self.items
         ))
         self.category_btn_rects.clear()
 
         for cat in categories:
-            btn_w = 64
-            cat_rect = pygame.Rect(cat_x, filter_y, btn_w, 26)
+            btn_w = upx(64)
+            cat_rect = pygame.Rect(cat_x, filter_y, btn_w, upx(26))
             self.category_btn_rects[cat] = cat_rect
             is_active = (self.category_filter == cat)
             is_hov = cat_rect.collidepoint(m_pos)
 
             bg = (59, 130, 246) if is_active else ((51, 65, 85) if is_hov else (30, 41, 59))
             border = (147, 197, 253) if is_active else (71, 85, 105)
-            pygame.draw.rect(surface, bg, cat_rect, border_radius=4)
-            pygame.draw.rect(surface, border, cat_rect, width=1, border_radius=4)
+            pygame.draw.rect(surface, bg, cat_rect, border_radius=upx(4))
+            pygame.draw.rect(surface, border, cat_rect, width=1, border_radius=upx(4))
 
             lbl = self.font_badge.render(cat.capitalize(), True, (255, 255, 255) if is_active else (203, 213, 225))
             surface.blit(lbl, (cat_rect.centerx - lbl.get_width() // 2, cat_rect.centery - lbl.get_height() // 2))
-            cat_x += btn_w + 5
+            cat_x += btn_w + upx(5)
 
         # 6. Item List (bulk quantity rows)
-        list_y = filter_y + 36
-        list_h = self.modal_h - (list_y - my) - 96
-        list_rect = pygame.Rect(mx + 20, list_y, self.modal_w - 40, list_h)
-        pygame.draw.rect(surface, (10, 15, 29), list_rect, border_radius=6)
-        pygame.draw.rect(surface, (51, 65, 85), list_rect, width=1, border_radius=6)
+        list_y = filter_y + upx(36)
+        list_h = self.modal_h - (list_y - my) - upx(96)
+        list_rect = pygame.Rect(mx + upx(20), list_y, self.modal_w - upx(40), list_h)
+        pygame.draw.rect(surface, (10, 15, 29), list_rect, border_radius=upx(6))
+        pygame.draw.rect(surface, (51, 65, 85), list_rect, width=1, border_radius=upx(6))
 
         filtered_items = self._filtered_items()
         row_h = upx(30)
@@ -401,9 +403,9 @@ class AddItemModal:
         surface.set_clip(list_rect)
         for row_idx in range(self.scroll_offset, min(len(filtered_items), self.scroll_offset + rows_visible + 1)):
             item_name = filtered_items[row_idx]
-            ry = list_rect.y + 6 + (row_idx - self.scroll_offset) * row_h
-            row_rect = pygame.Rect(list_rect.x + 6, ry, list_rect.width - 90, row_h - 4)
-            qty_rect = pygame.Rect(list_rect.right - 76, ry, 70, row_h - 4)
+            ry = list_rect.y + upx(6) + (row_idx - self.scroll_offset) * row_h
+            row_rect = pygame.Rect(list_rect.x + upx(6), ry, list_rect.width - upx(90), row_h - upx(4))
+            qty_rect = pygame.Rect(list_rect.right - upx(76), ry, upx(70), row_h - upx(4))
             self.row_rects[item_name] = (row_rect, qty_rect)
 
             is_editing = (self.editing_item == item_name)
@@ -412,27 +414,27 @@ class AddItemModal:
 
             row_bg = (30, 58, 138) if is_editing else ((30, 41, 59) if row_hov else (15, 23, 42))
             row_border = (250, 204, 21) if is_editing else ((56, 189, 248) if row_hov else (51, 65, 85))
-            pygame.draw.rect(surface, row_bg, row_rect, border_radius=5)
-            pygame.draw.rect(surface, row_border, row_rect, width=2 if is_editing else 1, border_radius=5)
+            pygame.draw.rect(surface, row_bg, row_rect, border_radius=upx(5))
+            pygame.draw.rect(surface, row_border, row_rect, width=2 if is_editing else 1, border_radius=upx(5))
 
-            draw_item_icon(surface, item_name, row_rect.x + 16, row_rect.centery, size=11)
+            draw_item_icon(surface, item_name, row_rect.x + upx(16), row_rect.centery, size=upx(11))
             display_name = item_name.replace("_", " ")
             if len(display_name) > 30:
                 display_name = display_name[:28] + ".."
             name_col = (254, 240, 138) if has_qty else ((255, 255, 255) if row_hov else (226, 232, 240))
             name_surf = self.font_body.render(display_name, True, name_col)
-            surface.blit(name_surf, (row_rect.x + 30, row_rect.centery - name_surf.get_height() // 2))
+            surface.blit(name_surf, (row_rect.x + upx(30), row_rect.centery - name_surf.get_height() // 2))
 
             cat_tag = self._get_item_category(item_name)
             if cat_tag and cat_tag != "RESOURCE":
                 cat_surf = self.font_badge.render(cat_tag[:12], True, COLOR_TEXT_MUTED)
-                surface.blit(cat_surf, (row_rect.right - cat_surf.get_width() - 8, row_rect.centery - cat_surf.get_height() // 2))
+                surface.blit(cat_surf, (row_rect.right - cat_surf.get_width() - upx(8), row_rect.centery - cat_surf.get_height() // 2))
 
             # Quantity box
             q_bg = (15, 23, 42) if not is_editing else (30, 41, 59)
             q_border = (250, 204, 21) if is_editing else ((56, 189, 248) if has_qty else (71, 85, 105))
-            pygame.draw.rect(surface, q_bg, qty_rect, border_radius=4)
-            pygame.draw.rect(surface, q_border, qty_rect, width=1, border_radius=4)
+            pygame.draw.rect(surface, q_bg, qty_rect, border_radius=upx(4))
+            pygame.draw.rect(surface, q_border, qty_rect, width=1, border_radius=upx(4))
 
             if is_editing:
                 q_text = self.editing_text + "_"
@@ -453,36 +455,36 @@ class AddItemModal:
 
         # Scrollbar
         if max_scroll > 0:
-            track = pygame.Rect(list_rect.right - 5, list_rect.y, 3, list_rect.height)
+            track = pygame.Rect(list_rect.right - upx(5), list_rect.y, 3, list_rect.height)
             pygame.draw.rect(surface, (51, 65, 85), track, border_radius=2)
-            thumb_h = max(20, int(track.height * rows_visible / max(len(filtered_items), rows_visible)))
+            thumb_h = max(upx(20), int(track.height * rows_visible / max(len(filtered_items), rows_visible)))
             thumb_y = track.y + int((track.height - thumb_h) * self.scroll_offset / max_scroll)
             pygame.draw.rect(surface, (96, 165, 250), (track.x, thumb_y, track.width, thumb_h), border_radius=2)
 
         # 7. Bottom Action Row
         pending = self._pending_entries()
         total_pending_qty = sum(q for _, q in pending)
-        act_y = list_rect.bottom + 10
+        act_y = list_rect.bottom + upx(10)
 
         summary_surf = self.font_badge.render(
             f"{len(pending)} item type(s), {total_pending_qty} total — Enter/Tab to move between rows",
             True, (56, 189, 248) if pending else COLOR_TEXT_MUTED,
         )
-        surface.blit(summary_surf, (mx + 24, act_y + 8))
+        surface.blit(summary_surf, (mx + upx(24), act_y + upx(8)))
 
         # Cancel Button
-        self.cancel_btn_rect = pygame.Rect(mx + self.modal_w - 240, act_y, 110, 38)
+        self.cancel_btn_rect = pygame.Rect(mx + self.modal_w - upx(240), act_y, upx(110), upx(38))
         c_hov = self.cancel_btn_rect.collidepoint(m_pos)
-        pygame.draw.rect(surface, (71, 85, 105) if c_hov else (51, 65, 85), self.cancel_btn_rect, border_radius=6)
+        pygame.draw.rect(surface, (71, 85, 105) if c_hov else (51, 65, 85), self.cancel_btn_rect, border_radius=upx(6))
         canc_txt = self.font_btn.render("Cancel", True, (241, 245, 249))
         surface.blit(canc_txt, (self.cancel_btn_rect.centerx - canc_txt.get_width() // 2, self.cancel_btn_rect.centery - canc_txt.get_height() // 2))
 
         # Add All Button
-        self.add_btn_rect = pygame.Rect(mx + self.modal_w - 120, act_y, 100, 38)
+        self.add_btn_rect = pygame.Rect(mx + self.modal_w - upx(120), act_y, upx(100), upx(38))
         a_hov = self.add_btn_rect.collidepoint(m_pos)
         a_bg = (16, 185, 129) if (a_hov and pending) else (5, 150, 105)
-        pygame.draw.rect(surface, a_bg, self.add_btn_rect, border_radius=6)
-        pygame.draw.rect(surface, (110, 231, 183) if a_hov else (52, 211, 153), self.add_btn_rect, width=2, border_radius=6)
+        pygame.draw.rect(surface, a_bg, self.add_btn_rect, border_radius=upx(6))
+        pygame.draw.rect(surface, (110, 231, 183) if a_hov else (52, 211, 153), self.add_btn_rect, width=2, border_radius=upx(6))
 
         add_label = f"ADD {len(pending)}" if pending else "ADD"
         add_txt = self.font_btn.render(add_label, True, (255, 255, 255))

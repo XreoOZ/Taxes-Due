@@ -65,9 +65,9 @@ class PermitsModal:
             return
         self._init_fonts()
         screen_w, screen_h = surface.get_size()
-        # Modal dimensions (relative to screen size)
-        mw = int(screen_w * 0.6)
-        mh = int(screen_h * 0.7)
+        # Modal dimensions (scaled logical size, clamped to screen)
+        mw = min(upx(860), int(screen_w * 0.85))
+        mh = min(upx(560), int(screen_h * 0.85))
         mx = (screen_w - mw) // 2
         my = (screen_h - mh) // 2
         self.modal_rect = pygame.Rect(mx, my, mw, mh)
@@ -78,42 +78,42 @@ class PermitsModal:
         surface.blit(dim, (0, 0))
 
         # Modal background
-        pygame.draw.rect(surface, COLOR_MODAL_BG, self.modal_rect, border_radius=12)
-        pygame.draw.rect(surface, COLOR_MODAL_BORDER, self.modal_rect, width=2, border_radius=12)
+        pygame.draw.rect(surface, COLOR_MODAL_BG, self.modal_rect, border_radius=upx(12))
+        pygame.draw.rect(surface, COLOR_MODAL_BORDER, self.modal_rect, width=2, border_radius=upx(12))
 
         # Header
         header_surf = self.font_title.render("Permits Overview", True, COLOR_TEXT_TITLE)
-        surface.blit(header_surf, (mx + 20, my + 20))
+        surface.blit(header_surf, (mx + upx(20), my + upx(20)))
 
         # List of permits on the left side (30% width)
         list_w = int(mw * 0.35)
-        list_h = mh - 80
-        list_x = mx + 20
-        list_y = my + 60
+        list_h = mh - upx(80)
+        list_x = mx + upx(20)
+        list_y = my + upx(60)
         item_h = upx(40)
         self.permit_rects.clear()
         for idx, (pid, pinfo) in enumerate(PERMIT_TYPES.items()):
-            rect = pygame.Rect(list_x, list_y + idx * (item_h + 8), list_w, item_h)
+            rect = pygame.Rect(list_x, list_y + idx * (item_h + upx(8)), list_w, item_h)
             self.permit_rects.append((pid, rect))
             bg = (30, 41, 59) if pid != self.selected_permit_id else (45, 55, 72)
-            pygame.draw.rect(surface, bg, rect, border_radius=6)
+            pygame.draw.rect(surface, bg, rect, border_radius=upx(6))
             label = pinfo.get("name", pid).title()
             txt = self.font_body.render(label, True, COLOR_TEXT_MAIN)
-            surface.blit(txt, (rect.x + 10, rect.centery - txt.get_height() // 2))
+            surface.blit(txt, (rect.x + upx(10), rect.centery - txt.get_height() // 2))
 
         # Detail pane on the right side
-        detail_x = list_x + list_w + 20
-        detail_w = mw - (list_w + 60)
+        detail_x = list_x + list_w + upx(20)
+        detail_w = mw - (list_w + upx(60))
         if self.selected_permit_id:
             pinfo = PERMIT_TYPES.get(self.selected_permit_id, {})
             # Title
             title = self.font_title.render(pinfo.get("name", ""), True, COLOR_TEXT_TITLE)
-            surface.blit(title, (detail_x, my + 60))
+            surface.blit(title, (detail_x, my + upx(60)))
             # Description
             desc_lines = pinfo.get("description", "").split("\n")
             for i, line in enumerate(desc_lines):
                 line_surf = self.font_body.render(line, True, COLOR_TEXT_MAIN)
-                surface.blit(line_surf, (detail_x, my + 100 + i * (line_surf.get_height() + 4)))
+                surface.blit(line_surf, (detail_x, my + upx(100) + i * (line_surf.get_height() + upx(4))))
             # Stats (e.g., max workers, cost)
             stats = []
             if "max_workers" in pinfo:
@@ -122,12 +122,12 @@ class PermitsModal:
                 stats.append(f"Cost: {pinfo['cost']} Wood, {pinfo.get('cost_stone', 0)} Stone")
             for i, s in enumerate(stats):
                 s_surf = self.font_body.render(s, True, COLOR_TEXT_MAIN)
-                surface.blit(s_surf, (detail_x, my + 180 + i * (s_surf.get_height() + 4)))
+                surface.blit(s_surf, (detail_x, my + upx(180) + i * (s_surf.get_height() + upx(4))))
 
         # Close button (top‑right corner)
-        btn_w, btn_h = 80, 30
-        btn_rect = pygame.Rect(mx + mw - btn_w - 10, my + 10, btn_w, btn_h)
-        pygame.draw.rect(surface, (200, 50, 50), btn_rect, border_radius=4)
+        btn_w, btn_h = upx(80), upx(30)
+        btn_rect = pygame.Rect(mx + mw - btn_w - upx(10), my + upx(10), btn_w, btn_h)
+        pygame.draw.rect(surface, (200, 50, 50), btn_rect, border_radius=upx(4))
         btn_txt = self.font_body.render("Close", True, (255, 255, 255))
         surface.blit(btn_txt, (btn_rect.centerx - btn_txt.get_width() // 2, btn_rect.centery - btn_txt.get_height() // 2))
         # Register close button for click handling

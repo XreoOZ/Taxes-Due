@@ -278,8 +278,8 @@ class MapOverlay:
         bar_rect = pygame.Rect(MAP_OVERLAY_MARGIN, MAP_OVERLAY_MARGIN,
                                screen_w - 2 * MAP_OVERLAY_MARGIN,
                                MAP_OVERLAY_TOP_BAR_HEIGHT)
-        pygame.draw.rect(surface, MAP_OVERLAY_MAP_BG, bar_rect, border_radius=8)
-        pygame.draw.rect(surface, MAP_OVERLAY_BORDER, bar_rect, width=1, border_radius=8)
+        pygame.draw.rect(surface, MAP_OVERLAY_MAP_BG, bar_rect, border_radius=upx(8))
+        pygame.draw.rect(surface, MAP_OVERLAY_BORDER, bar_rect, width=1, border_radius=upx(8))
 
         # Title
         title = self._font_title.render("World Map", True, MAP_OVERLAY_TITLE_COLOR)
@@ -303,19 +303,19 @@ class MapOverlay:
             else:
                 bg = MAP_OVERLAY_LAYER_OFF_BG
                 border = MAP_OVERLAY_LAYER_OFF_BORDER
-            pygame.draw.rect(surface, bg, btn_rect, border_radius=6)
-            pygame.draw.rect(surface, border, btn_rect, width=1, border_radius=6)
+            pygame.draw.rect(surface, bg, btn_rect, border_radius=upx(6))
+            pygame.draw.rect(surface, border, btn_rect, width=1, border_radius=upx(6))
             surface.blit(btn_text, btn_text.get_rect(center=btn_rect.center))
 
         # Hint text
         hint = self._font_hint.render("M / ESC to close", True, MAP_OVERLAY_TEXT_DIM)
         surface.blit(hint, (bar_rect.right - hint.get_width() - MAP_OVERLAY_BTN_PADDING_X,
-                            bar_rect.bottom + 4))
+                            bar_rect.bottom + upx(4)))
 
         # Map content area
         area, cr = self._map_area(screen_w, screen_h)
-        pygame.draw.rect(surface, MAP_OVERLAY_MAP_BG, area, border_radius=8)
-        pygame.draw.rect(surface, MAP_OVERLAY_BORDER, area, width=1, border_radius=8)
+        pygame.draw.rect(surface, MAP_OVERLAY_MAP_BG, area, border_radius=upx(8))
+        pygame.draw.rect(surface, MAP_OVERLAY_BORDER, area, width=1, border_radius=upx(8))
 
         # Clip to content rect
         old_clip = surface.get_clip()

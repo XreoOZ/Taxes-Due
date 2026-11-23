@@ -170,8 +170,8 @@ class DayCycleSystem:
         padding = self.font_sub.size("  ")[0]
         gap = max(3, self.font_sub.get_height() // 3)
         card_h = max(self.font_sub.get_height(), self.font_clock.get_height()) + padding
-        card_y = 16
-        day_w = day_surface.get_width() + padding * 2 + 26
+        card_y = upx(16)
+        day_w = day_surface.get_width() + padding * 2 + upx(26)
         unassigned_w = unassigned_surface.get_width() + padding * 2
         assigned_w = assigned_surface.get_width() + padding * 2
         card_specs = (
@@ -180,7 +180,7 @@ class DayCycleSystem:
             (assigned_w, assigned_surface, False),
         )
         total_w = sum(spec[0] for spec in card_specs) + gap * (len(card_specs) - 1)
-        card_x = min(16, max(0, screen_w - total_w))
+        card_x = min(upx(16), max(0, screen_w - total_w))
 
         # Procedural Sun / Moon Vector Icon (Zero missing glyphs)
         first_card_x = card_x
@@ -199,6 +199,6 @@ class DayCycleSystem:
             pygame.draw.rect(surface, COLOR_HUD_BORDER, card, width=1, border_radius=8)
             text_x = card.centerx - text_surface.get_width() // 2
             if has_icon:
-                text_x = card_x + padding * 2 + 14
+                text_x = card_x + padding * 2 + upx(14)
             surface.blit(text_surface, (text_x, card.centery - text_surface.get_height() // 2))
             card_x = card.right + gap

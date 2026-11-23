@@ -200,11 +200,6 @@ def main():
     pygame.display.set_caption(WINDOW_TITLE)
 
     clock = pygame.time.Clock()
-    font_hud = ui_font(12, bold=True)
-    font_card = ui_font(13, bold=True)
-    font_btn = ui_font(12, bold=True)
-    font_badge = ui_font(10, bold=True)
-    font_body = ui_font(11)
 
     # Inisialisasi Game Objects, Menu, Resources & Building System
     current_state = STATE_MENU
@@ -1966,46 +1961,46 @@ def main():
 
                 # D. Floating Bottom Control Bar
                 can_place, status_msg = permit_manager.can_place_permit_tiles(planning_permit_tiles)
-                bar_w = 620
-                bar_h = 86
+                bar_w = upx(620)
+                bar_h = upx(86)
                 bar_x = (screen.get_width() - bar_w) // 2
                 bar_y = screen.get_height() - bar_h - 14
 
                 bar_surf = pygame.Surface((bar_w, bar_h), pygame.SRCALPHA)
-                pygame.draw.rect(bar_surf, (15, 23, 42, 245), (0, 0, bar_w, bar_h), border_radius=10)
-                pygame.draw.rect(bar_surf, (71, 85, 105), (0, 0, bar_w, bar_h), width=2, border_radius=10)
+                pygame.draw.rect(bar_surf, (15, 23, 42, 245), (0, 0, bar_w, bar_h), border_radius=upx(10))
+                pygame.draw.rect(bar_surf, (71, 85, 105), (0, 0, bar_w, bar_h), width=2, border_radius=upx(10))
                 screen.blit(bar_surf, (bar_x, bar_y))
 
                 # Header & Info
                 p_title = planning_permit_type.replace('_', ' ').title()
                 info_txt = f"Issue {p_title} Deed | Planned: {len(planning_permit_tiles)} Tiles"
-                screen.blit(font_card.render(info_txt, True, (56, 189, 248)), (bar_x + 16, bar_y + 10))
+                screen.blit(ui_font(13, bold=True).render(info_txt, True, (56, 189, 248)), (bar_x + upx(16), bar_y + upx(10)))
 
                 stat_col = (34, 197, 94) if can_place and len(planning_permit_tiles) > 0 else (239, 68, 68)
                 stat_txt = f"Status: {status_msg} (Drag to add, Right-Click to erase)"
-                screen.blit(font_hud.render(stat_txt, True, stat_col), (bar_x + 16, bar_y + 30))
+                screen.blit(ui_font(12, bold=True).render(stat_txt, True, stat_col), (bar_x + upx(16), bar_y + upx(30)))
 
                 # Buttons
-                btn_y = bar_y + 46
-                btn_confirm_rect.x = bar_x + 16
+                btn_y = bar_y + upx(46)
+                btn_confirm_rect.x = bar_x + upx(16)
                 btn_confirm_rect.y = btn_y
-                btn_clear_rect.x = bar_x + 180
+                btn_clear_rect.x = bar_x + upx(180)
                 btn_clear_rect.y = btn_y
-                btn_cancel_rect.x = bar_x + 280
+                btn_cancel_rect.x = bar_x + upx(280)
                 btn_cancel_rect.y = btn_y
 
                 # Confirm Button
                 c_col = (16, 185, 129) if can_place and len(planning_permit_tiles) > 0 else (71, 85, 105)
-                pygame.draw.rect(screen, c_col, btn_confirm_rect, border_radius=6)
-                screen.blit(font_btn.render("ISSUE PERMIT", True, (255, 255, 255)), (btn_confirm_rect.x + 22, btn_confirm_rect.y + 8))
+                pygame.draw.rect(screen, c_col, btn_confirm_rect, border_radius=upx(6))
+                screen.blit(ui_font(12, bold=True).render("ISSUE PERMIT", True, (255, 255, 255)), (btn_confirm_rect.x + upx(22), btn_confirm_rect.y + upx(8)))
 
                 # Clear Button
-                pygame.draw.rect(screen, (71, 85, 105), btn_clear_rect, border_radius=6)
-                screen.blit(font_btn.render("CLEAR", True, (255, 255, 255)), (btn_clear_rect.x + 22, btn_clear_rect.y + 8))
+                pygame.draw.rect(screen, (71, 85, 105), btn_clear_rect, border_radius=upx(6))
+                screen.blit(ui_font(12, bold=True).render("CLEAR", True, (255, 255, 255)), (btn_clear_rect.x + upx(22), btn_clear_rect.y + upx(8)))
 
                 # Cancel Button
-                pygame.draw.rect(screen, (220, 38, 38), btn_cancel_rect, border_radius=6)
-                screen.blit(font_btn.render("CANCEL", True, (255, 255, 255)), (btn_cancel_rect.x + 24, btn_cancel_rect.y + 8))
+                pygame.draw.rect(screen, (220, 38, 38), btn_cancel_rect, border_radius=upx(6))
+                screen.blit(ui_font(12, bold=True).render("CANCEL", True, (255, 255, 255)), (btn_cancel_rect.x + upx(24), btn_cancel_rect.y + upx(8)))
 
             # -------------------------------------------------------------
             # 6B. OVERLAYS: EDIT PERMIT PLANNING MODE
@@ -2051,43 +2046,43 @@ def main():
                         building_manager=building_manager,
                         furniture_manager=furniture_manager
                     )
-                    bar_w = 660
-                    bar_h = 86
+                    bar_w = upx(660)
+                    bar_h = upx(86)
                     bar_x = (screen.get_width() - bar_w) // 2
                     bar_y = screen.get_height() - bar_h - 14
 
                     bar_surf = pygame.Surface((bar_w, bar_h), pygame.SRCALPHA)
-                    pygame.draw.rect(bar_surf, (15, 23, 42, 245), (0, 0, bar_w, bar_h), border_radius=10)
-                    pygame.draw.rect(bar_surf, (245, 158, 11), (0, 0, bar_w, bar_h), width=2, border_radius=10)
+                    pygame.draw.rect(bar_surf, (15, 23, 42, 245), (0, 0, bar_w, bar_h), border_radius=upx(10))
+                    pygame.draw.rect(bar_surf, (245, 158, 11), (0, 0, bar_w, bar_h), width=2, border_radius=upx(10))
                     screen.blit(bar_surf, (bar_x, bar_y))
 
                     diff = len(planning_permit_tiles) - len(original_permit_tiles)
                     diff_str = f"({diff:+d} tiles)" if diff != 0 else "(no change)"
                     info_txt = f"Edit Lot: {target_p.name} | Size: {len(original_permit_tiles)} -> {len(planning_permit_tiles)} Tiles {diff_str}"
-                    screen.blit(font_card.render(info_txt, True, (250, 204, 21)), (bar_x + 16, bar_y + 10))
+                    screen.blit(ui_font(13, bold=True).render(info_txt, True, (250, 204, 21)), (bar_x + upx(16), bar_y + upx(10)))
 
                     stat_col = (34, 197, 94) if can_resize and len(planning_permit_tiles) > 0 else (239, 68, 68)
                     stat_txt = f"Status: {status_msg} (Drag L-Click to add, R-Click to erase)"
-                    screen.blit(font_hud.render(stat_txt, True, stat_col), (bar_x + 16, bar_y + 30))
+                    screen.blit(ui_font(12, bold=True).render(stat_txt, True, stat_col), (bar_x + upx(16), bar_y + upx(30)))
 
                     # Buttons
-                    btn_y = bar_y + 46
-                    btn_confirm_rect.x = bar_x + 16
+                    btn_y = bar_y + upx(46)
+                    btn_confirm_rect.x = bar_x + upx(16)
                     btn_confirm_rect.y = btn_y
-                    btn_clear_rect.x = bar_x + 190
+                    btn_clear_rect.x = bar_x + upx(190)
                     btn_clear_rect.y = btn_y
-                    btn_cancel_rect.x = bar_x + 290
+                    btn_cancel_rect.x = bar_x + upx(290)
                     btn_cancel_rect.y = btn_y
 
                     c_col = (16, 185, 129) if can_resize and len(planning_permit_tiles) > 0 else (71, 85, 105)
-                    pygame.draw.rect(screen, c_col, btn_confirm_rect, border_radius=6)
-                    screen.blit(font_btn.render("APPLY RESIZE", True, (255, 255, 255)), (btn_confirm_rect.x + 20, btn_confirm_rect.y + 8))
+                    pygame.draw.rect(screen, c_col, btn_confirm_rect, border_radius=upx(6))
+                    screen.blit(ui_font(12, bold=True).render("APPLY RESIZE", True, (255, 255, 255)), (btn_confirm_rect.x + upx(20), btn_confirm_rect.y + upx(8)))
 
-                    pygame.draw.rect(screen, (71, 85, 105), btn_clear_rect, border_radius=6)
-                    screen.blit(font_btn.render("RESET", True, (255, 255, 255)), (btn_clear_rect.x + 20, btn_clear_rect.y + 8))
+                    pygame.draw.rect(screen, (71, 85, 105), btn_clear_rect, border_radius=upx(6))
+                    screen.blit(ui_font(12, bold=True).render("RESET", True, (255, 255, 255)), (btn_clear_rect.x + upx(20), btn_clear_rect.y + upx(8)))
 
-                    pygame.draw.rect(screen, (220, 38, 38), btn_cancel_rect, border_radius=6)
-                    screen.blit(font_btn.render("CANCEL", True, (255, 255, 255)), (btn_cancel_rect.x + 24, btn_cancel_rect.y + 8))
+                    pygame.draw.rect(screen, (220, 38, 38), btn_cancel_rect, border_radius=upx(6))
+                    screen.blit(ui_font(12, bold=True).render("CANCEL", True, (255, 255, 255)), (btn_cancel_rect.x + upx(24), btn_cancel_rect.y + upx(8)))
 
             # -------------------------------------------------------------
             # 7. OVERLAYS: BUILDING PLANNING MODE
@@ -2124,9 +2119,9 @@ def main():
                 # B. Render Door Marker
                 if planned_door_tile and planned_door_tile in planning_building_tiles:
                     dsx, dsy = camera.world_to_screen(planned_door_tile[0] * TILE_SIZE, planned_door_tile[1] * TILE_SIZE)
-                    door_box = pygame.Rect(dsx + 4, dsy + 4, scaled_t - 8, scaled_t - 8)
-                    pygame.draw.rect(screen, (234, 179, 8, 200), door_box, border_radius=4)
-                    d_lbl = font_badge.render(f"DOOR ({planned_door_side.upper()})", True, (0, 0, 0))
+                    door_box = pygame.Rect(dsx + upx(4), dsy + upx(4), scaled_t - upx(8), scaled_t - upx(8))
+                    pygame.draw.rect(screen, (234, 179, 8, 200), door_box, border_radius=upx(4))
+                    d_lbl = ui_font(10, bold=True).render(f"DOOR ({planned_door_side.upper()})", True, (0, 0, 0))
                     screen.blit(d_lbl, (door_box.centerx - d_lbl.get_width() // 2, door_box.centery - d_lbl.get_height() // 2))
 
                 # C. Configured fixed-footprint structure hover preview.
@@ -2197,14 +2192,14 @@ def main():
                     status_msg = f"Must be exactly {b_cfg['fixed_tiles_count']} tiles {dim_str}"
                 is_valid = (matching_permit is not None) and can_afford and is_valid_tile_count
 
-                bar_w = 700
-                bar_h = 92
+                bar_w = upx(700)
+                bar_h = upx(92)
                 bar_x = (screen.get_width() - bar_w) // 2
                 bar_y = screen.get_height() - bar_h - 14
 
                 bar_surf = pygame.Surface((bar_w, bar_h), pygame.SRCALPHA)
-                pygame.draw.rect(bar_surf, (15, 23, 42, 245), (0, 0, bar_w, bar_h), border_radius=10)
-                pygame.draw.rect(bar_surf, (71, 85, 105), (0, 0, bar_w, bar_h), width=2, border_radius=10)
+                pygame.draw.rect(bar_surf, (15, 23, 42, 245), (0, 0, bar_w, bar_h), border_radius=upx(10))
+                pygame.draw.rect(bar_surf, (71, 85, 105), (0, 0, bar_w, bar_h), width=2, border_radius=upx(10))
                 screen.blit(bar_surf, (bar_x, bar_y))
 
                 # Header & Cost
@@ -2213,7 +2208,7 @@ def main():
                     info_txt = f"Design {b_cfg['name']} | {tiles_label} | Lord pays Builder commission"
                 else:
                     info_txt = f"Design {b_cfg['name']} | {tiles_label} | Cost: {cost_w} Wood, {cost_s} Stone"
-                screen.blit(font_card.render(info_txt, True, (56, 189, 248)), (bar_x + 16, bar_y + 10))
+                screen.blit(ui_font(13, bold=True).render(info_txt, True, (56, 189, 248)), (bar_x + upx(16), bar_y + upx(10)))
 
                 # Status & Door info
                 if not b_cfg.get("has_door", True):
@@ -2224,29 +2219,29 @@ def main():
                     help_str = "(R: Rotate | Drag to expand, Right-Click to erase)"
                 stat_col = (34, 197, 94) if is_valid else (239, 68, 68)
                 stat_txt = f"Status: {status_msg} | {door_str} | {help_str}"
-                screen.blit(font_hud.render(stat_txt, True, stat_col), (bar_x + 16, bar_y + 32))
+                screen.blit(ui_font(12, bold=True).render(stat_txt, True, stat_col), (bar_x + upx(16), bar_y + upx(32)))
 
                 # Buttons
-                btn_y = bar_y + 52
-                btn_confirm_rect.x = bar_x + 16
+                btn_y = bar_y + upx(52)
+                btn_confirm_rect.x = bar_x + upx(16)
                 btn_confirm_rect.y = btn_y
-                btn_clear_rect.x = bar_x + 180
+                btn_clear_rect.x = bar_x + upx(180)
                 btn_clear_rect.y = btn_y
-                btn_cancel_rect.x = bar_x + 280
+                btn_cancel_rect.x = bar_x + upx(280)
                 btn_cancel_rect.y = btn_y
 
                 # Confirm Build Button
                 c_col = (16, 185, 129) if is_valid else (71, 85, 105)
-                pygame.draw.rect(screen, c_col, btn_confirm_rect, border_radius=6)
-                screen.blit(font_btn.render("ORDER", True, (255, 255, 255)), (btn_confirm_rect.x + 46, btn_confirm_rect.y + 8))
+                pygame.draw.rect(screen, c_col, btn_confirm_rect, border_radius=upx(6))
+                screen.blit(ui_font(12, bold=True).render("ORDER", True, (255, 255, 255)), (btn_confirm_rect.x + upx(46), btn_confirm_rect.y + upx(8)))
 
                 # Clear Button
-                pygame.draw.rect(screen, (71, 85, 105), btn_clear_rect, border_radius=6)
-                screen.blit(font_btn.render("CLEAR", True, (255, 255, 255)), (btn_clear_rect.x + 22, btn_clear_rect.y + 8))
+                pygame.draw.rect(screen, (71, 85, 105), btn_clear_rect, border_radius=upx(6))
+                screen.blit(ui_font(12, bold=True).render("CLEAR", True, (255, 255, 255)), (btn_clear_rect.x + upx(22), btn_clear_rect.y + upx(8)))
 
                 # Cancel Button
-                pygame.draw.rect(screen, (220, 38, 38), btn_cancel_rect, border_radius=6)
-                screen.blit(font_btn.render("CANCEL", True, (255, 255, 255)), (btn_cancel_rect.x + 24, btn_cancel_rect.y + 8))
+                pygame.draw.rect(screen, (220, 38, 38), btn_cancel_rect, border_radius=upx(6))
+                screen.blit(ui_font(12, bold=True).render("CANCEL", True, (255, 255, 255)), (btn_cancel_rect.x + upx(24), btn_cancel_rect.y + upx(8)))
 
             # -------------------------------------------------------------
             # 7.5. OVERLAYS: FURNITURE PLANNING MODE
@@ -2280,15 +2275,15 @@ def main():
                         p_surf.fill(p_tint)
                         screen.blit(p_surf, (psx, psy))
                         p_border_c = (250, 204, 21) if is_sel else (34, 197, 94)
-                        pygame.draw.rect(screen, p_border_c, (psx, psy, p_w, p_h), width=3 if is_sel else 2, border_radius=4)
+                        pygame.draw.rect(screen, p_border_c, (psx, psy, p_w, p_h), width=3 if is_sel else 2, border_radius=upx(4))
 
                         if p_fw == 1 and p_fh == 1 and p_cfg.get("rotatable", True):
                             draw_placement_orientation(
                                 screen, pygame.Rect(psx, psy, p_w, p_h), pf.get("rotation", 0),
                             )
 
-                        lbl = font_badge.render("PLAN", True, (255, 255, 255))
-                        screen.blit(lbl, (psx + 4, psy + 4))
+                        lbl = ui_font(10, bold=True).render("PLAN", True, (255, 255, 255))
+                        screen.blit(lbl, (psx + upx(4), psy + upx(4)))
 
                 # 2. Ghost Preview at Mouse Tile (if not already planned)
                 fsx, fsy = camera.world_to_screen(m_gx * TILE_SIZE, m_gy * TILE_SIZE)
@@ -2331,14 +2326,14 @@ def main():
                     pygame.draw.rect(screen, (239, 68, 68), (fsx, fsy, scaled_t, scaled_t), width=2)
 
                 # 3. Floating Bottom Bar
-                bar_w = 640
-                bar_h = 96
+                bar_w = upx(640)
+                bar_h = upx(96)
                 bar_x = (screen.get_width() - bar_w) // 2
                 bar_y = screen.get_height() - bar_h - 14
 
                 bar_surf = pygame.Surface((bar_w, bar_h), pygame.SRCALPHA)
-                pygame.draw.rect(bar_surf, (15, 23, 42, 245), (0, 0, bar_w, bar_h), border_radius=10)
-                pygame.draw.rect(bar_surf, (71, 85, 105), (0, 0, bar_w, bar_h), width=2, border_radius=10)
+                pygame.draw.rect(bar_surf, (15, 23, 42, 245), (0, 0, bar_w, bar_h), border_radius=upx(10))
+                pygame.draw.rect(bar_surf, (71, 85, 105), (0, 0, bar_w, bar_h), width=2, border_radius=upx(10))
                 screen.blit(bar_surf, (bar_x, bar_y))
 
                 planned_count = len(session_planned_furniture)
@@ -2348,7 +2343,7 @@ def main():
                     info_txt = f"Place {f_cfg['name']} | Planned: {planned_count} | Free and ready immediately"
                 else:
                     info_txt = f"Order {f_cfg['name']} | Planned: {planned_count} | Household pays commission; Builder supplies materials"
-                screen.blit(font_card.render(info_txt, True, (250, 204, 21)), (bar_x + 16, bar_y + 10))
+                screen.blit(ui_font(13, bold=True).render(info_txt, True, (250, 204, 21)), (bar_x + upx(16), bar_y + upx(10)))
 
                 if is_occupied_planned:
                     stat_msg = "Planned furniture selected! (Right-Click or Del to remove from session)"
@@ -2370,29 +2365,29 @@ def main():
                     stat_msg = f"Ready to order! (R: rotate | Left-Click to place, Right-Click to erase. {fam_str})"
                     stat_col = (34, 197, 94)
 
-                screen.blit(font_hud.render(stat_msg, True, stat_col), (bar_x + 16, bar_y + 32))
+                screen.blit(ui_font(12, bold=True).render(stat_msg, True, stat_col), (bar_x + upx(16), bar_y + upx(32)))
 
                 # Buttons
-                btn_y = bar_y + 52
-                btn_confirm_rect.x = bar_x + 16
+                btn_y = bar_y + upx(52)
+                btn_confirm_rect.x = bar_x + upx(16)
                 btn_confirm_rect.y = btn_y
-                btn_clear_rect.x = bar_x + 180
+                btn_clear_rect.x = bar_x + upx(180)
                 btn_clear_rect.y = btn_y
-                btn_cancel_rect.x = bar_x + 280
+                btn_cancel_rect.x = bar_x + upx(280)
                 btn_cancel_rect.y = btn_y
 
                 # Confirm Build Button
                 c_col = (16, 185, 129) if is_valid_build else (71, 85, 105)
-                pygame.draw.rect(screen, c_col, btn_confirm_rect, border_radius=6)
-                screen.blit(font_btn.render("BUILD", True, (255, 255, 255)), (btn_confirm_rect.x + 46, btn_confirm_rect.y + 8))
+                pygame.draw.rect(screen, c_col, btn_confirm_rect, border_radius=upx(6))
+                screen.blit(ui_font(12, bold=True).render("BUILD", True, (255, 255, 255)), (btn_confirm_rect.x + upx(46), btn_confirm_rect.y + upx(8)))
 
                 # Clear Button
-                pygame.draw.rect(screen, (71, 85, 105), btn_clear_rect, border_radius=6)
-                screen.blit(font_btn.render("CLEAR", True, (255, 255, 255)), (btn_clear_rect.x + 22, btn_clear_rect.y + 8))
+                pygame.draw.rect(screen, (71, 85, 105), btn_clear_rect, border_radius=upx(6))
+                screen.blit(ui_font(12, bold=True).render("CLEAR", True, (255, 255, 255)), (btn_clear_rect.x + upx(22), btn_clear_rect.y + upx(8)))
 
                 # Cancel Button
-                pygame.draw.rect(screen, (220, 38, 38), btn_cancel_rect, border_radius=6)
-                screen.blit(font_btn.render("CANCEL", True, (255, 255, 255)), (btn_cancel_rect.x + 24, btn_cancel_rect.y + 8))
+                pygame.draw.rect(screen, (220, 38, 38), btn_cancel_rect, border_radius=upx(6))
+                screen.blit(ui_font(12, bold=True).render("CANCEL", True, (255, 255, 255)), (btn_cancel_rect.x + upx(24), btn_cancel_rect.y + upx(8)))
 
             # -------------------------------------------------------------
             # 7.6. OVERLAYS: MOVE FURNITURE PLANNING MODE
@@ -2426,18 +2421,18 @@ def main():
                 pygame.draw.rect(screen, (34, 197, 94) if is_valid_dest else (239, 68, 68), (fsx, fsy, scaled_t, scaled_t), width=2)
 
                 # Floating Bottom Bar
-                bar_w = 640
-                bar_h = 86
+                bar_w = upx(640)
+                bar_h = upx(86)
                 bar_x = (screen.get_width() - bar_w) // 2
                 bar_y = screen.get_height() - bar_h - 14
 
                 bar_surf = pygame.Surface((bar_w, bar_h), pygame.SRCALPHA)
-                pygame.draw.rect(bar_surf, (15, 23, 42, 245), (0, 0, bar_w, bar_h), border_radius=10)
-                pygame.draw.rect(bar_surf, (56, 189, 248), (0, 0, bar_w, bar_h), width=2, border_radius=10)
+                pygame.draw.rect(bar_surf, (15, 23, 42, 245), (0, 0, bar_w, bar_h), border_radius=upx(10))
+                pygame.draw.rect(bar_surf, (56, 189, 248), (0, 0, bar_w, bar_h), width=2, border_radius=upx(10))
                 screen.blit(bar_surf, (bar_x, bar_y))
 
                 info_txt = f"Move {moving_furniture.name} (Status: {moving_furniture.status}) -> Target: ({m_gx}, {m_gy})"
-                screen.blit(font_card.render(info_txt, True, (56, 189, 248)), (bar_x + 16, bar_y + 10))
+                screen.blit(ui_font(13, bold=True).render(info_txt, True, (56, 189, 248)), (bar_x + upx(16), bar_y + upx(10)))
 
                 if is_blocked:
                     stat_msg = blocked_reason
@@ -2449,12 +2444,12 @@ def main():
                     stat_msg = f"Valid destination! Left-Click to confirm task ({fam_name} will haul it)."
 
                 stat_col = (34, 197, 94) if is_valid_dest else (239, 68, 68)
-                screen.blit(font_hud.render(stat_msg, True, stat_col), (bar_x + 16, bar_y + 32))
+                screen.blit(ui_font(12, bold=True).render(stat_msg, True, stat_col), (bar_x + upx(16), bar_y + upx(32)))
 
-                btn_cancel_rect.x = bar_x + bar_w - 126
-                btn_cancel_rect.y = bar_y + 25
-                pygame.draw.rect(screen, (220, 38, 38), btn_cancel_rect, border_radius=6)
-                screen.blit(font_btn.render("CANCEL", True, (255, 255, 255)), (btn_cancel_rect.x + 28, btn_cancel_rect.y + 8))
+                btn_cancel_rect.x = bar_x + bar_w - upx(126)
+                btn_cancel_rect.y = bar_y + upx(25)
+                pygame.draw.rect(screen, (220, 38, 38), btn_cancel_rect, border_radius=upx(6))
+                screen.blit(ui_font(12, bold=True).render("CANCEL", True, (255, 255, 255)), (btn_cancel_rect.x + upx(28), btn_cancel_rect.y + upx(8)))
 
             # -------------------------------------------------------------
             # 7.6b. OVERLAYS: ROAD PAINTING MODE
@@ -2489,7 +2484,7 @@ def main():
                     sx, sy = camera.world_to_screen(gx * TILE_SIZE, ty * TILE_SIZE)
                     valid = road_tile_valid_draw(gx, ty)
                     t_surf = pygame.Surface((scaled_t, scaled_t), pygame.SRCALPHA)
-                    t_surf.fill((r_cfg["color"] + (150,)) if valid else (239, 68, 68, 110))
+                    t_surf.fill((r_cfg["color"] + (upx(150),)) if valid else (239, 68, 68, 110))
                     screen.blit(t_surf, (sx, sy))
                     pygame.draw.rect(screen, (255, 255, 255) if valid else (239, 68, 68),
                                      (sx, sy, scaled_t, scaled_t), width=1)
@@ -2499,7 +2494,7 @@ def main():
                 hover_valid = road_tile_valid_draw(m_gx, m_gy)
                 h_surf = pygame.Surface((scaled_t, scaled_t), pygame.SRCALPHA)
                 h_col = r_cfg["color"] if hover_valid else (239, 68, 68)
-                h_surf.fill(h_col + (90,))
+                h_surf.fill(h_col + (upx(90),))
                 screen.blit(h_surf, (sx, sy))
                 pygame.draw.rect(screen, (255, 255, 255) if hover_valid else (239, 68, 68),
                                  (sx, sy, scaled_t, scaled_t), width=2)
@@ -2513,40 +2508,40 @@ def main():
                 cost_str = ", ".join(f"{a} {r}" for r, a in cost.items()) or "free"
                 can_afford = all(resources.get(r, 0) >= a for r, a in cost.items())
 
-                bar_w = 700
-                bar_h = 92
+                bar_w = upx(700)
+                bar_h = upx(92)
                 bar_x = (screen.get_width() - bar_w) // 2
                 bar_y = screen.get_height() - bar_h - 14
                 bar_surf = pygame.Surface((bar_w, bar_h), pygame.SRCALPHA)
-                pygame.draw.rect(bar_surf, (15, 23, 42, 245), (0, 0, bar_w, bar_h), border_radius=10)
-                pygame.draw.rect(bar_surf, (180, 83, 9), (0, 0, bar_w, bar_h), width=2, border_radius=10)
+                pygame.draw.rect(bar_surf, (15, 23, 42, 245), (0, 0, bar_w, bar_h), border_radius=upx(10))
+                pygame.draw.rect(bar_surf, (180, 83, 9), (0, 0, bar_w, bar_h), width=2, border_radius=upx(10))
                 screen.blit(bar_surf, (bar_x, bar_y))
 
-                screen.blit(font_card.render(
+                screen.blit(ui_font(13, bold=True).render(
                     f"Road: {r_cfg['name']} | {r_cfg['desc']} | Drag to paint ({new_count} new tiles)",
-                    True, (250, 204, 21)), (bar_x + 16, bar_y + 10))
+                    True, (250, 204, 21)), (bar_x + upx(16), bar_y + upx(10)))
                 stat_col = (34, 197, 94) if (new_count > 0 and can_afford) else (239, 68, 68)
-                screen.blit(font_hud.render(
+                screen.blit(ui_font(12, bold=True).render(
                     f"Cost: {cost_str} total | L-drag paint, R-click unpaint, Enter/Click confirm",
-                    True, stat_col), (bar_x + 16, bar_y + 34))
+                    True, stat_col), (bar_x + upx(16), bar_y + upx(34)))
 
-                btn_y = bar_y + 56
-                btn_confirm_rect.x = bar_x + 16
+                btn_y = bar_y + upx(56)
+                btn_confirm_rect.x = bar_x + upx(16)
                 btn_confirm_rect.y = btn_y
-                btn_clear_rect.x = bar_x + 180
+                btn_clear_rect.x = bar_x + upx(180)
                 btn_clear_rect.y = btn_y
-                btn_cancel_rect.x = bar_x + 280
+                btn_cancel_rect.x = bar_x + upx(280)
                 btn_cancel_rect.y = btn_y
                 c_col = (16, 185, 129) if (new_count > 0 and can_afford) else (71, 85, 105)
-                pygame.draw.rect(screen, c_col, btn_confirm_rect, border_radius=6)
-                screen.blit(font_btn.render("BUILD", True, (255, 255, 255)),
-                            (btn_confirm_rect.x + 46, btn_confirm_rect.y + 8))
-                pygame.draw.rect(screen, (71, 85, 105), btn_clear_rect, border_radius=6)
-                screen.blit(font_btn.render("CLEAR", True, (255, 255, 255)),
-                            (btn_clear_rect.x + 22, btn_clear_rect.y + 8))
-                pygame.draw.rect(screen, (220, 38, 38), btn_cancel_rect, border_radius=6)
-                screen.blit(font_btn.render("CANCEL", True, (255, 255, 255)),
-                            (btn_cancel_rect.x + 24, btn_cancel_rect.y + 8))
+                pygame.draw.rect(screen, c_col, btn_confirm_rect, border_radius=upx(6))
+                screen.blit(ui_font(12, bold=True).render("BUILD", True, (255, 255, 255)),
+                            (btn_confirm_rect.x + upx(46), btn_confirm_rect.y + upx(8)))
+                pygame.draw.rect(screen, (71, 85, 105), btn_clear_rect, border_radius=upx(6))
+                screen.blit(ui_font(12, bold=True).render("CLEAR", True, (255, 255, 255)),
+                            (btn_clear_rect.x + upx(22), btn_clear_rect.y + upx(8)))
+                pygame.draw.rect(screen, (220, 38, 38), btn_cancel_rect, border_radius=upx(6))
+                screen.blit(ui_font(12, bold=True).render("CANCEL", True, (255, 255, 255)),
+                            (btn_cancel_rect.x + upx(24), btn_cancel_rect.y + upx(8)))
 
             # -------------------------------------------------------------
             # 7.6c. OVERLAYS: DESTROY MODE (mark objects -> DONE -> confirm)
@@ -2579,60 +2574,60 @@ def main():
                                  (sx, sy, scaled_t, scaled_t), width=1)
 
                 # Bottom bar
-                bar_w = 640
-                bar_h = 86
+                bar_w = upx(640)
+                bar_h = upx(86)
                 bar_x = (screen.get_width() - bar_w) // 2
                 bar_y = screen.get_height() - bar_h - 14
                 bar_surf = pygame.Surface((bar_w, bar_h), pygame.SRCALPHA)
-                pygame.draw.rect(bar_surf, (15, 23, 42, 245), (0, 0, bar_w, bar_h), border_radius=10)
-                pygame.draw.rect(bar_surf, (220, 38, 38), (0, 0, bar_w, bar_h), width=2, border_radius=10)
+                pygame.draw.rect(bar_surf, (15, 23, 42, 245), (0, 0, bar_w, bar_h), border_radius=upx(10))
+                pygame.draw.rect(bar_surf, (220, 38, 38), (0, 0, bar_w, bar_h), width=2, border_radius=upx(10))
                 screen.blit(bar_surf, (bar_x, bar_y))
 
-                screen.blit(font_card.render(
+                screen.blit(ui_font(13, bold=True).render(
                     f"Destroy Mode — {len(destroy_marks)} marked | Click objects to mark/unmark",
-                    True, (248, 113, 113)), (bar_x + 16, bar_y + 10))
-                screen.blit(font_hud.render(
+                    True, (248, 113, 113)), (bar_x + upx(16), bar_y + upx(10)))
+                screen.blit(ui_font(12, bold=True).render(
                     "Buildings -> demolition (50% refund) | Sites -> cancel (materials refunded) | Roads -> gone, no refund",
                     True, (148, 163, 184)),
-                    (bar_x + 16, bar_y + 34))
+                    (bar_x + upx(16), bar_y + upx(34)))
 
-                btn_y = bar_y + 46
-                btn_done_rect.x = bar_x + 16
+                btn_y = bar_y + upx(46)
+                btn_done_rect.x = bar_x + upx(16)
                 btn_done_rect.y = btn_y
-                btn_cancel_rect.x = bar_x + 140
+                btn_cancel_rect.x = bar_x + upx(140)
                 btn_cancel_rect.y = btn_y
                 done_col = (220, 38, 38) if destroy_marks else (71, 85, 105)
-                pygame.draw.rect(screen, done_col, btn_done_rect, border_radius=6)
-                screen.blit(font_btn.render(f"DONE ({len(destroy_marks)})", True, (255, 255, 255)),
-                            (btn_done_rect.x + 14, btn_done_rect.y + 8))
-                pygame.draw.rect(screen, (71, 85, 105), btn_cancel_rect, border_radius=6)
-                screen.blit(font_btn.render("CANCEL", True, (255, 255, 255)),
-                            (btn_cancel_rect.x + 24, btn_cancel_rect.y + 8))
+                pygame.draw.rect(screen, done_col, btn_done_rect, border_radius=upx(6))
+                screen.blit(ui_font(12, bold=True).render(f"DONE ({len(destroy_marks)})", True, (255, 255, 255)),
+                            (btn_done_rect.x + upx(14), btn_done_rect.y + upx(8)))
+                pygame.draw.rect(screen, (71, 85, 105), btn_cancel_rect, border_radius=upx(6))
+                screen.blit(ui_font(12, bold=True).render("CANCEL", True, (255, 255, 255)),
+                            (btn_cancel_rect.x + upx(24), btn_cancel_rect.y + upx(8)))
 
                 # Confirm popup
                 if destroy_confirm is not None:
                     n = len(destroy_confirm["marks"])
-                    pw, ph = 380, 150
+                    pw, ph = upx(380), upx(150)
                     px = (screen.get_width() - pw) // 2
                     py = (screen.get_height() - ph) // 2
                     p_surf = pygame.Surface((pw, ph), pygame.SRCALPHA)
-                    pygame.draw.rect(p_surf, (15, 23, 42, 250), (0, 0, pw, ph), border_radius=10)
-                    pygame.draw.rect(p_surf, (220, 38, 38), (0, 0, pw, ph), width=2, border_radius=10)
+                    pygame.draw.rect(p_surf, (15, 23, 42, 250), (0, 0, pw, ph), border_radius=upx(10))
+                    pygame.draw.rect(p_surf, (220, 38, 38), (0, 0, pw, ph), width=2, border_radius=upx(10))
                     screen.blit(p_surf, (px, py))
-                    q_txt = font_card.render(f"Destroy {n} marked object(s)?", True, (255, 255, 255))
-                    screen.blit(q_txt, (px + (pw - q_txt.get_width()) // 2, py + 22))
-                    s_txt = font_hud.render("This cannot be undone.", True, (203, 213, 225))
-                    screen.blit(s_txt, (px + (pw - s_txt.get_width()) // 2, py + 52))
-                    destroy_yes_rect.x = px + pw // 2 - 125
-                    destroy_yes_rect.y = py + ph - 52
-                    destroy_no_rect.x = px + pw // 2 + 15
-                    destroy_no_rect.y = py + ph - 52
-                    pygame.draw.rect(screen, (220, 38, 38), destroy_yes_rect, border_radius=6)
-                    screen.blit(font_btn.render("YES, DESTROY", True, (255, 255, 255)),
-                                (destroy_yes_rect.x + 12, destroy_yes_rect.y + 8))
-                    pygame.draw.rect(screen, (71, 85, 105), destroy_no_rect, border_radius=6)
-                    screen.blit(font_btn.render("NO", True, (255, 255, 255)),
-                                (destroy_no_rect.x + 32, destroy_no_rect.y + 8))
+                    q_txt = ui_font(13, bold=True).render(f"Destroy {n} marked object(s)?", True, (255, 255, 255))
+                    screen.blit(q_txt, (px + (pw - q_txt.get_width()) // 2, py + upx(22)))
+                    s_txt = ui_font(12, bold=True).render("This cannot be undone.", True, (203, 213, 225))
+                    screen.blit(s_txt, (px + (pw - s_txt.get_width()) // 2, py + upx(52)))
+                    destroy_yes_rect.x = px + pw // 2 - upx(125)
+                    destroy_yes_rect.y = py + ph - upx(52)
+                    destroy_no_rect.x = px + pw // 2 + upx(15)
+                    destroy_no_rect.y = py + ph - upx(52)
+                    pygame.draw.rect(screen, (220, 38, 38), destroy_yes_rect, border_radius=upx(6))
+                    screen.blit(ui_font(12, bold=True).render("YES, DESTROY", True, (255, 255, 255)),
+                                (destroy_yes_rect.x + upx(12), destroy_yes_rect.y + upx(8)))
+                    pygame.draw.rect(screen, (71, 85, 105), destroy_no_rect, border_radius=upx(6))
+                    screen.blit(ui_font(12, bold=True).render("NO", True, (255, 255, 255)),
+                                (destroy_no_rect.x + upx(32), destroy_no_rect.y + upx(8)))
 
             # -------------------------------------------------------------
             # 7.7. OVERLAYS: SELECTED FURNITURE CONTEXT MENU / ACTION POPUP
@@ -2642,7 +2637,7 @@ def main():
                 fsx, fsy = camera.world_to_screen(selected_furniture.grid_x * TILE_SIZE, selected_furniture.grid_y * TILE_SIZE)
 
                 # Draw selection box on the furniture
-                pygame.draw.rect(screen, (250, 204, 21), (fsx - 2, fsy - 2, scaled_t + 4, scaled_t + 4), width=2, border_radius=5)
+                pygame.draw.rect(screen, (250, 204, 21), (fsx - 2, fsy - 2, scaled_t + upx(4), scaled_t + upx(4)), width=2, border_radius=upx(5))
 
                 # Modal popup positioned conveniently above/below the tile
                 has_owner = bool(selected_furniture.family_id)
@@ -2654,21 +2649,21 @@ def main():
                     and (getattr(selected_furniture, "construction_order", None) or {}).get("status")
                     in ("AWAITING_PAYMENT", "LANDLORD_PAYMENT_PENDING")
                 )
-                cw, ch = 280, (152 if has_owner else 134)
+                cw, ch = upx(280), (upx(152) if has_owner else upx(134))
                 if is_uninstalled:
-                    ch = 152
+                    ch = upx(152)
                 if public_order_pending:
                     ch = max(ch, 112)
                 furn_action_btns.clear()
                 furn_acts = furniture_menu_actions(selected_furniture)
-                act_row_h = 30 if furn_acts else 0
+                act_row_h = upx(30) if furn_acts else 0
                 if act_row_h:
                     ch += act_row_h
-                cx = max(12, min(screen.get_width() - cw - 12, fsx + scaled_t // 2 - cw // 2))
-                cy = fsy - ch - 12
+                cx = max(upx(12), min(screen.get_width() - cw - upx(12), fsx + scaled_t // 2 - cw // 2))
+                cy = fsy - ch - upx(12)
                 if cy < 50:
-                    cy = fsy + scaled_t + 12
-                cy = max(50, min(screen.get_height() - ch - 12, cy))
+                    cy = fsy + scaled_t + upx(12)
+                cy = max(upx(50), min(screen.get_height() - ch - upx(12), cy))
 
                 furn_menu_rect.x = cx
                 furn_menu_rect.y = cy
@@ -2677,30 +2672,30 @@ def main():
 
                 # Popup surface
                 popup_surf = pygame.Surface((cw, ch), pygame.SRCALPHA)
-                pygame.draw.rect(popup_surf, (15, 23, 42, 245), (0, 0, cw, ch), border_radius=10)
+                pygame.draw.rect(popup_surf, (15, 23, 42, 245), (0, 0, cw, ch), border_radius=upx(10))
                 pygame.draw.rect(popup_surf, (234, 179, 8) if selected_furniture.status == "UNINSTALLED" else (56, 189, 248), (0, 0, cw, ch), width=2, border_radius=10)
                 screen.blit(popup_surf, (cx, cy))
 
                 # Header
-                screen.blit(font_card.render(selected_furniture.name, True, (255, 255, 255)), (cx + 14, cy + 10))
+                screen.blit(ui_font(13, bold=True).render(selected_furniture.name, True, (255, 255, 255)), (cx + upx(14), cy + upx(10)))
 
                 # Status badge
                 st = selected_furniture.status
                 st_col = (234, 179, 8) if st == "UNINSTALLED" else ((56, 189, 248) if st == "MOVING" else (34, 197, 94))
-                screen.blit(font_badge.render(f"[{st}]", True, st_col), (cx + cw - 100, cy + 12))
+                screen.blit(ui_font(10, bold=True).render(f"[{st}]", True, st_col), (cx + cw - upx(100), cy + upx(12)))
 
                 # Close (X) button
-                btn_furn_close_rect.x = cx + cw - 26
-                btn_furn_close_rect.y = cy + 10
+                btn_furn_close_rect.x = cx + cw - upx(26)
+                btn_furn_close_rect.y = cy + upx(10)
                 c_hov = btn_furn_close_rect.collidepoint(m_pos)
-                pygame.draw.rect(screen, (220, 38, 38) if c_hov else (30, 41, 59), btn_furn_close_rect, border_radius=4)
-                x_lbl = font_badge.render("X", True, (255, 255, 255))
+                pygame.draw.rect(screen, (220, 38, 38) if c_hov else (30, 41, 59), btn_furn_close_rect, border_radius=upx(4))
+                x_lbl = ui_font(10, bold=True).render("X", True, (255, 255, 255))
                 screen.blit(x_lbl, (btn_furn_close_rect.centerx - x_lbl.get_width() // 2, btn_furn_close_rect.centery - x_lbl.get_height() // 2))
 
                 # Owner info
                 owner_fam = next((fam for fam in villager_manager.families if fam.id == selected_furniture.family_id), None)
                 owner_txt = f"Owner: The {owner_fam.surname} Family" if owner_fam else "Owner: Unassigned / Town"
-                screen.blit(font_hud.render(owner_txt, True, (148, 163, 184)), (cx + 14, cy + 34))
+                screen.blit(ui_font(12, bold=True).render(owner_txt, True, (148, 163, 184)), (cx + upx(14), cy + upx(34)))
 
                 # Details info
                 if selected_furniture.furniture_type == "household_storage":
@@ -2722,57 +2717,57 @@ def main():
                     det_txt = f"Assigned: {selected_furniture.assigned_villager_id or 'Vacant Bed'}"
                 else:
                     det_txt = f"Location: ({selected_furniture.grid_x}, {selected_furniture.grid_y})"
-                screen.blit(font_hud.render(det_txt, True, (56, 189, 248)), (cx + 14, cy + 54))
+                screen.blit(ui_font(12, bold=True).render(det_txt, True, (56, 189, 248)), (cx + upx(14), cy + upx(54)))
 
                 # Contextual action buttons (Catalogue / Immigrants / Workplace)
                 if furn_acts:
-                    aw = (cw - 28 - 8 * (len(furn_acts) - 1)) // len(furn_acts)
+                    aw = (cw - upx(28) - upx(8) * (len(furn_acts) - 1)) // len(furn_acts)
                     for i, (act, label) in enumerate(furn_acts):
-                        r = pygame.Rect(cx + 14 + i * (aw + 8), cy + 72, aw, 28)
+                        r = pygame.Rect(cx + upx(14) + i * (aw + upx(8)), cy + upx(72), aw, upx(28))
                         furn_action_btns.append({"rect": r, "action": act})
                         a_hov = r.collidepoint(m_pos)
                         pygame.draw.rect(screen, (30, 41, 59) if not a_hov else (45, 58, 82), r, border_radius=6)
-                        pygame.draw.rect(screen, (56, 189, 248), r, width=1, border_radius=6)
-                        a_txt = font_btn.render(label, True, (255, 255, 255))
+                        pygame.draw.rect(screen, (56, 189, 248), r, width=1, border_radius=upx(6))
+                        a_txt = ui_font(12, bold=True).render(label, True, (255, 255, 255))
                         screen.blit(a_txt, (r.centerx - a_txt.get_width() // 2, r.centery - a_txt.get_height() // 2))
-                row2_y = cy + 76 + act_row_h
+                row2_y = cy + upx(76) + act_row_h
 
                 # Contextual buttons — Household/Possessions hanya untuk
                 # household chest; furniture lain cukup Move/Destroy.
                 if (owner_fam and not is_uninstalled
                         and selected_furniture.furniture_type == "household_storage"):
-                    btn_furn_house_rect.x = cx + 14
+                    btn_furn_house_rect.x = cx + upx(14)
                     btn_furn_house_rect.y = row2_y
-                    btn_furn_house_rect.w = 114
-                    btn_furn_house_rect.h = 28
+                    btn_furn_house_rect.w = upx(114)
+                    btn_furn_house_rect.h = upx(28)
                     h_hov = btn_furn_house_rect.collidepoint(m_pos)
-                    pygame.draw.rect(screen, (14, 116, 144) if h_hov else (15, 23, 42), btn_furn_house_rect, border_radius=6)
-                    pygame.draw.rect(screen, (56, 189, 248), btn_furn_house_rect, width=1, border_radius=6)
-                    h_txt = font_btn.render("Household", True, (255, 255, 255))
+                    pygame.draw.rect(screen, (14, 116, 144) if h_hov else (15, 23, 42), btn_furn_house_rect, border_radius=upx(6))
+                    pygame.draw.rect(screen, (56, 189, 248), btn_furn_house_rect, width=1, border_radius=upx(6))
+                    h_txt = ui_font(12, bold=True).render("Household", True, (255, 255, 255))
                     screen.blit(h_txt, (btn_furn_house_rect.centerx - h_txt.get_width() // 2, btn_furn_house_rect.centery - h_txt.get_height() // 2))
 
-                    btn_furn_poss_rect.x = cx + cw - 14 - 114
+                    btn_furn_poss_rect.x = cx + cw - upx(14) - upx(114)
                     btn_furn_poss_rect.y = row2_y
-                    btn_furn_poss_rect.w = 114
-                    btn_furn_poss_rect.h = 28
+                    btn_furn_poss_rect.w = upx(114)
+                    btn_furn_poss_rect.h = upx(28)
                     p_hov = btn_furn_poss_rect.collidepoint(m_pos)
-                    pygame.draw.rect(screen, (202, 138, 4) if p_hov else (161, 98, 7), btn_furn_poss_rect, border_radius=6)
-                    pygame.draw.rect(screen, (250, 204, 21), btn_furn_poss_rect, width=1, border_radius=6)
-                    p_txt = font_btn.render("Possessions", True, (255, 255, 255))
+                    pygame.draw.rect(screen, (202, 138, 4) if p_hov else (161, 98, 7), btn_furn_poss_rect, border_radius=upx(6))
+                    pygame.draw.rect(screen, (250, 204, 21), btn_furn_poss_rect, width=1, border_radius=upx(6))
+                    p_txt = ui_font(12, bold=True).render("Possessions", True, (255, 255, 255))
                     screen.blit(p_txt, (btn_furn_poss_rect.centerx - p_txt.get_width() // 2, btn_furn_poss_rect.centery - p_txt.get_height() // 2))
                 else:
-                    btn_furn_house_rect.x = -9999
-                    btn_furn_poss_rect.x = -9999
+                    btn_furn_house_rect.x = -upx(9999)
+                    btn_furn_poss_rect.x = -upx(9999)
 
                 if is_uninstalled:
                     btn_furn_store_rect.update(cx + 14, row2_y, cw - 28, 28)
                     store_hov = btn_furn_store_rect.collidepoint(m_pos)
-                    pygame.draw.rect(screen, (16, 185, 129) if store_hov else (5, 150, 105), btn_furn_store_rect, border_radius=6)
-                    pygame.draw.rect(screen, (52, 211, 153), btn_furn_store_rect, width=1, border_radius=6)
-                    store_txt = font_btn.render("Store in Household", True, (255, 255, 255))
+                    pygame.draw.rect(screen, (16, 185, 129) if store_hov else (5, 150, 105), btn_furn_store_rect, border_radius=upx(6))
+                    pygame.draw.rect(screen, (52, 211, 153), btn_furn_store_rect, width=1, border_radius=upx(6))
+                    store_txt = ui_font(12, bold=True).render("Store in Household", True, (255, 255, 255))
                     screen.blit(store_txt, (btn_furn_store_rect.centerx - store_txt.get_width() // 2, btn_furn_store_rect.centery - store_txt.get_height() // 2))
                 else:
-                    btn_furn_store_rect.x = -9999
+                    btn_furn_store_rect.x = -upx(9999)
                 if public_order_pending:
                     order_status = (getattr(selected_furniture, "construction_order", None) or {}).get("status")
                     status_labels = {
@@ -2784,26 +2779,26 @@ def main():
                         "BUILDING": "Builder building",
                         "AWAITING_MATERIAL": "Builder gathering materials",
                     }
-                    order_text = font_badge.render(status_labels.get(order_status, "Builder order"), True, (56, 189, 248))
-                    screen.blit(order_text, (cx + 14, row2_y + 6))
+                    order_text = ui_font(10, bold=True).render(status_labels.get(order_status, "Builder order"), True, (56, 189, 248))
+                    screen.blit(order_text, (cx + upx(14), row2_y + upx(6)))
                 else:
-                    btn_furn_pay_builder_rect.x = -9999
+                    btn_furn_pay_builder_rect.x = -upx(9999)
 
                 # Buttons: Move & Destroy
-                btn_furn_move_rect.x = cx + 14
-                btn_furn_move_rect.y = cy + ch - 42
+                btn_furn_move_rect.x = cx + upx(14)
+                btn_furn_move_rect.y = cy + ch - upx(42)
                 m_hov = btn_furn_move_rect.collidepoint(m_pos)
-                pygame.draw.rect(screen, (37, 99, 235) if m_hov else (29, 78, 216), btn_furn_move_rect, border_radius=6)
-                pygame.draw.rect(screen, (96, 165, 250), btn_furn_move_rect, width=1, border_radius=6)
-                mv_txt = font_btn.render("Move", True, (255, 255, 255))
+                pygame.draw.rect(screen, (37, 99, 235) if m_hov else (29, 78, 216), btn_furn_move_rect, border_radius=upx(6))
+                pygame.draw.rect(screen, (96, 165, 250), btn_furn_move_rect, width=1, border_radius=upx(6))
+                mv_txt = ui_font(12, bold=True).render("Move", True, (255, 255, 255))
                 screen.blit(mv_txt, (btn_furn_move_rect.centerx - mv_txt.get_width() // 2, btn_furn_move_rect.centery - mv_txt.get_height() // 2))
 
-                btn_furn_destroy_rect.x = cx + cw - 14 - btn_furn_destroy_rect.w
-                btn_furn_destroy_rect.y = cy + ch - 42
+                btn_furn_destroy_rect.x = cx + cw - upx(14) - btn_furn_destroy_rect.w
+                btn_furn_destroy_rect.y = cy + ch - upx(42)
                 d_hov = btn_furn_destroy_rect.collidepoint(m_pos)
-                pygame.draw.rect(screen, (220, 38, 38) if d_hov else (185, 28, 28), btn_furn_destroy_rect, border_radius=6)
-                pygame.draw.rect(screen, (248, 113, 113), btn_furn_destroy_rect, width=1, border_radius=6)
-                des_txt = font_btn.render("Destroy", True, (255, 255, 255))
+                pygame.draw.rect(screen, (220, 38, 38) if d_hov else (185, 28, 28), btn_furn_destroy_rect, border_radius=upx(6))
+                pygame.draw.rect(screen, (248, 113, 113), btn_furn_destroy_rect, width=1, border_radius=upx(6))
+                des_txt = ui_font(12, bold=True).render("Destroy", True, (255, 255, 255))
                 screen.blit(des_txt, (btn_furn_destroy_rect.centerx - des_txt.get_width() // 2, btn_furn_destroy_rect.centery - des_txt.get_height() // 2))
 
             # -------------------------------------------------------------
@@ -2820,63 +2815,63 @@ def main():
                     # Selection outline around the whole footprint
                     ox0, oy0 = camera.world_to_screen(min(bxs) * TILE_SIZE, min(bys) * TILE_SIZE)
                     ox1, oy1 = camera.world_to_screen((max(bxs) + 1) * TILE_SIZE, (max(bys) + 1) * TILE_SIZE)
-                    pygame.draw.rect(screen, (250, 204, 21), (ox0, oy0, ox1 - ox0, oy1 - oy0), width=2, border_radius=5)
+                    pygame.draw.rect(screen, (250, 204, 21), (ox0, oy0, ox1 - ox0, oy1 - oy0), width=2, border_radius=upx(5))
 
                     struct_acts = structure_menu_actions(b)
-                    cw, ch = 260, 104 + (30 if struct_acts else 0)
-                    cx = max(12, min(screen.get_width() - cw - 12, bsx - cw // 2))
-                    cy = bsy - ch - 12
+                    cw, ch = upx(260), upx(104) + (upx(30) if struct_acts else 0)
+                    cx = max(upx(12), min(screen.get_width() - cw - upx(12), bsx - cw // 2))
+                    cy = bsy - ch - upx(12)
                     if cy < 50:
                         cy = bsy + int(TILE_SIZE * camera.zoom) + 12
-                    cy = max(50, min(screen.get_height() - ch - 12, cy))
+                    cy = max(upx(50), min(screen.get_height() - ch - upx(12), cy))
 
                     struct_menu_rect.update(cx, cy, cw, ch)
                     struct_action_btns.clear()
 
                     popup_surf = pygame.Surface((cw, ch), pygame.SRCALPHA)
-                    pygame.draw.rect(popup_surf, (15, 23, 42, 245), (0, 0, cw, ch), border_radius=10)
-                    pygame.draw.rect(popup_surf, (56, 189, 248), (0, 0, cw, ch), width=2, border_radius=10)
+                    pygame.draw.rect(popup_surf, (15, 23, 42, 245), (0, 0, cw, ch), border_radius=upx(10))
+                    pygame.draw.rect(popup_surf, (56, 189, 248), (0, 0, cw, ch), width=2, border_radius=upx(10))
                     screen.blit(popup_surf, (cx, cy))
 
-                    screen.blit(font_card.render(getattr(b, "name", "Structure"), True, (255, 255, 255)), (cx + 14, cy + 10))
+                    screen.blit(ui_font(13, bold=True).render(getattr(b, "name", "Structure"), True, (255, 255, 255)), (cx + upx(14), cy + upx(10)))
                     st_cfg = getattr(b, "type_cfg", {}) or {}
                     sub_txt = f"{st_cfg.get('name', b.building_type)} • Public Structure • {len(b.tiles)} tiles"
-                    screen.blit(font_hud.render(sub_txt, True, (148, 163, 184)), (cx + 14, cy + 32))
+                    screen.blit(ui_font(12, bold=True).render(sub_txt, True, (148, 163, 184)), (cx + upx(14), cy + upx(32)))
 
-                    btn_struct_close_rect.x = cx + cw - 26
-                    btn_struct_close_rect.y = cy + 10
+                    btn_struct_close_rect.x = cx + cw - upx(26)
+                    btn_struct_close_rect.y = cy + upx(10)
                     c_hov = btn_struct_close_rect.collidepoint(m_pos)
-                    pygame.draw.rect(screen, (220, 38, 38) if c_hov else (30, 41, 59), btn_struct_close_rect, border_radius=4)
-                    x_lbl = font_badge.render("X", True, (255, 255, 255))
+                    pygame.draw.rect(screen, (220, 38, 38) if c_hov else (30, 41, 59), btn_struct_close_rect, border_radius=upx(4))
+                    x_lbl = ui_font(10, bold=True).render("X", True, (255, 255, 255))
                     screen.blit(x_lbl, (btn_struct_close_rect.centerx - x_lbl.get_width() // 2, btn_struct_close_rect.centery - x_lbl.get_height() // 2))
 
                     # Contextual action row (Market / Workplace)
                     if struct_acts:
-                        aw = (cw - 28 - 8 * (len(struct_acts) - 1)) // len(struct_acts)
+                        aw = (cw - upx(28) - upx(8) * (len(struct_acts) - 1)) // len(struct_acts)
                         for i, (act, label) in enumerate(struct_acts):
-                            r = pygame.Rect(cx + 14 + i * (aw + 8), cy + 52, aw, 28)
+                            r = pygame.Rect(cx + upx(14) + i * (aw + upx(8)), cy + upx(52), aw, upx(28))
                             struct_action_btns.append({"rect": r, "action": act})
                             a_hov = r.collidepoint(m_pos)
                             pygame.draw.rect(screen, (30, 41, 59) if not a_hov else (45, 58, 82), r, border_radius=6)
-                            pygame.draw.rect(screen, (56, 189, 248), r, width=1, border_radius=6)
-                            a_txt = font_btn.render(label, True, (255, 255, 255))
+                            pygame.draw.rect(screen, (56, 189, 248), r, width=1, border_radius=upx(6))
+                            a_txt = ui_font(12, bold=True).render(label, True, (255, 255, 255))
                             screen.blit(a_txt, (r.centerx - a_txt.get_width() // 2, r.centery - a_txt.get_height() // 2))
 
                     # Bottom row: List (info panel) & Destroy (demolition)
-                    btn_struct_list_rect.x = cx + 14
-                    btn_struct_list_rect.y = cy + ch - 42
+                    btn_struct_list_rect.x = cx + upx(14)
+                    btn_struct_list_rect.y = cy + ch - upx(42)
                     l_hov = btn_struct_list_rect.collidepoint(m_pos)
-                    pygame.draw.rect(screen, (37, 99, 235) if l_hov else (29, 78, 216), btn_struct_list_rect, border_radius=6)
-                    pygame.draw.rect(screen, (96, 165, 250), btn_struct_list_rect, width=1, border_radius=6)
-                    l_txt = font_btn.render("List", True, (255, 255, 255))
+                    pygame.draw.rect(screen, (37, 99, 235) if l_hov else (29, 78, 216), btn_struct_list_rect, border_radius=upx(6))
+                    pygame.draw.rect(screen, (96, 165, 250), btn_struct_list_rect, width=1, border_radius=upx(6))
+                    l_txt = ui_font(12, bold=True).render("List", True, (255, 255, 255))
                     screen.blit(l_txt, (btn_struct_list_rect.centerx - l_txt.get_width() // 2, btn_struct_list_rect.centery - l_txt.get_height() // 2))
 
-                    btn_struct_destroy_rect.x = cx + cw - 14 - btn_struct_destroy_rect.w
-                    btn_struct_destroy_rect.y = cy + ch - 42
+                    btn_struct_destroy_rect.x = cx + cw - upx(14) - btn_struct_destroy_rect.w
+                    btn_struct_destroy_rect.y = cy + ch - upx(42)
                     d_hov = btn_struct_destroy_rect.collidepoint(m_pos)
-                    pygame.draw.rect(screen, (220, 38, 38) if d_hov else (185, 28, 28), btn_struct_destroy_rect, border_radius=6)
-                    pygame.draw.rect(screen, (248, 113, 113), btn_struct_destroy_rect, width=1, border_radius=6)
-                    d_txt = font_btn.render("Destroy", True, (255, 255, 255))
+                    pygame.draw.rect(screen, (220, 38, 38) if d_hov else (185, 28, 28), btn_struct_destroy_rect, border_radius=upx(6))
+                    pygame.draw.rect(screen, (248, 113, 113), btn_struct_destroy_rect, width=1, border_radius=upx(6))
+                    d_txt = ui_font(12, bold=True).render("Destroy", True, (255, 255, 255))
                     screen.blit(d_txt, (btn_struct_destroy_rect.centerx - d_txt.get_width() // 2, btn_struct_destroy_rect.centery - d_txt.get_height() // 2))
 
             # -------------------------------------------------------------
@@ -2887,25 +2882,25 @@ def main():
                 obj = workplace_popup["obj"]
                 bases = workplace_bases_for(kind, obj)
                 ox, oy = workplace_popup.get("pos", m_pos)
-                pw, ph = 260, 96
+                pw, ph = upx(260), upx(96)
                 px = min(max(8, ox - pw // 2), screen.get_width() - pw - 8)
                 py = min(max(8, oy - ph - 14), screen.get_height() - ph - 8)
                 wp_popup_rect.update(px, py, pw, ph)
-                pygame.draw.rect(screen, (24, 24, 30), wp_popup_rect, border_radius=8)
-                pygame.draw.rect(screen, (80, 80, 95), wp_popup_rect, width=1, border_radius=8)
+                pygame.draw.rect(screen, (24, 24, 30), wp_popup_rect, border_radius=upx(8))
+                pygame.draw.rect(screen, (80, 80, 95), wp_popup_rect, width=1, border_radius=upx(8))
 
                 title = f"{getattr(obj, 'name', '') or getattr(obj, 'permit_type', '') or getattr(obj, 'furniture_type', '') or getattr(obj, 'building_type', '')}"
-                title_s = font_badge.render(title[:26], True, (220, 220, 230))
-                screen.blit(title_s, (px + 12, py + 8))
+                title_s = ui_font(10, bold=True).render(title[:26], True, (220, 220, 230))
+                screen.blit(title_s, (px + upx(12), py + upx(8)))
 
                 wp_close_btn_rect.update(px + pw - 24, py + 6, 18, 18)
                 ch_hov = wp_close_btn_rect.collidepoint(m_pos)
-                pygame.draw.rect(screen, (200, 60, 60) if ch_hov else (140, 45, 45), wp_close_btn_rect, border_radius=4)
-                ch_s = font_badge.render("x", True, (255, 255, 255))
+                pygame.draw.rect(screen, (200, 60, 60) if ch_hov else (140, 45, 45), wp_close_btn_rect, border_radius=upx(4))
+                ch_s = ui_font(10, bold=True).render("x", True, (255, 255, 255))
                 screen.blit(ch_s, (wp_close_btn_rect.centerx - ch_s.get_width() // 2, wp_close_btn_rect.centery - ch_s.get_height() // 2))
 
-                btn_w = (pw - 12 * 3) // 2
-                by = py + 34
+                btn_w = (pw - upx(12) * 3) // 2
+                by = py + upx(34)
                 wp_base_btn_rect.update(px + 12, by, btn_w, 26)
                 wp_ws_btn_rect.update(px + 12 + btn_w + 12, by, btn_w, 26)
 
@@ -2923,15 +2918,15 @@ def main():
                         bg = (45, 45, 52)
                         fg = (60, 60, 68)
                         tc = (110, 110, 120)
-                    pygame.draw.rect(screen, bg, rect, border_radius=6)
-                    pygame.draw.rect(screen, fg, rect, width=1, border_radius=6)
-                    t = font_badge.render(label, True, tc)
+                    pygame.draw.rect(screen, bg, rect, border_radius=upx(6))
+                    pygame.draw.rect(screen, fg, rect, width=1, border_radius=upx(6))
+                    t = ui_font(10, bold=True).render(label, True, tc)
                     screen.blit(t, (rect.centerx - t.get_width() // 2, rect.centery - t.get_height() // 2))
             else:
-                wp_popup_rect.x = -9999
-                wp_base_btn_rect.x = -9999
-                wp_ws_btn_rect.x = -9999
-                wp_close_btn_rect.x = -9999
+                wp_popup_rect.x = -upx(9999)
+                wp_base_btn_rect.x = -upx(9999)
+                wp_ws_btn_rect.x = -upx(9999)
+                wp_close_btn_rect.x = -upx(9999)
 
             # -------------------------------------------------------------
             # 7.76. MINE INFO POPUP (natural resources)
@@ -2940,22 +2935,22 @@ def main():
                 from game.world.natural_resources import NaturalResourceManager
                 mine = mine_popup["mine"]
                 ox, oy = mine_popup.get("pos", m_pos)
-                pw, ph = 240, 92
+                pw, ph = upx(240), upx(92)
                 px = min(max(8, ox - pw // 2), screen.get_width() - pw - 8)
                 py = min(max(8, oy - ph - 14), screen.get_height() - ph - 8)
                 mine_popup_rect.update(px, py, pw, ph)
-                pygame.draw.rect(screen, (24, 24, 30), mine_popup_rect, border_radius=8)
-                pygame.draw.rect(screen, (80, 80, 95), mine_popup_rect, width=1, border_radius=8)
+                pygame.draw.rect(screen, (24, 24, 30), mine_popup_rect, border_radius=upx(8))
+                pygame.draw.rect(screen, (80, 80, 95), mine_popup_rect, width=1, border_radius=upx(8))
 
                 kind_label = str(mine.get("kind", "Mine")).replace("_", " ").title()
-                screen.blit(font_badge.render(kind_label, True, (220, 220, 230)), (px + 12, py + 8))
+                screen.blit(ui_font(10, bold=True).render(kind_label, True, (220, 220, 230)), (px + upx(12), py + upx(8)))
                 tier_name = NaturalResourceManager.mine_tier_name(mine)
                 lo, hi = NaturalResourceManager.mine_yield_range(mine)
-                screen.blit(font_badge.render(f"Tier: {tier_name}", True, (251, 191, 36)), (px + 12, py + 28))
-                screen.blit(font_body.render(f"Yield: {lo}-{hi} per hour", True, (203, 213, 225)), (px + 12, py + 48))
-                screen.blit(font_body.render("Unlimited deposit", True, (148, 163, 184)), (px + 12, py + 68))
+                screen.blit(ui_font(10, bold=True).render(f"Tier: {tier_name}", True, (251, 191, 36)), (px + upx(12), py + upx(28)))
+                screen.blit(ui_font(11).render(f"Yield: {lo}-{hi} per hour", True, (203, 213, 225)), (px + upx(12), py + upx(48)))
+                screen.blit(ui_font(11).render("Unlimited deposit", True, (148, 163, 184)), (px + upx(12), py + upx(68)))
             else:
-                mine_popup_rect.x = -9999
+                mine_popup_rect.x = -upx(9999)
 
             # -------------------------------------------------------------
             # 7.8. OVERLAYS: SELECTED INDIVIDUAL AI PROFILE POPUP (Agent 1)
@@ -2965,7 +2960,7 @@ def main():
                 er = max(6, int(getattr(selected_entity, "radius", 20) * camera.zoom))
 
                 # Ring indicator around entity
-                pygame.draw.circle(screen, (56, 189, 248), (esx, esy), er + 6, 2)
+                pygame.draw.circle(screen, (56, 189, 248), (esx, esy), er + upx(6), 2)
 
                 is_alive = getattr(selected_entity, "is_alive", True)
                 h_timer = getattr(selected_entity, "hunger_death_timer", None)
@@ -3004,14 +2999,14 @@ def main():
                 ch = (
                     happiness_panel_offset + happiness_panel_height
                     + AI_PROFILE_PANEL_BOTTOM_PADDING
-                    if has_happiness else info_y2_offset + 28
+                    if has_happiness else info_y2_offset + upx(28)
                 )
                 cw = min(AI_PROFILE_CARD_WIDTH, max(1, screen.get_width() - 24))
-                cx = max(12, min(screen.get_width() - cw - 12, esx - cw // 2))
-                cy = esy - ch - 16
+                cx = max(upx(12), min(screen.get_width() - cw - upx(12), esx - cw // 2))
+                cy = esy - ch - upx(16)
                 if cy < 50:
-                    cy = esy + er + 16
-                cy = max(50, min(screen.get_height() - ch - 12, cy))
+                    cy = esy + er + upx(16)
+                cy = max(upx(50), min(screen.get_height() - ch - upx(12), cy))
 
                 entity_card_rect.x = cx
                 entity_card_rect.y = cy
@@ -3019,29 +3014,29 @@ def main():
                 entity_card_rect.h = ch
 
                 card_surf = pygame.Surface((cw, ch), pygame.SRCALPHA)
-                pygame.draw.rect(card_surf, (15, 23, 42, 245), (0, 0, cw, ch), border_radius=10)
-                pygame.draw.rect(card_surf, (56, 189, 248), (0, 0, cw, ch), width=2, border_radius=10)
+                pygame.draw.rect(card_surf, (15, 23, 42, 245), (0, 0, cw, ch), border_radius=upx(10))
+                pygame.draw.rect(card_surf, (56, 189, 248), (0, 0, cw, ch), width=2, border_radius=upx(10))
                 screen.blit(card_surf, (cx, cy))
 
                 # Living / Deceased / Survival Countdown Status Badge
                 if not is_alive:
                     reason = getattr(selected_entity, "death_reason", "Starvation")
-                    st_txt = font_badge.render(f"[DECEASED: {reason}]", True, (239, 68, 68))
+                    st_txt = ui_font(10, bold=True).render(f"[DECEASED: {reason}]", True, (239, 68, 68))
                 elif h_timer is not None and t_timer is not None:
-                    st_txt = font_badge.render("[CRITICAL: Starving & Dehydrated]", True, (239, 68, 68))
+                    st_txt = ui_font(10, bold=True).render("[CRITICAL: Starving & Dehydrated]", True, (239, 68, 68))
                 elif h_timer is not None:
-                    st_txt = font_badge.render(f"[CRITICAL: Starving in {h_timer:.1f}h]", True, (239, 68, 68))
+                    st_txt = ui_font(10, bold=True).render(f"[CRITICAL: Starving in {h_timer:.1f}h]", True, (239, 68, 68))
                 elif t_timer is not None:
-                    st_txt = font_badge.render(f"[CRITICAL: Dehydrated in {t_timer:.1f}h]", True, (239, 68, 68))
+                    st_txt = ui_font(10, bold=True).render(f"[CRITICAL: Dehydrated in {t_timer:.1f}h]", True, (239, 68, 68))
                 else:
-                    st_txt = font_badge.render("[ALIVE]", True, (34, 197, 94))
+                    st_txt = ui_font(10, bold=True).render("[ALIVE]", True, (34, 197, 94))
 
                 # Close (X) button
-                btn_entity_close_rect.x = cx + cw - 26
-                btn_entity_close_rect.y = cy + 10
+                btn_entity_close_rect.x = cx + cw - upx(26)
+                btn_entity_close_rect.y = cy + upx(10)
                 c_hov = btn_entity_close_rect.collidepoint(m_pos)
-                pygame.draw.rect(screen, (220, 38, 38) if c_hov else (30, 41, 59), btn_entity_close_rect, border_radius=4)
-                x_lbl = font_badge.render("X", True, (255, 255, 255))
+                pygame.draw.rect(screen, (220, 38, 38) if c_hov else (30, 41, 59), btn_entity_close_rect, border_radius=upx(4))
+                x_lbl = ui_font(10, bold=True).render("X", True, (255, 255, 255))
                 screen.blit(x_lbl, (btn_entity_close_rect.centerx - x_lbl.get_width() // 2, btn_entity_close_rect.centery - x_lbl.get_height() // 2))
 
                 # Row 1: Identity Name & Role
@@ -3049,44 +3044,44 @@ def main():
                 role_str = getattr(selected_entity, "role", "")
                 title_lbl = f"{name_str} ({role_str})" if role_str else name_str
                 
-                avail_title_w = max(40, cw - 36 - (st_txt.get_width() + 14 if is_alive else 0))
-                title_surf = font_card.render(title_lbl, True, (255, 255, 255))
+                avail_title_w = max(upx(40), cw - upx(36) - (st_txt.get_width() + upx(14) if is_alive else 0))
+                title_surf = ui_font(13, bold=True).render(title_lbl, True, (255, 255, 255))
                 if title_surf.get_width() > avail_title_w:
                     for i in range(len(title_lbl), 0, -1):
-                        trunc_s = font_card.render(title_lbl[:i] + "...", True, (255, 255, 255))
+                        trunc_s = ui_font(13, bold=True).render(title_lbl[:i] + "...", True, (255, 255, 255))
                         if trunc_s.get_width() <= avail_title_w:
                             title_surf = trunc_s
                             break
-                screen.blit(title_surf, (cx + 14, cy + 10))
+                screen.blit(title_surf, (cx + upx(14), cy + upx(10)))
                 if is_alive:
-                    screen.blit(st_txt, (cx + cw - 32 - st_txt.get_width(), cy + 12))
+                    screen.blit(st_txt, (cx + cw - upx(32) - st_txt.get_width(), cy + upx(12)))
 
                 # Household Affiliation
                 fam_id = getattr(selected_entity, "family_id", None)
                 if fam_id and villager_manager:
                     fam_obj = villager_manager.get_family_by_id(fam_id)
                     household_name = f"The {fam_obj.surname} Family" if fam_obj else str(fam_id)
-                    btn_entity_household_rect.x = cx + cw - 96
-                    btn_entity_household_rect.y = cy + 32
-                    btn_entity_household_rect.w = 82
-                    btn_entity_household_rect.h = 20
+                    btn_entity_household_rect.x = cx + cw - upx(96)
+                    btn_entity_household_rect.y = cy + upx(32)
+                    btn_entity_household_rect.w = upx(82)
+                    btn_entity_household_rect.h = upx(20)
                     hh_hov = btn_entity_household_rect.collidepoint(m_pos)
-                    pygame.draw.rect(screen, (14, 116, 144) if hh_hov else (15, 23, 42), btn_entity_household_rect, border_radius=4)
-                    pygame.draw.rect(screen, (56, 189, 248), btn_entity_household_rect, width=1, border_radius=4)
-                    hh_lbl = font_badge.render("Household", True, (255, 255, 255))
+                    pygame.draw.rect(screen, (14, 116, 144) if hh_hov else (15, 23, 42), btn_entity_household_rect, border_radius=upx(4))
+                    pygame.draw.rect(screen, (56, 189, 248), btn_entity_household_rect, width=1, border_radius=upx(4))
+                    hh_lbl = ui_font(10, bold=True).render("Household", True, (255, 255, 255))
                     screen.blit(hh_lbl, (btn_entity_household_rect.centerx - hh_lbl.get_width() // 2, btn_entity_household_rect.centery - hh_lbl.get_height() // 2))
                 else:
                     household_name = getattr(selected_entity, "household_name", "Crown Estate Household")
-                    btn_entity_household_rect.x = -9999
+                    btn_entity_household_rect.x = -upx(9999)
 
                 # Row 2: Status (if deceased) or Household Name
                 if not is_alive:
-                    screen.blit(st_txt, (cx + 14, cy + 32))
-                    screen.blit(font_hud.render(f"Household: {household_name}", True, (56, 189, 248)), (cx + 14, cy + 48))
-                    act_y = cy + 68
+                    screen.blit(st_txt, (cx + upx(14), cy + upx(32)))
+                    screen.blit(ui_font(12, bold=True).render(f"Household: {household_name}", True, (56, 189, 248)), (cx + upx(14), cy + upx(48)))
+                    act_y = cy + upx(68)
                 else:
-                    screen.blit(font_hud.render(f"Household: {household_name}", True, (56, 189, 248)), (cx + 14, cy + 34))
-                    act_y = cy + 54
+                    screen.blit(ui_font(12, bold=True).render(f"Household: {household_name}", True, (56, 189, 248)), (cx + upx(14), cy + upx(34)))
+                    act_y = cy + upx(54)
 
                 # Current and upcoming activity details
                 job_name = getattr(selected_entity, "job", "Worker")
@@ -3100,31 +3095,31 @@ def main():
                         or getattr(selected_entity, "state", "IDLE")
                     )
                     task_name = str(raw_act).replace("_", " ").title() if raw_act == getattr(selected_entity, "task", None) else str(raw_act)
-                screen.blit(font_body.render(f"Profession: {job_name}", True, (226, 232, 240)), (cx + 14, act_y))
-                current_activity_y = act_y + 14
-                current_activity_rect = pygame.Rect(cx + 14, current_activity_y, cw - 28, font_body.get_height())
+                screen.blit(ui_font(11).render(f"Profession: {job_name}", True, (226, 232, 240)), (cx + upx(14), act_y))
+                current_activity_y = act_y + upx(14)
+                current_activity_rect = pygame.Rect(cx + upx(14), current_activity_y, cw - upx(28), ui_font(11).get_height())
                 old_clip = screen.get_clip()
                 screen.set_clip(current_activity_rect)
                 screen.blit(
-                    font_body.render(f"Current Activity: {task_name}", True, (226, 232, 240)),
+                    ui_font(11).render(f"Current Activity: {task_name}", True, (226, 232, 240)),
                     (current_activity_rect.x, current_activity_rect.y),
                 )
                 screen.set_clip(old_clip)
 
                 next_header_y = cy + next_header_offset
                 screen.blit(
-                    font_badge.render("Next Activities:", True, (56, 189, 248)),
-                    (cx + 14, next_header_y),
+                    ui_font(10, bold=True).render("Next Activities:", True, (56, 189, 248)),
+                    (cx + upx(14), next_header_y),
                 )
                 next_row_rect = pygame.Rect(
-                    cx + 14, cy + next_start_offset, cw - 28,
+                    cx + upx(14), cy + next_start_offset, cw - upx(28),
                     len(next_rows) * activity_row_height,
                 )
                 old_clip = screen.get_clip()
                 screen.set_clip(next_row_rect)
                 for index, activity in enumerate(next_rows):
                     screen.blit(
-                        font_badge.render(f"- {activity}", True, (203, 213, 225)),
+                        ui_font(10, bold=True).render(f"- {activity}", True, (203, 213, 225)),
                         (next_row_rect.x, next_row_rect.y + index * activity_row_height),
                     )
                 screen.set_clip(old_clip)
@@ -3142,15 +3137,15 @@ def main():
                         HAPPINESS_STATUS_BANDS[0],
                     )
                     happiness_color = HAPPINESS_STATUS_COLORS.get(happiness_status, (148, 163, 184))
-                    screen.blit(font_badge.render("Happiness:", True, (241, 245, 249)), (cx + 14, bar_y1))
-                    happiness_bg = pygame.Rect(cx + 68, bar_y1, 150, 14)
-                    pygame.draw.rect(screen, (30, 41, 59), happiness_bg, border_radius=4)
+                    screen.blit(ui_font(10, bold=True).render("Happiness:", True, (241, 245, 249)), (cx + upx(14), bar_y1))
+                    happiness_bg = pygame.Rect(cx + upx(68), bar_y1, upx(150), upx(14))
+                    pygame.draw.rect(screen, (30, 41, 59), happiness_bg, border_radius=upx(4))
                     happiness_range = max(1.0, HAPPINESS_MAX_VALUE - HAPPINESS_MIN_VALUE)
                     happiness_fill = max(0, int(150 * ((happiness_val - HAPPINESS_MIN_VALUE) / happiness_range)))
                     if happiness_fill > 0:
-                        pygame.draw.rect(screen, happiness_color, (cx + 68, bar_y1, happiness_fill, 14), border_radius=4)
-                    pygame.draw.rect(screen, (71, 85, 105), happiness_bg, width=1, border_radius=4)
-                    screen.blit(font_badge.render(happiness_band.get("label", "Happy"), True, happiness_color), (cx + 226, bar_y1))
+                        pygame.draw.rect(screen, happiness_color, (cx + upx(68), bar_y1, happiness_fill, upx(14)), border_radius=upx(4))
+                    pygame.draw.rect(screen, (71, 85, 105), happiness_bg, width=1, border_radius=upx(4))
+                    screen.blit(ui_font(10, bold=True).render(happiness_band.get("label", "Happy"), True, happiness_color), (cx + upx(226), bar_y1))
 
                 # Sleep follows happiness, then bodily needs and faith.
                 bar_y2 = bar_y1 + AI_PROFILE_NEED_ROW_HEIGHT
@@ -3158,73 +3153,73 @@ def main():
                     sleep_val = max(SLEEP_MIN_VALUE, min(SLEEP_MAX_VALUE, float(selected_entity.sleep_need)))
                     sleep_status = getattr(selected_entity, "sleep_status", "rested")
                     sleep_color = SLEEP_STATUS_COLORS.get(sleep_status, (148, 163, 184))
-                    screen.blit(font_badge.render("Sleep:", True, (241, 245, 249)), (cx + 14, bar_y2))
-                    sleep_bg = pygame.Rect(cx + 68, bar_y2, 150, 14)
-                    pygame.draw.rect(screen, (30, 41, 59), sleep_bg, border_radius=4)
+                    screen.blit(ui_font(10, bold=True).render("Sleep:", True, (241, 245, 249)), (cx + upx(14), bar_y2))
+                    sleep_bg = pygame.Rect(cx + upx(68), bar_y2, upx(150), upx(14))
+                    pygame.draw.rect(screen, (30, 41, 59), sleep_bg, border_radius=upx(4))
                     sleep_range = max(1.0, SLEEP_MAX_VALUE - SLEEP_MIN_VALUE)
                     sleep_fill = max(0, int(150 * ((sleep_val - SLEEP_MIN_VALUE) / sleep_range)))
                     if sleep_fill > 0:
-                        pygame.draw.rect(screen, sleep_color, (cx + 68, bar_y2, sleep_fill, 14), border_radius=4)
-                    pygame.draw.rect(screen, (71, 85, 105), sleep_bg, width=1, border_radius=4)
-                    screen.blit(font_badge.render(f"{int(sleep_val)}% {sleep_status.replace('_', ' ').title()}", True, sleep_color), (cx + 226, bar_y2))
+                        pygame.draw.rect(screen, sleep_color, (cx + upx(68), bar_y2, sleep_fill, upx(14)), border_radius=upx(4))
+                    pygame.draw.rect(screen, (71, 85, 105), sleep_bg, width=1, border_radius=upx(4))
+                    screen.blit(ui_font(10, bold=True).render(f"{int(sleep_val)}% {sleep_status.replace('_', ' ').title()}", True, sleep_color), (cx + upx(226), bar_y2))
 
                 # Hunger, thirst, toilet, and faith follow the sleep bar.
                 bar_y3 = bar_y2 + AI_PROFILE_NEED_ROW_HEIGHT
                 h_val = max(0.0, min(100.0, getattr(selected_entity, "hunger", 100.0)))
-                screen.blit(font_badge.render("Hunger:", True, (241, 245, 249)), (cx + 14, bar_y3))
-                h_bg = pygame.Rect(cx + 68, bar_y3, 150, 14)
-                pygame.draw.rect(screen, (30, 41, 59), h_bg, border_radius=4)
+                screen.blit(ui_font(10, bold=True).render("Hunger:", True, (241, 245, 249)), (cx + upx(14), bar_y3))
+                h_bg = pygame.Rect(cx + upx(68), bar_y3, upx(150), upx(14))
+                pygame.draw.rect(screen, (30, 41, 59), h_bg, border_radius=upx(4))
                 h_fill = max(0, int(150 * (h_val / 100.0)))
                 if h_fill > 0:
                     h_c = (34, 197, 94) if h_val > 50 else ((234, 179, 8) if h_val > 20 else (239, 68, 68))
-                    pygame.draw.rect(screen, h_c, (cx + 68, bar_y3, h_fill, 14), border_radius=4)
-                pygame.draw.rect(screen, (71, 85, 105), h_bg, width=1, border_radius=4)
+                    pygame.draw.rect(screen, h_c, (cx + upx(68), bar_y3, h_fill, upx(14)), border_radius=upx(4))
+                pygame.draw.rect(screen, (71, 85, 105), h_bg, width=1, border_radius=upx(4))
                 h_str = f"{int(h_val)}%" if h_timer is None else f"{int(h_val)}% ({h_timer:.1f}h)"
                 h_color = (255, 255, 255) if h_timer is None else (239, 68, 68)
-                screen.blit(font_badge.render(h_str, True, h_color), (cx + 226, bar_y3))
+                screen.blit(ui_font(10, bold=True).render(h_str, True, h_color), (cx + upx(226), bar_y3))
 
                 # Row 5: Thirst Bar
                 bar_y4 = bar_y3 + AI_PROFILE_NEED_ROW_HEIGHT
                 t_val = max(0.0, min(100.0, getattr(selected_entity, "thirst", 100.0)))
-                screen.blit(font_badge.render("Thirst:", True, (241, 245, 249)), (cx + 14, bar_y4))
-                t_bg = pygame.Rect(cx + 68, bar_y4, 150, 14)
-                pygame.draw.rect(screen, (30, 41, 59), t_bg, border_radius=4)
+                screen.blit(ui_font(10, bold=True).render("Thirst:", True, (241, 245, 249)), (cx + upx(14), bar_y4))
+                t_bg = pygame.Rect(cx + upx(68), bar_y4, upx(150), upx(14))
+                pygame.draw.rect(screen, (30, 41, 59), t_bg, border_radius=upx(4))
                 t_fill = max(0, int(150 * (t_val / 100.0)))
                 if t_fill > 0:
                     t_c = (56, 189, 248) if t_val > 50 else ((59, 130, 246) if t_val > 20 else (239, 68, 68))
-                    pygame.draw.rect(screen, t_c, (cx + 68, bar_y4, t_fill, 14), border_radius=4)
-                pygame.draw.rect(screen, (71, 85, 105), t_bg, width=1, border_radius=4)
+                    pygame.draw.rect(screen, t_c, (cx + upx(68), bar_y4, t_fill, upx(14)), border_radius=upx(4))
+                pygame.draw.rect(screen, (71, 85, 105), t_bg, width=1, border_radius=upx(4))
                 t_str = f"{int(t_val)}%" if t_timer is None else f"{int(t_val)}% ({t_timer:.1f}h)"
                 t_color = (255, 255, 255) if t_timer is None else (239, 68, 68)
-                screen.blit(font_badge.render(t_str, True, t_color), (cx + 226, bar_y4))
+                screen.blit(ui_font(10, bold=True).render(t_str, True, t_color), (cx + upx(226), bar_y4))
 
                 # Row 6: Need Toilet Bar
                 bar_y5 = bar_y4 + AI_PROFILE_NEED_ROW_HEIGHT
                 tl_val = max(0.0, min(100.0, getattr(selected_entity, "toilet", getattr(selected_entity, "need_toilet", 100.0))))
-                screen.blit(font_badge.render("Toilet:", True, (241, 245, 249)), (cx + 14, bar_y5))
-                tl_bg = pygame.Rect(cx + 68, bar_y5, 150, 14)
-                pygame.draw.rect(screen, (30, 41, 59), tl_bg, border_radius=4)
+                screen.blit(ui_font(10, bold=True).render("Toilet:", True, (241, 245, 249)), (cx + upx(14), bar_y5))
+                tl_bg = pygame.Rect(cx + upx(68), bar_y5, upx(150), upx(14))
+                pygame.draw.rect(screen, (30, 41, 59), tl_bg, border_radius=upx(4))
                 tl_fill = max(0, int(150 * (tl_val / 100.0)))
                 if tl_fill > 0:
                     tl_c = (16, 185, 129) if tl_val > 50 else ((245, 158, 11) if tl_val > 20 else (239, 68, 68))
-                    pygame.draw.rect(screen, tl_c, (cx + 68, bar_y5, tl_fill, 14), border_radius=4)
-                pygame.draw.rect(screen, (71, 85, 105), tl_bg, width=1, border_radius=4)
-                screen.blit(font_badge.render(f"{int(tl_val)}%", True, (255, 255, 255)), (cx + 226, bar_y5))
+                    pygame.draw.rect(screen, tl_c, (cx + upx(68), bar_y5, tl_fill, upx(14)), border_radius=upx(4))
+                pygame.draw.rect(screen, (71, 85, 105), tl_bg, width=1, border_radius=upx(4))
+                screen.blit(ui_font(10, bold=True).render(f"{int(tl_val)}%", True, (255, 255, 255)), (cx + upx(226), bar_y5))
 
                 # Faith meter is individual and does not decay continuously like bodily needs.
                 info_y1 = bar_y5 + AI_PROFILE_NEED_ROW_HEIGHT + AI_PROFILE_INFO_SECTION_GAP
                 if hasattr(selected_entity, "faith"):
                     bar_y6 = bar_y5 + AI_PROFILE_NEED_ROW_HEIGHT
                     faith_val = max(0.0, min(100.0, selected_entity.faith))
-                    screen.blit(font_badge.render("Faith:", True, (241, 245, 249)), (cx + 14, bar_y6))
-                    faith_bg = pygame.Rect(cx + 68, bar_y6, 150, 14)
-                    pygame.draw.rect(screen, (30, 41, 59), faith_bg, border_radius=4)
+                    screen.blit(ui_font(10, bold=True).render("Faith:", True, (241, 245, 249)), (cx + upx(14), bar_y6))
+                    faith_bg = pygame.Rect(cx + upx(68), bar_y6, upx(150), upx(14))
+                    pygame.draw.rect(screen, (30, 41, 59), faith_bg, border_radius=upx(4))
                     faith_fill = max(0, int(150 * (faith_val / 100.0)))
                     if faith_fill > 0:
                         faith_color = (34, 197, 94) if faith_val > 50 else ((234, 179, 8) if faith_val > 20 else (239, 68, 68))
-                        pygame.draw.rect(screen, faith_color, (cx + 68, bar_y6, faith_fill, 14), border_radius=4)
-                    pygame.draw.rect(screen, (71, 85, 105), faith_bg, width=1, border_radius=4)
-                    screen.blit(font_badge.render(f"{int(faith_val)}%", True, (255, 255, 255)), (cx + 226, bar_y6))
+                        pygame.draw.rect(screen, faith_color, (cx + upx(68), bar_y6, faith_fill, upx(14)), border_radius=upx(4))
+                    pygame.draw.rect(screen, (71, 85, 105), faith_bg, width=1, border_radius=upx(4))
+                    screen.blit(ui_font(10, bold=True).render(f"{int(faith_val)}%", True, (255, 255, 255)), (cx + upx(226), bar_y6))
                     info_y1 = bar_y6 + AI_PROFILE_NEED_ROW_HEIGHT + AI_PROFILE_INFO_SECTION_GAP
                 inv_items = []
                 for it, c in getattr(selected_entity, "inventory", {}).items():
@@ -3238,23 +3233,23 @@ def main():
                     inv_items.append(f"{selected_entity.carried_amount}x {carried_res}")
 
                 inv_summary = ", ".join(inv_items) if inv_items else "Empty (Hands free)"
-                screen.blit(font_badge.render(f"Inventory: {inv_summary[:40]}", True, (148, 163, 184)), (cx + 14, info_y1))
+                screen.blit(ui_font(10, bold=True).render(f"Inventory: {inv_summary[:40]}", True, (148, 163, 184)), (cx + upx(14), info_y1))
 
                 # Row 8: Bed / Tool info
                 info_y2 = info_y1 + AI_PROFILE_NEED_ROW_HEIGHT
                 assigned_bed = getattr(selected_entity, "assigned_bed_id", None)
                 bed_str = f"Bed: {assigned_bed}" if assigned_bed else "Bed: Floor"
                 tool_str = f"Tool: {getattr(selected_entity, 'active_tool', None) or 'None'}"
-                screen.blit(font_badge.render(f"{bed_str}  •  {tool_str}", True, (100, 116, 139)), (cx + 14, info_y2))
+                screen.blit(ui_font(10, bold=True).render(f"{bed_str}  •  {tool_str}", True, (100, 116, 139)), (cx + upx(14), info_y2))
 
                 if has_happiness:
                     happiness_panel = pygame.Rect(
-                        cx + 14, cy + happiness_panel_offset, cw - 28,
+                        cx + upx(14), cy + happiness_panel_offset, cw - upx(28),
                         happiness_panel_height,
                     )
                     entity_happiness_rect.update(happiness_panel)
-                    pygame.draw.rect(screen, (24, 34, 52), happiness_panel, border_radius=6)
-                    pygame.draw.rect(screen, (51, 65, 85), happiness_panel, width=1, border_radius=6)
+                    pygame.draw.rect(screen, (24, 34, 52), happiness_panel, border_radius=upx(6))
+                    pygame.draw.rect(screen, (51, 65, 85), happiness_panel, width=1, border_radius=upx(6))
 
                     max_scroll = max(0, len(happiness_factors) - visible_factor_rows)
                     selected_entity_happiness_scroll = min(
@@ -3273,23 +3268,23 @@ def main():
                     else:
                         panel_title = "Happiness factors"
                     screen.blit(
-                        font_badge.render(panel_title, True, (56, 189, 248)),
-                        (happiness_panel.x + 8, happiness_panel.y + 5),
+                        ui_font(10, bold=True).render(panel_title, True, (56, 189, 248)),
+                        (happiness_panel.x + upx(8), happiness_panel.y + upx(5)),
                     )
 
                     if not happiness_factors:
                         screen.blit(
-                            font_badge.render("No active happiness modifiers", True, (148, 163, 184)),
+                            ui_font(10, bold=True).render("No active happiness modifiers", True, (148, 163, 184)),
                             (
-                                happiness_panel.x + 8,
+                                happiness_panel.x + upx(8),
                                 happiness_panel.y + AI_PROFILE_FACTOR_PANEL_HEADER_HEIGHT,
                             ),
                         )
                     else:
                         factor_clip = pygame.Rect(
-                            happiness_panel.x + 8,
+                            happiness_panel.x + upx(8),
                             happiness_panel.y + AI_PROFILE_FACTOR_PANEL_HEADER_HEIGHT,
-                            happiness_panel.width - 16,
+                            happiness_panel.width - upx(16),
                             happiness_panel.height - AI_PROFILE_FACTOR_PANEL_HEADER_HEIGHT,
                         )
                         old_clip = screen.get_clip()
@@ -3299,11 +3294,11 @@ def main():
                             label = str(factor.get("label", "Happiness factor"))
                             color = (74, 222, 128) if amount >= 0 else (248, 113, 113)
                             row_y = factor_clip.y + row * activity_row_height
-                            label_surface = font_badge.render(label, True, (226, 232, 240))
-                            value_surface = font_badge.render(f"{amount:+g}", True, color)
+                            label_surface = ui_font(10, bold=True).render(label, True, (226, 232, 240))
+                            value_surface = ui_font(10, bold=True).render(f"{amount:+g}", True, color)
                             label_clip = pygame.Rect(
                                 factor_clip.x, row_y,
-                                factor_clip.width - value_surface.get_width() - 8,
+                                factor_clip.width - value_surface.get_width() - upx(8),
                                 activity_row_height,
                             )
                             screen.set_clip(label_clip)
@@ -3339,13 +3334,13 @@ def main():
                 cheat_bg = (180, 83, 9) if cheat_hover else (120, 53, 15)
                 pygame.draw.rect(screen, cheat_bg, btn_add_item_cheat_rect, border_radius=6)
                 pygame.draw.rect(screen, (245, 158, 11), btn_add_item_cheat_rect, width=1, border_radius=6)
-                cheat_txt = font_btn.render("Add Item", True, (255, 255, 255))
+                cheat_txt = ui_font(12, bold=True).render("Add Item", True, (255, 255, 255))
                 screen.blit(cheat_txt, cheat_txt.get_rect(center=btn_add_item_cheat_rect.center))
-                path_debug_overlay.draw_toggle(screen, btn_add_item_cheat_rect, font_btn)
+                path_debug_overlay.draw_toggle(screen, btn_add_item_cheat_rect, ui_font(12, bold=True))
 
                 if cheat_notice_timer > 0.0:
                     cheat_notice_timer = max(0.0, cheat_notice_timer - game_dt)
-                    not_surf = font_badge.render(cheat_notice, True, (250, 204, 21))
+                    not_surf = ui_font(10, bold=True).render(cheat_notice, True, (250, 204, 21))
                     not_rect = not_surf.get_rect(right=screen_w - resource_hud.margin, top=btn_add_item_cheat_rect.bottom + 6)
                     screen.blit(not_surf, not_rect)
 
@@ -3380,10 +3375,10 @@ def main():
                     screen.blit(ghost, (sx1, sy1))
                     pygame.draw.rect(screen, edge_col, (sx1, sy1, wpx, hpx), 2)
                     zlabel = zname[5:].capitalize() if zname.startswith("prop_") else zname.capitalize()
-                    zl = font_badge.render(zlabel, True, edge_col)
+                    zl = ui_font(10, bold=True).render(zlabel, True, edge_col)
                     screen.blit(zl, (sx1 + 3, sy1 + 3))
 
-                hint = font_body.render(
+                hint = ui_font(11).render(
                     "Click a location for your starter village — LMB confirm, RMB/ESC cancel",
                     True, (226, 232, 240))
                 screen.blit(hint, hint.get_rect(center=(screen_w // 2, 24)))
@@ -3393,18 +3388,18 @@ def main():
                     dlg = pygame.Rect(screen_w // 2 - dlg_w // 2, screen.get_height() // 2 - dlg_h // 2, dlg_w, dlg_h)
                     pygame.draw.rect(screen, COLOR_MODAL_BG, dlg, border_radius=10)
                     pygame.draw.rect(screen, COLOR_MODAL_BORDER, dlg, width=2, border_radius=10)
-                    q = font_card.render("Place starter village here?", True, COLOR_TEXT_TITLE)
+                    q = ui_font(13, bold=True).render("Place starter village here?", True, COLOR_TEXT_TITLE)
                     screen.blit(q, (dlg.centerx - q.get_width() // 2, dlg.y + 16))
                     bw, bh = 110, 34
                     starter_done_btn_rect = pygame.Rect(dlg.centerx - bw - 8, dlg.bottom - bh - 14, bw, bh)
                     starter_cancel_btn_rect = pygame.Rect(dlg.centerx + 8, dlg.bottom - bh - 14, bw, bh)
                     d_hov = starter_done_btn_rect.collidepoint(pygame.mouse.get_pos())
                     pygame.draw.rect(screen, (16, 185, 129) if d_hov else (5, 150, 105), starter_done_btn_rect, border_radius=6)
-                    dt = font_btn.render("Done", True, (255, 255, 255))
+                    dt = ui_font(12, bold=True).render("Done", True, (255, 255, 255))
                     screen.blit(dt, dt.get_rect(center=starter_done_btn_rect.center))
                     c_hov = starter_cancel_btn_rect.collidepoint(pygame.mouse.get_pos())
                     pygame.draw.rect(screen, (239, 68, 68) if c_hov else (185, 28, 28), starter_cancel_btn_rect, border_radius=6)
-                    ct = font_btn.render("Cancel", True, (255, 255, 255))
+                    ct = ui_font(12, bold=True).render("Cancel", True, (255, 255, 255))
                     screen.blit(ct, ct.get_rect(center=starter_cancel_btn_rect.center))
 
             # 12. Speed Control HUD (Bottom Right)

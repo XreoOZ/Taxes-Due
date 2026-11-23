@@ -11,7 +11,7 @@ from game.config import (
     COLOR_HUD_BORDER,
     SPEED_CONTROL_UI,
 )
-from game.ui.ui_theme import ui_font
+from game.ui.ui_theme import ui_font, upx
 
 class SpeedController:
     def __init__(self):
@@ -81,7 +81,11 @@ class SpeedController:
         screen_w, screen_h = surface.get_size()
 
         # Ukuran dan posisi panel speed (Dihitung dinamis relatif terhadap resolusi layar)
-        ui = SPEED_CONTROL_UI
+        ui = {
+            k: v if (k == "colors" or k.startswith("font")
+                     or not isinstance(v, (int, float))) else upx(v)
+            for k, v in SPEED_CONTROL_UI.items()
+        }
         colors = ui["colors"]
         speed_count = len(self.levels)
         required_width = (

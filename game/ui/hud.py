@@ -19,9 +19,9 @@ class ResourceHUD:
     def __init__(self):
         self.card_width = RES_HUD_WIDTH
         self.margin = RES_HUD_MARGIN
-        self.row_height = 28
-        self.header_height = 36
-        self.padding = 12
+        self.row_height = upx(28)
+        self.header_height = upx(36)
+        self.padding = upx(12)
 
         self.font_title = None
         self.font_item = None
@@ -36,6 +36,11 @@ class ResourceHUD:
     def draw(self, surface, resources, weekday=None, furniture_manager=None):
         self._init_fonts()
         screen_w, _ = surface.get_size()
+        self.card_width = upx(RES_HUD_WIDTH)
+        self.margin = upx(RES_HUD_MARGIN)
+        self.row_height = upx(28)
+        self.header_height = upx(36)
+        self.padding = upx(12)
 
         # Strict core resources filter: never overflow HUD with non-core items
         core_keys = ["Wood", "Food", "Stone", "Water", "Copper", "Silver", "Gold"]
@@ -59,13 +64,13 @@ class ResourceHUD:
 
         # 1. Background Card Panel
         card_surf = pygame.Surface((self.card_width, card_h), pygame.SRCALPHA)
-        pygame.draw.rect(card_surf, COLOR_HUD_BG, (0, 0, self.card_width, card_h), border_radius=8)
-        pygame.draw.rect(card_surf, COLOR_HUD_BORDER, (0, 0, self.card_width, card_h), width=1, border_radius=8)
+        pygame.draw.rect(card_surf, COLOR_HUD_BG, (0, 0, self.card_width, card_h), border_radius=upx(8))
+        pygame.draw.rect(card_surf, COLOR_HUD_BORDER, (0, 0, self.card_width, card_h), width=1, border_radius=upx(8))
         surface.blit(card_surf, (card_x, card_y))
 
         # 2. Header Title
         title_surf = self.font_title.render("RESOURCES", True, COLOR_TEXT_TITLE)
-        surface.blit(title_surf, (card_x + self.padding, card_y + 10))
+        surface.blit(title_surf, (card_x + self.padding, card_y + upx(10)))
         if weekday:
             weekday_surf = self.font_title.render(weekday, True, COLOR_TEXT_MAIN)
             weekday_rect = weekday_surf.get_rect(right=card_x + self.card_width - self.padding, top=card_y + 10)
@@ -75,23 +80,23 @@ class ResourceHUD:
         pygame.draw.line(
             surface,
             COLOR_HUD_BORDER,
-            (card_x + self.padding, card_y + 28),
-            (card_x + self.card_width - self.padding, card_y + 28)
+            (card_x + self.padding, card_y + upx(28)),
+            (card_x + self.card_width - self.padding, card_y + upx(28))
         )
 
         # 3. List Resource Items
-        start_y = card_y + 36
+        start_y = card_y + upx(36)
         for i, (name, amount) in enumerate(core_resources.items()):
             row_y = start_y + (i * self.row_height)
 
             # Unified procedural vector item icon (AGENT 2)
-            icon_x = card_x + self.padding + 8
-            icon_y = row_y + 10
-            draw_item_icon(surface, name, icon_x, icon_y, size=8)
+            icon_x = card_x + self.padding + upx(8)
+            icon_y = row_y + upx(10)
+            draw_item_icon(surface, name, icon_x, icon_y, size=upx(8))
 
             # Label nama resource
             lbl_surf = self.font_item.render(name, True, COLOR_TEXT_MAIN)
-            surface.blit(lbl_surf, (card_x + self.padding + 22, row_y))
+            surface.blit(lbl_surf, (card_x + self.padding + upx(22), row_y))
 
             # Jumlah resource (rata kanan)
             val_surf = self.font_val.render(str(amount), True, COLOR_TEXT_MAIN)

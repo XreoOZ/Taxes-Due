@@ -28,9 +28,9 @@ class MainMenu:
         ]
         
         # Dimensi dinamis tombol
-        self.btn_width = 300
-        self.btn_height = 54
-        self.btn_spacing = 18
+        self.btn_width = upx(300)
+        self.btn_height = upx(54)
+        self.btn_spacing = upx(18)
 
         # Cache rect untuk deteksi mouse hover/click
         self.btn_rects = []
@@ -73,8 +73,11 @@ class MainMenu:
 
     def _compute_layout(self, screen_w, screen_h):
         """Menghitung posisi tombol secara dinamis di tengah layar"""
+        self.btn_width = upx(300)
+        self.btn_height = upx(54)
+        self.btn_spacing = upx(18)
         total_menu_height = len(self.items) * self.btn_height + (len(self.items) - 1) * self.btn_spacing
-        start_y = (screen_h - total_menu_height) // 2 + 40
+        start_y = (screen_h - total_menu_height) // 2 + upx(40)
         center_x = screen_w // 2
 
         rects = []
@@ -175,7 +178,7 @@ class MainMenu:
 
         # Title
         title_surf = self.title_font.render("VILLAGE BUILDER", True, (56, 189, 248))
-        title_rect = title_surf.get_rect(center=(screen_w // 2, self.btn_rects[0].top - 80))
+        title_rect = title_surf.get_rect(center=(screen_w // 2, self.btn_rects[0].top - upx(80)))
         surface.blit(title_surf, title_rect)
 
         mouse_pos = pygame.mouse.get_pos()
@@ -201,8 +204,8 @@ class MainMenu:
                 text_color = (226, 232, 240)
 
             # Gambar background tombol
-            pygame.draw.rect(surface, bg_color, rect, border_radius=8)
-            pygame.draw.rect(surface, border_color, rect, width=2, border_radius=8)
+            pygame.draw.rect(surface, bg_color, rect, border_radius=upx(8))
+            pygame.draw.rect(surface, border_color, rect, width=2, border_radius=upx(8))
 
             # Render teks tombol tepat di tengah
             text_surf = self.btn_font.render(item["label"], True, text_color)
@@ -217,24 +220,24 @@ class MainMenu:
             dim_surf.fill((0, 0, 0, 180))
             surface.blit(dim_surf, (0, 0))
 
-            mw = 560
-            mh = 380
+            mw = upx(560)
+            mh = upx(380)
             mx = (screen_w - mw) // 2
             my = (screen_h - mh) // 2
 
             modal_surf = pygame.Surface((mw, mh), pygame.SRCALPHA)
-            pygame.draw.rect(modal_surf, COLOR_MODAL_BG, (0, 0, mw, mh), border_radius=14)
-            pygame.draw.rect(modal_surf, (56, 189, 248), (0, 0, mw, mh), width=2, border_radius=14)
+            pygame.draw.rect(modal_surf, COLOR_MODAL_BG, (0, 0, mw, mh), border_radius=upx(14))
+            pygame.draw.rect(modal_surf, (56, 189, 248), (0, 0, mw, mh), width=2, border_radius=upx(14))
             surface.blit(modal_surf, (mx, my))
 
             # Header
             t_surf = self.sub_font.render("☀️ START A NEW SETTLEMENT", True, COLOR_TEXT_TITLE)
-            surface.blit(t_surf, (mx + 28, my + 24))
+            surface.blit(t_surf, (mx + upx(28), my + upx(24)))
 
             sub_desc = self.body_font.render("Select real-world duration for each 24-hour in-game day:", True, COLOR_TEXT_MUTED)
-            surface.blit(sub_desc, (mx + 28, my + 54))
+            surface.blit(sub_desc, (mx + upx(28), my + upx(54)))
 
-            pygame.draw.line(surface, COLOR_MODAL_BORDER, (mx + 24, my + 82), (mx + mw - 24, my + 82))
+            pygame.draw.line(surface, COLOR_MODAL_BORDER, (mx + upx(24), my + upx(82)), (mx + mw - upx(24), my + upx(82)))
 
             # Option Cards (10 Min, 20 Min, 30 Min)
             self.modal_day_rects = []
@@ -244,9 +247,9 @@ class MainMenu:
                 ("30 Minutes / Day", "Slow Pace — Relaxed, deep management with prolonged daylight.")
             ]
 
-            card_y = my + 98
+            card_y = my + upx(98)
             for i, opt in enumerate(DAY_LENGTH_OPTIONS):
-                c_rect = pygame.Rect(mx + 28, card_y, mw - 56, 58)
+                c_rect = pygame.Rect(mx + upx(28), card_y, mw - upx(56), upx(58))
                 self.modal_day_rects.append(c_rect)
 
                 is_sel = (i == self.selected_day_index)
@@ -265,40 +268,40 @@ class MainMenu:
                     c_border = (51, 65, 85)
                     dot_c = (71, 85, 105)
 
-                pygame.draw.rect(surface, c_bg, c_rect, border_radius=8)
-                pygame.draw.rect(surface, c_border, c_rect, width=2 if is_sel else 1, border_radius=8)
+                pygame.draw.rect(surface, c_bg, c_rect, border_radius=upx(8))
+                pygame.draw.rect(surface, c_border, c_rect, width=2 if is_sel else 1, border_radius=upx(8))
 
                 # Radio circle
-                r_cx = c_rect.x + 22
+                r_cx = c_rect.x + upx(22)
                 r_cy = c_rect.y + c_rect.h // 2
-                pygame.draw.circle(surface, dot_c, (r_cx, r_cy), 8, width=0 if is_sel else 2)
+                pygame.draw.circle(surface, dot_c, (r_cx, r_cy), upx(8), width=0 if is_sel else 2)
                 if is_sel:
                     pygame.draw.circle(surface, (255, 255, 255), (r_cx, r_cy), 3)
 
                 # Option title & description
                 o_title, o_desc = opt_descriptions[i]
                 t_color = (255, 255, 255) if is_sel else (226, 232, 240)
-                surface.blit(self.sub_font.render(o_title, True, t_color), (c_rect.x + 42, c_rect.y + 10))
-                surface.blit(self.body_font.render(o_desc, True, (148, 163, 184)), (c_rect.x + 42, c_rect.y + 32))
+                surface.blit(self.sub_font.render(o_title, True, t_color), (c_rect.x + upx(42), c_rect.y + upx(10)))
+                surface.blit(self.body_font.render(o_desc, True, (148, 163, 184)), (c_rect.x + upx(42), c_rect.y + upx(32)))
 
-                card_y += 68
+                card_y += upx(68)
 
             # Action Buttons: [Begin Settlement] and [Cancel]
-            btn_w = 190
+            btn_w = upx(190)
             btn_h = upx(42)
-            by = my + mh - 58
+            by = my + mh - upx(58)
 
-            self.modal_start_btn_rect = pygame.Rect(mx + mw - btn_w - 28, by, btn_w, btn_h)
+            self.modal_start_btn_rect = pygame.Rect(mx + mw - btn_w - upx(28), by, btn_w, btn_h)
             b_hover = self.modal_start_btn_rect.collidepoint(mouse_pos)
-            pygame.draw.rect(surface, (16, 185, 129) if b_hover else (5, 150, 105), self.modal_start_btn_rect, border_radius=8)
+            pygame.draw.rect(surface, (16, 185, 129) if b_hover else (5, 150, 105), self.modal_start_btn_rect, border_radius=upx(8))
             st_txt = self.sub_font.render("▶ Begin Settlement", True, (255, 255, 255))
             surface.blit(st_txt, (self.modal_start_btn_rect.centerx - st_txt.get_width() // 2, self.modal_start_btn_rect.centery - st_txt.get_height() // 2))
 
-            cancel_w = 110
-            self.modal_cancel_btn_rect = pygame.Rect(mx + 28, by, cancel_w, btn_h)
+            cancel_w = upx(110)
+            self.modal_cancel_btn_rect = pygame.Rect(mx + upx(28), by, cancel_w, btn_h)
             c_hover = self.modal_cancel_btn_rect.collidepoint(mouse_pos)
-            pygame.draw.rect(surface, (51, 65, 85) if c_hover else (30, 41, 59), self.modal_cancel_btn_rect, border_radius=8)
-            pygame.draw.rect(surface, (71, 85, 105), self.modal_cancel_btn_rect, width=1, border_radius=8)
+            pygame.draw.rect(surface, (51, 65, 85) if c_hover else (30, 41, 59), self.modal_cancel_btn_rect, border_radius=upx(8))
+            pygame.draw.rect(surface, (71, 85, 105), self.modal_cancel_btn_rect, width=1, border_radius=upx(8))
             cn_txt = self.sub_font.render("✕ Cancel", True, (203, 213, 225))
             surface.blit(cn_txt, (self.modal_cancel_btn_rect.centerx - cn_txt.get_width() // 2, self.modal_cancel_btn_rect.centery - cn_txt.get_height() // 2))
 
@@ -310,28 +313,28 @@ class MainMenu:
             dim_surf.fill((0, 0, 0, 180))
             surface.blit(dim_surf, (0, 0))
 
-            mw = 560
-            mh = 340
+            mw = upx(560)
+            mh = upx(340)
             mx = (screen_w - mw) // 2
             my = (screen_h - mh) // 2
 
             modal_surf = pygame.Surface((mw, mh), pygame.SRCALPHA)
-            pygame.draw.rect(modal_surf, COLOR_MODAL_BG, (0, 0, mw, mh), border_radius=14)
-            pygame.draw.rect(modal_surf, (56, 189, 248), (0, 0, mw, mh), width=2, border_radius=14)
+            pygame.draw.rect(modal_surf, COLOR_MODAL_BG, (0, 0, mw, mh), border_radius=upx(14))
+            pygame.draw.rect(modal_surf, (56, 189, 248), (0, 0, mw, mh), width=2, border_radius=upx(14))
             surface.blit(modal_surf, (mx, my))
 
             t_surf = self.sub_font.render("🗺️ SELECT WORLD MAP", True, COLOR_TEXT_TITLE)
-            surface.blit(t_surf, (mx + 28, my + 24))
+            surface.blit(t_surf, (mx + upx(28), my + upx(24)))
 
             sub_desc = self.body_font.render("Choose the shape of the world your settlement will grow on:", True, COLOR_TEXT_MUTED)
-            surface.blit(sub_desc, (mx + 28, my + 54))
+            surface.blit(sub_desc, (mx + upx(28), my + upx(54)))
 
-            pygame.draw.line(surface, COLOR_MODAL_BORDER, (mx + 24, my + 82), (mx + mw - 24, my + 82))
+            pygame.draw.line(surface, COLOR_MODAL_BORDER, (mx + upx(24), my + upx(82)), (mx + mw - upx(24), my + upx(82)))
 
             self.modal_map_rects = []
-            card_y = my + 98
+            card_y = my + upx(98)
             for i, opt in enumerate(WORLD_TYPE_OPTIONS):
-                c_rect = pygame.Rect(mx + 28, card_y, mw - 56, 72)
+                c_rect = pygame.Rect(mx + upx(28), card_y, mw - upx(56), upx(72))
                 self.modal_map_rects.append(c_rect)
 
                 is_sel = (i == self.selected_map_index)
@@ -350,36 +353,36 @@ class MainMenu:
                     c_border = (51, 65, 85)
                     dot_c = (71, 85, 105)
 
-                pygame.draw.rect(surface, c_bg, c_rect, border_radius=8)
-                pygame.draw.rect(surface, c_border, c_rect, width=2 if is_sel else 1, border_radius=8)
+                pygame.draw.rect(surface, c_bg, c_rect, border_radius=upx(8))
+                pygame.draw.rect(surface, c_border, c_rect, width=2 if is_sel else 1, border_radius=upx(8))
 
-                r_cx = c_rect.x + 22
+                r_cx = c_rect.x + upx(22)
                 r_cy = c_rect.y + c_rect.h // 2
-                pygame.draw.circle(surface, dot_c, (r_cx, r_cy), 8, width=0 if is_sel else 2)
+                pygame.draw.circle(surface, dot_c, (r_cx, r_cy), upx(8), width=0 if is_sel else 2)
                 if is_sel:
                     pygame.draw.circle(surface, (255, 255, 255), (r_cx, r_cy), 3)
 
                 t_color = (255, 255, 255) if is_sel else (226, 232, 240)
-                surface.blit(self.sub_font.render(opt["label"], True, t_color), (c_rect.x + 42, c_rect.y + 12))
-                surface.blit(self.body_font.render(opt["desc"], True, (148, 163, 184)), (c_rect.x + 42, c_rect.y + 36))
+                surface.blit(self.sub_font.render(opt["label"], True, t_color), (c_rect.x + upx(42), c_rect.y + upx(12)))
+                surface.blit(self.body_font.render(opt["desc"], True, (148, 163, 184)), (c_rect.x + upx(42), c_rect.y + upx(36)))
 
-                card_y += 84
+                card_y += upx(84)
 
-            btn_w = 190
+            btn_w = upx(190)
             btn_h = upx(42)
-            by = my + mh - 58
+            by = my + mh - upx(58)
 
-            self.modal_map_start_btn_rect = pygame.Rect(mx + mw - btn_w - 28, by, btn_w, btn_h)
+            self.modal_map_start_btn_rect = pygame.Rect(mx + mw - btn_w - upx(28), by, btn_w, btn_h)
             b_hover = self.modal_map_start_btn_rect.collidepoint(mouse_pos)
-            pygame.draw.rect(surface, (16, 185, 129) if b_hover else (5, 150, 105), self.modal_map_start_btn_rect, border_radius=8)
+            pygame.draw.rect(surface, (16, 185, 129) if b_hover else (5, 150, 105), self.modal_map_start_btn_rect, border_radius=upx(8))
             st_txt = self.sub_font.render("▶ Begin Settlement", True, (255, 255, 255))
             surface.blit(st_txt, (self.modal_map_start_btn_rect.centerx - st_txt.get_width() // 2, self.modal_map_start_btn_rect.centery - st_txt.get_height() // 2))
 
-            cancel_w = 110
-            self.modal_map_cancel_btn_rect = pygame.Rect(mx + 28, by, cancel_w, btn_h)
+            cancel_w = upx(110)
+            self.modal_map_cancel_btn_rect = pygame.Rect(mx + upx(28), by, cancel_w, btn_h)
             c_hover = self.modal_map_cancel_btn_rect.collidepoint(mouse_pos)
-            pygame.draw.rect(surface, (51, 65, 85) if c_hover else (30, 41, 59), self.modal_map_cancel_btn_rect, border_radius=8)
-            pygame.draw.rect(surface, (71, 85, 105), self.modal_map_cancel_btn_rect, width=1, border_radius=8)
+            pygame.draw.rect(surface, (51, 65, 85) if c_hover else (30, 41, 59), self.modal_map_cancel_btn_rect, border_radius=upx(8))
+            pygame.draw.rect(surface, (71, 85, 105), self.modal_map_cancel_btn_rect, width=1, border_radius=upx(8))
             cn_txt = self.sub_font.render("✕ Back", True, (203, 213, 225))
             surface.blit(cn_txt, (self.modal_map_cancel_btn_rect.centerx - cn_txt.get_width() // 2, self.modal_map_cancel_btn_rect.centery - cn_txt.get_height() // 2))
 
@@ -391,28 +394,28 @@ class MainMenu:
             dim_surf.fill((0, 0, 0, 180))
             surface.blit(dim_surf, (0, 0))
 
-            mw = 620
-            mh = 380
+            mw = upx(620)
+            mh = upx(380)
             mx = (screen_w - mw) // 2
             my = (screen_h - mh) // 2
 
             modal_surf = pygame.Surface((mw, mh), pygame.SRCALPHA)
-            pygame.draw.rect(modal_surf, COLOR_MODAL_BG, (0, 0, mw, mh), border_radius=14)
-            pygame.draw.rect(modal_surf, (56, 189, 248), (0, 0, mw, mh), width=2, border_radius=14)
+            pygame.draw.rect(modal_surf, COLOR_MODAL_BG, (0, 0, mw, mh), border_radius=upx(14))
+            pygame.draw.rect(modal_surf, (56, 189, 248), (0, 0, mw, mh), width=2, border_radius=upx(14))
             surface.blit(modal_surf, (mx, my))
 
             t_surf = self.sub_font.render("⚔️ SELECT STARTER", True, COLOR_TEXT_TITLE)
-            surface.blit(t_surf, (mx + 28, my + 24))
+            surface.blit(t_surf, (mx + upx(28), my + upx(24)))
 
             sub_desc = self.body_font.render("Choose how your settlement begins:", True, COLOR_TEXT_MUTED)
-            surface.blit(sub_desc, (mx + 28, my + 54))
+            surface.blit(sub_desc, (mx + upx(28), my + upx(54)))
 
-            pygame.draw.line(surface, COLOR_MODAL_BORDER, (mx + 24, my + 82), (mx + mw - 24, my + 82))
+            pygame.draw.line(surface, COLOR_MODAL_BORDER, (mx + upx(24), my + upx(82)), (mx + mw - upx(24), my + upx(82)))
 
             self.modal_starter_rects = []
-            card_y = my + 98
+            card_y = my + upx(98)
             for i, preset in enumerate(STARTER_PRESETS):
-                c_rect = pygame.Rect(mx + 28, card_y, mw - 56, 96)
+                c_rect = pygame.Rect(mx + upx(28), card_y, mw - upx(56), upx(96))
                 self.modal_starter_rects.append(c_rect)
 
                 enabled = preset.get("enabled", True)
@@ -432,44 +435,44 @@ class MainMenu:
                     c_border = (51, 65, 85)
                     dot_c = (71, 85, 105)
 
-                pygame.draw.rect(surface, c_bg, c_rect, border_radius=8)
-                pygame.draw.rect(surface, c_border, c_rect, width=2 if is_sel else 1, border_radius=8)
+                pygame.draw.rect(surface, c_bg, c_rect, border_radius=upx(8))
+                pygame.draw.rect(surface, c_border, c_rect, width=2 if is_sel else 1, border_radius=upx(8))
 
-                r_cx = c_rect.x + 22
-                r_cy = c_rect.y + 30
-                pygame.draw.circle(surface, dot_c, (r_cx, r_cy), 8, width=0 if is_sel else 2)
+                r_cx = c_rect.x + upx(22)
+                r_cy = c_rect.y + upx(30)
+                pygame.draw.circle(surface, dot_c, (r_cx, r_cy), upx(8), width=0 if is_sel else 2)
                 if is_sel:
                     pygame.draw.circle(surface, (255, 255, 255), (r_cx, r_cy), 3)
 
                 title_color = (255, 255, 255) if enabled else (100, 116, 139)
                 surface.blit(self.sub_font.render(preset["label"], True, title_color),
-                             (c_rect.x + 42, c_rect.y + 12))
+                             (c_rect.x + upx(42), c_rect.y + upx(12)))
                 desc_color = (148, 163, 184) if enabled else (71, 85, 105)
                 surface.blit(self.body_font.render(preset.get("desc", ""), True, desc_color),
-                             (c_rect.x + 42, c_rect.y + 40))
+                             (c_rect.x + upx(42), c_rect.y + upx(40)))
 
                 if preset.get("wip"):
                     wip_txt = self.body_font.render("WIP", True, (245, 158, 11))
-                    surface.blit(wip_txt, (c_rect.right - wip_txt.get_width() - 14, c_rect.y + 12))
+                    surface.blit(wip_txt, (c_rect.right - wip_txt.get_width() - upx(14), c_rect.y + upx(12)))
 
-                card_y += 108
+                card_y += upx(108)
 
-            btn_w = 190
+            btn_w = upx(190)
             btn_h = upx(42)
-            by = my + mh - 58
+            by = my + mh - upx(58)
 
-            self.modal_starter_start_btn_rect = pygame.Rect(mx + mw - btn_w - 28, by, btn_w, btn_h)
+            self.modal_starter_start_btn_rect = pygame.Rect(mx + mw - btn_w - upx(28), by, btn_w, btn_h)
             b_hover = self.modal_starter_start_btn_rect.collidepoint(mouse_pos)
             start_enabled = STARTER_PRESETS[self.selected_starter_index].get("enabled", True)
             pygame.draw.rect(surface, (16, 185, 129) if (b_hover and start_enabled) else ((5, 150, 105) if start_enabled else (51, 65, 85)),
-                             self.modal_starter_start_btn_rect, border_radius=8)
+                             self.modal_starter_start_btn_rect, border_radius=upx(8))
             st_txt = self.sub_font.render("▶ Begin Settlement", True, (255, 255, 255) if start_enabled else (100, 116, 139))
             surface.blit(st_txt, (self.modal_starter_start_btn_rect.centerx - st_txt.get_width() // 2, self.modal_starter_start_btn_rect.centery - st_txt.get_height() // 2))
 
-            cancel_w = 110
-            self.modal_starter_cancel_btn_rect = pygame.Rect(mx + 28, by, cancel_w, btn_h)
+            cancel_w = upx(110)
+            self.modal_starter_cancel_btn_rect = pygame.Rect(mx + upx(28), by, cancel_w, btn_h)
             c_hover = self.modal_starter_cancel_btn_rect.collidepoint(mouse_pos)
-            pygame.draw.rect(surface, (51, 65, 85) if c_hover else (30, 41, 59), self.modal_starter_cancel_btn_rect, border_radius=8)
-            pygame.draw.rect(surface, (71, 85, 105), self.modal_starter_cancel_btn_rect, width=1, border_radius=8)
+            pygame.draw.rect(surface, (51, 65, 85) if c_hover else (30, 41, 59), self.modal_starter_cancel_btn_rect, border_radius=upx(8))
+            pygame.draw.rect(surface, (71, 85, 105), self.modal_starter_cancel_btn_rect, width=1, border_radius=upx(8))
             cn_txt = self.sub_font.render("✕ Back", True, (203, 213, 225))
             surface.blit(cn_txt, (self.modal_starter_cancel_btn_rect.centerx - cn_txt.get_width() // 2, self.modal_starter_cancel_btn_rect.centery - cn_txt.get_height() // 2))

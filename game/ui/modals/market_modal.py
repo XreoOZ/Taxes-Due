@@ -50,8 +50,8 @@ class MarketProfileModal:
         self.font_btn = None
 
         # Modal bounds
-        self.modal_w = 780
-        self.modal_h = 560
+        self.modal_w = upx(780)
+        self.modal_h = upx(560)
         self.modal_top = 0
 
         # Tabs & Sub-views
@@ -493,6 +493,8 @@ class MarketProfileModal:
         mkt = self.target_market
         sw = surface.get_width()
         sh = surface.get_height()
+        self.modal_w = min(upx(780), sw - upx(48))
+        self.modal_h = min(upx(560), sh - upx(48))
         m_pos = pygame.mouse.get_pos()
 
         # 1. Dark Backdrop Overlay
@@ -506,18 +508,18 @@ class MarketProfileModal:
         self.modal_top = my
         modal_rect = pygame.Rect(mx, my, self.modal_w, self.modal_h)
 
-        pygame.draw.rect(surface, COLOR_MODAL_BG, modal_rect, border_radius=10)
-        pygame.draw.rect(surface, (245, 158, 11), modal_rect, width=2, border_radius=10)
+        pygame.draw.rect(surface, COLOR_MODAL_BG, modal_rect, border_radius=upx(10))
+        pygame.draw.rect(surface, (245, 158, 11), modal_rect, width=2, border_radius=upx(10))
 
         # 3. Header: Title & Close Button
-        header_y = my + 16
+        header_y = my + upx(16)
         title_txt = f"{getattr(mkt, 'name', 'Village Market')} — Market Management"
-        surface.blit(self.font_title.render(title_txt, True, (250, 204, 21)), (mx + 24, header_y))
+        surface.blit(self.font_title.render(title_txt, True, (250, 204, 21)), (mx + upx(24), header_y))
 
         # Close [X] Button
-        self.close_btn_rect = pygame.Rect(mx + self.modal_w - 38, my + 14, 26, 26)
+        self.close_btn_rect = pygame.Rect(mx + self.modal_w - upx(38), my + upx(14), upx(26), upx(26))
         c_hover = self.close_btn_rect.collidepoint(m_pos)
-        pygame.draw.rect(surface, (220, 38, 38) if c_hover else (51, 65, 85), self.close_btn_rect, border_radius=5)
+        pygame.draw.rect(surface, (220, 38, 38) if c_hover else (51, 65, 85), self.close_btn_rect, border_radius=upx(5))
         x_lbl = self.font_sub.render("X", True, (255, 255, 255))
         surface.blit(x_lbl, (self.close_btn_rect.centerx - x_lbl.get_width() // 2, self.close_btn_rect.centery - x_lbl.get_height() // 2))
 
@@ -527,7 +529,7 @@ class MarketProfileModal:
         if fam_assigned_id and villager_manager:
             assigned_fam = next((f for f in getattr(villager_manager, "families", []) if f.id == fam_assigned_id), None)
 
-        status_y = header_y + 26
+        status_y = header_y + upx(26)
         if assigned_fam:
             assign_txt = f"Stall Assigned To: The {assigned_fam.surname} Family"
             status_col = (34, 197, 94)
@@ -535,30 +537,30 @@ class MarketProfileModal:
             assign_txt = "Stall Assigned To: Unassigned (Controlled by Landlord)"
             status_col = (148, 163, 184)
 
-        surface.blit(self.font_body.render(assign_txt, True, status_col), (mx + 24, status_y + 4))
+        surface.blit(self.font_body.render(assign_txt, True, status_col), (mx + upx(24), status_y + upx(4)))
 
         # 'Assign Stall To' Button
-        self.assign_stall_btn_rect = pygame.Rect(mx + self.modal_w - 180, status_y, 142, 26)
+        self.assign_stall_btn_rect = pygame.Rect(mx + self.modal_w - upx(180), status_y, upx(142), upx(26))
         as_hov = self.assign_stall_btn_rect.collidepoint(m_pos)
-        pygame.draw.rect(surface, (14, 116, 144) if as_hov else (15, 23, 42), self.assign_stall_btn_rect, border_radius=4)
-        pygame.draw.rect(surface, (56, 189, 248), self.assign_stall_btn_rect, width=1, border_radius=4)
+        pygame.draw.rect(surface, (14, 116, 144) if as_hov else (15, 23, 42), self.assign_stall_btn_rect, border_radius=upx(4))
+        pygame.draw.rect(surface, (56, 189, 248), self.assign_stall_btn_rect, width=1, border_radius=upx(4))
         as_lbl = self.font_badge.render("Assign Stall To", True, (255, 255, 255))
         surface.blit(as_lbl, (self.assign_stall_btn_rect.centerx - as_lbl.get_width() // 2, self.assign_stall_btn_rect.centery - as_lbl.get_height() // 2))
 
         # Goods and household sale limits share this single market view.
-        tab_y = status_y + 4
+        tab_y = status_y + upx(4)
         self.tab_goods_rect = None
 
 
         # 6. STATS & TREASURY BAR: Capacity, Coin Balances, Deposit Coin & Withdraw Coin
-        stats_y = tab_y + 34
-        stats_rect = pygame.Rect(mx + 24, stats_y, self.modal_w - 48, 56)
-        pygame.draw.rect(surface, (24, 34, 52), stats_rect, border_radius=6)
-        pygame.draw.rect(surface, (71, 85, 105), stats_rect, width=1, border_radius=6)
+        stats_y = tab_y + upx(34)
+        stats_rect = pygame.Rect(mx + upx(24), stats_y, self.modal_w - upx(48), upx(56))
+        pygame.draw.rect(surface, (24, 34, 52), stats_rect, border_radius=upx(6))
+        pygame.draw.rect(surface, (71, 85, 105), stats_rect, width=1, border_radius=upx(6))
 
         # Capacity Badge (UNLIMITED)
-        cap_badge_rect = pygame.Rect(stats_rect.x + 12, stats_rect.y + 12, 140, 32)
-        pygame.draw.rect(surface, (16, 185, 129), cap_badge_rect, border_radius=5)
+        cap_badge_rect = pygame.Rect(stats_rect.x + upx(12), stats_rect.y + upx(12), upx(140), upx(32))
+        pygame.draw.rect(surface, (16, 185, 129), cap_badge_rect, border_radius=upx(5))
         cap_lbl = self.font_sub.render("Storage: ∞ UNLIMITED", True, (255, 255, 255))
         surface.blit(cap_lbl, (cap_badge_rect.centerx - cap_lbl.get_width() // 2, cap_badge_rect.centery - cap_lbl.get_height() // 2))
 
@@ -566,36 +568,36 @@ class MarketProfileModal:
         curr = normalize_wallet(getattr(mkt, "currency", {}))
         total_mkt_c = to_copper(curr)
 
-        t_x = cap_badge_rect.right + 16
-        t_y = stats_rect.y + 9
+        t_x = cap_badge_rect.right + upx(16)
+        t_y = stats_rect.y + upx(9)
         surface.blit(self.font_badge.render("MARKET TREASURY:", True, COLOR_TEXT_MUTED), (t_x, t_y))
 
-        bal_y = t_y + 15
+        bal_y = t_y + upx(15)
         surface.blit(self.font_sub.render(f"{curr['Gold']} Gold", True, (250, 204, 21)), (t_x, bal_y))
-        surface.blit(self.font_sub.render(f"{curr['Silver']} Silver", True, (203, 213, 225)), (t_x + 85, bal_y))
-        surface.blit(self.font_sub.render(f"{curr['Copper']} Copper", True, (184, 115, 51)), (t_x + 175, bal_y))
-        surface.blit(self.font_body.render(f"({total_mkt_c}c)", True, COLOR_TEXT_MUTED), (t_x + 265, bal_y + 1))
+        surface.blit(self.font_sub.render(f"{curr['Silver']} Silver", True, (203, 213, 225)), (t_x + upx(85), bal_y))
+        surface.blit(self.font_sub.render(f"{curr['Copper']} Copper", True, (184, 115, 51)), (t_x + upx(175), bal_y))
+        surface.blit(self.font_body.render(f"({total_mkt_c}c)", True, COLOR_TEXT_MUTED), (t_x + upx(265), bal_y + 1))
 
         # Deposit Coin & Withdraw Coin Buttons
         landlord_owned = not fam_assigned_id
-        self.deposit_coin_btn_rect = pygame.Rect(stats_rect.right - 180, stats_rect.y + 14, 82, 28) if landlord_owned else None
+        self.deposit_coin_btn_rect = pygame.Rect(stats_rect.right - upx(180), stats_rect.y + upx(14), upx(82), upx(28)) if landlord_owned else None
         if landlord_owned:
             dep_hov = self.deposit_coin_btn_rect.collidepoint(m_pos)
-            pygame.draw.rect(surface, (22, 101, 52) if dep_hov else (20, 83, 45), self.deposit_coin_btn_rect, border_radius=4)
-            pygame.draw.rect(surface, (74, 222, 128), self.deposit_coin_btn_rect, width=1, border_radius=4)
-            surface.blit(self.font_badge.render("Deposit", True, (255, 255, 255)), (self.deposit_coin_btn_rect.x + 18, self.deposit_coin_btn_rect.y + 8))
+            pygame.draw.rect(surface, (22, 101, 52) if dep_hov else (20, 83, 45), self.deposit_coin_btn_rect, border_radius=upx(4))
+            pygame.draw.rect(surface, (74, 222, 128), self.deposit_coin_btn_rect, width=1, border_radius=upx(4))
+            surface.blit(self.font_badge.render("Deposit", True, (255, 255, 255)), (self.deposit_coin_btn_rect.x + upx(18), self.deposit_coin_btn_rect.y + upx(8)))
 
-        self.withdraw_coin_btn_rect = pygame.Rect(stats_rect.right - 92, stats_rect.y + 14, 82, 28) if landlord_owned else None
+        self.withdraw_coin_btn_rect = pygame.Rect(stats_rect.right - upx(92), stats_rect.y + upx(14), upx(82), upx(28)) if landlord_owned else None
         if landlord_owned:
             with_hov = self.withdraw_coin_btn_rect.collidepoint(m_pos)
-            pygame.draw.rect(surface, (153, 27, 27) if with_hov else (127, 29, 29), self.withdraw_coin_btn_rect, border_radius=4)
-            pygame.draw.rect(surface, (248, 113, 113), self.withdraw_coin_btn_rect, width=1, border_radius=4)
-            surface.blit(self.font_badge.render("Withdraw", True, (255, 255, 255)), (self.withdraw_coin_btn_rect.x + 12, self.withdraw_coin_btn_rect.y + 8))
+            pygame.draw.rect(surface, (153, 27, 27) if with_hov else (127, 29, 29), self.withdraw_coin_btn_rect, border_radius=upx(4))
+            pygame.draw.rect(surface, (248, 113, 113), self.withdraw_coin_btn_rect, width=1, border_radius=upx(4))
+            surface.blit(self.font_badge.render("Withdraw", True, (255, 255, 255)), (self.withdraw_coin_btn_rect.x + upx(12), self.withdraw_coin_btn_rect.y + upx(8)))
 
         # -------------------------------------------------------------
         # TAB CONTENT
         # -------------------------------------------------------------
-        content_y = stats_rect.bottom + 14
+        content_y = stats_rect.bottom + upx(14)
 
         self._draw_goods_tab(surface, mx, content_y, mkt, servant_manager, resources,
                              stockpile_manager, furniture_manager, villager_manager, m_pos,
@@ -642,8 +644,8 @@ class MarketProfileModal:
         active = (self.num_input.active_key == key)
         bg = (15, 23, 42) if not active else (30, 58, 138)
         border = (250, 204, 21) if active else (71, 85, 105)
-        pygame.draw.rect(surface, bg, rect, border_radius=4)
-        pygame.draw.rect(surface, border, rect, width=2 if active else 1, border_radius=4)
+        pygame.draw.rect(surface, bg, rect, border_radius=upx(4))
+        pygame.draw.rect(surface, border, rect, width=2 if active else 1, border_radius=upx(4))
         txt = (self.num_input.text + "_") if active else str(display_value)
         t = self.font_badge.render(txt, True, (255, 255, 255))
         surface.blit(t, (rect.centerx - t.get_width() // 2,
@@ -662,58 +664,58 @@ class MarketProfileModal:
         self.buy_qty_rects.clear()
         self.num_fields.clear()
 
-        self.add_item_btn_rect = pygame.Rect(mx + self.modal_w - 188, list_y - 2, 164, 26)
-        pygame.draw.rect(surface, (22, 101, 52) if self.add_item_btn_rect.collidepoint(m_pos) else (20, 83, 45), self.add_item_btn_rect, border_radius=4)
-        surface.blit(self.font_badge.render("+ Add item to sell", True, (255, 255, 255)), (self.add_item_btn_rect.x + 12, self.add_item_btn_rect.y + 7))
+        self.add_item_btn_rect = pygame.Rect(mx + self.modal_w - upx(188), list_y - 2, upx(164), upx(26))
+        pygame.draw.rect(surface, (22, 101, 52) if self.add_item_btn_rect.collidepoint(m_pos) else (20, 83, 45), self.add_item_btn_rect, border_radius=upx(4))
+        surface.blit(self.font_badge.render("+ Add item to sell", True, (255, 255, 255)), (self.add_item_btn_rect.x + upx(12), self.add_item_btn_rect.y + upx(7)))
 
         title = "MARKET ITEMS FOR SALE"
-        surface.blit(self.font_sub.render(title, True, COLOR_TEXT_TITLE), (mx + 24, list_y + 4))
-        row_top = list_y + 30
+        surface.blit(self.font_sub.render(title, True, COLOR_TEXT_TITLE), (mx + upx(24), list_y + upx(4)))
+        row_top = list_y + upx(30)
 
-        table = pygame.Rect(mx + 24, row_top, self.modal_w - 48, 24)
-        pygame.draw.rect(surface, (30, 41, 59), table, border_radius=4)
-        labels = ((mx + 36, "ITEM"), (mx + 174, "STOCK"), (mx + 250, "PRICE"), (mx + 326, "SALE %" if assigned else "PRICE"), (mx + (352 if assigned else 394), "QTY"), (mx + 468, "RESTOCK"))
+        table = pygame.Rect(mx + upx(24), row_top, self.modal_w - upx(48), upx(24))
+        pygame.draw.rect(surface, (30, 41, 59), table, border_radius=upx(4))
+        labels = ((mx + upx(36), "ITEM"), (mx + upx(174), "STOCK"), (mx + upx(250), "PRICE"), (mx + upx(326), "SALE %" if assigned else "PRICE"), (mx + (upx(352) if assigned else upx(394)), "QTY"), (mx + upx(468), "RESTOCK"))
         if not assigned:
-            labels += ((mx + 570, "WITHDRAW"),)
-        labels += ((mx + (558 if assigned else 660), "REMOVE"),)
+            labels += ((mx + upx(570), "WITHDRAW"),)
+        labels += ((mx + (upx(558) if assigned else upx(660)), "REMOVE"),)
         for x, label in labels:
-            surface.blit(self.font_badge.render(label, True, COLOR_TEXT_MUTED), (x, row_top + 5))
+            surface.blit(self.font_badge.render(label, True, COLOR_TEXT_MUTED), (x, row_top + upx(5)))
 
         tradeable_items = [it for it in getattr(mkt, "sale_items", []) if it in MARKET_TRADEABLE_ITEMS]
         items_per_page = 4
         total_pages = max(1, math.ceil(len(tradeable_items) / items_per_page))
         self.goods_page = max(0, min(getattr(self, "goods_page", 0), total_pages - 1))
         page_items = tradeable_items[self.goods_page * items_per_page:(self.goods_page + 1) * items_per_page]
-        row_y = row_top + 28
+        row_y = row_top + upx(28)
         row_h = upx(58) if assigned else upx(38)
         for item_name in page_items:
-            card = pygame.Rect(mx + 24, row_y, self.modal_w - 48, row_h)
-            pygame.draw.rect(surface, (15, 23, 42), card, border_radius=5)
-            draw_item_icon(surface, item_name, mx + 44, row_y + row_h // 2, size=9)
-            surface.blit(self.font_sub.render(item_name.replace("_", " "), True, (241, 245, 249)), (mx + 60, row_y + 11))
+            card = pygame.Rect(mx + upx(24), row_y, self.modal_w - upx(48), row_h)
+            pygame.draw.rect(surface, (15, 23, 42), card, border_radius=upx(5))
+            draw_item_icon(surface, item_name, mx + upx(44), row_y + row_h // 2, size=upx(9))
+            surface.blit(self.font_sub.render(item_name.replace("_", " "), True, (241, 245, 249)), (mx + upx(60), row_y + upx(11)))
             stock = max(0, int(mkt.inventory.get(item_name, 0)))
-            surface.blit(self.font_badge.render(str(stock), True, (34, 197, 94) if stock else (239, 68, 68)), (mx + 180, row_y + 13))
+            surface.blit(self.font_badge.render(str(stock), True, (34, 197, 94) if stock else (239, 68, 68)), (mx + upx(180), row_y + upx(13)))
             price = MarketService.get_item_price(item_name, mkt)
             price_display = from_copper(max(1, int(price)))
-            surface.blit(self.font_badge.render(f"{price_display['Gold']}g {price_display['Silver']}s {price_display['Copper']}c", True, (250, 204, 21)), (mx + 250, row_y + 13))
+            surface.blit(self.font_badge.render(f"{price_display['Gold']}g {price_display['Silver']}s {price_display['Copper']}c", True, (250, 204, 21)), (mx + upx(250), row_y + upx(13)))
 
             if assigned:
                 pct = max(0, min(100, int(getattr(mkt, "item_allocations", {}).get(item_name, MARKET_DEFAULT_HOUSEHOLD_SALE_PERCENT))))
                 pct_key = ("num", "alloc", item_name)
-                pct_rect = pygame.Rect(mx + 328, row_y + 5, 44, 28)
+                pct_rect = pygame.Rect(mx + upx(328), row_y + upx(5), upx(44), upx(28))
                 self.num_fields[pct_key] = {"rect": pct_rect, "kind": "alloc",
                                             "item": item_name, "min": 0, "max": 100}
                 self._draw_num_input(surface, pct_key, pct_rect, pct)
             else:
                 price_key = ("num", "price", item_name)
-                price_rect = pygame.Rect(mx + 328, row_y + 5, 48, 28)
+                price_rect = pygame.Rect(mx + upx(328), row_y + upx(5), upx(48), upx(28))
                 self.num_fields[price_key] = {"rect": price_rect, "kind": "price",
                                               "item": item_name, "min": 1, "max": 9999999}
                 self._draw_num_input(surface, price_key, price_rect,
                                      max(1, int(price)))
 
             if not assigned:
-                qty_rect = pygame.Rect(mx + 390, row_y + 7, 54, 24)
+                qty_rect = pygame.Rect(mx + upx(390), row_y + upx(7), upx(54), upx(24))
                 self.stock_quantity_rects[item_name] = qty_rect
                 qty_text = self.quantity_values.setdefault(item_name, str(MARKET_QUANTITY_DEFAULT))
                 pygame.draw.rect(surface, (15, 23, 42), qty_rect, border_radius=3)
@@ -722,28 +724,28 @@ class MarketProfileModal:
                 qty_surf = self.font_badge.render(shown_qty, True, (255, 255, 255))
                 surface.blit(qty_surf, (qty_rect.centerx - qty_surf.get_width() // 2, qty_rect.centery - qty_surf.get_height() // 2))
 
-            restock = pygame.Rect(mx + 456, row_y + 7, 76, 24)
+            restock = pygame.Rect(mx + upx(456), row_y + upx(7), upx(76), upx(24))
             if not assigned:
                 self.stock_dep_btns[item_name] = restock
                 pygame.draw.rect(surface, (30, 58, 138), restock, border_radius=3)
-                surface.blit(self.font_badge.render("Restock", True, (255, 255, 255)), (restock.x + 12, restock.y + 6))
+                surface.blit(self.font_badge.render("Restock", True, (255, 255, 255)), (restock.x + upx(12), restock.y + upx(6)))
             else:
-                surface.blit(self.font_badge.render("Auto", True, COLOR_TEXT_MUTED), (restock.x + 22, restock.y + 7))
+                surface.blit(self.font_badge.render("Auto", True, COLOR_TEXT_MUTED), (restock.x + upx(22), restock.y + upx(7)))
             if not assigned:
-                withdraw = pygame.Rect(mx + 558, row_y + 7, 84, 24)
+                withdraw = pygame.Rect(mx + upx(558), row_y + upx(7), upx(84), upx(24))
                 self.stock_with_btns[item_name] = withdraw
                 pygame.draw.rect(surface, (127, 29, 29), withdraw, border_radius=3)
-                surface.blit(self.font_badge.render("Withdraw", True, (255, 255, 255)), (withdraw.x + 10, withdraw.y + 6))
-            remove = pygame.Rect(mx + (558 if assigned else 660), row_y + 7, 60, 24)
+                surface.blit(self.font_badge.render("Withdraw", True, (255, 255, 255)), (withdraw.x + upx(10), withdraw.y + upx(6)))
+            remove = pygame.Rect(mx + (upx(558) if assigned else upx(660)), row_y + upx(7), upx(60), upx(24))
             self.stock_remove_btns[item_name] = remove
             pygame.draw.rect(surface, (127, 29, 29), remove, border_radius=3)
-            surface.blit(self.font_badge.render("Remove", True, (255, 255, 255)), (remove.x + 8, remove.y + 6))
+            surface.blit(self.font_badge.render("Remove", True, (255, 255, 255)), (remove.x + upx(8), remove.y + upx(6)))
 
             if assigned:
                 # Lord BUY row: qty + BUY button. Coins come from the Lord
                 # Treasury; a servant hauls the goods to landlord storage.
-                y2 = row_y + 33
-                qty_rect = pygame.Rect(mx + 330, y2, 46, 22)
+                y2 = row_y + upx(33)
+                qty_rect = pygame.Rect(mx + upx(330), y2, upx(46), upx(22))
                 self.buy_qty_rects[item_name] = qty_rect
                 qty_text = self.quantity_values.setdefault(item_name, str(MARKET_QUANTITY_DEFAULT))
                 pygame.draw.rect(surface, (15, 23, 42), qty_rect, border_radius=3)
@@ -752,7 +754,7 @@ class MarketProfileModal:
                 qty_surf = self.font_badge.render(qty_text or "0", True, (255, 255, 255))
                 surface.blit(qty_surf, (qty_rect.centerx - qty_surf.get_width() // 2,
                                         qty_rect.centery - qty_surf.get_height() // 2))
-                buy_rect = pygame.Rect(mx + 384, y2, 92, 22)
+                buy_rect = pygame.Rect(mx + upx(384), y2, upx(92), upx(22))
                 self.buy_btns[item_name] = buy_rect
                 b_hov = buy_rect.collidepoint(m_pos)
                 pygame.draw.rect(surface, (22, 101, 52) if b_hov else (20, 83, 45), buy_rect, border_radius=3)
@@ -764,54 +766,54 @@ class MarketProfileModal:
                 except (TypeError, ValueError):
                     est_qty = 0
                 est_txt = self.font_badge.render(f"~{price * est_qty}c", True, COLOR_TEXT_MUTED)
-                surface.blit(est_txt, (buy_rect.right + 10, y2 + 5))
+                surface.blit(est_txt, (buy_rect.right + upx(10), y2 + upx(5)))
             row_y += row_h + 3
 
         if not page_items:
-            empty = pygame.Rect(mx + 24, row_y, self.modal_w - 48, 82)
-            pygame.draw.rect(surface, (15, 23, 42), empty, border_radius=5)
+            empty = pygame.Rect(mx + upx(24), row_y, self.modal_w - upx(48), upx(82))
+            pygame.draw.rect(surface, (15, 23, 42), empty, border_radius=upx(5))
             empty_text = self.font_body.render("No goods listed. Choose Add item to sell to begin.", True, COLOR_TEXT_MUTED)
             surface.blit(empty_text, (empty.centerx - empty_text.get_width() // 2, empty.centery - empty_text.get_height() // 2))
 
         page_y = max(row_y + 4, row_top + 28 + items_per_page * (row_h + 3))
         self.goods_list_rect = pygame.Rect(
-            mx + 24, row_top + 28, self.modal_w - 48,
-            max(1, page_y - (row_top + 28)),
+            mx + upx(24), row_top + upx(28), self.modal_w - upx(48),
+            max(1, page_y - (row_top + upx(28))),
         )
         if total_pages > 1:
             scroll_hint = self.font_badge.render("Scroll list for more items", True, COLOR_TEXT_MUTED)
-            surface.blit(scroll_hint, (mx + self.modal_w - 24 - scroll_hint.get_width(), list_y + 5))
+            surface.blit(scroll_hint, (mx + self.modal_w - upx(24) - scroll_hint.get_width(), list_y + upx(5)))
 
         if self.status_message:
             status = self.font_badge.render(self.status_message, True, (248, 113, 113) if "No Goods" in self.status_message else (134, 239, 172))
-            surface.blit(status, (mx + 130, page_y + 5))
+            surface.blit(status, (mx + upx(130), page_y + upx(5)))
 
         from game.systems.economy.market_sales_report import MarketSalesReportSystem
         report = MarketSalesReportSystem.get_report(mkt, day_number)
-        report_top = page_y + 30
-        report_bottom = self.modal_top + self.modal_h - 14
-        report_rect = pygame.Rect(mx + 24, report_top, self.modal_w - 48,
-                                  max(42, report_bottom - report_top))
-        pygame.draw.rect(surface, (15, 23, 42), report_rect, border_radius=5)
-        pygame.draw.rect(surface, (51, 65, 85), report_rect, width=1, border_radius=5)
+        report_top = page_y + upx(30)
+        report_bottom = self.modal_top + self.modal_h - upx(14)
+        report_rect = pygame.Rect(mx + upx(24), report_top, self.modal_w - upx(48),
+                                  max(upx(42), report_bottom - report_top))
+        pygame.draw.rect(surface, (15, 23, 42), report_rect, border_radius=upx(5))
+        pygame.draw.rect(surface, (51, 65, 85), report_rect, width=1, border_radius=upx(5))
         report_title = self.font_badge.render(
             f"TOTAL SALES - DAYS {report['start_day']} to {report['end_day']} (THROUGH DAY {min(day_number, report['end_day'])})",
             True, COLOR_TEXT_TITLE,
         )
-        surface.blit(report_title, (report_rect.x + 10, report_rect.y + 7))
+        surface.blit(report_title, (report_rect.x + upx(10), report_rect.y + upx(7)))
         sold_items = sorted(report["items"].items(), key=lambda pair: pair[0].casefold())
         if not sold_items:
             surface.blit(self.font_body.render("No sales recorded in this 10-day period.", True, COLOR_TEXT_MUTED),
-                         (report_rect.x + 10, report_rect.y + 27))
+                         (report_rect.x + upx(10), report_rect.y + upx(27)))
         else:
             row_height = upx(16)
-            rows_per_column = max(1, (report_rect.height - 28) // row_height)
+            rows_per_column = max(1, (report_rect.height - upx(28)) // row_height)
             visible_count = min(len(sold_items), rows_per_column * 2)
-            column_width = (report_rect.width - 20) // 2
+            column_width = (report_rect.width - upx(20)) // 2
             for idx, (item_name, sale) in enumerate(sold_items[:visible_count]):
                 col, row = divmod(idx, rows_per_column)
-                item_x = report_rect.x + 10 + col * column_width
-                item_y = report_rect.y + 25 + row * row_height
+                item_x = report_rect.x + upx(10) + col * column_width
+                item_y = report_rect.y + upx(25) + row * row_height
                 qty = max(0, int(sale.get("quantity", 0)))
                 revenue = from_copper(max(0, int(sale.get("revenue_copper", 0))))
                 earnings = f"{revenue['Gold']}g {revenue['Silver']}s {revenue['Copper']}c"
@@ -821,7 +823,7 @@ class MarketProfileModal:
                 surface.blit(label, (item_x, item_y))
             if visible_count < len(sold_items):
                 more = self.font_badge.render(f"+ {len(sold_items) - visible_count} more items", True, COLOR_TEXT_MUTED)
-                surface.blit(more, (report_rect.right - more.get_width() - 10, report_rect.bottom - more.get_height() - 5))
+                surface.blit(more, (report_rect.right - more.get_width() - upx(10), report_rect.bottom - more.get_height() - upx(5)))
 
         self.item_picker_rects.clear()
         self.picker_dialog_rect = None
@@ -843,26 +845,26 @@ class MarketProfileModal:
                               if it not in getattr(mkt, "sale_items", [])]
             self.picker_items = selectable
 
-            dlg_w = 480
-            dlg_h = min(470, self.modal_h - 70)
+            dlg_w = upx(480)
+            dlg_h = min(upx(470), self.modal_h - upx(70))
             dlg_x = mx + (self.modal_w - dlg_w) // 2
             dlg_y = self.modal_top + (self.modal_h - dlg_h) // 2
             self.picker_dialog_rect = pygame.Rect(dlg_x, dlg_y, dlg_w, dlg_h)
-            pygame.draw.rect(surface, (15, 23, 42), self.picker_dialog_rect, border_radius=10)
-            pygame.draw.rect(surface, (96, 165, 250), self.picker_dialog_rect, width=2, border_radius=10)
+            pygame.draw.rect(surface, (15, 23, 42), self.picker_dialog_rect, border_radius=upx(10))
+            pygame.draw.rect(surface, (96, 165, 250), self.picker_dialog_rect, width=2, border_radius=upx(10))
 
             surface.blit(self.font_sub.render("Add items to sell", True, COLOR_TEXT_TITLE),
-                         (dlg_x + 16, dlg_y + 12))
+                         (dlg_x + upx(16), dlg_y + upx(12)))
             sel_count = len(self.picker_selected)
             count_txt = self.font_badge.render(f"{sel_count} selected", True, COLOR_TEXT_MUTED)
-            surface.blit(count_txt, (self.picker_dialog_rect.right - 16 - count_txt.get_width(), dlg_y + 16))
+            surface.blit(count_txt, (self.picker_dialog_rect.right - upx(16) - count_txt.get_width(), dlg_y + upx(16)))
 
             # Scrollable clipped item list with icons + checkboxes
             row_h = upx(40)
-            list_x = dlg_x + 16
-            list_y = dlg_y + 46
-            list_w = dlg_w - 32
-            btn_zone = 52
+            list_x = dlg_x + upx(16)
+            list_y = dlg_y + upx(46)
+            list_w = dlg_w - upx(32)
+            btn_zone = upx(52)
             visible_rows = max(1, (dlg_h - (list_y - dlg_y) - btn_zone) // row_h)
             list_h = visible_rows * row_h
             self.picker_list_rect = pygame.Rect(list_x, list_y, list_w, list_h)
@@ -875,16 +877,16 @@ class MarketProfileModal:
                 ry = list_y + idx * row_h - self.picker_scroll
                 if ry + row_h - 4 < list_y or ry > list_y + list_h:
                     continue
-                item_rect = pygame.Rect(list_x + 6, ry, list_w - 12, row_h - 5)
+                item_rect = pygame.Rect(list_x + upx(6), ry, list_w - upx(12), row_h - upx(5))
                 self.item_picker_rects[item_name] = item_rect
                 checked = item_name in self.picker_selected
                 bg = (30, 58, 138) if checked else (30, 41, 59)
                 border = (96, 165, 250) if checked else (51, 65, 85)
-                pygame.draw.rect(surface, bg, item_rect, border_radius=6)
-                pygame.draw.rect(surface, border, item_rect, width=1, border_radius=6)
+                pygame.draw.rect(surface, bg, item_rect, border_radius=upx(6))
+                pygame.draw.rect(surface, border, item_rect, width=1, border_radius=upx(6))
 
                 # Checkbox on the right
-                cb = pygame.Rect(item_rect.right - 30, item_rect.centery - 8, 16, 16)
+                cb = pygame.Rect(item_rect.right - upx(30), item_rect.centery - upx(8), upx(16), upx(16))
                 pygame.draw.rect(surface, (15, 23, 42), cb, border_radius=3)
                 if checked:
                     pygame.draw.rect(surface, (59, 130, 246), cb, border_radius=3)
@@ -894,9 +896,9 @@ class MarketProfileModal:
                     pygame.draw.rect(surface, (96, 165, 250), cb, width=1, border_radius=3)
 
                 # Icon + name
-                draw_item_icon(surface, item_name, item_rect.x + 26, item_rect.centery, size=13)
+                draw_item_icon(surface, item_name, item_rect.x + upx(26), item_rect.centery, size=upx(13))
                 name_txt = self.font_sub.render(item_name.replace("_", " "), True, (241, 245, 249))
-                surface.blit(name_txt, (item_rect.x + 48, item_rect.centery - name_txt.get_height() // 2))
+                surface.blit(name_txt, (item_rect.x + upx(48), item_rect.centery - name_txt.get_height() // 2))
             surface.set_clip(None)
 
             if not selectable:
@@ -904,20 +906,20 @@ class MarketProfileModal:
                                if getattr(mkt, "assigned_family_id", None)
                                else "All supported goods are already listed at this stall.")
                 surface.blit(self.font_body.render(empty_label, True, COLOR_TEXT_MUTED),
-                             (list_x + 8, list_y + 10))
+                             (list_x + upx(8), list_y + upx(10)))
             elif max_scroll > 0:
                 # Thin scrollbar indicating scrollable content
-                track = pygame.Rect(list_x + list_w - 8, list_y + 4, 4, list_h - 8)
+                track = pygame.Rect(list_x + list_w - upx(8), list_y + upx(4), upx(4), list_h - upx(8))
                 pygame.draw.rect(surface, (30, 41, 59), track, border_radius=2)
-                thumb_h = max(16, int(list_h * list_h / (len(selectable) * row_h)))
-                thumb_y = list_y + 4 + int((list_h - 8 - thumb_h) * (self.picker_scroll / max_scroll))
+                thumb_h = max(upx(16), int(list_h * list_h / (len(selectable) * row_h)))
+                thumb_y = list_y + 4 + int((list_h - upx(8) - thumb_h) * (self.picker_scroll / max_scroll))
                 pygame.draw.rect(surface, (96, 165, 250),
-                                 (track.x, thumb_y, 4, thumb_h), border_radius=2)
+                                 (track.x, thumb_y, upx(4), thumb_h), border_radius=2)
 
             # Done / Cancel
-            btn_y = dlg_y + dlg_h - 42
-            self.picker_cancel_rect = pygame.Rect(dlg_x + 16, btn_y, 110, 30)
-            self.picker_done_rect = pygame.Rect(dlg_x + dlg_w - 16 - 150, btn_y, 150, 30)
+            btn_y = dlg_y + dlg_h - upx(42)
+            self.picker_cancel_rect = pygame.Rect(dlg_x + upx(16), btn_y, upx(110), upx(30))
+            self.picker_done_rect = pygame.Rect(dlg_x + dlg_w - upx(16) - upx(150), btn_y, upx(150), upx(30))
             c_hov = self.picker_cancel_rect.collidepoint(m_pos)
             pygame.draw.rect(surface, (51, 65, 85) if not c_hov else (71, 85, 105),
                              self.picker_cancel_rect, border_radius=6)
@@ -961,72 +963,72 @@ class MarketProfileModal:
 
     def _draw_assign_dialog(self, surface, mx, my, mkt, villager_manager, m_pos):
         """Displays modal dialog for assigning stall to a peasant household"""
-        dlg_w = 460
-        dlg_h = 320
+        dlg_w = upx(460)
+        dlg_h = upx(320)
         dlg_x = mx + (self.modal_w - dlg_w) // 2
         dlg_y = my + (self.modal_h - dlg_h) // 2
 
-        pygame.draw.rect(surface, (15, 23, 42), (dlg_x, dlg_y, dlg_w, dlg_h), border_radius=10)
-        pygame.draw.rect(surface, (56, 189, 248), (dlg_x, dlg_y, dlg_w, dlg_h), width=2, border_radius=10)
+        pygame.draw.rect(surface, (15, 23, 42), (dlg_x, dlg_y, dlg_w, dlg_h), border_radius=upx(10))
+        pygame.draw.rect(surface, (56, 189, 248), (dlg_x, dlg_y, dlg_w, dlg_h), width=2, border_radius=upx(10))
 
         # Title
-        surface.blit(self.font_title.render("Assign Stall To Household", True, (250, 204, 21)), (dlg_x + 20, dlg_y + 16))
-        surface.blit(self.font_body.render("Select a peasant family to operate this market stall:", True, COLOR_TEXT_MUTED), (dlg_x + 20, dlg_y + 42))
+        surface.blit(self.font_title.render("Assign Stall To Household", True, (250, 204, 21)), (dlg_x + upx(20), dlg_y + upx(16)))
+        surface.blit(self.font_body.render("Select a peasant family to operate this market stall:", True, COLOR_TEXT_MUTED), (dlg_x + upx(20), dlg_y + upx(42)))
 
         # Close X
-        self.close_assign_dlg_btn_rect = pygame.Rect(dlg_x + dlg_w - 32, dlg_y + 14, 22, 22)
-        pygame.draw.rect(surface, (51, 65, 85), self.close_assign_dlg_btn_rect, border_radius=4)
-        surface.blit(self.font_badge.render("X", True, (255, 255, 255)), (self.close_assign_dlg_btn_rect.x + 6, self.close_assign_dlg_btn_rect.y + 3))
+        self.close_assign_dlg_btn_rect = pygame.Rect(dlg_x + dlg_w - upx(32), dlg_y + upx(14), upx(22), upx(22))
+        pygame.draw.rect(surface, (51, 65, 85), self.close_assign_dlg_btn_rect, border_radius=upx(4))
+        surface.blit(self.font_badge.render("X", True, (255, 255, 255)), (self.close_assign_dlg_btn_rect.x + upx(6), self.close_assign_dlg_btn_rect.y + 3))
 
         self.family_assign_btn_rects.clear()
         fam_list = getattr(villager_manager, "families", []) if villager_manager else []
 
-        f_y = dlg_y + 70
+        f_y = dlg_y + upx(70)
         for fam in fam_list[:4]:
-            f_rect = pygame.Rect(dlg_x + 20, f_y, dlg_w - 40, 38)
+            f_rect = pygame.Rect(dlg_x + upx(20), f_y, dlg_w - upx(40), upx(38))
             is_cur = (getattr(mkt, "assigned_family_id", None) == fam.id)
-            pygame.draw.rect(surface, (30, 58, 138) if is_cur else (30, 41, 59), f_rect, border_radius=6)
-            pygame.draw.rect(surface, (56, 189, 248) if is_cur else (51, 65, 85), f_rect, width=1, border_radius=6)
+            pygame.draw.rect(surface, (30, 58, 138) if is_cur else (30, 41, 59), f_rect, border_radius=upx(6))
+            pygame.draw.rect(surface, (56, 189, 248) if is_cur else (51, 65, 85), f_rect, width=1, border_radius=upx(6))
 
-            surface.blit(self.font_sub.render(f"The {fam.surname} Family", True, (255, 255, 255)), (f_rect.x + 12, f_rect.y + 10))
-            surface.blit(self.font_badge.render(f"({len(fam.members)} members)", True, (148, 163, 184)), (f_rect.x + 180, f_rect.y + 12))
+            surface.blit(self.font_sub.render(f"The {fam.surname} Family", True, (255, 255, 255)), (f_rect.x + upx(12), f_rect.y + upx(10)))
+            surface.blit(self.font_badge.render(f"({len(fam.members)} members)", True, (148, 163, 184)), (f_rect.x + upx(180), f_rect.y + upx(12)))
 
-            btn_a = pygame.Rect(f_rect.right - 90, f_rect.y + 7, 80, 24)
+            btn_a = pygame.Rect(f_rect.right - upx(90), f_rect.y + upx(7), upx(80), upx(24))
             self.family_assign_btn_rects[fam.id] = btn_a
             hov = btn_a.collidepoint(m_pos)
-            pygame.draw.rect(surface, (22, 101, 52) if hov else (20, 83, 45), btn_a, border_radius=4)
+            pygame.draw.rect(surface, (22, 101, 52) if hov else (20, 83, 45), btn_a, border_radius=upx(4))
             a_lbl = "Assigned" if is_cur else "Assign"
-            surface.blit(self.font_badge.render(a_lbl, True, (255, 255, 255)), (btn_a.x + 16, btn_a.y + 5))
+            surface.blit(self.font_badge.render(a_lbl, True, (255, 255, 255)), (btn_a.x + upx(16), btn_a.y + upx(5)))
 
-            f_y += 44
+            f_y += upx(44)
 
         # Bottom: Unassign button
-        self.unassign_stall_btn_rect = pygame.Rect(dlg_x + 20, dlg_y + dlg_h - 44, 200, 30)
+        self.unassign_stall_btn_rect = pygame.Rect(dlg_x + upx(20), dlg_y + dlg_h - upx(44), upx(200), upx(30))
         u_hov = self.unassign_stall_btn_rect.collidepoint(m_pos)
-        pygame.draw.rect(surface, (127, 29, 29) if u_hov else (153, 27, 27), self.unassign_stall_btn_rect, border_radius=5)
-        surface.blit(self.font_badge.render("Unassign (Revert to Crown)", True, (255, 255, 255)), (self.unassign_stall_btn_rect.x + 14, self.unassign_stall_btn_rect.y + 7))
+        pygame.draw.rect(surface, (127, 29, 29) if u_hov else (153, 27, 27), self.unassign_stall_btn_rect, border_radius=upx(5))
+        surface.blit(self.font_badge.render("Unassign (Revert to Crown)", True, (255, 255, 255)), (self.unassign_stall_btn_rect.x + upx(14), self.unassign_stall_btn_rect.y + upx(7)))
 
     def _draw_coin_dialog(self, surface, mx, my, mkt, resources, m_pos, stockpile_manager=None, servant_manager=None):
         """Quantity based physical coin deposit or withdrawal controls."""
         action = self.show_coin_dialog
-        dlg_w, dlg_h = 420, 240
+        dlg_w, dlg_h = upx(420), upx(240)
         dlg_x = mx + (self.modal_w - dlg_w) // 2
         dlg_y = my + (self.modal_h - dlg_h) // 2
-        pygame.draw.rect(surface, (15, 23, 42), (dlg_x, dlg_y, dlg_w, dlg_h), border_radius=10)
-        pygame.draw.rect(surface, (245, 158, 11), (dlg_x, dlg_y, dlg_w, dlg_h), width=2, border_radius=10)
+        pygame.draw.rect(surface, (15, 23, 42), (dlg_x, dlg_y, dlg_w, dlg_h), border_radius=upx(10))
+        pygame.draw.rect(surface, (245, 158, 11), (dlg_x, dlg_y, dlg_w, dlg_h), width=2, border_radius=upx(10))
         title = "Deposit Coins to Market" if action == "deposit" else "Withdraw Coins from Market"
-        surface.blit(self.font_title.render(title, True, (250, 204, 21)), (dlg_x + 20, dlg_y + 14))
-        self.close_coin_dlg_btn_rect = pygame.Rect(dlg_x + dlg_w - 32, dlg_y + 12, 22, 22)
-        pygame.draw.rect(surface, (51, 65, 85), self.close_coin_dlg_btn_rect, border_radius=4)
-        surface.blit(self.font_badge.render("X", True, (255, 255, 255)), (self.close_coin_dlg_btn_rect.x + 6, self.close_coin_dlg_btn_rect.y + 4))
+        surface.blit(self.font_title.render(title, True, (250, 204, 21)), (dlg_x + upx(20), dlg_y + upx(14)))
+        self.close_coin_dlg_btn_rect = pygame.Rect(dlg_x + dlg_w - upx(32), dlg_y + upx(12), upx(22), upx(22))
+        pygame.draw.rect(surface, (51, 65, 85), self.close_coin_dlg_btn_rect, border_radius=upx(4))
+        surface.blit(self.font_badge.render("X", True, (255, 255, 255)), (self.close_coin_dlg_btn_rect.x + upx(6), self.close_coin_dlg_btn_rect.y + upx(4)))
 
         wallet = normalize_wallet(getattr(mkt, "currency", {}))
         self.coin_action_btn_rects.clear()
         self.coin_quantity_rects.clear()
         for idx, denom in enumerate(MARKET_CURRENCY_DENOMINATIONS):
-            row_y = dlg_y + 48 + idx * 42
-            surface.blit(self.font_sub.render(denom, True, (241, 245, 249)), (dlg_x + 20, row_y + 7))
-            field = pygame.Rect(dlg_x + 100, row_y + 2, 72, 28)
+            row_y = dlg_y + upx(48) + idx * upx(42)
+            surface.blit(self.font_sub.render(denom, True, (241, 245, 249)), (dlg_x + upx(20), row_y + upx(7)))
+            field = pygame.Rect(dlg_x + upx(100), row_y + 2, upx(72), upx(28))
             self.coin_quantity_rects[denom] = field
             key = f"coin:{denom}"
             raw = self.quantity_values.setdefault(key, str(MARKET_QUANTITY_DEFAULT))
@@ -1035,7 +1037,7 @@ class MarketProfileModal:
             qty_surf = self.font_badge.render(raw or "0", True, (255, 255, 255))
             surface.blit(qty_surf, (field.centerx - qty_surf.get_width() // 2, field.centery - qty_surf.get_height() // 2))
 
-            button = pygame.Rect(dlg_x + 184, row_y + 2, 94, 28)
+            button = pygame.Rect(dlg_x + upx(184), row_y + 2, upx(94), upx(28))
             self.coin_action_btn_rects[(denom, action)] = button
             pygame.draw.rect(surface, (20, 83, 45) if action == "deposit" else (127, 29, 29), button, border_radius=4)
             btn_surf = self.font_badge.render(action.title(), True, (255, 255, 255))
@@ -1048,8 +1050,8 @@ class MarketProfileModal:
                 ) if stockpile_manager else 0
             else:
                 available = wallet.get(denom, 0)
-            surface.blit(self.font_badge.render(f"Available: {available}", True, COLOR_TEXT_MUTED), (dlg_x + 286, row_y + 9))
+            surface.blit(self.font_badge.render(f"Available: {available}", True, COLOR_TEXT_MUTED), (dlg_x + upx(286), row_y + upx(9)))
 
         if self.status_message:
             status = self.font_badge.render(self.status_message, True, (248, 113, 113) if "No Goods" in self.status_message else (134, 239, 172))
-            surface.blit(status, (dlg_x + 20, dlg_y + dlg_h - 22))
+            surface.blit(status, (dlg_x + upx(20), dlg_y + dlg_h - upx(22)))

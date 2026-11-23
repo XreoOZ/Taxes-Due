@@ -75,8 +75,8 @@ class BuilderCatalogModal:
             return
         self._ensure_fonts()
         screen_w, screen_h = surface.get_size()
-        modal_w = min(780, screen_w - 32)
-        modal_h = min(620, screen_h - 32)
+        modal_w = min(upx(780), screen_w - upx(32))
+        modal_h = min(upx(620), screen_h - upx(32))
         modal_x = (screen_w - modal_w) // 2
         modal_y = (screen_h - modal_h) // 2
         self.modal_rect = pygame.Rect(modal_x, modal_y, modal_w, modal_h)
@@ -84,24 +84,24 @@ class BuilderCatalogModal:
         shade = pygame.Surface((screen_w, screen_h), pygame.SRCALPHA)
         shade.fill((0, 0, 0, 170))
         surface.blit(shade, (0, 0))
-        pygame.draw.rect(surface, COLOR_MODAL_BG, self.modal_rect, border_radius=12)
-        pygame.draw.rect(surface, COLOR_MODAL_BORDER, self.modal_rect, width=2, border_radius=12)
+        pygame.draw.rect(surface, COLOR_MODAL_BG, self.modal_rect, border_radius=upx(12))
+        pygame.draw.rect(surface, COLOR_MODAL_BORDER, self.modal_rect, width=2, border_radius=upx(12))
 
         title = self.font_title.render("BUILDER WORKBENCH", True, COLOR_TEXT_TITLE)
-        surface.blit(title, (modal_x + 24, modal_y + 18))
+        surface.blit(title, (modal_x + upx(24), modal_y + upx(18)))
         subtitle = self.font_sub.render("Furniture and public build quotes use market material costs and living wages.", True, COLOR_TEXT_MUTED)
-        surface.blit(subtitle, (modal_x + 26, modal_y + 48))
+        surface.blit(subtitle, (modal_x + upx(26), modal_y + upx(48)))
 
-        self.close_rect = pygame.Rect(modal_x + modal_w - 42, modal_y + 16, 26, 26)
-        pygame.draw.rect(surface, (30, 41, 59), self.close_rect, border_radius=5)
+        self.close_rect = pygame.Rect(modal_x + modal_w - upx(42), modal_y + upx(16), upx(26), upx(26))
+        pygame.draw.rect(surface, (30, 41, 59), self.close_rect, border_radius=upx(5))
         close_label = self.font_badge.render("X", True, COLOR_TEXT_MAIN)
         surface.blit(close_label, (self.close_rect.centerx - close_label.get_width() // 2,
                                    self.close_rect.centery - close_label.get_height() // 2))
 
-        footer_h = 42
-        viewport_top = modal_y + 82
-        viewport_bottom = modal_y + modal_h - footer_h - 12
-        self.viewport_rect = pygame.Rect(modal_x + 20, viewport_top, modal_w - 40,
+        footer_h = upx(42)
+        viewport_top = modal_y + upx(82)
+        viewport_bottom = modal_y + modal_h - footer_h - upx(12)
+        self.viewport_rect = pygame.Rect(modal_x + upx(20), viewport_top, modal_w - upx(40),
                                          max(0, viewport_bottom - viewport_top))
         item_types = [(key, cfg, "furniture") for key, cfg in FURNITURE_TYPES.items()]
         item_types.extend((key, cfg, "building") for key, cfg in BUILDING_TYPES.items()
@@ -121,12 +121,12 @@ class BuilderCatalogModal:
             row = pygame.Rect(self.viewport_rect.x,
                               self.viewport_rect.y + index * row_step - self.scroll_y,
                               self.viewport_rect.width, row_h)
-            pygame.draw.rect(surface, (15, 23, 42), row, border_radius=7)
-            pygame.draw.rect(surface, (51, 65, 85), row, width=1, border_radius=7)
+            pygame.draw.rect(surface, (15, 23, 42), row, border_radius=upx(7))
+            pygame.draw.rect(surface, (51, 65, 85), row, width=1, border_radius=upx(7))
             name = self.font_body.render(cfg.get("name", item_type.replace("_", " ").title()), True, COLOR_TEXT_MAIN)
-            surface.blit(name, (row.x + 14, row.y + 10))
+            surface.blit(name, (row.x + upx(14), row.y + upx(10)))
             desc = self.font_sub.render(cfg.get("desc", ""), True, COLOR_TEXT_MUTED)
-            surface.blit(desc, (row.x + 14, row.y + 31))
+            surface.blit(desc, (row.x + upx(14), row.y + upx(31)))
             materials = cfg.get("materials", {})
             if item_kind == "building":
                 quote = BuilderSystem.quote_building_order(item_type, building_manager, villager_manager)
@@ -135,7 +135,7 @@ class BuilderCatalogModal:
             if not material_text:
                 material_text = "No material cost"
             material_label = self.font_sub.render(f"Materials: {material_text}", True, COLOR_TEXT_MUTED)
-            surface.blit(material_label, (row.x + 14, row.y + 56))
+            surface.blit(material_label, (row.x + upx(14), row.y + upx(56)))
 
             if item_kind == "furniture":
                 quote = BuilderSystem.quote_order(
@@ -144,20 +144,20 @@ class BuilderCatalogModal:
                 )
             price = self._format_price(quote["price_copper"])
             price_label = self.font_badge.render(f"{price}  (material + living wage)", True, (250, 204, 21))
-            surface.blit(price_label, (row.right - 218, row.y + 14))
-            order_rect = pygame.Rect(row.right - 128, row.y + 49, 112, 28)
+            surface.blit(price_label, (row.right - upx(218), row.y + upx(14)))
+            order_rect = pygame.Rect(row.right - upx(128), row.y + upx(49), upx(112), upx(28))
             self.order_rects[order_key] = order_rect
             hovered = order_rect.collidepoint(pygame.mouse.get_pos())
-            pygame.draw.rect(surface, (16, 185, 129) if hovered else (5, 150, 105), order_rect, border_radius=5)
-            pygame.draw.rect(surface, (52, 211, 153), order_rect, width=1, border_radius=5)
+            pygame.draw.rect(surface, (16, 185, 129) if hovered else (5, 150, 105), order_rect, border_radius=upx(5))
+            pygame.draw.rect(surface, (52, 211, 153), order_rect, width=1, border_radius=upx(5))
             order_label = self.font_badge.render("Commission" if item_kind == "furniture" else "Plan", True, (255, 255, 255))
             surface.blit(order_label, (order_rect.centerx - order_label.get_width() // 2,
                                        order_rect.centery - order_label.get_height() // 2))
 
         surface.set_clip(old_clip)
         if self.max_scroll:
-            track = pygame.Rect(self.viewport_rect.right - 4, self.viewport_rect.y, 3, self.viewport_rect.height)
+            track = pygame.Rect(self.viewport_rect.right - upx(4), self.viewport_rect.y, 3, self.viewport_rect.height)
             pygame.draw.rect(surface, (51, 65, 85), track, border_radius=2)
-            thumb_h = max(24, int(track.height * self.viewport_rect.height / content_h))
+            thumb_h = max(upx(24), int(track.height * self.viewport_rect.height / content_h))
             thumb_y = track.y + int((track.height - thumb_h) * self.scroll_y / self.max_scroll)
             pygame.draw.rect(surface, (96, 165, 250), (track.x, thumb_y, track.width, thumb_h), border_radius=2)

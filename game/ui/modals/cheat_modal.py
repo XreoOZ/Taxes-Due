@@ -31,7 +31,7 @@ class CheatModal:
         self.deactivate_btn_rect = None
         self.unlock_btn_rect = None
         self.session_btn_rects = {}
-        self.close_btn_rect = pygame.Rect(0, 0, 24, 24)
+        self.close_btn_rect = pygame.Rect(0, 0, upx(24), upx(24))
         self.font_title = None
         self.font_sub = None
         self.font_body = None
@@ -111,6 +111,8 @@ class CheatModal:
 
         self._init_fonts()
         screen_w, screen_h = surface.get_size()
+        self.modal_w = min(upx(CHEAT_MODAL_WIDTH), screen_w - upx(48))
+        self.modal_h = min(upx(CHEAT_MODAL_HEIGHT), screen_h - upx(48))
 
         dim_surf = pygame.Surface((screen_w, screen_h), pygame.SRCALPHA)
         dim_surf.fill((0, 0, 0, 140))
@@ -120,66 +122,66 @@ class CheatModal:
         my = (screen_h - self.modal_h) // 2
 
         modal_surf = pygame.Surface((self.modal_w, self.modal_h), pygame.SRCALPHA)
-        pygame.draw.rect(modal_surf, COLOR_MODAL_BG, (0, 0, self.modal_w, self.modal_h), border_radius=12)
-        pygame.draw.rect(modal_surf, COLOR_MODAL_BORDER, (0, 0, self.modal_w, self.modal_h), width=2, border_radius=12)
+        pygame.draw.rect(modal_surf, COLOR_MODAL_BG, (0, 0, self.modal_w, self.modal_h), border_radius=upx(12))
+        pygame.draw.rect(modal_surf, COLOR_MODAL_BORDER, (0, 0, self.modal_w, self.modal_h), width=2, border_radius=upx(12))
         surface.blit(modal_surf, (mx, my))
 
         mouse_pos = pygame.mouse.get_pos()
-        self.close_btn_rect = pygame.Rect(mx + self.modal_w - 36, my + 14, 22, 22)
+        self.close_btn_rect = pygame.Rect(mx + self.modal_w - upx(36), my + upx(14), upx(22), upx(22))
         c_hover = self.close_btn_rect.collidepoint(mouse_pos)
         c_col = (239, 68, 68) if c_hover else COLOR_TEXT_MUTED
         c_surf = self.font_btn.render("X", True, c_col)
-        surface.blit(c_surf, (self.close_btn_rect.x + 5, self.close_btn_rect.y + 1))
+        surface.blit(c_surf, (self.close_btn_rect.x + upx(5), self.close_btn_rect.y + 1))
 
         title = self.font_title.render("ESC MENU", True, COLOR_TEXT_TITLE)
-        surface.blit(title, (mx + 20, my + 16))
-        pygame.draw.line(surface, COLOR_MODAL_BORDER, (mx + 20, my + 48), (mx + self.modal_w - 20, my + 48))
+        surface.blit(title, (mx + upx(20), my + upx(16)))
+        pygame.draw.line(surface, COLOR_MODAL_BORDER, (mx + upx(20), my + upx(48)), (mx + self.modal_w - upx(20), my + upx(48)))
 
-        cy = my + 62
+        cy = my + upx(62)
         if self.mode == "password":
             lbl = self.font_sub.render("Enter Cheat Password", True, COLOR_TEXT_TITLE)
-            surface.blit(lbl, (mx + 24, cy))
+            surface.blit(lbl, (mx + upx(24), cy))
 
-            box = pygame.Rect(mx + 24, cy + 26, self.modal_w - 48, 34)
-            pygame.draw.rect(surface, (20, 29, 45), box, border_radius=6)
-            pygame.draw.rect(surface, COLOR_MODAL_BORDER, box, width=1, border_radius=6)
+            box = pygame.Rect(mx + upx(24), cy + upx(26), self.modal_w - upx(48), upx(34))
+            pygame.draw.rect(surface, (20, 29, 45), box, border_radius=upx(6))
+            pygame.draw.rect(surface, COLOR_MODAL_BORDER, box, width=1, border_radius=upx(6))
             masked = "•" * len(self.password_input)
             txt = self.font_body.render(masked if masked else "type password...", True,
                                         COLOR_TEXT_MAIN if masked else COLOR_TEXT_MUTED)
-            surface.blit(txt, (box.x + 10, box.centery - txt.get_height() // 2))
+            surface.blit(txt, (box.x + upx(10), box.centery - txt.get_height() // 2))
 
             if self.error_msg:
                 err = self.font_body.render(self.error_msg, True, (239, 68, 68))
-                surface.blit(err, (mx + 24, box.bottom + 8))
+                surface.blit(err, (mx + upx(24), box.bottom + upx(8)))
 
-            self.unlock_btn_rect = pygame.Rect(mx + self.modal_w // 2 - 70, self.modal_h + my - 62, 140, 32)
+            self.unlock_btn_rect = pygame.Rect(mx + self.modal_w // 2 - upx(70), self.modal_h + my - upx(62), upx(140), upx(32))
             u_hover = self.unlock_btn_rect.collidepoint(mouse_pos)
             pygame.draw.rect(surface, (16, 185, 129) if u_hover else (5, 150, 105),
-                             self.unlock_btn_rect, border_radius=6)
+                             self.unlock_btn_rect, border_radius=upx(6))
             u_txt = self.font_btn.render("Unlock", True, (255, 255, 255))
             surface.blit(u_txt, (self.unlock_btn_rect.centerx - u_txt.get_width() // 2,
                                  self.unlock_btn_rect.centery - u_txt.get_height() // 2))
             hint = self.font_body.render("Press ENTER to submit, ESC to go back", True, COLOR_TEXT_MUTED)
-            surface.blit(hint, (mx + 24, my + self.modal_h - 30))
+            surface.blit(hint, (mx + upx(24), my + self.modal_h - upx(30)))
         else:
             status_col = (34, 197, 94) if cheats_active else (148, 163, 184)
             status = "ACTIVE" if cheats_active else "LOCKED"
             st = self.font_sub.render(f"Cheats: {status}", True, status_col)
-            surface.blit(st, (mx + 24, cy))
+            surface.blit(st, (mx + upx(24), cy))
 
             note = self.font_body.render(
                 "Unlocks Add Item & Add Family buttons." if not cheats_active
                 else "Cheat features are enabled this session.",
                 True, COLOR_TEXT_MUTED)
-            surface.blit(note, (mx + 24, cy + 22))
+            surface.blit(note, (mx + upx(24), cy + upx(22)))
 
             # Session action buttons (same set as the old ESC settings menu)
-            surface.blit(self.font_sub.render("Session Actions:", True, COLOR_TEXT_TITLE), (mx + 24, cy + 48))
-            bx = mx + 24
-            by = cy + 74
-            bw = 100
-            bh = 32
-            gap = 8
+            surface.blit(self.font_sub.render("Session Actions:", True, COLOR_TEXT_TITLE), (mx + upx(24), cy + upx(48)))
+            bx = mx + upx(24)
+            by = cy + upx(74)
+            bw = upx(100)
+            bh = upx(32)
+            gap = upx(8)
             session_defs = [
                 ("unpause_game", "Resume", (16, 185, 129), (5, 150, 105)),
                 ("open_save_modal", "Save", (37, 99, 235), (30, 58, 138)),
@@ -192,29 +194,29 @@ class CheatModal:
                 rect = pygame.Rect(bx, by, bw, bh)
                 self.session_btn_rects[action] = rect
                 hover = rect.collidepoint(mouse_pos)
-                pygame.draw.rect(surface, hov_col if hover else base_col, rect, border_radius=6)
+                pygame.draw.rect(surface, hov_col if hover else base_col, rect, border_radius=upx(6))
                 txt = self.font_btn.render(label, True, (255, 255, 255))
                 surface.blit(txt, (rect.centerx - txt.get_width() // 2,
                                    rect.centery - txt.get_height() // 2))
                 bx += bw + gap
 
             # Cheat unlock / deactivate button
-            cby = by + bh + 22
+            cby = by + bh + upx(22)
             if cheats_active:
-                self.deactivate_btn_rect = pygame.Rect(mx + self.modal_w // 2 - 90, cby, 180, 34)
+                self.deactivate_btn_rect = pygame.Rect(mx + self.modal_w // 2 - upx(90), cby, upx(180), upx(34))
                 d_hover = self.deactivate_btn_rect.collidepoint(mouse_pos)
                 pygame.draw.rect(surface, (239, 68, 68) if d_hover else (185, 28, 28),
-                                 self.deactivate_btn_rect, border_radius=6)
+                                 self.deactivate_btn_rect, border_radius=upx(6))
                 d_txt = self.font_btn.render("Deactivate Cheats", True, (255, 255, 255))
                 surface.blit(d_txt, (self.deactivate_btn_rect.centerx - d_txt.get_width() // 2,
                                      self.deactivate_btn_rect.centery - d_txt.get_height() // 2))
             else:
-                self.active_btn_rect = pygame.Rect(mx + self.modal_w // 2 - 90, cby, 180, 34)
+                self.active_btn_rect = pygame.Rect(mx + self.modal_w // 2 - upx(90), cby, upx(180), upx(34))
                 a_hover = self.active_btn_rect.collidepoint(mouse_pos)
                 pygame.draw.rect(surface, (245, 158, 11) if a_hover else (180, 83, 9),
-                                 self.active_btn_rect, border_radius=6)
+                                 self.active_btn_rect, border_radius=upx(6))
                 a_txt = self.font_btn.render("Active Cheat", True, (255, 255, 255))
                 surface.blit(a_txt, (self.active_btn_rect.centerx - a_txt.get_width() // 2,
                                      self.active_btn_rect.centery - a_txt.get_height() // 2))
                 hint = self.font_body.render("You'll be asked for a password.", True, COLOR_TEXT_MUTED)
-                surface.blit(hint, (mx + 24, my + self.modal_h - 30))
+                surface.blit(hint, (mx + upx(24), my + self.modal_h - upx(30)))
