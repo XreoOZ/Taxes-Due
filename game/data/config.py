@@ -267,11 +267,11 @@ MINE_SPAWN_GUARANTEE_DIST_MAX_TILES = 100
 MINE_SPAWN_KIND_RATIO = {"Stone Mine": 3, "Iron Mine": 1}  # exact island-wide ratio
 # Yield per in-game hour by tier (unlimited deposits; tier = speed only).
 MINE_YIELD_PER_INGAME_HOUR = {
-    1: {"name": "Scarce", "min": 1, "max": 3},
-    2: {"name": "Low", "min": 2, "max": 4},
-    3: {"name": "Normal", "min": 3, "max": 5},
-    4: {"name": "Rich", "min": 4, "max": 7},
-    5: {"name": "Abundant", "min": 6, "max": 10},
+    1: {"name": "Scarce", "min": 1, "max": 1},
+    2: {"name": "Low", "min": 1, "max": 2},
+    3: {"name": "Normal", "min": 2, "max": 2},
+    4: {"name": "Rich", "min": 3, "max": 4},
+    5: {"name": "Abundant", "min": 4, "max": 4},
 }
 MINE_TYPE_TABLE = {
     "Stone Mine": {"output_item": "Stone", "color": (203, 213, 225)},
