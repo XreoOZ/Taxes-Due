@@ -91,6 +91,7 @@ from game.ui.modals.add_item_modal import AddItemModal
 from game.ui.modals.cheat_modal import CheatModal
 from game.ui.modals.builder_catalog_modal import BuilderCatalogModal
 from game.ui.modals.toolmaker_catalog_modal import ToolmakerCatalogModal
+from game.ui.modals.help_modal import HelpModal
 from game.systems.work.toolmaker_system import ToolmakerSystem
 from game.systems.work.tool_condition import ToolConditionSystem
 from game.ui.path_debug_overlay import PathDebugOverlay
@@ -216,6 +217,7 @@ def main():
     cheat_modal = CheatModal()
     builder_catalog_modal = BuilderCatalogModal()
     toolmaker_catalog_modal = ToolmakerCatalogModal()
+    help_modal = HelpModal()
     path_debug_overlay = PathDebugOverlay(enabled=False)
     map_overlay = MapOverlay()
     production_system = ProductionDistributionSystem.get_instance()
@@ -399,6 +401,7 @@ def main():
         moving_furniture = None
         builder_catalog_modal.close()
         toolmaker_catalog_modal.close()
+        help_modal.close()
         original_permit_tiles.clear()
         planning_road_tiles.clear()
         road_drag_start = None
@@ -428,7 +431,7 @@ def main():
         real_dt = min(clock.tick(FPS) / 1000.0, 0.1)
         profile_frame_start = perf_counter() if profile_enabled else 0.0
         game_dt = min(speed_controller.get_game_dt(real_dt), MAX_FRAME_GAME_DT)
-        if current_state == STATE_PLAYING and (settings_modal.is_open or save_modal.is_open or cheat_modal.is_open):
+        if current_state == STATE_PLAYING and (settings_modal.is_open or save_modal.is_open or cheat_modal.is_open or help_modal.is_open):
             game_dt = 0.0
 
         # Refresh fisik item di stockpile setiap frame
@@ -612,6 +615,7 @@ def main():
                 any_modal_open = (
                     raport_ui.is_open or settings_modal.is_open or save_modal.is_open
                     or market_modal.is_open or add_item_modal.is_open or cheat_modal.is_open
+                    or help_modal.is_open
                 )
                 if not any_modal_open:
                     speed_action = speed_controller.handle_event(event)
@@ -1294,9 +1298,19 @@ def main():
                     elif c_action == "open_load_modal":
                         save_modal.open(mode="LOAD")
                         continue
+                    elif c_action == "open_help_modal":
+                        help_modal.open()
+                        continue
                     elif c_action == "return_to_main_menu":
                         current_state = STATE_MENU
                         continue
+
+                # -------------------------------------------------------------
+                # 4.7b. HELP / CODEX MODAL
+                # -------------------------------------------------------------
+                elif help_modal.is_open:
+                    help_modal.handle_event(event)
+                    continue
 
                 # -------------------------------------------------------------
                 # 4.8. STARTER PLACEMENT MODE (pick drop location → confirm)
@@ -1792,7 +1806,7 @@ def main():
             # Substep physics/entities so high speed multiplier (Fast 2x, Very Fast 4x) never tunnels through walls
             MAX_PHYSICS_SUB_DT = 0.02  # Maximum 20ms per physics integration step
             sub_time = game_dt
-            is_modal_open = raport_ui.is_open or settings_modal.is_open or save_modal.is_open or market_modal.is_open or add_item_modal.is_open or cheat_modal.is_open or pending_starter_id is not None
+            is_modal_open = raport_ui.is_open or settings_modal.is_open or save_modal.is_open or market_modal.is_open or add_item_modal.is_open or cheat_modal.is_open or help_modal.is_open or pending_starter_id is not None
             raport_ui.cheats_active = cheats_active
             keys = pygame.key.get_pressed() if not is_modal_open else None
 
@@ -3341,6 +3355,7 @@ def main():
 
             # 11.7. ESC Cheat Menu Modal
             cheat_modal.draw(screen, cheats_active=cheats_active)
+            help_modal.draw(screen)
 
             # 11.8. Starter Placement Ghost + Confirm Dialog
             if pending_starter_id is not None:

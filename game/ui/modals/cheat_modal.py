@@ -176,14 +176,15 @@ class CheatModal:
             surface.blit(self.font_sub.render("Session Actions:", True, COLOR_TEXT_TITLE), (mx + 24, cy + 48))
             bx = mx + 24
             by = cy + 74
-            bw = 118
+            bw = 100
             bh = 32
-            gap = 10
+            gap = 8
             session_defs = [
                 ("unpause_game", "Resume", (16, 185, 129), (5, 150, 105)),
-                ("open_save_modal", "Save Game", (37, 99, 235), (30, 58, 138)),
-                ("open_load_modal", "Load Game", (234, 179, 8), (180, 83, 9)),
-                ("return_to_main_menu", "Main Menu", (239, 68, 68), (185, 28, 28)),
+                ("open_save_modal", "Save", (37, 99, 235), (30, 58, 138)),
+                ("open_load_modal", "Load", (234, 179, 8), (180, 83, 9)),
+                ("open_help_modal", "Help", (14, 165, 233), (29, 78, 216)),
+                ("return_to_main_menu", "Menu", (239, 68, 68), (185, 28, 28)),
             ]
             self.session_btn_rects = {}
             for action, label, hov_col, base_col in session_defs:
