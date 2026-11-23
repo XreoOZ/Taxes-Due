@@ -264,6 +264,8 @@ def serialize_game_state(day_cycle, resources, player, permit_manager, building_
             "condition": getattr(f, "condition", 1.0),
             "inventory": dict(getattr(f, "inventory", {})),
             "currency": dict(getattr(f, "currency", {})),
+            "tool_conditions": {k: list(v) for k, v in (getattr(f, "tool_conditions", {}) or {}).items()},
+            "tool_orders": [dict(s.construction_order) for s in (getattr(f, "tool_order_subjects", None) or []) if getattr(s, "construction_order", None)],
             "break_check_day": getattr(f, "break_check_day", 1),
             "break_check_hour": getattr(f, "break_check_hour", 0.0),
             "break_checked_today": getattr(f, "break_checked_today", False),
@@ -302,6 +304,7 @@ def serialize_game_state(day_cycle, resources, player, permit_manager, building_
                     "task": m.task,
                     "carrying_crop": getattr(m, "carrying_crop", 0),
                     "inventory": dict(getattr(m, "inventory", {})),
+                    "tool_conditions": {k: list(v) for k, v in (getattr(m, "tool_conditions", {}) or {}).items()},
                     "currency": dict(getattr(m, "currency", {})),
                     "active_tool": getattr(m, "active_tool", None),
                     "has_water": getattr(m, "has_water", False),
@@ -672,6 +675,11 @@ def deserialize_game_state(data, day_cycle, resources, player, permit_manager, b
         f.station_quota_day = f_d.get("station_quota_day", -1)
         f.plant_tree_enabled = f_d.get("plant_tree_enabled", False)
         f.bound_mine_id = f_d.get("bound_mine_id", None)
+        f.tool_conditions = {k: list(v2) for k, v2 in (f_d.get("tool_conditions", {}) or {}).items()}
+        f.tool_order_subjects = []
+        for order_d in f_d.get("tool_orders", []) or []:
+            from game.systems.work.toolmaker_system import ToolOrderSubject
+            f.tool_order_subjects.append(ToolOrderSubject(f, dict(order_d)))
         furniture_manager.furnitures.append(f)
     if hasattr(furniture_manager, "invalidate_cache"):
         furniture_manager.invalidate_cache()
@@ -705,6 +713,7 @@ def deserialize_game_state(data, day_cycle, resources, player, permit_manager, b
             v.task = m_d.get("task", "IDLE")
             v.carrying_crop = m_d.get("carrying_crop", 0)
             v.inventory = dict(m_d.get("inventory", {}))
+            v.tool_conditions = {k: list(v2) for k, v2 in (m_d.get("tool_conditions", {}) or {}).items()}
             v.currency = dict(m_d.get("currency", {}))
             v.active_tool = m_d.get("active_tool", None)
             v.has_water = m_d.get("has_water", False)

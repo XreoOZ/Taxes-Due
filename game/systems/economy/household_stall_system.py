@@ -220,17 +220,18 @@ class HouseholdStallSystem:
         if chest_stock <= 0:
             return 0
 
+        # Percentage is live: the cap always tracks the household's CURRENT
+        # chest stock, so 10% of 100 potatoes sells 10, and if the chest
+        # grows to 200 it sells up to 20 — never a stale absolute number.
+        max_alloc = int(math.ceil(chest_stock * (pct / 100.0)))
         if not isinstance(getattr(market, "household_sale_limits", None), dict):
             market.household_sale_limits = {}
-        max_alloc = market.household_sale_limits.get(item_name)
-        if max_alloc is None or int(max_alloc) <= 0:
-            max_alloc = int(math.ceil(chest_stock * (pct / 100.0)))
-            market.household_sale_limits[item_name] = max_alloc
+        market.household_sale_limits[item_name] = max_alloc
         current_mkt_stock = market.inventory.get(item_name, 0) if hasattr(market, "inventory") else 0
         in_transit = getattr(market, "_stall_in_transit", {}).get(item_name, 0)
 
         remaining_alloc = max(0, max_alloc - (current_mkt_stock + in_transit))
-        # Replenish sales up to the saved cap without exceeding actual household stock.
+        # Replenish sales up to the percentage cap without exceeding actual household stock.
         return min(remaining_alloc, chest_stock)
 
     @classmethod

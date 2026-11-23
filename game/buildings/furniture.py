@@ -473,6 +473,50 @@ class Furniture:
                         table.top - max(2, int(scaled_t * (0.10 + abs(swing) * 0.025))))
             pygame.draw.line(surface, iron, (table.centerx, table.top + 1), tool_end, max(1, int(camera.zoom * 2)))
 
+        elif self.furniture_type == "toolmaker_workbench":
+            # Smithy: stone forge base, anvil, quench trough, tool rack.
+            inset = max(3, int(scaled_t * 0.08))
+            pad = pygame.Rect(sx + inset, sy + inset,
+                              max(4, scaled_w - inset * 2), max(4, scaled_h - inset * 2))
+            u = max(4, int(min(pad.width, pad.height) * 0.16))
+            frame = self.type_cfg.get("color_frame", (70, 55, 38))
+            top = self.type_cfg.get("color_top", (112, 85, 48))
+            iron = self.type_cfg.get("color_iron", (100, 116, 139))
+            anvil_col = self.type_cfg.get("color_anvil", (71, 85, 105))
+            pygame.draw.rect(surface, (0, 0, 0, 60), pad.move(2, 3), border_radius=6)
+            pygame.draw.rect(surface, frame, pad, border_radius=6)
+            pygame.draw.rect(surface, top, pad.inflate(-u // 2, -u // 2), border_radius=4)
+            # Forge mouth (left): dark opening with ember glow
+            forge_x = pad.left + u
+            forge_y = pad.top + pad.height * 0.45
+            forge_r = pygame.Rect(forge_x, forge_y, u * 1.6, u * 1.5)
+            pygame.draw.rect(surface, (40, 30, 24), forge_r, border_radius=3)
+            pygame.draw.rect(surface, (220, 90, 30),
+                             (forge_r.left + u // 4, forge_r.bottom - u // 2, u, u // 3), border_radius=2)
+            pygame.draw.circle(surface, (255, 200, 80), forge_r.center, max(2, u // 6))
+            # Anvil (center): base + body + horn
+            ax = pad.centerx + u // 2
+            ay = pad.bottom - u * 1.1
+            pygame.draw.rect(surface, anvil_col, (ax - u // 2, ay, u, u // 3), border_radius=2)
+            pygame.draw.rect(surface, anvil_col, (ax - u // 3, ay - u // 3, int(u * 0.75), u // 3), border_radius=2)
+            pygame.draw.polygon(surface, anvil_col,
+                                [(ax + int(u * 0.42), ay - u // 3), (ax + int(u * 0.85), ay - u // 5),
+                                 (ax + int(u * 0.42), ay - u // 6)])
+            pygame.draw.rect(surface, (40, 48, 60), (ax - u // 3, ay - u // 3, int(u * 0.75), u // 8), border_radius=1)
+            # Quench trough (right): barrel with water glint
+            qx = pad.right - u * 1.9
+            qy = pad.bottom - u * 1.2
+            pygame.draw.rect(surface, (88, 58, 32), (qx, qy, u * 0.9, u * 1.1), border_radius=3)
+            pygame.draw.rect(surface, (56, 189, 248), (qx + 2, qy + 2, u * 0.9 - 4, u * 0.3), border_radius=2)
+            # Tool rack (top-right): hanging pick silhouettes
+            rx = pad.right - u * 1.1
+            ry = pad.top + u // 2
+            pygame.draw.line(surface, iron, (rx - u // 4, ry), (rx + u, ry), max(1, u // 8))
+            for i in range(3):
+                tx = rx + i * u * 0.32
+                pygame.draw.line(surface, (120, 80, 50), (tx, ry), (tx, ry + u * 0.45), max(1, u // 10))
+                pygame.draw.rect(surface, iron, (tx - u // 12, ry + u * 0.45, u // 6, u // 5), border_radius=1)
+
         elif self.furniture_type == "confession_box":
             frame = self.type_cfg.get("color_frame", (92, 57, 34))
             panel = self.type_cfg.get("color_panel", (122, 75, 42))

@@ -257,12 +257,8 @@ class Servant:
             from game.systems.work.builder_system import BuilderSystem
             from game.systems.village_life.cemetery_system import CemeterySystem
             from game.systems.economy.currency import compact_currency_wallet, from_copper, to_copper
-            order_subject = next((entity for entity in (
-                list(getattr(furniture_manager, "furnitures", []))
-                + list(getattr(building_manager, "buildings", []))
-                + list(getattr(building_manager, "construction_sites", []))
-            ) if str((getattr(entity, "construction_order", None) or {}).get("id"))
-                 == str(self.builder_commission_order_id)), None)
+            order_subject = BuilderSystem._find_subject_by_order_id(
+                self.builder_commission_order_id, furniture_manager, building_manager)
             order = getattr(order_subject, "construction_order", None) if order_subject else None
             builder = next((worker for worker in (villager_manager.get_all_villagers() if villager_manager else [])
                               if str(getattr(worker, "id", "")) == str(self.builder_commission_builder_id)

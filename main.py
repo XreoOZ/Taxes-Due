@@ -90,6 +90,9 @@ from game.ui.modals.market_modal import MarketProfileModal
 from game.ui.modals.add_item_modal import AddItemModal
 from game.ui.modals.cheat_modal import CheatModal
 from game.ui.modals.builder_catalog_modal import BuilderCatalogModal
+from game.ui.modals.toolmaker_catalog_modal import ToolmakerCatalogModal
+from game.systems.work.toolmaker_system import ToolmakerSystem
+from game.systems.work.tool_condition import ToolConditionSystem
 from game.ui.path_debug_overlay import PathDebugOverlay
 from game.ui.map_overlay import MapOverlay
 from game.systems.economy.production_distribution import ProductionDistributionSystem
@@ -157,6 +160,8 @@ def furniture_menu_actions(f):
     ftype = getattr(f, "furniture_type", "")
     if ftype == "builder_workbench":
         acts.append(("catalogue", "Catalogue"))
+    if ftype == "toolmaker_workbench":
+        acts.append(("tool_catalogue", "Forge Catalogue"))
     if ftype == "notice_board":
         acts.append(("immigrants", "Immigrants"))
     if workplace_bases_for("furniture", f):
@@ -210,6 +215,7 @@ def main():
     add_item_modal = AddItemModal()
     cheat_modal = CheatModal()
     builder_catalog_modal = BuilderCatalogModal()
+    toolmaker_catalog_modal = ToolmakerCatalogModal()
     path_debug_overlay = PathDebugOverlay(enabled=False)
     map_overlay = MapOverlay()
     production_system = ProductionDistributionSystem.get_instance()
@@ -392,6 +398,7 @@ def main():
         selected_structure = None
         moving_furniture = None
         builder_catalog_modal.close()
+        toolmaker_catalog_modal.close()
         original_permit_tiles.clear()
         planning_road_tiles.clear()
         road_drag_start = None
@@ -451,6 +458,7 @@ def main():
                             raport_ui.close()
                             market_modal.close()
                             builder_catalog_modal.close()
+                            toolmaker_catalog_modal.close()
                             planning_mode = "NONE"
                             session_planned_furniture.clear()
                             selected_planned_furniture = None
@@ -575,6 +583,22 @@ def main():
                         planning_building_tiles.clear()
                         planned_door_tile = None
                         planned_door_side = "bottom"
+                    continue
+
+                if toolmaker_catalog_modal.is_open:
+                    tool_action = toolmaker_catalog_modal.handle_event(event)
+                    if tool_action and tool_action.startswith("tool_order_"):
+                        try:
+                            wb = toolmaker_catalog_modal.workbench or selected_furniture
+                            toolmaker_catalog_modal.close()
+                            _, tool_name, qty_str = tool_action.split("_", 2)
+                            subject, err = ToolmakerSystem.create_tool_order(
+                                wb, tool_name, int(qty_str), payer_family_id=None,
+                                building_manager=building_manager, villager_manager=villager_manager)
+                            if err:
+                                print(f"[Toolmaker] order failed: {err}")
+                        except Exception as exc:
+                            print(f"[Toolmaker] order error: {exc}")
                     continue
 
                 # World map overlay (M): fullscreen view-only map; WASD keeps working.
@@ -1472,6 +1496,8 @@ def main():
                                         act = ab["action"]
                                         if act == "catalogue":
                                             builder_catalog_modal.open(selected_furniture)
+                                        elif act == "tool_catalogue":
+                                            toolmaker_catalog_modal.open(selected_furniture)
                                         elif act == "immigrants":
                                             raport_ui.open_immigrant_tab()
                                         elif act == "workplace":
@@ -1570,7 +1596,7 @@ def main():
                             # checked before entities so a worker standing on the tile
                             # doesn't swallow the click.
                             clicked_f = furniture_manager.get_furniture_at(m_gx, m_gy)
-                            if clicked_f and (clicked_f.furniture_type in ("builder_workbench", "notice_board")
+                            if clicked_f and (clicked_f.furniture_type in ("builder_workbench", "notice_board", "toolmaker_workbench")
                                               or workplace_bases_for("furniture", clicked_f)):
                                 selected_furniture = clicked_f
                                 selected_entity = None
@@ -1720,6 +1746,9 @@ def main():
                 villager_manager.daily_midnight_update(day_cycle.day_number)
                 furniture_manager.daily_wear_update(days_passed)
                 building_manager.daily_public_maintenance_update(days_passed)
+                ToolConditionSystem.daily_tick(
+                    day_cycle.day_number, villager_manager, furniture_manager,
+                    building_manager, stockpile_manager)
             furniture_manager.check_breaks_by_time(day_cycle.day_number, day_cycle.current_hour)
             day_dt = game_dt / max(1.0, day_cycle.day_length_seconds)
             cur_day_time = day_cycle.day_number + (day_cycle.current_hour / 24.0)
@@ -1801,6 +1830,25 @@ def main():
                     building_manager, furniture_manager, villager_manager,
                     servant_manager=servant_manager, stockpile_manager=stockpile_manager,
                     day_cycle=day_cycle)
+                # Landlord-paid tool orders need the same servant treasury
+                # courier dispatch as public builder commissions.
+                for _wb in ToolmakerSystem._toolmaker_workbenches(furniture_manager):
+                    for _sub in getattr(_wb, "tool_order_subjects", []) or []:
+                        _o = getattr(_sub, "construction_order", None)
+                        if (isinstance(_o, dict)
+                                and _o.get("status") == "LANDLORD_PAYMENT_PENDING"
+                                and _o.get("artisan_job") == "Toolmaker"
+                                and (not _o.get("_dispatch_retry_at")
+                                     or perf_counter() >= float(_o["_dispatch_retry_at"]))):
+                            _ok, _msg = BuilderSystem.request_public_commission(
+                                _sub, None, servant_manager, villager_manager,
+                                building_manager, day_cycle=day_cycle,
+                                stockpile_manager=stockpile_manager,
+                                furniture_manager=furniture_manager)
+                            if not _ok:
+                                _o["_dispatch_retry_at"] = perf_counter() + 30.0
+                            else:
+                                _o.pop("_dispatch_retry_at", None)
 
             # Immigration: pending households travel/wait/leave at the Notice Board.
             if furniture_manager is not None and villager_manager is not None:
@@ -3347,6 +3395,7 @@ def main():
 
             # The workbench catalogue is the topmost modal when opened from the map.
             builder_catalog_modal.draw(screen, building_manager, villager_manager)
+            toolmaker_catalog_modal.draw(screen, building_manager, villager_manager)
 
             # 14. Save / Load Modal Dialog (Topmost overlay)
             save_modal.draw(screen)

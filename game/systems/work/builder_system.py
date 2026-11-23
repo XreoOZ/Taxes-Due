@@ -409,6 +409,10 @@ class BuilderSystem:
         subjects = []
         if furniture_manager:
             subjects.extend(getattr(furniture_manager, "furnitures", []))
+            # Toolmaker tool orders live on workbenches as ToolOrderSubject
+            # entries so they share the commission/payment/refund machinery.
+            for f in getattr(furniture_manager, "furnitures", []):
+                subjects.extend(getattr(f, "tool_order_subjects", None) or [])
         if building_manager:
             subjects.extend(getattr(building_manager, "construction_sites", []))
             subjects.extend(getattr(building_manager, "buildings", []))
@@ -450,10 +454,8 @@ class BuilderSystem:
         )
 
     @classmethod
-    def _get_order(cls, furniture_manager, order_id):
-        return next((f for f in getattr(furniture_manager, "furnitures", [])
-                     if str(getattr(f, "id", "")) == str(order_id)
-                     and getattr(f, "construction_order", None)), None)
+    def _get_order(cls, furniture_manager, order_id, building_manager=None):
+        return cls._find_subject_by_order_id(order_id, furniture_manager, building_manager)
 
     @classmethod
     def _move_exact_value(cls, source, destination, amount):
@@ -585,7 +587,7 @@ class BuilderSystem:
                 stockpile_manager, all_entities, player, villager_manager)
         if task not in ("BUILDER_FEE_RETRIEVE", "BUILDER_FEE_TRAVEL", "BUILDER_FEE_LANDLORD_RETRIEVE"):
             return False
-        order_furniture = cls._get_order(furniture_manager, getattr(villager, "builder_payment_order_id", None))
+        order_furniture = cls._get_order(furniture_manager, getattr(villager, "builder_payment_order_id", None), building_manager)
         if not order_furniture:
             villager.builder_payment_order_id = None
             villager.builder_payment_builder_id = None

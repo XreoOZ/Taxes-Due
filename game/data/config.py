@@ -268,6 +268,7 @@ MINE_YIELD_PER_INGAME_HOUR = {
 }
 MINE_TYPE_TABLE = {
     "Stone Mine": {"output_item": "Stone", "weight": 1},
+    "Iron Mine": {"output_item": "Iron Ore", "weight": 2},
 }
 BUILDER_DEFAULT_LIVING_HOUSEHOLD_SIZE = 1
 FURNITURE_DAILY_BREAK_CHANCE = 0.05
@@ -275,6 +276,29 @@ BUILDER_REPAIR_FOOD_DAYS = 3
 BUILDER_REPAIR_MATERIALS = {"Wood": 2}
 # Commission queue: seconds before a failed payment claim may be retried.
 COMMISSION_CLAIM_RETRY_SECONDS = 20.0
+
+# -----------------------------------------------------------------------------
+# Toolmaker System (Iron chain: Iron Mine -> Iron Ore -> Iron Bar -> Tools)
+# -----------------------------------------------------------------------------
+# Smelting: 1 Iron Ore + 1 Wood -> 1 Iron Bar at the Toolmaker Workbench.
+TOOLMAKER_BAR_RECIPE = {"Iron Ore": 1, "Wood": 1}
+TOOLMAKER_BAR_SMELT_INGAME_MINUTES = 10.0
+# Automatic bar production: keep up to this many bars in the toolmaker's
+# household chest; never exceed this many smelts per in-game day.
+TOOLMAKER_BAR_STOCK_TARGET = 10
+TOOLMAKER_BAR_DAILY_CAP = 10
+# Tool forging: every craftable tool costs this per unit, build time is a
+# per-unit RNG roll between min and max in-game hours.
+TOOLMAKER_TOOL_RECIPE = {"Wood": 2, "Iron Bar": 3}
+TOOLMAKER_TOOL_MIN_INGAME_HOURS = 1.0
+TOOLMAKER_TOOL_MAX_INGAME_HOURS = 2.0
+# Craftable catalogue = every item whose ITEM_CATEGORIES value is "TOOL".
+# -----------------------------------------------------------------------------
+# Tool Condition Lifecycle (per-unit wear on every TOOL item)
+# -----------------------------------------------------------------------------
+TOOL_CONDITION_STAGES = ["PRISTINE", "GOOD", "WORN", "DAMAGED", "BROKEN"]
+TOOL_CONDITION_DEGRADE_CHANCE = 0.30   # per unit, per check
+TOOL_CONDITION_CHECK_EVERY_DAYS = 2     # degradation sweep cadence
 # Orders carry "artisan_job"; missing value falls back to this job id.
 DEFAULT_COMMISSION_ARTISAN_JOB = "Builder"
 BUILDER_TOOL_SWING_SPEED = 7.0
@@ -491,6 +515,17 @@ DEDICATED_JOBS = {
         "workplace_furniture_type": "miner_workstation",
         "desc": "Extracts ore at the mine a Miner Workstation is built upon (Stone, Copper, Gold, ...).",
         "required_tools": ["Pickaxe", "Sledgehammer"]
+    },
+    "Toolmaker": {
+        "id": "Toolmaker",
+        "name": "Toolmaker",
+        "title": "Toolmaker",
+        "color": (180, 83, 9),
+        "wip": False,
+        "workplace_furniture_type": "toolmaker_workbench",
+        "desc": "Smelts iron ore into bars and forges tools at the Toolmaker Workbench (hammer, tongs, and moulds).",
+        "required_tools": [],
+        "material_stock_target": {"Wood": 10}
     }
 }
 
@@ -586,7 +621,7 @@ SCHEDULE_ACTIVITY_TASK_PREFIXES = (
     ("GRAVEDIGGER_RESTOCK_", "WORK"),
     ("HAULING_STALL_", "LEISURE"),
 )
-ARTISAN_JOB_IDS = ("Builder", "Blacksmith", "Baker")
+ARTISAN_JOB_IDS = ("Builder", "Blacksmith", "Baker", "Toolmaker")
 SCHEDULE_ACTIVITY_STRICT_TASK_PREFIXES = tuple(
     f"{job.upper()}_" for job in ARTISAN_JOB_IDS
 )
@@ -762,6 +797,8 @@ DEFAULT_ITEM_PRICES = {
     "Spade": 8,
     "Pickaxe": 14,
     "Sledgehammer": 10,
+    "Iron Ore": 4,      # Raw ore; base for smelting cost
+    "Iron Bar": 10,     # Smelted bar: ore + wood + labor priced in
 }
 
 # Only goods with implemented storage and market behavior are listed here.
@@ -780,6 +817,8 @@ MARKET_TRADEABLE_ITEMS = {
     "Spade": "Spade",
     "Pickaxe": "Pickaxe",
     "Sledgehammer": "Sledgehammer",
+    "Iron Ore": "Iron Ore",
+    "Iron Bar": "Iron Bar",
 }
 MARKET_CURRENCY_DENOMINATIONS = ("Gold", "Silver", "Copper")
 MARKET_DEFAULT_HOUSEHOLD_SALE_PERCENT = 20
@@ -847,6 +886,10 @@ ITEM_CATEGORIES = {
     "Linen Cloth": "RESOURCE",
     "Copper Ore": "RESOURCE",
     "Gold Ore": "RESOURCE",
+    "Iron Ore": "RESOURCE",
+    "iron ore": "RESOURCE",
+    "Iron Bar": "RESOURCE",
+    "iron bar": "RESOURCE",
 
     # CURRENCY
     "Copper": "CURRENCY",
@@ -916,6 +959,8 @@ RESOURCE_COLORS = {
     "Sledgehammer": (71, 85, 105),
     "Copper Ore": (194, 96, 40),
     "Gold Ore": (234, 179, 8),
+    "Iron Ore": (120, 72, 40),
+    "Iron Bar": (148, 163, 184),
 }
 
 TOOL_TYPES = {
@@ -1671,6 +1716,24 @@ FURNITURE_TYPES = {
         "color_frame": (71, 85, 105),
         "color_roof": (51, 65, 85),
         "color_rock": (100, 116, 139)
+    },
+    "toolmaker_workbench": {
+        "id": "toolmaker_workbench",
+        "name": "Toolmaker Workbench",
+        "category_id": "workplace",
+        "desc": "Smithy bench with anvil, tongs, and moulds. Smelts iron bars and forges tools to order.",
+        "capacity": 0,
+        "materials": {"Wood": 15, "Stone": 10},
+        "width_tiles": 2,
+        "height_tiles": 1,
+        "max_workers": 2,
+        "household_owned": False,
+        "placement_anywhere": True,
+        "maintainable": False,
+        "color_frame": (70, 55, 38),
+        "color_top": (112, 85, 48),
+        "color_iron": (100, 116, 139),
+        "color_anvil": (71, 85, 105)
     },
     # *** ESTABLISHED — DO NOT REGRESS ***
     # Notice Board attracts immigrant households. UNIQUE: max 1 per village

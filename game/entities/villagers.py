@@ -2853,6 +2853,14 @@ class Villager:
         ):
             return
 
+        from game.systems.work.toolmaker_system import ToolmakerSystem
+        if ToolmakerSystem.update_worker(
+            self, dt, sched_activity, building_manager, furniture_manager,
+            villager_manager, all_entities, player, day_cycle,
+            stockpile_manager=stockpile_manager, permit_manager=permit_manager,
+        ):
+            return
+
         if sched_activity in ("WORK", "ANY"):
             # Jika sedang membawa hasil panen di tangan, antar langsung ke Household Storage keluarga
             if self.carrying_crop > 0:
