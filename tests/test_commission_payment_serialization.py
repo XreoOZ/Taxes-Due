@@ -215,10 +215,9 @@ class TestAssignPaymentSerialization(unittest.TestCase):
                             for e in rep_b.pending_commission_tasks))
         self.assertEqual(len(rep_a.pending_commission_tasks), 0)
 
-    def test_second_family_member_pays_in_parallel(self):
-        """Anti-oscillation is per member: a second living member MAY run a
-        parallel errand for the same family — orders only wait when every
-        able member is already mid-flight."""
+    def test_second_family_member_also_serializes(self):
+        """One representative per household: a second living member must NOT
+        start a parallel errand while the family's payment is in flight."""
         rep1 = make_payer("v1", "fam_p")
         rep2 = make_payer("v2", "fam_p")
         fam = make_family("fam_p", [rep1, rep2])
@@ -231,36 +230,28 @@ class TestAssignPaymentSerialization(unittest.TestCase):
         CommissionScheduleSystem.activate(rep1, "LEISURE")
         self.assertEqual(rep1.task, "BUILDER_FEE_RETRIEVE")
 
-        # rep1 is busy — the order must go to the OTHER free member.
         o2 = make_order("m2", "fam_p")
-        self.assertTrue(BuilderSystem._assign_payment(
+        self.assertFalse(BuilderSystem._assign_payment(
             make_order_subject(o2, "fm2"), vm, fm, None))
-        self.assertEqual(o2.construction_order["status"], "PAYMENT_REQUESTED")
-        self.assertEqual(o2.construction_order["payer_id"], "v2")
-        self.assertTrue(any(e["task"] == "BUILDER_FEE_RETRIEVE"
-                            for e in rep2.pending_commission_tasks))
+        self.assertEqual(o2.construction_order["status"], "AWAITING_PAYMENT")
+        self.assertFalse(any(e["task"] == "BUILDER_FEE_RETRIEVE"
+                             for e in rep2.pending_commission_tasks))
 
-    def test_order_waits_when_all_members_busy(self):
-        """With every able member mid-flight, the next order stays
-        AWAITING_PAYMENT instead of double-booking a payer."""
-        rep1 = make_payer("v1", "fam_p")
-        rep2 = make_payer("v2", "fam_p")
-        fam = make_family("fam_p", [rep1, rep2])
-        vm = make_villager_manager({"fam_p": fam}, [rep1, rep2])
+    def test_committed_fees_reduce_available_funds(self):
+        """Simultaneous orders must not each pass affordability against the
+        same coins: fees in transit reserve household funds."""
+        rep = make_payer("v1", "fam_p")
+        fam = make_family("fam_p", [rep])
+        vm = make_villager_manager({"fam_p": fam}, [rep])
         fm = make_furniture_manager()
 
-        for i in range(2):
-            o = make_order(f"m{i}", "fam_p")
-            self.assertTrue(BuilderSystem._assign_payment(
-                make_order_subject(o, f"fm{i}"), vm, fm, None))
-        # Both members now have queued/in-flight fee errands.
-        rep1.pending_commission_tasks.append({"task": "BUILDER_FEE_RETRIEVE"})
-        rep2.pending_commission_tasks.append({"task": "BUILDER_FEE_RETRIEVE"})
-
-        o3 = make_order("m3", "fam_p")
-        self.assertFalse(BuilderSystem._assign_payment(
-            make_order_subject(o3, "fm3"), vm, fm, None))
-        self.assertEqual(o3.construction_order["status"], "AWAITING_PAYMENT")
+        o1 = make_order("c1", "fam_p", price=10)
+        subject = make_order_subject(o1, "fc1")
+        fm.furnitures.append(subject)  # register so _order_subjects sees it
+        self.assertTrue(BuilderSystem._assign_payment(subject, vm, fm, None))
+        # o1 now PAYMENT_REQUESTED -> its fee is committed.
+        committed = BuilderSystem._family_committed_fee_copper("fam_p", fm)
+        self.assertEqual(committed, 10)
 
 
 def make_order_subject(order_ns, sid):

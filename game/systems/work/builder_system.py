@@ -542,6 +542,32 @@ class BuilderSystem:
         return False
 
     @classmethod
+    def _family_committed_fee_copper(cls, family_id, furniture_manager):
+        """Total commission fees already spoken for by payment errands in
+        transit (queued / coins collected / traveling to the artisan).
+
+        These coins are still physically inside the household's wallets, so
+        the raw coin total alone would let simultaneous orders overspend.
+        PAID-and-beyond orders are excluded: their coins have already been
+        physically handed to the artisan and left the household's wallets.
+        """
+        if not furniture_manager or family_id is None:
+            return 0
+        fam_str = str(family_id)
+        transit = {"PAYMENT_REQUESTED", "PAYMENT_TRAVELING", "LANDLORD_RETRIEVING"}
+        bm = getattr(furniture_manager, "building_manager", None)
+        total = 0
+        for subject in cls._order_subjects(furniture_manager, bm):
+            o = getattr(subject, "construction_order", None)
+            if not isinstance(o, dict):
+                continue
+            if str(o.get("payer_family_id") or "") != fam_str:
+                continue
+            if o.get("status") in transit:
+                total += max(0, int(o.get("price_copper", 0) or 0))
+        return total
+
+    @classmethod
     def _assign_payment(cls, order_furniture, villager_manager, furniture_manager, stockpile_manager=None):
         order = order_furniture.construction_order
         family_id = order.get("payer_family_id")
@@ -550,28 +576,33 @@ class BuilderSystem:
         if survivors:
             chest = furniture_manager.get_storage_for_family(family_id)
             fee = int(order["price_copper"])
-            if cls._family_coin_total_copper(family_id, chest, stockpile_manager, villager_manager) < fee:
+            # Reserve fees already spoken for by payment errands in transit:
+            # without this, N simultaneous orders each pass the same
+            # affordability check and the household pays N times its coins.
+            committed = cls._family_committed_fee_copper(family_id, furniture_manager)
+            if cls._family_coin_total_copper(family_id, chest, stockpile_manager, villager_manager) - committed < fee:
                 order["status"] = "AWAITING_PAYMENT"
                 return False
-            # Anti-oscillation is per MEMBER, not per family: a household may
-            # run several commission payments in parallel as long as each
-            # errand belongs to a different member. Orders only wait when
-            # EVERY able member is already mid-flight on a fee errand.
+            # One representative, one errand at a time per household: while a
+            # member is mid-flight (or queued) on a builder-fee errand, further
+            # orders for THIS family wait for it to finish (retrieve ->
+            # deliver -> PAID). The schedule's in-flight guard prevents the
+            # same rep oscillating between orders.
+            if cls._family_fee_errand_active(family):
+                order["status"] = "AWAITING_PAYMENT"
+                return False
+            payer = family.get_available_recovery_representative() if hasattr(family, "get_available_recovery_representative") else survivors[0]
             builder_id = str(order.get("builder_id"))
-            free_members = [m for m in survivors if not cls._member_fee_errand_active(m)]
-            if not free_members:
-                order["status"] = "AWAITING_PAYMENT"
+            if payer and str(getattr(payer, "id", "")) == builder_id:
+                other_members = [member for member in survivors if str(getattr(member, "id", "")) != builder_id]
+                if other_members:
+                    payer = next((member for member in other_members
+                                  if getattr(member, "task", "") not in ("SEEKING_FOOD", "SEEKING_WATER", "SEEKING_TOILET", "RECOVER_DEATH_ITEMS")
+                                  and getattr(member, "hunger", 100.0) > 20.0
+                                  and getattr(member, "thirst", 100.0) > 20.0
+                                  and getattr(member, "need_toilet", 100.0) > 20.0), other_members[0])
+            if not payer:
                 return False
-            available = [
-                m for m in free_members
-                if getattr(m, "task", "") not in ("SEEKING_FOOD", "SEEKING_WATER", "SEEKING_TOILET", "RECOVER_DEATH_ITEMS")
-                and getattr(m, "hunger", 100.0) > 20.0
-                and getattr(m, "thirst", 100.0) > 20.0
-                and getattr(m, "need_toilet", 100.0) > 20.0
-            ]
-            pool = available or free_members
-            non_builder = [m for m in pool if str(getattr(m, "id", "")) != builder_id]
-            payer = (non_builder or pool)[0]
             builder = next((member for member in survivors
                                if str(getattr(member, "id", "")) == builder_id), None)
             if str(getattr(payer, "id", "")) == builder_id and builder:
@@ -1153,19 +1184,74 @@ class BuilderSystem:
     @classmethod
     def _begin_restock(cls, builder, missing, building_manager, furniture_manager, villager_manager,
                        payer_type=None, family_id=None):
-        from game.systems.economy.market_purchasing import AIMarketPurchasingSystem
-        for material, quantity in missing.items():
-            market, _, affordable = AIMarketPurchasingSystem.find_nearest_market_for_material(
-                builder, material, quantity, building_manager, furniture_manager, villager_manager)
-            if market and affordable:
-                builder.target_restock_market = market
-                builder.target_restock_mat = material
-                builder.target_restock_qty = affordable
-                builder.target_restock_payer_type = payer_type
-                builder.target_restock_family_id = family_id
-                builder.task = "BUILDER_RESTOCK_RETRIEVE_COINS"
-                return True
-        return False
+        """Plan ONE market run covering as many missing materials as possible.
+
+        Every deficit is priced against its best market; the market that can
+        supply the largest total quantity wins the trip, and quantities are
+        scaled down to fit the household's coins and the villager's carry
+        capacity — so a worker needing 10 items buys them in one visit
+        instead of one item per round trip. Leftover deficits are picked up
+        by the next restock cycle."""
+        from game.systems.economy.market_purchasing import (
+            AIMarketPurchasingSystem, _inventory_room)
+        from game.systems.economy.market_service import MarketService
+        from game.systems.economy.currency import to_copper, normalize_wallet
+        if not missing:
+            return False
+
+        # Household spendable funds (chest + abstract wallets + pockets).
+        wallet, source = MarketService.get_household_funds_and_source(
+            builder, furniture_manager, villager_manager)
+        pocket = getattr(builder, "inventory", {})
+        pocket_funds = to_copper(normalize_wallet(pocket))
+        total_funds = to_copper(wallet) + (0 if source is pocket else pocket_funds)
+        room = max(0, int(_inventory_room(pocket)))
+        if total_funds <= 0 or room <= 0:
+            return False
+
+        # Best market per material.
+        by_market = {}
+        for material, need in missing.items():
+            need = max(1, int(need))
+            market, unit_price, qty = AIMarketPurchasingSystem.find_nearest_market_for_material(
+                builder, material, need, building_manager, furniture_manager, villager_manager)
+            if not market or qty <= 0:
+                continue
+            by_market.setdefault(market, []).append(
+                {"material": material, "qty": int(qty), "unit_price": int(unit_price)})
+        if not by_market:
+            return False
+
+        # Cheapest-feasible market = the one covering the most total units.
+        market = max(by_market, key=lambda m: sum(i["qty"] for i in by_market[m]))
+        items = by_market[market]
+
+        # Fit the shopping list into funds + carry room (keep order stable).
+        budget = total_funds
+        capacity = room
+        fitted = []
+        for item in items:
+            affordable = budget // max(1, item["unit_price"])
+            qty = max(0, min(item["qty"], affordable, capacity))
+            if qty <= 0:
+                continue
+            fitted.append({"material": item["material"], "qty": qty,
+                           "unit_price": item["unit_price"]})
+            budget -= qty * item["unit_price"]
+            capacity -= qty
+        if not fitted:
+            return False
+
+        builder.target_restock_market = market
+        builder.target_restock_items = fitted
+        # Legacy single-item fields mirror the first entry for any reader
+        # that still expects them.
+        builder.target_restock_mat = fitted[0]["material"]
+        builder.target_restock_qty = sum(i["qty"] for i in fitted)
+        builder.target_restock_payer_type = payer_type
+        builder.target_restock_family_id = family_id
+        builder.task = "BUILDER_RESTOCK_RETRIEVE_COINS"
+        return True
 
     @classmethod
     def _update_restock(cls, builder, dt, building_manager, furniture_manager, villager_manager,
@@ -1187,12 +1273,18 @@ class BuilderSystem:
             builder.target_restock_market = None
             builder.target_restock_mat = None
             builder.target_restock_qty = 0
+            builder.target_restock_items = None
             builder.target_restock_payer_type = None
             builder.target_restock_family_id = None
             return True
         unit_price = MarketService.get_item_price(material, market)
+        # Shopping list planned by _begin_restock: every material this run
+        # buys, with the unit price locked at planning time.
+        items = getattr(builder, "target_restock_items", None) or [
+            {"material": material, "qty": int(quantity), "unit_price": int(unit_price)}]
+        total_cost = sum(int(i["qty"]) * int(i["unit_price"]) for i in items)
         if task == "BUILDER_RESTOCK_RETRIEVE_COINS":
-            needed_coins = unit_price * quantity
+            needed_coins = total_cost
             pocket_coins = to_copper(normalize_wallet(getattr(builder, "inventory", {})))
             if pocket_coins >= needed_coins:
                 arrived = True
@@ -1233,11 +1325,22 @@ class BuilderSystem:
                                        all_entities=all_entities, player=player,
                                        building_manager=building_manager, furniture_manager=furniture_manager,
                                        interaction_target=market):
-                ok, message = AIMarketPurchasingSystem.execute_material_transaction(builder, market, material, quantity)
-                if ok:
+                # One market counter, whole shopping list: buy every planned
+                # material in a single visit (partial buys still haul home).
+                bought_any = False
+                last_msg = ""
+                for item in items:
+                    ok, msg = AIMarketPurchasingSystem.execute_material_transaction(
+                        builder, market, item["material"], int(item["qty"]))
+                    if ok:
+                        bought_any = True
+                    else:
+                        last_msg = msg
+                        break
+                if bought_any:
                     builder.task = "BUILDER_RESTOCK_HAULING_HOME"
                 else:
-                    builder.say(message, duration=2.5)
+                    builder.say(last_msg or "Purchase failed at the market.", duration=2.5)
                     builder.task = "IDLE"
             return True
         if task == "BUILDER_RESTOCK_HAULING_HOME":
@@ -1264,9 +1367,21 @@ class BuilderSystem:
                         furniture_manager.invalidate_cache()
                     else:
                         AIMarketPurchasingSystem.deposit_materials_and_change_to_chest(builder, furniture_manager)
+                    # Shopping-list materials may sit outside the job's
+                    # material_stock_target (e.g. Iron Bar for the Toolmaker)
+                    # — deposit every purchased item into the chest.
+                    for item in items:
+                        mat = item["material"]
+                        amt = int(builder.inventory.get(mat, 0) or 0)
+                        if amt > 0 and chest is not None:
+                            chest.store_item(mat, amt)
+                            del builder.inventory[mat]
+                    if chest is not None:
+                        furniture_manager.invalidate_cache()
                     builder.target_restock_market = None
                     builder.target_restock_mat = None
                     builder.target_restock_qty = 0
+                    builder.target_restock_items = None
                     builder.target_restock_payer_type = None
                     builder.target_restock_family_id = None
                     builder.say("Restocked Builder materials.", duration=2.0)
@@ -1330,7 +1445,11 @@ class BuilderSystem:
                         ref_x=home_x, ref_y=home_y)
                 if drop_tile is None:
                     drop_tile = (int(home_x // TILE_SIZE), int(home_y // TILE_SIZE))
-                for material in material_targets:
+                drop_materials = dict(material_targets)
+                for item in items:
+                    drop_materials[item["material"]] = max(
+                        drop_materials.get(item["material"], 0), int(item["qty"]))
+                for material in drop_materials:
                     surplus = max(0, int(builder.inventory.get(material, 0)) - int(retained.get(material, 0)))
                     if surplus and stockpile_manager:
                         builder.inventory[material] -= surplus
@@ -1346,6 +1465,7 @@ class BuilderSystem:
                 builder.target_restock_market = None
                 builder.target_restock_mat = None
                 builder.target_restock_qty = 0
+                builder.target_restock_items = None
                 return False
             return True
         return False

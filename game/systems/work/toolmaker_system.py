@@ -333,12 +333,14 @@ class ToolmakerSystem:
             if wood_target > cls._chest_qty(chest, "Wood"):
                 missing["Wood"] = max(missing.get("Wood", 0), wood_target - cls._chest_qty(chest, "Wood"))
             if "Iron Bar" in missing:
-                # Bars are produced, not bought: try smelting one now.
+                # Bars are produced in-house first (smelt), but Iron Bar is
+                # also tradeable — when smelting can't run (no ore, cap hit,
+                # restock failed) keep it in `missing` so the market restock
+                # below can buy bars directly instead of stalling forever.
                 if cls._smelt_step(toolmaker, dt, furniture_manager, building_manager,
                                    villager_manager, all_entities, player, day_cycle):
                     order["status"] = "AWAITING_MATERIAL"
                     return True
-                missing.pop("Iron Bar")
             if missing and cls._begin_material_restock(toolmaker, missing, building_manager,
                                                        furniture_manager, villager_manager):
                 order["status"] = "AWAITING_MATERIAL"
