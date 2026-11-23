@@ -1067,6 +1067,10 @@ SPEED_LEVELS = [
     {"id": "very_fast", "name": "Very Fast", "short_label": "4×", "speed": 4.0, "key_label": "5"},
 ]
 DEFAULT_SPEED_INDEX = 2  # Normal (1.0x)
+# Cap on simulated game-time consumed per rendered frame. Prevents a
+# hitched frame at high speed multipliers from queueing dozens of physics
+# substeps and spiralling the FPS further down.
+MAX_FRAME_GAME_DT = 0.15
 SPEED_CONTROL_UI = {
     "font_button": 12,
     "font_sub": 9,
@@ -1755,6 +1759,9 @@ CONFESSION_BUBBLE_DURATION_SECONDS = 5.0
 HAPPINESS_INITIAL_VALUE = 70.0
 HAPPINESS_MIN_VALUE = 0.0
 HAPPINESS_MAX_VALUE = 100.0
+# Full happiness recompute (permit/building scans, wallet normalize) is a
+# slow stat — throttle it to this many game-seconds per villager.
+HAPPINESS_REFRESH_INTERVAL_SECONDS = 5.0
 HAPPINESS_WEALTH_DENOMINATION = "Gold"
 HAPPINESS_STATUS_BANDS = (
     {"id": "miserable", "label": "Miserable", "min": 0.0, "max": 24.0},

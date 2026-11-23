@@ -38,6 +38,7 @@ from game.config import (
     PATH_TOGGLE_BTN_HEIGHT,
     MARKET_WEALTH_CONTEXT_REFRESH_SECONDS,
     SIMULATION_PROFILE_REPORT_SECONDS,
+    MAX_FRAME_GAME_DT,
     PLACEMENT_ORIENTATION_MARKER_LENGTH_RATIO,
     PLACEMENT_ORIENTATION_MARKER_HEAD_RATIO,
     PLACEMENT_ORIENTATION_MARKER_COLOR,
@@ -418,7 +419,7 @@ def main():
     while running:
         real_dt = min(clock.tick(FPS) / 1000.0, 0.1)
         profile_frame_start = perf_counter() if profile_enabled else 0.0
-        game_dt = speed_controller.get_game_dt(real_dt)
+        game_dt = min(speed_controller.get_game_dt(real_dt), MAX_FRAME_GAME_DT)
         if current_state == STATE_PLAYING and (settings_modal.is_open or save_modal.is_open or cheat_modal.is_open):
             game_dt = 0.0
 

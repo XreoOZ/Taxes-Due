@@ -34,6 +34,7 @@ from game.config import (
     AI_DECISION_MAX_INTERVAL_SECONDS,
     AI_DECISION_REFERENCE_POPULATION,
     AI_DECISION_TICK_INTERVAL_SECONDS,
+    HAPPINESS_REFRESH_INTERVAL_SECONDS,
     WATERING_DURATION_INGAME_HOURS,
     TILLING_DURATION_INGAME_HOURS,
     FARM_TILE_DISPERSION_ENABLED,
@@ -232,6 +233,7 @@ class Villager:
         self.happiness_status = HappinessSystem.status_for(self.happiness)
         self.happiness_effects = {}
         self.happiness_trigger_days = {}
+        self._happiness_refresh_acc = 0.0
         self.happiness_food_day = None
         self.happiness_food_types = []
         self.last_faith_decay_day = 1
@@ -1359,6 +1361,22 @@ class Villager:
 
         return True
 
+    def _refresh_happiness(self, world_dt, day_cycle, permit_manager,
+                           building_manager, furniture_manager, villager_manager):
+        """Throttled HappinessSystem.refresh. The full recompute scans
+        permits/buildings and normalizes the wallet, but happiness is a slow
+        stat — it only needs to run every HAPPINESS_REFRESH_INTERVAL_SECONDS
+        of game time instead of on every AI tick."""
+        self._happiness_refresh_acc += max(0.0, float(world_dt or 0.0))
+        if self._happiness_refresh_acc < HAPPINESS_REFRESH_INTERVAL_SECONDS:
+            return
+        self._happiness_refresh_acc = 0.0
+        from game.systems.happiness_system import HappinessSystem
+        HappinessSystem.refresh(
+            self, getattr(day_cycle, "day_number", 1), permit_manager,
+            building_manager, furniture_manager, villager_manager,
+        )
+
     def update(self, dt, permit_manager, building_manager, all_entities, player, stockpile_manager=None, furniture_manager=None, day_cycle=None, schedule_manager=None, production_system=None, villager_manager=None, market_service=None):
         # Guard: Deceased AI stops performing all jobs and activities
         if not getattr(self, "is_alive", True):
@@ -1425,10 +1443,8 @@ class Villager:
         # and activity progress only, never route-search computation or need decay.
         world_dt = dt
         from game.systems.happiness_system import HappinessSystem
-        HappinessSystem.refresh(
-            self, getattr(day_cycle, "day_number", 1), permit_manager,
-            building_manager, furniture_manager, villager_manager,
-        )
+        self._refresh_happiness(world_dt, day_cycle, permit_manager,
+                                building_manager, furniture_manager, villager_manager)
         dt = world_dt * HappinessSystem.activity_multiplier(self)
 
         if market_service is not None:
@@ -1618,10 +1634,8 @@ class Villager:
             self._move_to_assigned_bed(
                 dt, all_entities, player, building_manager, furniture_manager,
             )
-            HappinessSystem.refresh(
-                self, getattr(day_cycle, "day_number", 1), permit_manager,
-                building_manager, furniture_manager, villager_manager,
-            )
+            self._refresh_happiness(world_dt, day_cycle, permit_manager,
+                                    building_manager, furniture_manager, villager_manager)
             return
         if self.task == "ZONKED_SLEEP":
             if sched_activity == "SLEEP":
@@ -1632,10 +1646,8 @@ class Villager:
                 )
             else:
                 self.task = "IDLE"
-        HappinessSystem.refresh(
-            self, getattr(day_cycle, "day_number", 1), permit_manager,
-            building_manager, furniture_manager, villager_manager,
-        )
+        self._refresh_happiness(world_dt, day_cycle, permit_manager,
+                                building_manager, furniture_manager, villager_manager)
         dt = world_dt * HappinessSystem.activity_multiplier(self)
 
         from game.systems.commission_schedule import CommissionScheduleSystem
@@ -1663,10 +1675,8 @@ class Villager:
             HappinessSystem.record_leisure(
                 self, world_dt, getattr(day_cycle, "day_number", 1), day_sec
             )
-            HappinessSystem.refresh(
-                self, getattr(day_cycle, "day_number", 1), permit_manager,
-                building_manager, furniture_manager, villager_manager,
-            )
+            self._refresh_happiness(world_dt, day_cycle, permit_manager,
+                                    building_manager, furniture_manager, villager_manager)
 
         # -------------------------------------------------------------
         # Rutinitas Kebutuhan Pokok: Critical Needs (<= 20%) & Evening Dinner
