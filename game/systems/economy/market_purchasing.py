@@ -156,11 +156,12 @@ class AIFoodPurchasingSystem:
 
     @classmethod
     def get_household_purchase_quantity(cls, villager, market, food_item, furniture_manager=None,
-                                       villager_manager=None, stockpile_manager=None):
-        need = MarketService.get_household_food_need(
-            villager, furniture_manager=furniture_manager,
-            villager_manager=villager_manager, stockpile_manager=stockpile_manager
-        )
+                                       villager_manager=None, stockpile_manager=None, need=None):
+        if need is None:
+            need = MarketService.get_household_food_need(
+                villager, furniture_manager=furniture_manager,
+                villager_manager=villager_manager, stockpile_manager=stockpile_manager
+            )
         stock = MarketService.get_market_stock(food_item, market)
         wallet = cls.get_household_spendable_wallet(
             villager, furniture_manager=furniture_manager,

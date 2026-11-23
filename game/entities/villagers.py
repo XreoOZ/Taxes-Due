@@ -2025,16 +2025,25 @@ class Villager:
                 )
                 return
 
+            # Universal rule: NEED -> no reachable resource -> acquire it.
+            # Household food accounting counts food in ANY member pocket,
+            # including members physically across the map. A villager who
+            # personally still owes a meal must be able to buy one even when
+            # household_need == 0 on paper — otherwise he oscillates between
+            # SEEKING_FOOD and work forever without ever eating.
+            household_need = MarketService.get_household_food_need(
+                self, furniture_manager=furniture_manager, villager_manager=vm,
+                stockpile_manager=stockpile_manager,
+            )
+            personal_need = 1 if self.daily_food_consumed < DAILY_FOOD_REQUIREMENT else 0
+            effective_need = max(household_need, personal_need)
             purchase_qty = AIFoodPurchasingSystem.get_household_purchase_quantity(
                 self, market, food_item, furniture_manager=furniture_manager,
-                villager_manager=vm, stockpile_manager=stockpile_manager
+                villager_manager=vm, stockpile_manager=stockpile_manager,
+                need=effective_need,
             )
             if purchase_qty <= 0:
-                current_need = MarketService.get_household_food_need(
-                    self, furniture_manager=furniture_manager, villager_manager=vm,
-                    stockpile_manager=stockpile_manager,
-                )
-                if current_need <= 0:
+                if effective_need <= 0:
                     self.task = "IDLE"
                     self._resume_or_idle_after_need()
                     return
