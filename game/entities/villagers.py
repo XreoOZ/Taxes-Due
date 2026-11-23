@@ -1490,6 +1490,12 @@ class Villager:
             self.current_path = []
             return
 
+        # Guard: immigrants in transit are moved exclusively by
+        # ImmigrationSystem (travel to board / leave map). The normal AI
+        # brain must not schedule needs, jobs, or chores for them.
+        if self.task == "IMMIGRANT":
+            return
+
         if self.speech_timer > 0:
             self.speech_timer -= dt
             if self.speech_timer <= 0:
@@ -2819,7 +2825,7 @@ class Villager:
                             self.carrying_res = res_name
                             self.carrying_amount = actual
                             self.inventory[res_name] = self.inventory.get(res_name, 0) + actual
-                            if res_name in ("Potato", "Food", "potato"):
+                            if is_food_item(res_name):
                                 self.carrying_crop = actual
                             self.say(f"Retrieved our {res_name} (x{actual})!", duration=2.0)
                             self.task = "HAULING_POSSESSION_HOME"

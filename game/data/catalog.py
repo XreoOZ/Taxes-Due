@@ -205,16 +205,6 @@ DEDICATED_JOBS = {
         "desc": "Tends crops and agricultural plots; waters and harvests food.",
         "required_tools": ["Hoe", "Watering_Can", "Sickle"]
     },
-    "Builder": {
-        "id": "Builder",
-        "name": "Builder",
-        "title": "Builder",
-        "color": (245, 158, 11),
-        "wip": False,
-        "workplace_permit": "construction",
-        "desc": "Constructs buildings, infrastructure, and structural works.",
-        "required_tools": ["Hammer"]
-    },
     "Blacksmith": {
         "id": "Blacksmith",
         "name": "Blacksmith",
