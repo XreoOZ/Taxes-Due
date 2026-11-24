@@ -178,6 +178,11 @@ class BuilderSystem:
                 )
             )
         )
+        for furniture in getattr(furniture_manager, "furnitures", []):
+            for subject in (getattr(furniture, "tool_order_subjects", None) or []):
+                order = getattr(subject, "construction_order", None)
+                if isinstance(order, dict) and order.get("payer_type") == "landlord":
+                    candidates.append(subject)
         for site in candidates:
             order = getattr(site, "construction_order", None) or {}
             if order.get("status") not in ("AWAITING_PAYMENT", "LANDLORD_PAYMENT_PENDING"):
@@ -821,13 +826,22 @@ class BuilderSystem:
                 family_id if family_id is not None else builder.family_id
             )
         totals = dict(getattr(builder, "inventory", {}))
-        material_types = DEDICATED_JOBS.get("Builder", {}).get("material_stock_target", {})
         if chest:
-            for item in material_types:
-                totals[item] = totals.get(item, 0) + chest.inventory.get(item, 0)
-        # Loose stacks owned by the paying party also count as materials.
+            for item, count in getattr(chest, "inventory", {}).items():
+                totals[item] = totals.get(item, 0) + int(count)
+        # If family_id is specified and distinct from builder's own family,
+        # also count materials in the Builder's workshop chest:
+        if furniture_manager and family_id is not None and str(family_id) != str(getattr(builder, "family_id", "")):
+            builder_chest = furniture_manager.get_storage_for_family(builder.family_id)
+            if builder_chest:
+                for item, count in getattr(builder_chest, "inventory", {}).items():
+                    totals[item] = totals.get(item, 0) + int(count)
+        # Loose stacks owned by the paying party or the Builder also count as materials.
         for stack in cls._order_loose_stacks(builder, stockpile_manager, payer_type, family_id):
             totals[stack.resource_type] = totals.get(stack.resource_type, 0) + int(stack.amount)
+        if family_id is not None and str(family_id) != str(getattr(builder, "family_id", "")):
+            for stack in cls._family_loose_stacks(builder, stockpile_manager, builder.family_id):
+                totals[stack.resource_type] = totals.get(stack.resource_type, 0) + int(stack.amount)
         return chest, totals
 
     @classmethod
@@ -992,6 +1006,13 @@ class BuilderSystem:
         chest_can_supply = bool(chest) and any(
             int(chest.inventory.get(material, 0)) > 0 for material in remaining
         )
+        if not chest_can_supply and furniture_manager and getattr(builder, "family_id", None):
+            builder_chest = furniture_manager.get_storage_for_family(builder.family_id)
+            if builder_chest and builder_chest is not chest and any(
+                int(builder_chest.inventory.get(material, 0)) > 0 for material in remaining
+            ):
+                chest = builder_chest
+                chest_can_supply = True
         if chest_can_supply:
             chest_x, chest_y = chest.get_approach_point(
                 builder.x, builder.y, worker_id=builder.id,
@@ -1753,22 +1774,15 @@ class BuilderSystem:
             builder, furniture_manager, stockpile_manager,
             payer_type=order.get("payer_type"),
             family_id=order.get("payer_family_id"))
-        target_stock = cfg.get("material_stock_target", {}) if chest else {}
         is_repair = order.get("order_type") == "REPAIR"
         recipe = FURNITURE_TYPES.get(active.furniture_type, {})
         material_recipe = BUILDER_REPAIR_MATERIALS if is_repair else recipe.get("materials", {})
         required = {item: max(0, int(amount))
                     for item, amount in material_recipe.items() if int(amount) > 0}
-        missing = {} if is_repair else {item: max(0, int(target) - int(totals.get(item, 0)))
-                   for item, target in target_stock.items()
-                   if totals.get(item, 0) < target}
         short_recipe = {item: amount - int(totals.get(item, 0)) for item, amount in required.items()
                         if totals.get(item, 0) < amount}
-        if short_recipe:
-            missing.update({item: max(missing.get(item, 0), amount) for item, amount in short_recipe.items()})
-        if missing and cls._begin_restock(builder, missing, building_manager, furniture_manager, villager_manager,
-                                          payer_type=order.get("payer_type"),
-                                          family_id=order.get("payer_family_id")):
+        missing = dict(short_recipe)
+        if missing and cls._begin_restock(builder, missing, building_manager, furniture_manager, villager_manager):
             return True
         if short_recipe:
             builder.say("I need this furniture's materials, but none are available to buy right now.", duration=2.5)
