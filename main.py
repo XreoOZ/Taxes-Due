@@ -72,8 +72,12 @@ from game.config import (
     COLOR_MODAL_BORDER,
     COLOR_TEXT_TITLE,
     STARTER_PLACEMENT_PAN_SPEED,
+    STARTER_PRESETS,
+    AUTOSAVE_INTERVAL_SECONDS,
 )
-from game.world.island import set_world
+from game.world.island import set_world, is_land_tile
+from game.world.natural_resources import get_natural_resources, NaturalResourceManager
+from game.world.roads import get_roads
 from game.camera import Camera
 from game.player import Player
 from game.world import World
@@ -103,7 +107,12 @@ from game.day_cycle import DayCycleSystem
 from game.settings import SettingsModal
 from game.schedule import ScheduleManager
 from game.save_modal import SaveLoadModal
-from game.save_system import save_to_slot, load_from_slot
+from game.save_system import save_to_slot, load_from_slot, delete_save, autosave_slot_name, prune_autosaves
+from game.systems.village_life.cemetery_system import CemeterySystem
+from game.systems.village_life.confession_system import ConfessionSystem
+from game.systems.village_life.immigration_system import get_immigration_system
+from game.systems.core.starter_preset import StarterPresetSystem
+from game.systems.bot.playtester_bot import PlaytesterBot
 from game.systems.economy.currency import from_copper
 from game.systems.economy.market_pricing import MarketPricingSystem
 from game.systems.economy.market_service import MarketService
@@ -351,16 +360,12 @@ def main():
         map_option = WORLD_TYPE_OPTIONS[world_map_index] if world_map_index is not None else WORLD_TYPE_OPTIONS[0]
         world_seed = random.randint(ISLAND_SEED_MIN, ISLAND_SEED_MAX) if map_option["id"] == "island" else None
         set_world(map_option["id"], seed=world_seed)
-        from game.world.natural_resources import get_natural_resources
         get_natural_resources().generate(world_seed)
-        from game.world.roads import get_roads
         get_roads().reset()
 
-        from game.systems.village_life.cemetery_system import CemeterySystem
         cemetery_system = CemeterySystem.get_instance()
         cemetery_system.pending_commissions.clear()
         cemetery_system.overflow_corpses.clear()
-        from game.systems.village_life.confession_system import ConfessionSystem
         confession_system = ConfessionSystem.get_instance()
         confession_system.queues.clear()
         confession_system.active.clear()
@@ -394,7 +399,6 @@ def main():
         pending_starter_id = None
         starter_confirm_tile = None
         if starter_index is not None:
-            from game.data.config import STARTER_PRESETS
             if 0 <= int(starter_index) < len(STARTER_PRESETS):
                 pending_starter_id = STARTER_PRESETS[int(starter_index)]["id"]
         if pending_starter_id is None:
@@ -436,7 +440,6 @@ def main():
     is_playtest = ("--playtest" in sys.argv) or (os.environ.get("PLAYTEST_BOT") == "1")
     bot = None
     if is_playtest:
-        from game.systems.bot.playtester_bot import PlaytesterBot
         duration = int(os.environ.get("PLAYTEST_DURATION", 600))
         bot = PlaytesterBot(duration_seconds=duration, map_type="island")
         start_fresh_game(day_length_index=0, world_map_index=1, starter_index=0)
@@ -508,7 +511,6 @@ def main():
                         else:
                             save_modal.refresh_slots(f"Error: {msg}")
                     elif save_action and save_action.startswith("delete_slot_"):
-                        from game.save_system import delete_save
                         save_name = save_action.split("delete_slot_", 1)[1]
                         success, msg = delete_save(save_name)
                         save_modal.refresh_slots(msg if success else f"Error: {msg}")
@@ -569,7 +571,6 @@ def main():
                             else:
                                 save_modal.refresh_slots(f"Error: {msg}")
                         elif save_action.startswith("delete_slot_"):
-                            from game.save_system import delete_save
                             save_name = save_action.split("delete_slot_", 1)[1]
                             success, msg = delete_save(save_name)
                             save_modal.refresh_slots(msg if success else f"Error: {msg}")
@@ -1012,7 +1013,6 @@ def main():
                         planned_tiles.update((pf["gx"] + dx, pf["gy"] + dy) for dx in range(p_w) for dy in range(p_h))
                     is_valid_place = all(valid and not occupied for valid, occupied in footprint_context) and not (footprint & planned_tiles)
                     if planning_furniture_type == "miner_workstation" and is_valid_place:
-                        from game.world.natural_resources import get_natural_resources
                         is_valid_place = get_natural_resources().mine_for_footprint(footprint) is not None
 
                     is_valid_build = bool(session_planned_furniture)
@@ -1147,9 +1147,6 @@ def main():
                 # 3.7. ROAD PAINTING MODE (instant tile layer, pay per tile)
                 # -------------------------------------------------------------
                 elif planning_mode == "ROAD":
-                    from game.world.roads import get_roads
-                    from game.world.island import is_land_tile
-                    from game.world.natural_resources import get_natural_resources
                     roads = get_roads()
                     nr = get_natural_resources()
                     r_cfg = ROAD_TYPES.get(planning_road_type, ROAD_TYPES["dirt_road"])
@@ -1222,7 +1219,6 @@ def main():
                 # 3.8. DESTROY MODE — mark objects, DONE -> confirm -> execute
                 # -------------------------------------------------------------
                 elif planning_mode == "DESTROY":
-                    from game.world.roads import get_roads
                     roads = get_roads()
 
                     def destroy_hit(tx, ty):
@@ -1414,7 +1410,6 @@ def main():
                 # 4.8. STARTER PLACEMENT MODE (pick drop location → confirm)
                 # -------------------------------------------------------------
                 elif pending_starter_id is not None:
-                    from game.systems.core.starter_preset import StarterPresetSystem
                     if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
                         if starter_confirm_tile is not None:
                             starter_confirm_tile = None
@@ -1787,7 +1782,6 @@ def main():
                                 continue
 
                             # 0D. Cek apakah pemain mengklik mine hasil generate (natural resources)
-                            from game.world.natural_resources import get_natural_resources
                             clicked_mine = get_natural_resources().get_mine_at(m_gx, m_gy)
                             if clicked_mine is not None:
                                 selected_furniture = None
@@ -1868,8 +1862,6 @@ def main():
             cur_day_time = day_cycle.day_number + (day_cycle.current_hour / 24.0)
             wealth_context_timer -= real_dt
             # Periodic autosave: one file per in-game day (autosave-dayNN).
-            from game.data.config import AUTOSAVE_INTERVAL_SECONDS
-            from game.save_system import autosave_slot_name, prune_autosaves
             autosave_elapsed += real_dt
             if autosave_elapsed >= AUTOSAVE_INTERVAL_SECONDS:
                 autosave_elapsed = 0.0
@@ -1985,7 +1977,6 @@ def main():
 
             # Immigration: pending households travel/wait/leave at the Notice Board.
             if furniture_manager is not None and villager_manager is not None:
-                from game.systems.village_life.immigration_system import get_immigration_system
                 _imm_sys = get_immigration_system()
                 _imm_ents = (villager_manager.get_all_villagers() + servant_manager.servants) if _imm_sys.pending else ()
                 _imm_sys.update(
@@ -2010,9 +2001,7 @@ def main():
 
             # 1. World & Ground
             world.draw(screen, camera)
-            from game.world.natural_resources import get_natural_resources
             get_natural_resources().draw(screen, camera, TILE_SIZE)
-            from game.world.roads import get_roads
             get_roads().draw(screen, camera, TILE_SIZE)
 
             # 2. Area Permits (Fixed, Permanent Boundaries)
@@ -2032,7 +2021,6 @@ def main():
             if pending_starter_id is None:
                 villager_manager.draw(screen, camera)
                 servant_manager.draw(screen, camera)
-                from game.systems.village_life.immigration_system import get_immigration_system
                 get_immigration_system().draw(screen, camera, TILE_SIZE)
                 player.draw(screen, camera)
 
@@ -2416,7 +2404,6 @@ def main():
                 is_valid_place = all(valid and not occupied for valid, occupied in valid_cells) and not is_occupied_planned
                 mine_match = None
                 if planning_furniture_type == "miner_workstation" and is_valid_place:
-                    from game.world.natural_resources import get_natural_resources
                     mine_match = get_natural_resources().mine_for_footprint(footprint)
                     is_valid_place = mine_match is not None
                     is_valid_location = is_valid_location and mine_match is not None
@@ -2566,9 +2553,6 @@ def main():
             # 7.6b. OVERLAYS: ROAD PAINTING MODE
             # -------------------------------------------------------------
             elif planning_mode == "ROAD":
-                from game.world.roads import get_roads
-                from game.world.island import is_land_tile
-                from game.world.natural_resources import get_natural_resources
                 roads = get_roads()
                 r_cfg = ROAD_TYPES.get(planning_road_type, ROAD_TYPES["dirt_road"])
                 scaled_t = int(TILE_SIZE * camera.zoom)
@@ -3050,7 +3034,6 @@ def main():
             # 7.76. MINE INFO POPUP (natural resources)
             # -------------------------------------------------------------
             if mine_popup is not None and planning_mode == "NONE" and not raport_ui.is_open:
-                from game.world.natural_resources import NaturalResourceManager
                 mine = mine_popup["mine"]
                 ox, oy = mine_popup.get("pos", m_pos)
                 pw, ph = upx(240), upx(92)
@@ -3477,7 +3460,6 @@ def main():
 
             # 11.8. Starter Placement Ghost + Confirm Dialog
             if pending_starter_id is not None:
-                from game.systems.core.starter_preset import StarterPresetSystem
                 anchor = starter_confirm_tile if starter_confirm_tile is not None else (m_gx, m_gy)
                 zones, valid = StarterPresetSystem.get_anchor_preview(
                     pending_starter_id, anchor,

@@ -238,14 +238,23 @@ class ToiletSystem:
             toilet, _ = cls.find_best_toilet(villager, building_manager, furniture_manager)
             villager.target_toilet = toilet
             if not toilet:
-                # No toilet facility available in settlement: preserve need, wait/idle politely
-                villager.say("I desperately need a Toilet, Lord! Please build an outhouse.", duration=2.5)
-                villager._resume_or_idle_after_need()
-                villager._set_need_seek_cooldown(
-                    AI_NEED_SEEK_COOLDOWN_SECONDS,
-                    task="SEEKING_TOILET",
-                )
-                return True
+                # No working toilet facility available in settlement
+                if getattr(villager, "need_toilet", 100.0) <= 0.0:
+                    # Extreme bodily urgency: when no toilet exists or all toilets are broken,
+                    # villager relieves themselves outdoors to prevent permanent deadlock.
+                    villager.need_toilet = float(AI_NEED_TOILET_RESTORE)
+                    villager.say("No working toilet... Had to relieve myself in the open!", duration=2.5)
+                    villager.happiness = max(0.0, getattr(villager, "happiness", 100.0) - 15.0)
+                    villager._resume_or_idle_after_need()
+                    return True
+                else:
+                    villager.say("The toilet is unavailable or needs repair!", duration=2.0)
+                    villager._resume_or_idle_after_need()
+                    villager._set_need_seek_cooldown(
+                        AI_NEED_SEEK_COOLDOWN_SECONDS,
+                        task="SEEKING_TOILET",
+                    )
+                    return True
 
         # Dynamic load balancing re-evaluation:
         # Periodically check if another toilet has become significantly better (e.g. current one is backlogged).

@@ -20,6 +20,7 @@ from game.systems.economy.currency import (
     execute_currency_transfer,
     canonical_denomination
 )
+from game.systems.economy.market_pricing import MarketPricingSystem
 
 class MarketService:
     """
@@ -72,11 +73,9 @@ class MarketService:
         """
         if market:
             if getattr(market, "assigned_family_id", None):
-                from game.systems.economy.market_pricing import MarketPricingSystem
                 return MarketPricingSystem.get_price(market, item_name)
             if hasattr(market, "prices") and item_name in market.prices:
                 return max(1, int(market.prices[item_name]))
-        from game.systems.economy.market_pricing import MarketPricingSystem
         return MarketPricingSystem.get_base_price(item_name)
 
     @classmethod

@@ -39,4 +39,5 @@ saves/autosave-*.json
 saves/Barudak.json
 saves/playtest_*.json
 screenshots/
+*.zip
 

@@ -36,7 +36,10 @@ from game.systems.economy.currency import (
     to_copper,
     from_copper,
     normalize_wallet,
+    compact_currency_wallet,
 )
+from game.systems.work.commission_schedule import CommissionScheduleSystem
+from game.systems.economy.market_sales_report import MarketSalesReportSystem
 
 
 class CemeterySystem:
@@ -394,14 +397,12 @@ class CemeterySystem:
         inst.pending_commissions.append(commission)
 
         if fee_available > 0 and payer_type == "representative" and payer:
-            from game.systems.work.commission_schedule import CommissionScheduleSystem
             CommissionScheduleSystem.queue(
                 payer, "BURIAL_PAYMENT_RETRIEVE",
                 burial_payment_target_corpse_id=corpse_id,
                 burial_payment_gravedigger_id=getattr(gravedigger, "id", None),
             )
         elif fee_available > 0 and gravedigger:
-            from game.systems.work.commission_schedule import CommissionScheduleSystem
             CommissionScheduleSystem.queue(
                 gravedigger, "GRAVEDIGGER_BURIAL_PAYMENT_RETRIEVE",
                 burial_payment_target_corpse_id=corpse_id,
@@ -494,7 +495,6 @@ class CemeterySystem:
             commission["fee_paid"] = fee if success else 0
             commission["status"] = "PAID"
             if success and fee > 0:
-                from game.systems.economy.market_sales_report import MarketSalesReportSystem
                 villager_manager = getattr(gravedigger, "villager_manager", None)
                 MarketSalesReportSystem.record_household_income(
                     villager_manager, getattr(gravedigger, "family_id", None),
@@ -523,13 +523,11 @@ class CemeterySystem:
         for denom, amount in from_copper(fee).items():
             if amount:
                 gravedigger.inventory[denom] = gravedigger.inventory.get(denom, 0) + amount
-        from game.systems.economy.currency import compact_currency_wallet
         compact_currency_wallet(gravedigger.inventory)
         commission["fee_paid"] = fee
         commission["status"] = "PAID"
         cls._mark_wealth_dirty()
         if fee > 0:
-            from game.systems.economy.market_sales_report import MarketSalesReportSystem
             villager_manager = getattr(gravedigger, "villager_manager", None)
             MarketSalesReportSystem.record_household_income(
                 villager_manager, getattr(gravedigger, "family_id", None),
@@ -601,7 +599,6 @@ class CemeterySystem:
                     for denom, amount in from_copper(commission.get("fee_paid", 0)).items():
                         if amount:
                             chest.store_item(denom, amount)
-                    from game.systems.economy.currency import compact_currency_wallet
                     compact_currency_wallet(chest.inventory)
                 commission["status"] = "PAID"
                 villager.burial_payment_target_corpse_id = None
@@ -622,10 +619,8 @@ class CemeterySystem:
                         if villager.inventory[denom] <= 0:
                             villager.inventory.pop(denom, None)
                         gravedigger.inventory[denom] = gravedigger.inventory.get(denom, 0) + amount
-                from game.systems.economy.currency import compact_currency_wallet
                 compact_currency_wallet(villager.inventory)
                 compact_currency_wallet(gravedigger.inventory)
-                from game.systems.economy.market_sales_report import MarketSalesReportSystem
                 if str(getattr(gravedigger, "family_id", "")) != str(getattr(villager, "family_id", "")):
                     MarketSalesReportSystem.record_household_income(
                         villager_manager, getattr(gravedigger, "family_id", None),

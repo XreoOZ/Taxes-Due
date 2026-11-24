@@ -54,6 +54,17 @@ from game.systems.economy.household_inventory import (
     sort_possession_items,
     canonical_item_name
 )
+from game.systems.work.workplace_system import (
+    get_job_workplaces,
+    workplace_workers,
+    workplace_capacity,
+    assigned_ids,
+    auto_sort_all_workers,
+    workplace_job_workers,
+    unassign_workplace_worker,
+)
+from game.systems.economy.taxation_system import TaxationSystem
+from game.world.permits import get_villager_home_position
 from game.systems.economy.wealth_system import VillageWealthSystem
 from game.systems.work.schedule import UNIVERSAL_SCHEDULE_ID
 from game.ui.item_icons import draw_item_icon
@@ -489,7 +500,6 @@ class RaportUI(
     @staticmethod
     def _commit_socage_tax_input(text):
         if text and text.isdigit():
-            from game.systems.economy.taxation_system import TaxationSystem
             TaxationSystem.set_socage_percent(int(text))
 
     # ---------------------------------------------------------
@@ -497,7 +507,6 @@ class RaportUI(
     # ---------------------------------------------------------
     def _num_field_station(self, fld, permit_manager, furniture_manager, building_manager):
         """Resolve a workplace field's (kind, obj) station tuple."""
-        from game.systems.work.workplace_system import get_job_workplaces
         job_id, skey = fld["payload"]
         workplaces = get_job_workplaces(job_id, permit_manager, furniture_manager, building_manager)
         return next((w for w in workplaces if self._workplace_key(w) == skey), None)
@@ -1084,7 +1093,6 @@ class RaportUI(
             for pid, rect in list(self.worker_auto_btn_rects.items()):
                 if rect.collidepoint(mouse_pos):
                     if villager_manager:
-                        from game.systems.work.workplace_system import auto_sort_all_workers
                         auto_sort_all_workers(permit_manager, furniture_manager, villager_manager,
                                               building_manager=building_manager)
                     return f"auto_worker_{pid}"
@@ -1354,7 +1362,6 @@ class RaportUI(
 
                 if self.auto_sort_all_btn_rect and self.auto_sort_all_btn_rect.collidepoint(mouse_pos):
                     if villager_manager:
-                        from game.systems.work.workplace_system import auto_sort_all_workers
                         auto_sort_all_workers(permit_manager, furniture_manager, villager_manager,
                                               building_manager=building_manager,
                                               job_filter=self.selected_job_id)
@@ -1368,7 +1375,6 @@ class RaportUI(
                             if kind == "permit":
                                 permit_manager.unassign_worker_from_permit(station_id, v_id, villager_manager=villager_manager)
                             else:
-                                from game.systems.work.workplace_system import unassign_workplace_worker
                                 station = None
                                 if kind == "furniture" and furniture_manager:
                                     station = furniture_manager.get_furniture_by_id(station_id)
@@ -1388,8 +1394,6 @@ class RaportUI(
                         if villager_manager:
                             worker = next((v for v in villager_manager.get_all_villagers() if v.id == v_id), None)
                             if worker:
-                                from game.systems.work.workplace_system import get_job_workplaces, workplace_workers, workplace_capacity, assigned_ids
-                                from game.world.permits import get_villager_home_position
                                 home_x, home_y = get_villager_home_position(worker, villager_manager, permit_manager, furniture_manager)
                                 occupied = assigned_ids(permit_manager, furniture_manager, building_manager)
                                 options = []
@@ -1419,7 +1423,6 @@ class RaportUI(
                     for key, rect in list(self.workplace_crop_btn_rects.items()):
                         if rect.collidepoint(mouse_pos):
                             job_id, station_key = key
-                            from game.systems.work.workplace_system import get_job_workplaces
                             workplaces = get_job_workplaces(job_id, permit_manager, furniture_manager, building_manager)
                             station = next((ws for ws in workplaces if self._workplace_key(ws) == station_key), None)
                             if station is not None and station[0] == "permit":
@@ -1428,7 +1431,6 @@ class RaportUI(
                     for key, rect in list(self.workplace_plant_btn_rects.items()):
                         if rect.collidepoint(mouse_pos):
                             job_id, station_key = key
-                            from game.systems.work.workplace_system import get_job_workplaces
                             workplaces = get_job_workplaces(job_id, permit_manager, furniture_manager, building_manager)
                             station = next((ws for ws in workplaces if self._workplace_key(ws) == station_key), None)
                             if station is not None and station[0] == "furniture":
@@ -1443,7 +1445,6 @@ class RaportUI(
 
                 if self.auto_sort_all_btn_rect and self.auto_sort_all_btn_rect.collidepoint(mouse_pos):
                     if villager_manager:
-                        from game.systems.work.workplace_system import auto_sort_all_workers
                         auto_sort_all_workers(permit_manager, furniture_manager, villager_manager,
                                               building_manager=building_manager)
                     return "auto_sort_all"
@@ -1553,7 +1554,6 @@ class RaportUI(
                 return "open_wealth_dialog"
 
             from game.systems.village_life.church_system import ChurchSystem
-            from game.systems.economy.taxation_system import TaxationSystem
             if not hasattr(self, "church_tax") or not isinstance(self.church_tax, dict):
                 self.church_tax = ChurchSystem.get_tax_settings()
 

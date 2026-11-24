@@ -37,6 +37,7 @@ from game.systems.economy.currency import (
 )
 from game.systems.economy.market_service import MarketService
 from game.systems.economy.household_stall_system import HouseholdStallSystem
+from game.systems.economy.wealth_system import VillageWealthSystem
 from game.ui.item_icons import draw_item_icon
 from game.ui.number_input import NumberInputState
 from game.ui.ui_theme import ui_font, upx
@@ -291,11 +292,7 @@ class MarketProfileModal:
                 if self.unassign_stall_btn_rect and self.unassign_stall_btn_rect.collidepoint(mouse_pos):
                     HouseholdStallSystem.unassign_stall(mkt)
                     self.show_assign_dialog = False
-                    try:
-                        from game.systems.economy.wealth_system import VillageWealthSystem
-                        VillageWealthSystem.mark_dirty()
-                    except ImportError:
-                        pass
+                    VillageWealthSystem.mark_dirty()
                     return "stall_unassigned"
 
                 for fam_id, btn_rect in self.family_assign_btn_rects.items():
@@ -307,11 +304,7 @@ class MarketProfileModal:
                         for item_name in mkt.sale_items:
                             mkt.item_allocations.setdefault(item_name, MARKET_DEFAULT_HOUSEHOLD_SALE_PERCENT)
                         self.show_assign_dialog = False
-                        try:
-                            from game.systems.economy.wealth_system import VillageWealthSystem
-                            VillageWealthSystem.mark_dirty()
-                        except ImportError:
-                            pass
+                        VillageWealthSystem.mark_dirty()
                         return f"stall_assigned_{fam_id}"
                 return None
 
@@ -362,7 +355,6 @@ class MarketProfileModal:
                                         o for o in getattr(servant_manager, "restock_orders", [])
                                         if not (o.get("market_building") is mkt and o.get("item_type") == denom)
                                     ]
-                                from game.systems.economy.wealth_system import VillageWealthSystem
                                 VillageWealthSystem.mark_dirty()
                                 self.status_message = f"Dropped {actual} {denom} near the market for servant hauling."
                                 return f"coin_withdrawn_{actual}_{denom}"

@@ -93,22 +93,17 @@ class BuilderSystem:
                     if getattr(s, "state", "IDLE") == "IDLE"] if servant_manager else []
         fee = max(0, int(order.get("price_copper", 0)))
         from game.systems.economy.lord_treasury import LordTreasurySystem
-        treasury = LordTreasurySystem.get_chest(furniture_manager)
-        if not treasury or LordTreasurySystem.value(furniture_manager) < fee:
-            message = random.choice(BUILDER_INSUFFICIENT_LANDLORD_COIN_MESSAGES)
-            if servant_manager and getattr(servant_manager, "servants", None):
-                servant_manager.servants[0].say(message, duration=3.5)
-            return False, message
-        if not servants:
-            return False, "No idle servant is available to carry the commission."
+        from game.systems.village_life.cemetery_system import CemeterySystem
+        from game.systems.economy.currency import canonical_denomination, to_copper
 
         if hasattr(subject, "get_world_pos"):
             target_x, target_y = subject.get_world_pos(TILE_SIZE)
         elif hasattr(subject, "get_center_world"):
             target_x, target_y = subject.get_center_world(TILE_SIZE)
         else:
-            target_x = (subject.grid_x + subject.tiles_w / 2.0) * TILE_SIZE
-            target_y = (subject.grid_y + subject.tiles_h / 2.0) * TILE_SIZE
+            target_x = (subject.grid_x + getattr(subject, "tiles_w", 1) / 2.0) * TILE_SIZE
+            target_y = (subject.grid_y + getattr(subject, "tiles_h", 1) / 2.0) * TILE_SIZE
+
         builder = min(
             builders,
             key=lambda worker: (
@@ -116,12 +111,53 @@ class BuilderSystem:
                 math.hypot(worker.x - target_x, worker.y - target_y),
             ),
         )
+
+        treasury = LordTreasurySystem.get_chest(furniture_manager)
+        treasury_val = LordTreasurySystem.value(furniture_manager) if treasury else 0
+        landlord_stacks = CemeterySystem._landlord_coin_stacks(stockpile_manager) if stockpile_manager else []
+        stockpile_val = sum(to_copper({canonical_denomination(s.resource_type): s.amount})
+                            for s in landlord_stacks if canonical_denomination(s.resource_type))
+        total_landlord_funds = treasury_val + stockpile_val
+
+        if total_landlord_funds < fee:
+            if order.get("order_type") == "REPAIR" and hasattr(subject, "building_type"):
+                # Emergency civic repair: public structure needs repair to keep town functional.
+                order["status"] = "PAID"
+                order["commission_paid"] = True
+                order["paid_by_id"] = "landlord"
+                order["paid_amount_copper"] = 0
+                order["builder_id"] = str(builder.id)
+                order["builder_family_id"] = str(getattr(builder, "family_id", "") or "")
+                cls._ensure_paid_seq(order, furniture_manager, building_manager)
+                if not getattr(builder, "speech_text", None):
+                    builder.say(f"Emergency public repair: {getattr(subject, 'name', 'structure')}.", duration=2.5)
+                return True, "Emergency civic repair order dispatched."
+            message = random.choice(BUILDER_INSUFFICIENT_LANDLORD_COIN_MESSAGES)
+            if servant_manager and getattr(servant_manager, "servants", None):
+                servant_manager.servants[0].say(message, duration=3.5)
+            return False, message
+        if not servants:
+            return False, "No idle servant is available to carry the commission."
+
+        if treasury and treasury_val >= fee:
+            ref_x = (treasury.grid_x + 0.5) * TILE_SIZE
+            ref_y = (treasury.grid_y + 0.5) * TILE_SIZE
+            storage_tile = [treasury.grid_x, treasury.grid_y]
+            treasury_id = str(treasury.id)
+        elif landlord_stacks:
+            first_stack = landlord_stacks[0]
+            ref_x = (first_stack.grid_x + 0.5) * TILE_SIZE
+            ref_y = (first_stack.grid_y + 0.5) * TILE_SIZE
+            storage_tile = [first_stack.grid_x, first_stack.grid_y]
+            treasury_id = None
+        else:
+            ref_x, ref_y = target_x, target_y
+            storage_tile = [int(target_x // TILE_SIZE), int(target_y // TILE_SIZE)]
+            treasury_id = None
+
         servant = min(
             servants,
-            key=lambda worker: math.hypot(
-                (treasury.grid_x + 0.5) * TILE_SIZE - worker.x,
-                (treasury.grid_y + 0.5) * TILE_SIZE - worker.y,
-            ),
+            key=lambda worker: math.hypot(ref_x - worker.x, ref_y - worker.y),
         )
 
         order["status"] = "LANDLORD_RETRIEVING"
@@ -152,10 +188,16 @@ class BuilderSystem:
         if not building_manager or not servant_manager or not villager_manager:
             return 0
         from game.systems.economy.lord_treasury import LordTreasurySystem
+        from game.systems.village_life.cemetery_system import CemeterySystem
+        from game.systems.economy.currency import canonical_denomination, to_copper
 
         treasury = LordTreasurySystem.get_chest(furniture_manager)
-        if not treasury:
-            return 0
+        treasury_val = LordTreasurySystem.value(furniture_manager) if treasury else 0
+        landlord_stacks = CemeterySystem._landlord_coin_stacks(stockpile_manager) if stockpile_manager else []
+        stockpile_val = sum(to_copper({canonical_denomination(s.resource_type): s.amount})
+                            for s in landlord_stacks if canonical_denomination(s.resource_type))
+        total_landlord_funds = treasury_val + stockpile_val
+
         started = 0
         candidates = []
         for site in getattr(building_manager, "construction_sites", []):
@@ -189,10 +231,40 @@ class BuilderSystem:
                 continue
             if "price_copper" not in order:
                 order.update(cls.quote_building_order(
-                    site.building_type, building_manager, villager_manager,
+                    getattr(site, "building_type", "wooden_structure"), building_manager, villager_manager,
                     tile_count=len(getattr(site, "tiles", ())),
                 ))
-            if LordTreasurySystem.value(furniture_manager) < max(0, int(order.get("price_copper", 0))):
+            fee = max(0, int(order.get("price_copper", 0)))
+            if total_landlord_funds < fee:
+                if order.get("order_type") == "REPAIR" and hasattr(site, "building_type"):
+                    # Emergency civic repair for public structure (e.g. toilet, well)
+                    artisan_job = cls._artisan_job(order)
+                    builders = [v for v in villager_manager.get_all_villagers()
+                                if getattr(v, "job", None) == artisan_job and getattr(v, "is_alive", True)]
+                    if builders:
+                        if hasattr(site, "get_center_world"):
+                            tx, ty = site.get_center_world(TILE_SIZE)
+                        else:
+                            tx = (site.grid_x + getattr(site, "tiles_w", 1) / 2.0) * TILE_SIZE
+                            ty = (site.grid_y + getattr(site, "tiles_h", 1) / 2.0) * TILE_SIZE
+                        builder = min(
+                            builders,
+                            key=lambda worker: (
+                                cls._queue_length(worker.id, furniture_manager, building_manager),
+                                math.hypot(worker.x - tx, worker.y - ty),
+                            ),
+                        )
+                        order["status"] = "PAID"
+                        order["commission_paid"] = True
+                        order["paid_by_id"] = "landlord"
+                        order["paid_amount_copper"] = 0
+                        order["builder_id"] = str(builder.id)
+                        order["builder_family_id"] = str(getattr(builder, "family_id", "") or "")
+                        cls._ensure_paid_seq(order, furniture_manager, building_manager)
+                        if not getattr(builder, "speech_text", None):
+                            builder.say(f"Emergency public repair: {getattr(site, 'name', 'structure')}.", duration=2.5)
+                        started += 1
+                        continue
                 idle_servant = next((servant for servant in getattr(servant_manager, "servants", [])
                                      if getattr(servant, "state", "IDLE") == "IDLE"), None)
                 if idle_servant and not order.get("insufficient_coin_notice_sent"):

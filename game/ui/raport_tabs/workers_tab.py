@@ -427,7 +427,6 @@ class WorkersMixin:
                     surface.blit(self.font_body.render(info_str, True, (241, 245, 249)), (card.x + upx(12), card.y + upx(7)))
 
                     # Find this worker's assigned workplace for the selected job.
-                    from game.systems.work.workplace_system import get_job_workplaces, workplace_job_workers
                     assigned_ws = next((ws for ws in get_job_workplaces(self.selected_job_id, permit_manager, furniture_manager, building_manager)
                                         if str(v.id) in {str(wid) for wid in workplace_job_workers(ws, self.selected_job_id, villager_manager)}), None)
                     assigned_station = assigned_ws[1] if assigned_ws else None

@@ -17,6 +17,7 @@ from game.data.config import (
     SCHEDULE_WORK,
 )
 from game.systems.economy.currency import normalize_wallet, to_copper, transfer_exact_value
+from game.systems.economy.wealth_system import VillageWealthSystem
 from game.world.navigation.navigation import distance_to_object
 
 
@@ -488,7 +489,6 @@ class TaxationSystem:
                     if refunded:
                         villager.socage_tax_prepared_amount = 0
                         villager.socage_tax_prepared_cycle = None
-                        from game.systems.economy.wealth_system import VillageWealthSystem
                         VillageWealthSystem.mark_dirty()
             if getattr(villager, "task", None) == "PAYING_SOCAGE_TAX":
                 villager.task = "IDLE"
@@ -518,7 +518,6 @@ class TaxationSystem:
                 success, _ = transfer_exact_value(chest.inventory, villager.inventory, due)
                 if success:
                     prepared = due
-                    from game.systems.economy.wealth_system import VillageWealthSystem
                     VillageWealthSystem.mark_dirty()
             villager.socage_tax_prepared_cycle = cycle
             villager.socage_tax_prepared_amount = prepared
@@ -543,7 +542,6 @@ class TaxationSystem:
                     villager.family_id, "tax_socage", cls.socage_happiness_effect(),
                     villager_manager, day_number,
                 )
-                from game.systems.economy.wealth_system import VillageWealthSystem
                 VillageWealthSystem.mark_dirty()
                 replies = SOCAGE_TAX_HAPPINESS_REPLIES.get(
                     getattr(villager, "happiness_status", "happy"), SOCAGE_TAX_HAPPINESS_REPLIES["happy"]
