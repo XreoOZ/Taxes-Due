@@ -1,0 +1,6025 @@
+{
+  "timestamp": "2026-11-24 18:12",
+  "world": {
+    "type": "island",
+    "seed": 198631
+  },
+  "natural_resources": {
+    "-4,-23": [
+      "growing",
+      7.638428333333507
+    ],
+    "-3,-23": [
+      "growing",
+      7.67048166666684
+    ],
+    "-2,-23": [
+      "growing",
+      7.702598333333506
+    ],
+    "0,-23": [
+      "empty",
+      0.0
+    ],
+    "-5,-22": [
+      "growing",
+      7.574638333333508
+    ],
+    "-4,-22": [
+      "growing",
+      7.606421666666841
+    ],
+    "-2,-22": [
+      "growing",
+      8.292180000000124
+    ],
+    "-1,-22": [
+      "growing",
+      8.401900000000126
+    ],
+    "-8,-21": [
+      "growing",
+      8.401840000000126
+    ],
+    "-7,-21": [
+      "empty",
+      0.0
+    ],
+    "-5,-21": [
+      "growing",
+      7.542575000000178
+    ],
+    "-4,-21": [
+      "growing",
+      7.510498333333509
+    ],
+    "-2,-21": [
+      "growing",
+      8.323855000000124
+    ],
+    "-1,-21": [
+      "growing",
+      8.369748333333458
+    ],
+    "-3,-20": [
+      "growing",
+      7.477990000000178
+    ],
+    "-3,-19": [
+      "growing",
+      7.445941666666844
+    ],
+    "-2,-19": [
+      "growing",
+      7.350906666666843
+    ],
+    "-5,-18": [
+      "growing",
+      6.6994066666667935
+    ],
+    "-3,-18": [
+      "growing",
+      7.286391666666841
+    ],
+    "-2,-17": [
+      "growing",
+      7.318346666666842
+    ]
+  },
+  "roads": [],
+  "day_number": 8,
+  "time_str": "10:21",
+  "population": 14,
+  "resources": {
+    "Wood": 32,
+    "Food": 0,
+    "Stone": 74,
+    "Water": 0,
+    "Copper": 0,
+    "Silver": 0,
+    "Gold": 0
+  },
+  "day_cycle": {
+    "day_number": 8,
+    "time_seconds": 258.99600000007405,
+    "day_length_index": 0,
+    "time_str": "10:21"
+  },
+  "player": {
+    "x": -447.15938377164923,
+    "y": -24.0
+  },
+  "permits": [
+    {
+      "id": "permit_1",
+      "name": "Starter Housing",
+      "permit_type": "housing",
+      "tiles": [
+        [
+          -12,
+          -4
+        ],
+        [
+          -13,
+          -6
+        ],
+        [
+          -8,
+          -5
+        ],
+        [
+          -10,
+          -4
+        ],
+        [
+          -11,
+          -6
+        ],
+        [
+          -9,
+          -4
+        ],
+        [
+          -13,
+          -5
+        ],
+        [
+          -12,
+          -6
+        ],
+        [
+          -11,
+          -5
+        ],
+        [
+          -10,
+          -6
+        ],
+        [
+          -8,
+          -4
+        ],
+        [
+          -9,
+          -6
+        ],
+        [
+          -13,
+          -4
+        ],
+        [
+          -12,
+          -5
+        ],
+        [
+          -11,
+          -4
+        ],
+        [
+          -10,
+          -5
+        ],
+        [
+          -9,
+          -5
+        ],
+        [
+          -8,
+          -6
+        ]
+      ],
+      "max_workers": 2,
+      "assigned_workers": [],
+      "crop": null,
+      "growth_days": 0.0,
+      "watered_today": false,
+      "tile_crops": {},
+      "tile_graves": {},
+      "church_tax": {
+        "Gold": 0,
+        "Silver": 0,
+        "Copper": 1
+      },
+      "church_tax_paid_households": {},
+      "tax_paid_households_today": [],
+      "batches": [],
+      "active_batch_id": null,
+      "batch_counter": 0,
+      "current_day_time": 8.431660000000123
+    },
+    {
+      "id": "permit_2",
+      "name": "Starter Market",
+      "permit_type": "market",
+      "tiles": [
+        [
+          -17,
+          -6
+        ],
+        [
+          -16,
+          -6
+        ],
+        [
+          -17,
+          -5
+        ],
+        [
+          -16,
+          -5
+        ],
+        [
+          -15,
+          -6
+        ],
+        [
+          -15,
+          -5
+        ]
+      ],
+      "max_workers": 2,
+      "assigned_workers": [],
+      "crop": null,
+      "growth_days": 0.0,
+      "watered_today": false,
+      "tile_crops": {},
+      "tile_graves": {},
+      "church_tax": {
+        "Gold": 0,
+        "Silver": 0,
+        "Copper": 1
+      },
+      "church_tax_paid_households": {},
+      "tax_paid_households_today": [],
+      "batches": [],
+      "active_batch_id": null,
+      "batch_counter": 0,
+      "current_day_time": 8.431660000000123
+    },
+    {
+      "id": "permit_3",
+      "name": "Starter Farm",
+      "permit_type": "farm",
+      "tiles": [
+        [
+          -5,
+          -3
+        ],
+        [
+          -6,
+          -5
+        ],
+        [
+          -5,
+          -6
+        ],
+        [
+          -4,
+          -3
+        ],
+        [
+          -3,
+          -3
+        ],
+        [
+          -4,
+          -6
+        ],
+        [
+          -3,
+          -6
+        ],
+        [
+          -2,
+          -3
+        ],
+        [
+          -1,
+          -3
+        ],
+        [
+          -2,
+          -6
+        ],
+        [
+          -1,
+          -6
+        ],
+        [
+          -5,
+          -5
+        ],
+        [
+          -4,
+          -5
+        ],
+        [
+          -6,
+          -4
+        ],
+        [
+          -3,
+          -5
+        ],
+        [
+          -2,
+          -5
+        ],
+        [
+          -1,
+          -5
+        ],
+        [
+          -6,
+          -3
+        ],
+        [
+          -5,
+          -4
+        ],
+        [
+          -6,
+          -6
+        ],
+        [
+          -2,
+          -4
+        ],
+        [
+          -4,
+          -4
+        ],
+        [
+          -3,
+          -4
+        ],
+        [
+          -1,
+          -4
+        ]
+      ],
+      "max_workers": 3,
+      "assigned_workers": [
+        "vil_1",
+        "vil_2",
+        "vil_3"
+      ],
+      "crop": "Potato",
+      "growth_days": 7.09603166666679,
+      "watered_today": true,
+      "tile_crops": {
+        "-5,-3": {
+          "crop": "Potato",
+          "batch_id": "permit_3_batch_1",
+          "growth_days": 7.09603166666679,
+          "watered_today": true,
+          "unwatered_days": 0,
+          "is_dead": false
+        },
+        "-6,-5": {
+          "crop": "Potato",
+          "batch_id": "permit_3_batch_1",
+          "growth_days": 7.09603166666679,
+          "watered_today": false,
+          "unwatered_days": 0,
+          "is_dead": false
+        },
+        "-5,-6": {
+          "crop": "Potato",
+          "batch_id": "permit_3_batch_1",
+          "growth_days": 7.09603166666679,
+          "watered_today": true,
+          "unwatered_days": 0,
+          "is_dead": false
+        },
+        "-4,-3": {
+          "crop": "Potato",
+          "batch_id": "permit_3_batch_1",
+          "growth_days": 7.09603166666679,
+          "watered_today": true,
+          "unwatered_days": 0,
+          "is_dead": false
+        },
+        "-3,-3": {
+          "crop": "Potato",
+          "batch_id": "permit_3_batch_1",
+          "growth_days": 7.09603166666679,
+          "watered_today": true,
+          "unwatered_days": 0,
+          "is_dead": false
+        },
+        "-4,-6": {
+          "crop": "Potato",
+          "batch_id": "permit_3_batch_1",
+          "growth_days": 7.09603166666679,
+          "watered_today": true,
+          "unwatered_days": 0,
+          "is_dead": false
+        },
+        "-3,-6": {
+          "crop": "Potato",
+          "batch_id": "permit_3_batch_1",
+          "growth_days": 7.09603166666679,
+          "watered_today": true,
+          "unwatered_days": 0,
+          "is_dead": false
+        },
+        "-2,-3": {
+          "crop": "Potato",
+          "batch_id": "permit_3_batch_1",
+          "growth_days": 7.09603166666679,
+          "watered_today": true,
+          "unwatered_days": 0,
+          "is_dead": false
+        },
+        "-1,-3": {
+          "crop": "Potato",
+          "batch_id": "permit_3_batch_1",
+          "growth_days": 7.09603166666679,
+          "watered_today": true,
+          "unwatered_days": 0,
+          "is_dead": false
+        },
+        "-2,-6": {
+          "crop": "Potato",
+          "batch_id": "permit_3_batch_1",
+          "growth_days": 7.09603166666679,
+          "watered_today": true,
+          "unwatered_days": 0,
+          "is_dead": false
+        },
+        "-1,-6": {
+          "crop": "Potato",
+          "batch_id": "permit_3_batch_1",
+          "growth_days": 7.09603166666679,
+          "watered_today": true,
+          "unwatered_days": 0,
+          "is_dead": false
+        },
+        "-5,-5": {
+          "crop": "Potato",
+          "batch_id": "permit_3_batch_1",
+          "growth_days": 7.09603166666679,
+          "watered_today": true,
+          "unwatered_days": 0,
+          "is_dead": false
+        },
+        "-4,-5": {
+          "crop": "Potato",
+          "batch_id": "permit_3_batch_1",
+          "growth_days": 7.09603166666679,
+          "watered_today": true,
+          "unwatered_days": 0,
+          "is_dead": false
+        },
+        "-3,-5": {
+          "crop": "Potato",
+          "batch_id": "permit_3_batch_1",
+          "growth_days": 7.09603166666679,
+          "watered_today": true,
+          "unwatered_days": 0,
+          "is_dead": false
+        },
+        "-6,-4": {
+          "crop": "Potato",
+          "batch_id": "permit_3_batch_1",
+          "growth_days": 7.09603166666679,
+          "watered_today": true,
+          "unwatered_days": 0,
+          "is_dead": false
+        },
+        "-2,-5": {
+          "crop": "Potato",
+          "batch_id": "permit_3_batch_1",
+          "growth_days": 7.09603166666679,
+          "watered_today": true,
+          "unwatered_days": 0,
+          "is_dead": false
+        },
+        "-1,-5": {
+          "crop": "Potato",
+          "batch_id": "permit_3_batch_1",
+          "growth_days": 7.09603166666679,
+          "watered_today": true,
+          "unwatered_days": 0,
+          "is_dead": false
+        },
+        "-6,-3": {
+          "crop": "Potato",
+          "batch_id": "permit_3_batch_1",
+          "growth_days": 7.09603166666679,
+          "watered_today": true,
+          "unwatered_days": 0,
+          "is_dead": false
+        },
+        "-5,-4": {
+          "crop": "Potato",
+          "batch_id": "permit_3_batch_1",
+          "growth_days": 7.09603166666679,
+          "watered_today": true,
+          "unwatered_days": 0,
+          "is_dead": false
+        },
+        "-6,-6": {
+          "crop": "Potato",
+          "batch_id": "permit_3_batch_1",
+          "growth_days": 7.09603166666679,
+          "watered_today": true,
+          "unwatered_days": 0,
+          "is_dead": false
+        },
+        "-2,-4": {
+          "crop": "Potato",
+          "batch_id": "permit_3_batch_1",
+          "growth_days": 7.09603166666679,
+          "watered_today": true,
+          "unwatered_days": 0,
+          "is_dead": false
+        },
+        "-4,-4": {
+          "crop": "Potato",
+          "batch_id": "permit_3_batch_1",
+          "growth_days": 7.09603166666679,
+          "watered_today": true,
+          "unwatered_days": 0,
+          "is_dead": false
+        },
+        "-3,-4": {
+          "crop": "Potato",
+          "batch_id": "permit_3_batch_1",
+          "growth_days": 7.09603166666679,
+          "watered_today": true,
+          "unwatered_days": 0,
+          "is_dead": false
+        },
+        "-1,-4": {
+          "crop": "Potato",
+          "batch_id": "permit_3_batch_1",
+          "growth_days": 7.09603166666679,
+          "watered_today": true,
+          "unwatered_days": 0,
+          "is_dead": false
+        }
+      },
+      "tile_graves": {},
+      "church_tax": {
+        "Gold": 0,
+        "Silver": 0,
+        "Copper": 1
+      },
+      "church_tax_paid_households": {},
+      "tax_paid_households_today": [],
+      "batches": [
+        {
+          "id": "permit_3_batch_1",
+          "permit_id": "permit_3",
+          "crop": "Potato",
+          "start_day": 1.3356283333333334,
+          "window_duration_days": 1.0,
+          "close_day": 2.335678333333375,
+          "completion_day": 11.335628333333334,
+          "closed": true,
+          "tiles": [
+            [
+              -6,
+              -6
+            ],
+            [
+              -6,
+              -5
+            ],
+            [
+              -6,
+              -4
+            ],
+            [
+              -6,
+              -3
+            ],
+            [
+              -5,
+              -6
+            ],
+            [
+              -5,
+              -5
+            ],
+            [
+              -5,
+              -4
+            ],
+            [
+              -5,
+              -3
+            ],
+            [
+              -4,
+              -6
+            ],
+            [
+              -4,
+              -5
+            ],
+            [
+              -4,
+              -4
+            ],
+            [
+              -4,
+              -3
+            ],
+            [
+              -3,
+              -6
+            ],
+            [
+              -3,
+              -5
+            ],
+            [
+              -3,
+              -4
+            ],
+            [
+              -3,
+              -3
+            ],
+            [
+              -2,
+              -6
+            ],
+            [
+              -2,
+              -5
+            ],
+            [
+              -2,
+              -4
+            ],
+            [
+              -2,
+              -3
+            ],
+            [
+              -1,
+              -6
+            ],
+            [
+              -1,
+              -5
+            ],
+            [
+              -1,
+              -4
+            ],
+            [
+              -1,
+              -3
+            ]
+          ],
+          "growth_days": 7.09603166666679,
+          "watered_today": true,
+          "unwatered_days": 0,
+          "is_dead": false
+        }
+      ],
+      "active_batch_id": null,
+      "batch_counter": 1,
+      "current_day_time": 8.431660000000123
+    },
+    {
+      "id": "permit_4",
+      "name": "Starter Storage",
+      "permit_type": "storage",
+      "tiles": [
+        [
+          -13,
+          11
+        ],
+        [
+          -15,
+          11
+        ],
+        [
+          -12,
+          10
+        ],
+        [
+          -13,
+          8
+        ],
+        [
+          -11,
+          11
+        ],
+        [
+          -10,
+          10
+        ],
+        [
+          -11,
+          8
+        ],
+        [
+          -14,
+          9
+        ],
+        [
+          -14,
+          12
+        ],
+        [
+          -16,
+          11
+        ],
+        [
+          -15,
+          10
+        ],
+        [
+          -16,
+          8
+        ],
+        [
+          -12,
+          9
+        ],
+        [
+          -12,
+          12
+        ],
+        [
+          -13,
+          10
+        ],
+        [
+          -10,
+          9
+        ],
+        [
+          -10,
+          12
+        ],
+        [
+          -11,
+          10
+        ],
+        [
+          -14,
+          11
+        ],
+        [
+          -14,
+          8
+        ],
+        [
+          -15,
+          9
+        ],
+        [
+          -15,
+          12
+        ],
+        [
+          -16,
+          10
+        ],
+        [
+          -13,
+          9
+        ],
+        [
+          -12,
+          8
+        ],
+        [
+          -13,
+          12
+        ],
+        [
+          -11,
+          9
+        ],
+        [
+          -12,
+          11
+        ],
+        [
+          -10,
+          8
+        ],
+        [
+          -11,
+          12
+        ],
+        [
+          -10,
+          11
+        ],
+        [
+          -14,
+          10
+        ],
+        [
+          -16,
+          9
+        ],
+        [
+          -15,
+          8
+        ],
+        [
+          -16,
+          12
+        ]
+      ],
+      "max_workers": 2,
+      "assigned_workers": [],
+      "crop": null,
+      "growth_days": 0.0,
+      "watered_today": false,
+      "tile_crops": {
+        "-13,11": {
+          "crop": null,
+          "growth_days": 0.0,
+          "watered_today": false,
+          "unwatered_days": 0,
+          "is_dead": false
+        },
+        "-15,11": {
+          "crop": null,
+          "growth_days": 0.0,
+          "watered_today": false,
+          "unwatered_days": 0,
+          "is_dead": false
+        },
+        "-12,10": {
+          "crop": null,
+          "growth_days": 0.0,
+          "watered_today": false,
+          "unwatered_days": 0,
+          "is_dead": false
+        },
+        "-13,8": {
+          "crop": null,
+          "growth_days": 0.0,
+          "watered_today": false,
+          "unwatered_days": 0,
+          "is_dead": false
+        },
+        "-11,11": {
+          "crop": null,
+          "growth_days": 0.0,
+          "watered_today": false,
+          "unwatered_days": 0,
+          "is_dead": false
+        },
+        "-10,10": {
+          "crop": null,
+          "growth_days": 0.0,
+          "watered_today": false,
+          "unwatered_days": 0,
+          "is_dead": false
+        },
+        "-11,8": {
+          "crop": null,
+          "growth_days": 0.0,
+          "watered_today": false,
+          "unwatered_days": 0,
+          "is_dead": false
+        },
+        "-14,9": {
+          "crop": null,
+          "growth_days": 0.0,
+          "watered_today": false,
+          "unwatered_days": 0,
+          "is_dead": false
+        },
+        "-14,12": {
+          "crop": null,
+          "growth_days": 0.0,
+          "watered_today": false,
+          "unwatered_days": 0,
+          "is_dead": false
+        },
+        "-16,11": {
+          "crop": null,
+          "growth_days": 0.0,
+          "watered_today": false,
+          "unwatered_days": 0,
+          "is_dead": false
+        },
+        "-15,10": {
+          "crop": null,
+          "growth_days": 0.0,
+          "watered_today": false,
+          "unwatered_days": 0,
+          "is_dead": false
+        },
+        "-16,8": {
+          "crop": null,
+          "growth_days": 0.0,
+          "watered_today": false,
+          "unwatered_days": 0,
+          "is_dead": false
+        },
+        "-12,9": {
+          "crop": null,
+          "growth_days": 0.0,
+          "watered_today": false,
+          "unwatered_days": 0,
+          "is_dead": false
+        },
+        "-12,12": {
+          "crop": null,
+          "growth_days": 0.0,
+          "watered_today": false,
+          "unwatered_days": 0,
+          "is_dead": false
+        },
+        "-13,10": {
+          "crop": null,
+          "growth_days": 0.0,
+          "watered_today": false,
+          "unwatered_days": 0,
+          "is_dead": false
+        },
+        "-10,9": {
+          "crop": null,
+          "growth_days": 0.0,
+          "watered_today": false,
+          "unwatered_days": 0,
+          "is_dead": false
+        },
+        "-10,12": {
+          "crop": null,
+          "growth_days": 0.0,
+          "watered_today": false,
+          "unwatered_days": 0,
+          "is_dead": false
+        },
+        "-11,10": {
+          "crop": null,
+          "growth_days": 0.0,
+          "watered_today": false,
+          "unwatered_days": 0,
+          "is_dead": false
+        },
+        "-14,11": {
+          "crop": null,
+          "growth_days": 0.0,
+          "watered_today": false,
+          "unwatered_days": 0,
+          "is_dead": false
+        },
+        "-14,8": {
+          "crop": null,
+          "growth_days": 0.0,
+          "watered_today": false,
+          "unwatered_days": 0,
+          "is_dead": false
+        },
+        "-15,9": {
+          "crop": null,
+          "growth_days": 0.0,
+          "watered_today": false,
+          "unwatered_days": 0,
+          "is_dead": false
+        },
+        "-15,12": {
+          "crop": null,
+          "growth_days": 0.0,
+          "watered_today": false,
+          "unwatered_days": 0,
+          "is_dead": false
+        },
+        "-16,10": {
+          "crop": null,
+          "growth_days": 0.0,
+          "watered_today": false,
+          "unwatered_days": 0,
+          "is_dead": false
+        },
+        "-13,9": {
+          "crop": null,
+          "growth_days": 0.0,
+          "watered_today": false,
+          "unwatered_days": 0,
+          "is_dead": false
+        },
+        "-12,8": {
+          "crop": null,
+          "growth_days": 0.0,
+          "watered_today": false,
+          "unwatered_days": 0,
+          "is_dead": false
+        },
+        "-13,12": {
+          "crop": null,
+          "growth_days": 0.0,
+          "watered_today": false,
+          "unwatered_days": 0,
+          "is_dead": false
+        },
+        "-11,9": {
+          "crop": null,
+          "growth_days": 0.0,
+          "watered_today": false,
+          "unwatered_days": 0,
+          "is_dead": false
+        },
+        "-12,11": {
+          "crop": null,
+          "growth_days": 0.0,
+          "watered_today": false,
+          "unwatered_days": 0,
+          "is_dead": false
+        },
+        "-10,8": {
+          "crop": null,
+          "growth_days": 0.0,
+          "watered_today": false,
+          "unwatered_days": 0,
+          "is_dead": false
+        },
+        "-11,12": {
+          "crop": null,
+          "growth_days": 0.0,
+          "watered_today": false,
+          "unwatered_days": 0,
+          "is_dead": false
+        },
+        "-10,11": {
+          "crop": null,
+          "growth_days": 0.0,
+          "watered_today": false,
+          "unwatered_days": 0,
+          "is_dead": false
+        },
+        "-14,10": {
+          "crop": null,
+          "growth_days": 0.0,
+          "watered_today": false,
+          "unwatered_days": 0,
+          "is_dead": false
+        },
+        "-16,9": {
+          "crop": null,
+          "growth_days": 0.0,
+          "watered_today": false,
+          "unwatered_days": 0,
+          "is_dead": false
+        },
+        "-15,8": {
+          "crop": null,
+          "growth_days": 0.0,
+          "watered_today": false,
+          "unwatered_days": 0,
+          "is_dead": false
+        },
+        "-16,12": {
+          "crop": null,
+          "growth_days": 0.0,
+          "watered_today": false,
+          "unwatered_days": 0,
+          "is_dead": false
+        }
+      },
+      "tile_graves": {},
+      "church_tax": {
+        "Gold": 0,
+        "Silver": 0,
+        "Copper": 1
+      },
+      "church_tax_paid_households": {},
+      "tax_paid_households_today": [],
+      "batches": [],
+      "active_batch_id": null,
+      "batch_counter": 0,
+      "current_day_time": 8.431660000000123
+    },
+    {
+      "id": "permit_5",
+      "name": "Housing Lot #5",
+      "permit_type": "housing",
+      "tiles": [
+        [
+          0,
+          1
+        ],
+        [
+          2,
+          4
+        ],
+        [
+          1,
+          2
+        ],
+        [
+          0,
+          4
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          1,
+          5
+        ],
+        [
+          0,
+          2
+        ],
+        [
+          0,
+          5
+        ],
+        [
+          2,
+          2
+        ],
+        [
+          1,
+          0
+        ],
+        [
+          2,
+          5
+        ],
+        [
+          1,
+          3
+        ],
+        [
+          0,
+          0
+        ],
+        [
+          1,
+          1
+        ],
+        [
+          0,
+          3
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          1,
+          4
+        ],
+        [
+          2,
+          3
+        ]
+      ],
+      "max_workers": 2,
+      "assigned_workers": [],
+      "crop": null,
+      "growth_days": 0.0,
+      "watered_today": false,
+      "tile_crops": {},
+      "tile_graves": {},
+      "church_tax": {
+        "Gold": 0,
+        "Silver": 0,
+        "Copper": 1
+      },
+      "church_tax_paid_households": {},
+      "tax_paid_households_today": [],
+      "batches": [],
+      "active_batch_id": null,
+      "batch_counter": 0,
+      "current_day_time": 8.431660000000123
+    },
+    {
+      "id": "permit_6",
+      "name": "Housing Lot #6",
+      "permit_type": "housing",
+      "tiles": [
+        [
+          -5,
+          0
+        ],
+        [
+          -6,
+          4
+        ],
+        [
+          -4,
+          0
+        ],
+        [
+          -5,
+          3
+        ],
+        [
+          -6,
+          1
+        ],
+        [
+          -4,
+          3
+        ],
+        [
+          -6,
+          2
+        ],
+        [
+          -5,
+          1
+        ],
+        [
+          -4,
+          4
+        ],
+        [
+          -6,
+          5
+        ],
+        [
+          -4,
+          1
+        ],
+        [
+          -5,
+          4
+        ],
+        [
+          -5,
+          2
+        ],
+        [
+          -6,
+          0
+        ],
+        [
+          -4,
+          2
+        ],
+        [
+          -5,
+          5
+        ],
+        [
+          -6,
+          3
+        ],
+        [
+          -4,
+          5
+        ]
+      ],
+      "max_workers": 2,
+      "assigned_workers": [],
+      "crop": null,
+      "growth_days": 0.0,
+      "watered_today": false,
+      "tile_crops": {},
+      "tile_graves": {},
+      "church_tax": {
+        "Gold": 0,
+        "Silver": 0,
+        "Copper": 1
+      },
+      "church_tax_paid_households": {},
+      "tax_paid_households_today": [],
+      "batches": [],
+      "active_batch_id": null,
+      "batch_counter": 0,
+      "current_day_time": 8.431660000000123
+    },
+    {
+      "id": "permit_7",
+      "name": "Church Lot #7",
+      "permit_type": "church",
+      "tiles": [
+        [
+          -12,
+          4
+        ],
+        [
+          -9,
+          4
+        ],
+        [
+          -11,
+          5
+        ],
+        [
+          -14,
+          3
+        ],
+        [
+          -12,
+          5
+        ],
+        [
+          -13,
+          3
+        ],
+        [
+          -10,
+          4
+        ],
+        [
+          -10,
+          5
+        ],
+        [
+          -11,
+          3
+        ],
+        [
+          -9,
+          5
+        ],
+        [
+          -14,
+          4
+        ],
+        [
+          -13,
+          4
+        ],
+        [
+          -12,
+          3
+        ],
+        [
+          -11,
+          4
+        ],
+        [
+          -10,
+          3
+        ],
+        [
+          -9,
+          3
+        ],
+        [
+          -14,
+          5
+        ],
+        [
+          -13,
+          5
+        ]
+      ],
+      "max_workers": 1,
+      "assigned_workers": [
+        "vil_11"
+      ],
+      "crop": null,
+      "growth_days": 0.0,
+      "watered_today": false,
+      "tile_crops": {},
+      "tile_graves": {},
+      "church_tax": {
+        "Gold": 0,
+        "Silver": 0,
+        "Copper": 1
+      },
+      "church_tax_paid_households": {},
+      "tax_paid_households_today": [],
+      "batches": [],
+      "active_batch_id": null,
+      "batch_counter": 0,
+      "current_day_time": 8.431660000000123
+    },
+    {
+      "id": "permit_8",
+      "name": "Cemetery Lot #8",
+      "permit_type": "cemetery",
+      "tiles": [
+        [
+          -10,
+          7
+        ],
+        [
+          -9,
+          7
+        ],
+        [
+          -16,
+          4
+        ],
+        [
+          -15,
+          3
+        ],
+        [
+          -16,
+          7
+        ],
+        [
+          -15,
+          6
+        ],
+        [
+          -14,
+          6
+        ],
+        [
+          -11,
+          6
+        ],
+        [
+          -13,
+          6
+        ],
+        [
+          -15,
+          4
+        ],
+        [
+          -15,
+          7
+        ],
+        [
+          -16,
+          5
+        ],
+        [
+          -14,
+          7
+        ],
+        [
+          -13,
+          7
+        ],
+        [
+          -12,
+          6
+        ],
+        [
+          -11,
+          7
+        ],
+        [
+          -10,
+          6
+        ],
+        [
+          -9,
+          6
+        ],
+        [
+          -16,
+          6
+        ],
+        [
+          -15,
+          5
+        ],
+        [
+          -16,
+          3
+        ],
+        [
+          -12,
+          7
+        ]
+      ],
+      "max_workers": 2,
+      "assigned_workers": [
+        "vil_10"
+      ],
+      "crop": null,
+      "growth_days": 0.0,
+      "watered_today": false,
+      "tile_crops": {},
+      "tile_graves": {},
+      "church_tax": {
+        "Gold": 0,
+        "Silver": 0,
+        "Copper": 1
+      },
+      "church_tax_paid_households": {},
+      "tax_paid_households_today": [],
+      "batches": [],
+      "active_batch_id": null,
+      "batch_counter": 0,
+      "current_day_time": 8.431660000000123
+    },
+    {
+      "id": "permit_9",
+      "name": "Housing Lot #9",
+      "permit_type": "housing",
+      "tiles": [
+        [
+          -20,
+          4
+        ],
+        [
+          -19,
+          4
+        ],
+        [
+          -20,
+          7
+        ],
+        [
+          -18,
+          4
+        ],
+        [
+          -19,
+          7
+        ],
+        [
+          -17,
+          3
+        ],
+        [
+          -18,
+          7
+        ],
+        [
+          -17,
+          6
+        ],
+        [
+          -20,
+          5
+        ],
+        [
+          -19,
+          5
+        ],
+        [
+          -17,
+          7
+        ],
+        [
+          -18,
+          5
+        ],
+        [
+          -17,
+          4
+        ],
+        [
+          -20,
+          3
+        ],
+        [
+          -19,
+          3
+        ],
+        [
+          -20,
+          6
+        ],
+        [
+          -17,
+          5
+        ],
+        [
+          -18,
+          3
+        ],
+        [
+          -19,
+          6
+        ],
+        [
+          -18,
+          6
+        ]
+      ],
+      "max_workers": 2,
+      "assigned_workers": [],
+      "crop": null,
+      "growth_days": 0.0,
+      "watered_today": false,
+      "tile_crops": {},
+      "tile_graves": {},
+      "church_tax": {
+        "Gold": 0,
+        "Silver": 0,
+        "Copper": 1
+      },
+      "church_tax_paid_households": {},
+      "tax_paid_households_today": [],
+      "batches": [],
+      "active_batch_id": null,
+      "batch_counter": 0,
+      "current_day_time": 8.431660000000123
+    },
+    {
+      "id": "permit_10",
+      "name": "Market Lot #10",
+      "permit_type": "market",
+      "tiles": [
+        [
+          -21,
+          -5
+        ],
+        [
+          -21,
+          -6
+        ],
+        [
+          -20,
+          -6
+        ],
+        [
+          -20,
+          -5
+        ],
+        [
+          -19,
+          -6
+        ],
+        [
+          -19,
+          -5
+        ]
+      ],
+      "max_workers": 2,
+      "assigned_workers": [],
+      "crop": null,
+      "growth_days": 0.0,
+      "watered_today": false,
+      "tile_crops": {},
+      "tile_graves": {},
+      "church_tax": {
+        "Gold": 0,
+        "Silver": 0,
+        "Copper": 1
+      },
+      "church_tax_paid_households": {},
+      "tax_paid_households_today": [],
+      "batches": [],
+      "active_batch_id": null,
+      "batch_counter": 0,
+      "current_day_time": 8.431660000000123
+    },
+    {
+      "id": "permit_11",
+      "name": "Market Lot #11",
+      "permit_type": "market",
+      "tiles": [
+        [
+          -20,
+          -2
+        ],
+        [
+          -19,
+          -2
+        ],
+        [
+          -20,
+          -3
+        ],
+        [
+          -19,
+          -3
+        ],
+        [
+          -21,
+          -3
+        ],
+        [
+          -21,
+          -2
+        ]
+      ],
+      "max_workers": 2,
+      "assigned_workers": [],
+      "crop": null,
+      "growth_days": 0.0,
+      "watered_today": false,
+      "tile_crops": {},
+      "tile_graves": {},
+      "church_tax": {
+        "Gold": 0,
+        "Silver": 0,
+        "Copper": 1
+      },
+      "church_tax_paid_households": {},
+      "tax_paid_households_today": [],
+      "batches": [],
+      "active_batch_id": null,
+      "batch_counter": 0,
+      "current_day_time": 8.431660000000123
+    }
+  ],
+  "buildings": [
+    {
+      "building_type": "wooden_structure",
+      "tiles": [
+        [
+          -12,
+          -4
+        ],
+        [
+          -13,
+          -6
+        ],
+        [
+          -8,
+          -5
+        ],
+        [
+          -10,
+          -4
+        ],
+        [
+          -11,
+          -6
+        ],
+        [
+          -9,
+          -4
+        ],
+        [
+          -13,
+          -5
+        ],
+        [
+          -12,
+          -6
+        ],
+        [
+          -11,
+          -5
+        ],
+        [
+          -10,
+          -6
+        ],
+        [
+          -8,
+          -4
+        ],
+        [
+          -9,
+          -6
+        ],
+        [
+          -13,
+          -4
+        ],
+        [
+          -12,
+          -5
+        ],
+        [
+          -11,
+          -4
+        ],
+        [
+          -10,
+          -5
+        ],
+        [
+          -9,
+          -5
+        ],
+        [
+          -8,
+          -6
+        ]
+      ],
+      "door_pos": [
+        -10,
+        -4
+      ],
+      "door_side": "bottom",
+      "rotation": 0,
+      "condition": 1.0,
+      "construction_order": {},
+      "construction_progress": 0.0,
+      "assigned_workers": [],
+      "owner": "landlord",
+      "inventory": {},
+      "currency": {
+        "Copper": 0,
+        "Silver": 0,
+        "Gold": 0
+      },
+      "prices": {},
+      "assigned_family_id": null,
+      "assigned_household_id": null,
+      "item_allocations": {},
+      "sale_items": [],
+      "sales_report_period": null,
+      "sales_report_by_item": {},
+      "sales_report_last_day": 1,
+      "household_sale_percent": 20,
+      "household_sale_limits": {},
+      "stall_requested_qty": {},
+      "auto_pricing": false
+    },
+    {
+      "building_type": "market",
+      "tiles": [
+        [
+          -17,
+          -6
+        ],
+        [
+          -16,
+          -6
+        ],
+        [
+          -17,
+          -5
+        ],
+        [
+          -16,
+          -5
+        ],
+        [
+          -15,
+          -6
+        ],
+        [
+          -15,
+          -5
+        ]
+      ],
+      "door_pos": null,
+      "door_side": null,
+      "rotation": 0,
+      "condition": 1.0,
+      "construction_order": {
+        "id": "building:market:-17:-6",
+        "order_type": "REPAIR",
+        "status": "COMPLETE",
+        "payer_family_id": null,
+        "payer_type": "landlord",
+        "payer_id": "landlord",
+        "builder_id": "vil_4",
+        "artisan_job": "Builder",
+        "commission_paid": true,
+        "materials": {
+          "Wood": 2
+        },
+        "material_cost_copper": 4,
+        "living_wage_copper": 9,
+        "price_copper": 13,
+        "food_unit_price_at_order": 3,
+        "progress_ratio": 1.0,
+        "builder_family_id": "fam_1",
+        "build_duration_seconds": 25.0,
+        "paid_by_id": "landlord",
+        "paid_amount_copper": 13,
+        "paid_seq": 13,
+        "material_source_family_id": "fam_1",
+        "materials_delivered": {
+          "Wood": 2
+        },
+        "materials_committed": true
+      },
+      "construction_progress": 25.00000000000022,
+      "assigned_workers": [],
+      "owner": "landlord",
+      "inventory": {
+        "Spade": 1,
+        "Iron Bar": 50,
+        "Iron Ore": 10,
+        "Felling_Axe": 1,
+        "Stone": 20,
+        "Potato": 35
+      },
+      "currency": {
+        "Copper": 6,
+        "Silver": 1
+      },
+      "prices": {
+        "Potato": 1,
+        "Wood": 1,
+        "Stone": 1,
+        "Water": 1,
+        "Hoe": 1,
+        "Sickle": 1,
+        "Watering_Can": 1,
+        "Saw": 1,
+        "Adze": 1,
+        "Felling_Axe": 1,
+        "Spade": 1,
+        "Pickaxe": 1,
+        "Sledgehammer": 1,
+        "Hammer": 1,
+        "Tongs": 1,
+        "Iron Ore": 1,
+        "Iron Bar": 1
+      },
+      "assigned_family_id": null,
+      "assigned_household_id": null,
+      "item_allocations": {},
+      "sale_items": [
+        "Potato",
+        "Wood",
+        "Stone",
+        "Water",
+        "Hoe",
+        "Sickle",
+        "Watering_Can",
+        "Saw",
+        "Adze",
+        "Felling_Axe",
+        "Spade",
+        "Pickaxe",
+        "Sledgehammer",
+        "Hammer",
+        "Tongs",
+        "Iron Ore",
+        "Iron Bar"
+      ],
+      "sales_report_period": 0,
+      "sales_report_by_item": {
+        "Adze": {
+          "quantity": 1,
+          "revenue_copper": 1
+        },
+        "Saw": {
+          "quantity": 1,
+          "revenue_copper": 1
+        },
+        "Sickle": {
+          "quantity": 3,
+          "revenue_copper": 3
+        },
+        "Stone": {
+          "quantity": 180,
+          "revenue_copper": 180
+        },
+        "Hoe": {
+          "quantity": 3,
+          "revenue_copper": 3
+        },
+        "Watering_Can": {
+          "quantity": 3,
+          "revenue_copper": 3
+        },
+        "Wood": {
+          "quantity": 250,
+          "revenue_copper": 250
+        },
+        "Potato": {
+          "quantity": 65,
+          "revenue_copper": 65
+        },
+        "Hammer": {
+          "quantity": 1,
+          "revenue_copper": 1
+        },
+        "Tongs": {
+          "quantity": 1,
+          "revenue_copper": 1
+        },
+        "Iron Ore": {
+          "quantity": 40,
+          "revenue_copper": 40
+        },
+        "Pickaxe": {
+          "quantity": 1,
+          "revenue_copper": 1
+        },
+        "Sledgehammer": {
+          "quantity": 1,
+          "revenue_copper": 1
+        }
+      },
+      "sales_report_last_day": 8,
+      "household_sale_percent": 20,
+      "household_sale_limits": {},
+      "stall_requested_qty": {},
+      "auto_pricing": false
+    },
+    {
+      "building_type": "toilet",
+      "tiles": [
+        [
+          -7,
+          -6
+        ]
+      ],
+      "door_pos": null,
+      "door_side": null,
+      "rotation": 0,
+      "condition": 1.0,
+      "construction_order": {},
+      "construction_progress": 0.0,
+      "assigned_workers": [],
+      "owner": "landlord",
+      "inventory": {},
+      "currency": {
+        "Copper": 0,
+        "Silver": 0,
+        "Gold": 0
+      },
+      "prices": {},
+      "assigned_family_id": null,
+      "assigned_household_id": null,
+      "item_allocations": {},
+      "sale_items": [],
+      "sales_report_period": null,
+      "sales_report_by_item": {},
+      "sales_report_last_day": 1,
+      "household_sale_percent": 20,
+      "household_sale_limits": {},
+      "stall_requested_qty": {},
+      "auto_pricing": false
+    },
+    {
+      "building_type": "well",
+      "tiles": [
+        [
+          0,
+          -5
+        ],
+        [
+          0,
+          -4
+        ],
+        [
+          1,
+          -4
+        ],
+        [
+          1,
+          -5
+        ]
+      ],
+      "door_pos": null,
+      "door_side": null,
+      "rotation": 0,
+      "condition": 1.0,
+      "construction_order": {},
+      "construction_progress": 0.0,
+      "assigned_workers": [],
+      "owner": "landlord",
+      "inventory": {},
+      "currency": {
+        "Copper": 0,
+        "Silver": 0,
+        "Gold": 0
+      },
+      "prices": {},
+      "assigned_family_id": null,
+      "assigned_household_id": null,
+      "item_allocations": {},
+      "sale_items": [],
+      "sales_report_period": null,
+      "sales_report_by_item": {},
+      "sales_report_last_day": 1,
+      "household_sale_percent": 20,
+      "household_sale_limits": {},
+      "stall_requested_qty": {},
+      "auto_pricing": false
+    },
+    {
+      "building_type": "wooden_structure",
+      "tiles": [
+        [
+          -5,
+          0
+        ],
+        [
+          -6,
+          4
+        ],
+        [
+          -4,
+          0
+        ],
+        [
+          -5,
+          3
+        ],
+        [
+          -6,
+          1
+        ],
+        [
+          -4,
+          3
+        ],
+        [
+          -6,
+          2
+        ],
+        [
+          -5,
+          1
+        ],
+        [
+          -4,
+          4
+        ],
+        [
+          -6,
+          5
+        ],
+        [
+          -4,
+          1
+        ],
+        [
+          -5,
+          4
+        ],
+        [
+          -5,
+          2
+        ],
+        [
+          -6,
+          0
+        ],
+        [
+          -4,
+          2
+        ],
+        [
+          -5,
+          5
+        ],
+        [
+          -6,
+          3
+        ],
+        [
+          -4,
+          5
+        ]
+      ],
+      "door_pos": [
+        -4,
+        1
+      ],
+      "door_side": "right",
+      "rotation": 0,
+      "condition": 1.0,
+      "construction_order": {},
+      "construction_progress": 0.0,
+      "assigned_workers": [],
+      "owner": "landlord",
+      "inventory": {},
+      "currency": {
+        "Copper": 0,
+        "Silver": 0,
+        "Gold": 0
+      },
+      "prices": {},
+      "assigned_family_id": null,
+      "assigned_household_id": null,
+      "item_allocations": {},
+      "sale_items": [],
+      "sales_report_period": null,
+      "sales_report_by_item": {},
+      "sales_report_last_day": 1,
+      "household_sale_percent": 20,
+      "household_sale_limits": {},
+      "stall_requested_qty": {},
+      "auto_pricing": false
+    },
+    {
+      "building_type": "wooden_structure",
+      "tiles": [
+        [
+          0,
+          1
+        ],
+        [
+          2,
+          4
+        ],
+        [
+          1,
+          2
+        ],
+        [
+          0,
+          4
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          1,
+          5
+        ],
+        [
+          0,
+          2
+        ],
+        [
+          0,
+          5
+        ],
+        [
+          2,
+          2
+        ],
+        [
+          1,
+          0
+        ],
+        [
+          2,
+          5
+        ],
+        [
+          1,
+          3
+        ],
+        [
+          0,
+          0
+        ],
+        [
+          1,
+          1
+        ],
+        [
+          0,
+          3
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          1,
+          4
+        ],
+        [
+          2,
+          3
+        ]
+      ],
+      "door_pos": [
+        0,
+        1
+      ],
+      "door_side": "left",
+      "rotation": 0,
+      "condition": 1.0,
+      "construction_order": {},
+      "construction_progress": 0.0,
+      "assigned_workers": [],
+      "owner": "landlord",
+      "inventory": {},
+      "currency": {
+        "Copper": 0,
+        "Silver": 0,
+        "Gold": 0
+      },
+      "prices": {},
+      "assigned_family_id": null,
+      "assigned_household_id": null,
+      "item_allocations": {},
+      "sale_items": [],
+      "sales_report_period": null,
+      "sales_report_by_item": {},
+      "sales_report_last_day": 1,
+      "household_sale_percent": 20,
+      "household_sale_limits": {},
+      "stall_requested_qty": {},
+      "auto_pricing": false
+    },
+    {
+      "building_type": "toilet",
+      "tiles": [
+        [
+          -7,
+          0
+        ]
+      ],
+      "door_pos": null,
+      "door_side": null,
+      "rotation": 270,
+      "condition": 1.0,
+      "construction_order": {},
+      "construction_progress": 0.0,
+      "assigned_workers": [],
+      "owner": "landlord",
+      "inventory": {},
+      "currency": {
+        "Copper": 0,
+        "Silver": 0,
+        "Gold": 0
+      },
+      "prices": {},
+      "assigned_family_id": null,
+      "assigned_household_id": null,
+      "item_allocations": {},
+      "sale_items": [],
+      "sales_report_period": null,
+      "sales_report_by_item": {},
+      "sales_report_last_day": 1,
+      "household_sale_percent": 20,
+      "household_sale_limits": {},
+      "stall_requested_qty": {},
+      "auto_pricing": false
+    },
+    {
+      "building_type": "toilet",
+      "tiles": [
+        [
+          -7,
+          2
+        ]
+      ],
+      "door_pos": null,
+      "door_side": null,
+      "rotation": 270,
+      "condition": 1.0,
+      "construction_order": {},
+      "construction_progress": 0.0,
+      "assigned_workers": [],
+      "owner": "landlord",
+      "inventory": {},
+      "currency": {
+        "Copper": 0,
+        "Silver": 0,
+        "Gold": 0
+      },
+      "prices": {},
+      "assigned_family_id": null,
+      "assigned_household_id": null,
+      "item_allocations": {},
+      "sale_items": [],
+      "sales_report_period": null,
+      "sales_report_by_item": {},
+      "sales_report_last_day": 1,
+      "household_sale_percent": 20,
+      "household_sale_limits": {},
+      "stall_requested_qty": {},
+      "auto_pricing": false
+    },
+    {
+      "building_type": "stone_structure",
+      "tiles": [
+        [
+          -12,
+          4
+        ],
+        [
+          -9,
+          4
+        ],
+        [
+          -11,
+          5
+        ],
+        [
+          -14,
+          3
+        ],
+        [
+          -12,
+          5
+        ],
+        [
+          -13,
+          3
+        ],
+        [
+          -10,
+          4
+        ],
+        [
+          -10,
+          5
+        ],
+        [
+          -11,
+          3
+        ],
+        [
+          -9,
+          5
+        ],
+        [
+          -14,
+          4
+        ],
+        [
+          -13,
+          4
+        ],
+        [
+          -12,
+          3
+        ],
+        [
+          -11,
+          4
+        ],
+        [
+          -10,
+          3
+        ],
+        [
+          -9,
+          3
+        ],
+        [
+          -14,
+          5
+        ],
+        [
+          -13,
+          5
+        ]
+      ],
+      "door_pos": [
+        -13,
+        3
+      ],
+      "door_side": "top",
+      "rotation": 0,
+      "condition": 1.0,
+      "construction_order": {},
+      "construction_progress": 0.0,
+      "assigned_workers": [],
+      "owner": "landlord",
+      "inventory": {},
+      "currency": {
+        "Copper": 0,
+        "Silver": 0,
+        "Gold": 0
+      },
+      "prices": {},
+      "assigned_family_id": null,
+      "assigned_household_id": null,
+      "item_allocations": {},
+      "sale_items": [],
+      "sales_report_period": null,
+      "sales_report_by_item": {},
+      "sales_report_last_day": 1,
+      "household_sale_percent": 20,
+      "household_sale_limits": {},
+      "stall_requested_qty": {},
+      "auto_pricing": false
+    },
+    {
+      "building_type": "stone_structure",
+      "tiles": [
+        [
+          -20,
+          4
+        ],
+        [
+          -19,
+          4
+        ],
+        [
+          -20,
+          7
+        ],
+        [
+          -18,
+          4
+        ],
+        [
+          -19,
+          7
+        ],
+        [
+          -17,
+          3
+        ],
+        [
+          -18,
+          7
+        ],
+        [
+          -17,
+          6
+        ],
+        [
+          -20,
+          5
+        ],
+        [
+          -19,
+          5
+        ],
+        [
+          -17,
+          7
+        ],
+        [
+          -18,
+          5
+        ],
+        [
+          -17,
+          4
+        ],
+        [
+          -20,
+          3
+        ],
+        [
+          -19,
+          3
+        ],
+        [
+          -20,
+          6
+        ],
+        [
+          -17,
+          5
+        ],
+        [
+          -18,
+          3
+        ],
+        [
+          -19,
+          6
+        ],
+        [
+          -18,
+          6
+        ]
+      ],
+      "door_pos": [
+        -18,
+        3
+      ],
+      "door_side": "top",
+      "rotation": 0,
+      "condition": 1.0,
+      "construction_order": {},
+      "construction_progress": 0.0,
+      "assigned_workers": [],
+      "owner": "landlord",
+      "inventory": {},
+      "currency": {
+        "Copper": 0,
+        "Silver": 0,
+        "Gold": 0
+      },
+      "prices": {},
+      "assigned_family_id": null,
+      "assigned_household_id": null,
+      "item_allocations": {},
+      "sale_items": [],
+      "sales_report_period": null,
+      "sales_report_by_item": {},
+      "sales_report_last_day": 1,
+      "household_sale_percent": 20,
+      "household_sale_limits": {},
+      "stall_requested_qty": {},
+      "auto_pricing": false
+    },
+    {
+      "building_type": "market",
+      "tiles": [
+        [
+          -21,
+          -5
+        ],
+        [
+          -21,
+          -6
+        ],
+        [
+          -20,
+          -6
+        ],
+        [
+          -20,
+          -5
+        ],
+        [
+          -19,
+          -6
+        ],
+        [
+          -19,
+          -5
+        ]
+      ],
+      "door_pos": null,
+      "door_side": null,
+      "rotation": 0,
+      "condition": 1.0,
+      "construction_order": {},
+      "construction_progress": 0.0,
+      "assigned_workers": [],
+      "owner": "fam_2",
+      "inventory": {},
+      "currency": {
+        "Copper": 0,
+        "Silver": 0,
+        "Gold": 0
+      },
+      "prices": {
+        "Potato": 3,
+        "Wood": 2,
+        "Stone": 3,
+        "Water": 2,
+        "Hoe": 8,
+        "Sickle": 6,
+        "Watering_Can": 8,
+        "Saw": 12,
+        "Adze": 10,
+        "Felling_Axe": 15,
+        "Spade": 8,
+        "Pickaxe": 14,
+        "Sledgehammer": 10,
+        "Hammer": 12,
+        "Tongs": 10,
+        "Iron Ore": 4,
+        "Iron Bar": 10
+      },
+      "assigned_family_id": "fam_2",
+      "assigned_household_id": "fam_2",
+      "item_allocations": {},
+      "sale_items": [],
+      "sales_report_period": 0,
+      "sales_report_by_item": {},
+      "sales_report_last_day": 1,
+      "household_sale_percent": 20,
+      "household_sale_limits": {},
+      "stall_requested_qty": {},
+      "auto_pricing": true
+    }
+  ],
+  "construction_sites": [],
+  "demolition_sites": [],
+  "stockpile": [
+    {
+      "resource_type": "Stone",
+      "amount": 74,
+      "grid_x": -16,
+      "grid_y": 8,
+      "owner_type": "landlord",
+      "owner_id": null
+    },
+    {
+      "resource_type": "Wood",
+      "amount": 32,
+      "grid_x": -15,
+      "grid_y": 8,
+      "owner_type": "landlord",
+      "owner_id": null
+    },
+    {
+      "resource_type": "Pickaxe",
+      "amount": 1,
+      "grid_x": 0,
+      "grid_y": 1,
+      "owner_type": "villager",
+      "owner_id": "fam_2"
+    },
+    {
+      "resource_type": "Silver",
+      "amount": 5,
+      "grid_x": 0,
+      "grid_y": 1,
+      "owner_type": "villager",
+      "owner_id": "fam_2"
+    },
+    {
+      "resource_type": "Water",
+      "amount": 4,
+      "grid_x": 0,
+      "grid_y": 0,
+      "owner_type": "villager",
+      "owner_id": "fam_2"
+    },
+    {
+      "resource_type": "Water",
+      "amount": 3,
+      "grid_x": 0,
+      "grid_y": 1,
+      "owner_type": "villager",
+      "owner_id": "fam_2"
+    }
+  ],
+  "furniture": [
+    {
+      "id": "furn_1",
+      "furniture_type": "lord_treasury_chest",
+      "gx": -10,
+      "gy": 2,
+      "rotation": 0,
+      "permit_id": null,
+      "family_id": null,
+      "assigned_villager_id": null,
+      "assigned_workers": [],
+      "is_dropped": false,
+      "stored_in_id": null,
+      "construction_order": {},
+      "construction_progress": 0.0,
+      "designated_target": null,
+      "carrier_id": null,
+      "condition": 1.0,
+      "inventory": {
+        "Silver": 14,
+        "Gold": 6,
+        "Copper": 6
+      },
+      "currency": {},
+      "tool_conditions": {},
+      "tool_orders": [],
+      "break_check_day": 8,
+      "break_check_hour": 3.25613437134595,
+      "break_checked_today": true,
+      "station_quota_daily": 0,
+      "station_quota_today": 0,
+      "station_quota_day": -1,
+      "plant_tree_enabled": false,
+      "bound_mine_id": null
+    },
+    {
+      "id": "furn_2",
+      "furniture_type": "household_storage",
+      "gx": -12,
+      "gy": -4,
+      "rotation": 0,
+      "permit_id": "permit_1",
+      "family_id": "fam_1",
+      "assigned_villager_id": null,
+      "assigned_workers": [],
+      "is_dropped": false,
+      "stored_in_id": null,
+      "construction_order": {
+        "id": "furn_2",
+        "order_type": "REPAIR",
+        "status": "COMPLETE",
+        "payer_family_id": "fam_1",
+        "payer_type": "household",
+        "payer_id": null,
+        "builder_id": "vil_4",
+        "artisan_job": "Builder",
+        "commission_paid": true,
+        "materials": {
+          "Wood": 2
+        },
+        "material_cost_copper": 2,
+        "living_wage_copper": 3,
+        "price_copper": 5,
+        "food_unit_price_at_order": 1,
+        "progress_ratio": 1.0,
+        "builder_family_id": "fam_1",
+        "paid_by_id": "household",
+        "paid_amount_copper": 0,
+        "paid_seq": 7,
+        "material_source_family_id": "fam_1",
+        "materials_delivered": {
+          "Wood": 2
+        },
+        "materials_committed": true
+      },
+      "construction_progress": 25.00000000000022,
+      "designated_target": null,
+      "carrier_id": null,
+      "condition": 1.0,
+      "inventory": {
+        "Stone": 115,
+        "Wood": 19,
+        "Water": 6,
+        "Iron Bar": 10,
+        "Iron Ore": 6,
+        "Copper": 14,
+        "Silver": 4,
+        "Gold": 1
+      },
+      "currency": {},
+      "tool_conditions": {
+        "Hoe": [
+          "GOOD",
+          "GOOD",
+          "GOOD"
+        ],
+        "Sickle": [
+          "PRISTINE",
+          "PRISTINE",
+          "PRISTINE"
+        ],
+        "Watering_Can": [
+          "PRISTINE",
+          "GOOD",
+          "PRISTINE"
+        ]
+      },
+      "tool_orders": [],
+      "break_check_day": 8,
+      "break_check_hour": 16.110084285170682,
+      "break_checked_today": true,
+      "station_quota_daily": 0,
+      "station_quota_today": 0,
+      "station_quota_day": -1,
+      "plant_tree_enabled": false,
+      "bound_mine_id": null
+    },
+    {
+      "id": "furn_3",
+      "furniture_type": "builder_workbench",
+      "gx": -9,
+      "gy": -4,
+      "rotation": 0,
+      "permit_id": "permit_1",
+      "family_id": "fam_1",
+      "assigned_villager_id": null,
+      "assigned_workers": [
+        "vil_4"
+      ],
+      "is_dropped": false,
+      "stored_in_id": null,
+      "construction_order": {},
+      "construction_progress": 0.0,
+      "designated_target": null,
+      "carrier_id": null,
+      "condition": 1.0,
+      "inventory": {},
+      "currency": {},
+      "tool_conditions": {},
+      "tool_orders": [],
+      "break_check_day": 8,
+      "break_check_hour": 8.914271739488283,
+      "break_checked_today": true,
+      "station_quota_daily": 0,
+      "station_quota_today": 0,
+      "station_quota_day": -1,
+      "plant_tree_enabled": false,
+      "bound_mine_id": null
+    },
+    {
+      "id": "furn_4",
+      "furniture_type": "toolmaker_workbench",
+      "gx": -9,
+      "gy": -6,
+      "rotation": 0,
+      "permit_id": "permit_1",
+      "family_id": "fam_1",
+      "assigned_villager_id": null,
+      "assigned_workers": [
+        "vil_5"
+      ],
+      "is_dropped": false,
+      "stored_in_id": null,
+      "construction_order": {
+        "id": "furn_4",
+        "order_type": "REPAIR",
+        "status": "COMPLETE",
+        "payer_family_id": "fam_1",
+        "payer_type": "household",
+        "payer_id": null,
+        "builder_id": "vil_4",
+        "artisan_job": "Builder",
+        "commission_paid": true,
+        "materials": {
+          "Wood": 2
+        },
+        "material_cost_copper": 2,
+        "living_wage_copper": 3,
+        "price_copper": 5,
+        "food_unit_price_at_order": 1,
+        "progress_ratio": 1.0,
+        "builder_family_id": "fam_1",
+        "paid_by_id": "household",
+        "paid_amount_copper": 0,
+        "paid_seq": 14,
+        "material_source_family_id": "fam_1",
+        "materials_delivered": {
+          "Wood": 2
+        },
+        "materials_committed": true
+      },
+      "construction_progress": 25.00000000000022,
+      "designated_target": null,
+      "carrier_id": null,
+      "condition": 1.0,
+      "inventory": {},
+      "currency": {},
+      "tool_conditions": {},
+      "tool_orders": [
+        {
+          "materials": {
+            "Wood": 2,
+            "Iron Bar": 3
+          },
+          "material_cost_copper": 5,
+          "living_wage_copper": 5,
+          "price_copper": 10,
+          "food_unit_price_at_order": 1,
+          "id": "toolorder:furn_4:1",
+          "order_type": "TOOL_ORDER",
+          "status": "COMPLETE",
+          "payer_family_id": "fam_2",
+          "payer_type": "household",
+          "payer_id": "vil_6",
+          "builder_id": "vil_5",
+          "artisan_job": "Toolmaker",
+          "commission_paid": true,
+          "tool_name": "Pickaxe",
+          "qty_total": 1,
+          "qty_done": 1,
+          "craft_progress": 0.0,
+          "unit_duration_seconds": 48.60298682245199,
+          "builder_family_id": "fam_1",
+          "paid_by_id": "vil_6",
+          "paid_by_family_id": "fam_2",
+          "paid_amount_copper": 10,
+          "paid_seq": 16,
+          "progress_ratio": 1.0
+        },
+        {
+          "materials": {
+            "Wood": 2,
+            "Iron Bar": 3
+          },
+          "material_cost_copper": 5,
+          "living_wage_copper": 5,
+          "price_copper": 10,
+          "food_unit_price_at_order": 1,
+          "id": "toolorder:furn_4:2",
+          "order_type": "TOOL_ORDER",
+          "status": "COMPLETE",
+          "payer_family_id": "fam_2",
+          "payer_type": "household",
+          "payer_id": "vil_6",
+          "builder_id": "vil_5",
+          "artisan_job": "Toolmaker",
+          "commission_paid": true,
+          "tool_name": "Sledgehammer",
+          "qty_total": 1,
+          "qty_done": 1,
+          "craft_progress": 0.0,
+          "unit_duration_seconds": 30.558496865722613,
+          "builder_family_id": "fam_1",
+          "_claim_retry_at": 1795517675.384972,
+          "paid_by_id": "vil_6",
+          "paid_by_family_id": "fam_2",
+          "paid_amount_copper": 10,
+          "paid_seq": 17,
+          "progress_ratio": 1.0
+        },
+        {
+          "materials": {
+            "Wood": 2,
+            "Iron Bar": 3
+          },
+          "material_cost_copper": 5,
+          "living_wage_copper": 5,
+          "price_copper": 10,
+          "food_unit_price_at_order": 1,
+          "id": "toolorder:furn_4:3",
+          "order_type": "TOOL_ORDER",
+          "status": "COMPLETE",
+          "payer_family_id": "fam_2",
+          "payer_type": "household",
+          "payer_id": "vil_7",
+          "builder_id": "vil_5",
+          "artisan_job": "Toolmaker",
+          "commission_paid": true,
+          "tool_name": "Pickaxe",
+          "qty_total": 1,
+          "qty_done": 1,
+          "craft_progress": 0.0,
+          "unit_duration_seconds": 46.18016867601937,
+          "builder_family_id": "fam_1",
+          "paid_by_id": "vil_7",
+          "paid_by_family_id": "fam_2",
+          "paid_amount_copper": 10,
+          "paid_seq": 18,
+          "progress_ratio": 1.0
+        },
+        {
+          "materials": {
+            "Wood": 2,
+            "Iron Bar": 3
+          },
+          "material_cost_copper": 5,
+          "living_wage_copper": 5,
+          "price_copper": 10,
+          "food_unit_price_at_order": 1,
+          "id": "toolorder:furn_4:4",
+          "order_type": "TOOL_ORDER",
+          "status": "COMPLETE",
+          "payer_family_id": "fam_2",
+          "payer_type": "household",
+          "payer_id": "vil_8",
+          "builder_id": "vil_5",
+          "artisan_job": "Toolmaker",
+          "commission_paid": true,
+          "tool_name": "Felling_Axe",
+          "qty_total": 1,
+          "qty_done": 1,
+          "craft_progress": 0.0,
+          "unit_duration_seconds": 36.82049913067196,
+          "builder_family_id": "fam_1",
+          "_claim_retry_at": 1795517890.3183868,
+          "paid_by_id": "vil_8",
+          "paid_by_family_id": "fam_2",
+          "paid_amount_copper": 10,
+          "paid_seq": 20,
+          "progress_ratio": 1.0
+        },
+        {
+          "materials": {
+            "Wood": 2,
+            "Iron Bar": 3
+          },
+          "material_cost_copper": 5,
+          "living_wage_copper": 5,
+          "price_copper": 10,
+          "food_unit_price_at_order": 1,
+          "id": "toolorder:furn_4:5",
+          "order_type": "TOOL_ORDER",
+          "status": "COMPLETE",
+          "payer_family_id": "fam_2",
+          "payer_type": "household",
+          "payer_id": "vil_8",
+          "builder_id": "vil_5",
+          "artisan_job": "Toolmaker",
+          "commission_paid": true,
+          "tool_name": "Spade",
+          "qty_total": 1,
+          "qty_done": 1,
+          "craft_progress": 0.0,
+          "unit_duration_seconds": 48.716233483937145,
+          "builder_family_id": "fam_1",
+          "_claim_retry_at": 1795517903.694405,
+          "paid_by_id": "vil_8",
+          "paid_by_family_id": "fam_2",
+          "paid_amount_copper": 10,
+          "paid_seq": 22,
+          "progress_ratio": 1.0
+        },
+        {
+          "materials": {
+            "Wood": 2,
+            "Iron Bar": 3
+          },
+          "material_cost_copper": 5,
+          "living_wage_copper": 5,
+          "price_copper": 10,
+          "food_unit_price_at_order": 1,
+          "id": "toolorder:furn_4:6",
+          "order_type": "TOOL_ORDER",
+          "status": "COMPLETE",
+          "payer_family_id": "fam_3",
+          "payer_type": "household",
+          "payer_id": "vil_10",
+          "builder_id": "vil_5",
+          "artisan_job": "Toolmaker",
+          "commission_paid": true,
+          "tool_name": "Hoe",
+          "qty_total": 1,
+          "qty_done": 1,
+          "craft_progress": 0.0,
+          "unit_duration_seconds": 47.79544565276982,
+          "builder_family_id": "fam_1",
+          "paid_by_id": "vil_10",
+          "paid_by_family_id": "fam_3",
+          "paid_amount_copper": 10,
+          "paid_seq": 21,
+          "progress_ratio": 1.0
+        },
+        {
+          "materials": {
+            "Wood": 2,
+            "Iron Bar": 3
+          },
+          "material_cost_copper": 5,
+          "living_wage_copper": 5,
+          "price_copper": 10,
+          "food_unit_price_at_order": 1,
+          "id": "toolorder:furn_4:7",
+          "order_type": "TOOL_ORDER",
+          "status": "COMPLETE",
+          "payer_family_id": "fam_2",
+          "payer_type": "household",
+          "payer_id": "vil_8",
+          "builder_id": "vil_5",
+          "artisan_job": "Toolmaker",
+          "commission_paid": true,
+          "tool_name": "Felling_Axe",
+          "qty_total": 1,
+          "qty_done": 1,
+          "craft_progress": 0.0,
+          "unit_duration_seconds": 42.13831340165889,
+          "builder_family_id": "fam_1",
+          "_claim_retry_at": 1795517944.2218666,
+          "paid_by_id": "vil_8",
+          "paid_by_family_id": "fam_2",
+          "paid_amount_copper": 10,
+          "paid_seq": 25,
+          "progress_ratio": 1.0
+        },
+        {
+          "materials": {
+            "Wood": 2,
+            "Iron Bar": 3
+          },
+          "material_cost_copper": 5,
+          "living_wage_copper": 5,
+          "price_copper": 10,
+          "food_unit_price_at_order": 1,
+          "id": "toolorder:furn_4:8",
+          "order_type": "TOOL_ORDER",
+          "status": "COMPLETE",
+          "payer_family_id": "fam_2",
+          "payer_type": "household",
+          "payer_id": "vil_9",
+          "builder_id": "vil_5",
+          "artisan_job": "Toolmaker",
+          "commission_paid": true,
+          "tool_name": "Spade",
+          "qty_total": 1,
+          "qty_done": 1,
+          "craft_progress": 0.0,
+          "unit_duration_seconds": 46.9203814614334,
+          "builder_family_id": "fam_1",
+          "_claim_retry_at": 1795518679.602129,
+          "paid_by_id": "vil_9",
+          "paid_by_family_id": "fam_2",
+          "paid_amount_copper": 10,
+          "paid_seq": 33,
+          "progress_ratio": 1.0
+        }
+      ],
+      "break_check_day": 8,
+      "break_check_hour": 14.277633114244527,
+      "break_checked_today": true,
+      "station_quota_daily": 0,
+      "station_quota_today": 0,
+      "station_quota_day": -1,
+      "plant_tree_enabled": false,
+      "bound_mine_id": null
+    },
+    {
+      "id": "furn_5",
+      "furniture_type": "notice_board",
+      "gx": -12,
+      "gy": 2,
+      "rotation": 180,
+      "permit_id": null,
+      "family_id": null,
+      "assigned_villager_id": null,
+      "assigned_workers": [],
+      "is_dropped": false,
+      "stored_in_id": null,
+      "construction_order": {
+        "material_cost_copper": 10,
+        "living_wage_copper": 5,
+        "price_copper": 15,
+        "materials": {
+          "Wood": 10
+        },
+        "food_unit_price_at_order": 1,
+        "id": "furn_5",
+        "order_type": "BUILD",
+        "status": "COMPLETE",
+        "payer_family_id": null,
+        "payer_id": "landlord",
+        "builder_id": "vil_4",
+        "artisan_job": "Builder",
+        "commission_paid": true,
+        "payer_type": "landlord",
+        "builder_family_id": "fam_1",
+        "build_duration_seconds": 25.0,
+        "paid_by_id": "landlord",
+        "paid_amount_copper": 15,
+        "paid_seq": 4,
+        "material_source_family_id": "fam_1",
+        "materials_delivered": {
+          "Wood": 10
+        },
+        "materials_committed": true,
+        "progress_ratio": 1.0
+      },
+      "construction_progress": 25.00000000000022,
+      "designated_target": null,
+      "carrier_id": null,
+      "condition": 1.0,
+      "inventory": {},
+      "currency": {},
+      "tool_conditions": {},
+      "tool_orders": [],
+      "break_check_day": 8,
+      "break_check_hour": 15.38913505546795,
+      "break_checked_today": true,
+      "station_quota_daily": 0,
+      "station_quota_today": 0,
+      "station_quota_day": -1,
+      "plant_tree_enabled": false,
+      "bound_mine_id": null
+    },
+    {
+      "id": "furn_7",
+      "furniture_type": "miner_workstation",
+      "gx": 71,
+      "gy": -25,
+      "rotation": 0,
+      "permit_id": null,
+      "family_id": null,
+      "assigned_villager_id": null,
+      "assigned_workers": [
+        "vil_6"
+      ],
+      "is_dropped": false,
+      "stored_in_id": null,
+      "construction_order": {
+        "material_cost_copper": 30,
+        "living_wage_copper": 5,
+        "price_copper": 35,
+        "materials": {
+          "Stone": 20,
+          "Wood": 10
+        },
+        "food_unit_price_at_order": 1,
+        "id": "furn_7",
+        "order_type": "BUILD",
+        "status": "COMPLETE",
+        "payer_family_id": null,
+        "payer_id": "landlord",
+        "builder_id": "vil_4",
+        "artisan_job": "Builder",
+        "commission_paid": true,
+        "payer_type": "landlord",
+        "builder_family_id": "fam_1",
+        "build_duration_seconds": 25.0,
+        "paid_by_id": "landlord",
+        "paid_amount_copper": 35,
+        "paid_seq": 5,
+        "material_source_family_id": "fam_1",
+        "materials_delivered": {
+          "Stone": 20,
+          "Wood": 10
+        },
+        "materials_committed": true,
+        "progress_ratio": 1.0
+      },
+      "construction_progress": 25.00000000000022,
+      "designated_target": null,
+      "carrier_id": null,
+      "condition": 1.0,
+      "inventory": {},
+      "currency": {},
+      "tool_conditions": {},
+      "tool_orders": [],
+      "break_check_day": 8,
+      "break_check_hour": 2.195771165859969,
+      "break_checked_today": true,
+      "station_quota_daily": 0,
+      "station_quota_today": 4,
+      "station_quota_day": 8,
+      "plant_tree_enabled": false,
+      "bound_mine_id": "mine_1"
+    },
+    {
+      "id": "furn_9",
+      "furniture_type": "miner_workstation",
+      "gx": -90,
+      "gy": -23,
+      "rotation": 0,
+      "permit_id": null,
+      "family_id": null,
+      "assigned_villager_id": null,
+      "assigned_workers": [
+        "vil_7"
+      ],
+      "is_dropped": false,
+      "stored_in_id": null,
+      "construction_order": {
+        "material_cost_copper": 30,
+        "living_wage_copper": 5,
+        "price_copper": 35,
+        "materials": {
+          "Stone": 20,
+          "Wood": 10
+        },
+        "food_unit_price_at_order": 1,
+        "id": "furn_9",
+        "order_type": "BUILD",
+        "status": "COMPLETE",
+        "payer_family_id": null,
+        "payer_id": "landlord",
+        "builder_id": "vil_4",
+        "artisan_job": "Builder",
+        "commission_paid": true,
+        "payer_type": "landlord",
+        "builder_family_id": "fam_1",
+        "build_duration_seconds": 25.0,
+        "paid_by_id": "landlord",
+        "paid_amount_copper": 35,
+        "paid_seq": 6,
+        "material_source_family_id": "fam_1",
+        "materials_delivered": {
+          "Stone": 20,
+          "Wood": 10
+        },
+        "materials_committed": true,
+        "progress_ratio": 1.0
+      },
+      "construction_progress": 25.00000000000022,
+      "designated_target": null,
+      "carrier_id": null,
+      "condition": 1.0,
+      "inventory": {},
+      "currency": {},
+      "tool_conditions": {},
+      "tool_orders": [],
+      "break_check_day": 8,
+      "break_check_hour": 15.792129173764085,
+      "break_checked_today": true,
+      "station_quota_daily": 0,
+      "station_quota_today": 4,
+      "station_quota_day": 8,
+      "plant_tree_enabled": false,
+      "bound_mine_id": "mine_0"
+    },
+    {
+      "id": "furn_10",
+      "furniture_type": "bed",
+      "gx": -13,
+      "gy": -4,
+      "rotation": 0,
+      "permit_id": "permit_1",
+      "family_id": "fam_1",
+      "assigned_villager_id": "vil_5",
+      "assigned_workers": [],
+      "is_dropped": false,
+      "stored_in_id": null,
+      "construction_order": {
+        "material_cost_copper": 5,
+        "living_wage_copper": 5,
+        "price_copper": 10,
+        "materials": {
+          "Wood": 5,
+          "Stone": 0
+        },
+        "food_unit_price_at_order": 1,
+        "id": "furn_10",
+        "order_type": "BUILD",
+        "status": "COMPLETE",
+        "payer_family_id": "fam_1",
+        "payer_id": null,
+        "builder_id": "vil_4",
+        "artisan_job": "Builder",
+        "commission_paid": true,
+        "builder_family_id": "fam_1",
+        "paid_by_id": "household",
+        "paid_amount_copper": 0,
+        "paid_seq": 8,
+        "material_source_family_id": "fam_1",
+        "materials_delivered": {
+          "Wood": 5
+        },
+        "materials_committed": true,
+        "progress_ratio": 1.0
+      },
+      "construction_progress": 25.00000000000022,
+      "designated_target": null,
+      "carrier_id": null,
+      "condition": 1.0,
+      "inventory": {},
+      "currency": {},
+      "tool_conditions": {},
+      "tool_orders": [],
+      "break_check_day": 8,
+      "break_check_hour": 15.248058809200144,
+      "break_checked_today": true,
+      "station_quota_daily": 0,
+      "station_quota_today": 0,
+      "station_quota_day": -1,
+      "plant_tree_enabled": false,
+      "bound_mine_id": null
+    },
+    {
+      "id": "furn_11",
+      "furniture_type": "bed",
+      "gx": -11,
+      "gy": -4,
+      "rotation": 0,
+      "permit_id": "permit_1",
+      "family_id": "fam_1",
+      "assigned_villager_id": "vil_1",
+      "assigned_workers": [],
+      "is_dropped": false,
+      "stored_in_id": null,
+      "construction_order": {
+        "material_cost_copper": 5,
+        "living_wage_copper": 5,
+        "price_copper": 10,
+        "materials": {
+          "Wood": 5,
+          "Stone": 0
+        },
+        "food_unit_price_at_order": 1,
+        "id": "furn_11",
+        "order_type": "BUILD",
+        "status": "COMPLETE",
+        "payer_family_id": "fam_1",
+        "payer_id": null,
+        "builder_id": "vil_4",
+        "artisan_job": "Builder",
+        "commission_paid": true,
+        "builder_family_id": "fam_1",
+        "paid_by_id": "household",
+        "paid_amount_copper": 0,
+        "paid_seq": 9,
+        "material_source_family_id": "fam_1",
+        "materials_delivered": {
+          "Wood": 5
+        },
+        "materials_committed": true,
+        "progress_ratio": 1.0
+      },
+      "construction_progress": 25.00000000000022,
+      "designated_target": null,
+      "carrier_id": null,
+      "condition": 1.0,
+      "inventory": {},
+      "currency": {},
+      "tool_conditions": {},
+      "tool_orders": [],
+      "break_check_day": 8,
+      "break_check_hour": 15.334930420072995,
+      "break_checked_today": true,
+      "station_quota_daily": 0,
+      "station_quota_today": 0,
+      "station_quota_day": -1,
+      "plant_tree_enabled": false,
+      "bound_mine_id": null
+    },
+    {
+      "id": "furn_12",
+      "furniture_type": "bed",
+      "gx": -13,
+      "gy": -6,
+      "rotation": 180,
+      "permit_id": "permit_1",
+      "family_id": "fam_1",
+      "assigned_villager_id": "vil_3",
+      "assigned_workers": [],
+      "is_dropped": false,
+      "stored_in_id": null,
+      "construction_order": {
+        "material_cost_copper": 5,
+        "living_wage_copper": 5,
+        "price_copper": 10,
+        "materials": {
+          "Wood": 5,
+          "Stone": 0
+        },
+        "food_unit_price_at_order": 1,
+        "id": "furn_12",
+        "order_type": "BUILD",
+        "status": "COMPLETE",
+        "payer_family_id": "fam_1",
+        "payer_id": null,
+        "builder_id": "vil_4",
+        "artisan_job": "Builder",
+        "commission_paid": true,
+        "builder_family_id": "fam_1",
+        "paid_by_id": "household",
+        "paid_amount_copper": 0,
+        "paid_seq": 10,
+        "material_source_family_id": "fam_1",
+        "materials_delivered": {
+          "Wood": 5
+        },
+        "materials_committed": true,
+        "progress_ratio": 1.0
+      },
+      "construction_progress": 25.00000000000022,
+      "designated_target": null,
+      "carrier_id": null,
+      "condition": 1.0,
+      "inventory": {},
+      "currency": {},
+      "tool_conditions": {},
+      "tool_orders": [],
+      "break_check_day": 8,
+      "break_check_hour": 6.216714985465692,
+      "break_checked_today": true,
+      "station_quota_daily": 0,
+      "station_quota_today": 0,
+      "station_quota_day": -1,
+      "plant_tree_enabled": false,
+      "bound_mine_id": null
+    },
+    {
+      "id": "furn_13",
+      "furniture_type": "bed",
+      "gx": -12,
+      "gy": -6,
+      "rotation": 180,
+      "permit_id": "permit_1",
+      "family_id": "fam_1",
+      "assigned_villager_id": "vil_4",
+      "assigned_workers": [],
+      "is_dropped": false,
+      "stored_in_id": null,
+      "construction_order": {
+        "material_cost_copper": 5,
+        "living_wage_copper": 5,
+        "price_copper": 10,
+        "materials": {
+          "Wood": 5,
+          "Stone": 0
+        },
+        "food_unit_price_at_order": 1,
+        "id": "furn_13",
+        "order_type": "BUILD",
+        "status": "COMPLETE",
+        "payer_family_id": "fam_1",
+        "payer_id": null,
+        "builder_id": "vil_4",
+        "artisan_job": "Builder",
+        "commission_paid": true,
+        "builder_family_id": "fam_1",
+        "paid_by_id": "household",
+        "paid_amount_copper": 0,
+        "paid_seq": 11,
+        "material_source_family_id": "fam_1",
+        "materials_delivered": {
+          "Wood": 5
+        },
+        "materials_committed": true,
+        "progress_ratio": 1.0
+      },
+      "construction_progress": 25.00000000000022,
+      "designated_target": null,
+      "carrier_id": null,
+      "condition": 1.0,
+      "inventory": {},
+      "currency": {},
+      "tool_conditions": {},
+      "tool_orders": [],
+      "break_check_day": 8,
+      "break_check_hour": 16.702594342955386,
+      "break_checked_today": true,
+      "station_quota_daily": 0,
+      "station_quota_today": 0,
+      "station_quota_day": -1,
+      "plant_tree_enabled": false,
+      "bound_mine_id": null
+    },
+    {
+      "id": "furn_14",
+      "furniture_type": "bed",
+      "gx": -11,
+      "gy": -6,
+      "rotation": 180,
+      "permit_id": "permit_1",
+      "family_id": "fam_1",
+      "assigned_villager_id": "vil_2",
+      "assigned_workers": [],
+      "is_dropped": false,
+      "stored_in_id": null,
+      "construction_order": {
+        "material_cost_copper": 5,
+        "living_wage_copper": 5,
+        "price_copper": 10,
+        "materials": {
+          "Wood": 5,
+          "Stone": 0
+        },
+        "food_unit_price_at_order": 1,
+        "id": "furn_14",
+        "order_type": "BUILD",
+        "status": "COMPLETE",
+        "payer_family_id": "fam_1",
+        "payer_id": null,
+        "builder_id": "vil_4",
+        "artisan_job": "Builder",
+        "commission_paid": true,
+        "builder_family_id": "fam_1",
+        "paid_by_id": "household",
+        "paid_amount_copper": 0,
+        "paid_seq": 12,
+        "material_source_family_id": "fam_1",
+        "materials_delivered": {
+          "Wood": 5
+        },
+        "materials_committed": true,
+        "progress_ratio": 1.0
+      },
+      "construction_progress": 25.00000000000022,
+      "designated_target": null,
+      "carrier_id": null,
+      "condition": 1.0,
+      "inventory": {},
+      "currency": {},
+      "tool_conditions": {},
+      "tool_orders": [],
+      "break_check_day": 8,
+      "break_check_hour": 6.724615330433431,
+      "break_checked_today": true,
+      "station_quota_daily": 0,
+      "station_quota_today": 0,
+      "station_quota_day": -1,
+      "plant_tree_enabled": false,
+      "bound_mine_id": null
+    },
+    {
+      "id": "furn_15",
+      "furniture_type": "woodsman_lodge",
+      "gx": -1,
+      "gy": -20,
+      "rotation": 0,
+      "permit_id": null,
+      "family_id": null,
+      "assigned_villager_id": null,
+      "assigned_workers": [
+        "vil_8",
+        "vil_9"
+      ],
+      "is_dropped": false,
+      "stored_in_id": null,
+      "construction_order": {
+        "material_cost_copper": 30,
+        "living_wage_copper": 5,
+        "price_copper": 35,
+        "materials": {
+          "Wood": 20,
+          "Stone": 10
+        },
+        "food_unit_price_at_order": 1,
+        "id": "furn_15",
+        "order_type": "BUILD",
+        "status": "COMPLETE",
+        "payer_family_id": null,
+        "payer_id": "landlord",
+        "builder_id": "vil_4",
+        "artisan_job": "Builder",
+        "commission_paid": true,
+        "payer_type": "landlord",
+        "builder_family_id": "fam_1",
+        "build_duration_seconds": 25.0,
+        "paid_by_id": "landlord",
+        "paid_amount_copper": 35,
+        "paid_seq": 15,
+        "material_source_family_id": "fam_1",
+        "materials_delivered": {
+          "Wood": 20,
+          "Stone": 10
+        },
+        "materials_committed": true,
+        "progress_ratio": 1.0
+      },
+      "construction_progress": 25.00000000000022,
+      "designated_target": null,
+      "carrier_id": null,
+      "condition": 1.0,
+      "inventory": {},
+      "currency": {},
+      "tool_conditions": {},
+      "tool_orders": [],
+      "break_check_day": 8,
+      "break_check_hour": 9.361650521442868,
+      "break_checked_today": true,
+      "station_quota_daily": 0,
+      "station_quota_today": 19,
+      "station_quota_day": 8,
+      "plant_tree_enabled": true,
+      "bound_mine_id": null
+    },
+    {
+      "id": "furn_16",
+      "furniture_type": "bed",
+      "gx": 2,
+      "gy": 5,
+      "rotation": 270,
+      "permit_id": "permit_5",
+      "family_id": "fam_2",
+      "assigned_villager_id": "vil_9",
+      "assigned_workers": [],
+      "is_dropped": false,
+      "stored_in_id": null,
+      "construction_order": {
+        "material_cost_copper": 5,
+        "living_wage_copper": 5,
+        "price_copper": 10,
+        "materials": {
+          "Wood": 5,
+          "Stone": 0
+        },
+        "food_unit_price_at_order": 1,
+        "id": "furn_16",
+        "order_type": "BUILD",
+        "status": "COMPLETE",
+        "payer_family_id": "fam_2",
+        "payer_id": "vil_6",
+        "builder_id": "vil_4",
+        "artisan_job": "Builder",
+        "commission_paid": true,
+        "builder_family_id": "fam_1",
+        "paid_by_id": "vil_6",
+        "paid_by_family_id": "fam_2",
+        "paid_amount_copper": 10,
+        "paid_seq": 19,
+        "material_source_family_id": "fam_2",
+        "materials_delivered": {
+          "Wood": 5
+        },
+        "materials_committed": true,
+        "progress_ratio": 1.0
+      },
+      "construction_progress": 25.00000000000022,
+      "designated_target": null,
+      "carrier_id": null,
+      "condition": 1.0,
+      "inventory": {},
+      "currency": {},
+      "tool_conditions": {},
+      "tool_orders": [],
+      "break_check_day": 8,
+      "break_check_hour": 11.569250362043288,
+      "break_checked_today": true,
+      "station_quota_daily": 0,
+      "station_quota_today": 0,
+      "station_quota_day": -1,
+      "plant_tree_enabled": false,
+      "bound_mine_id": null
+    },
+    {
+      "id": "furn_17",
+      "furniture_type": "bed",
+      "gx": 2,
+      "gy": 3,
+      "rotation": 270,
+      "permit_id": "permit_5",
+      "family_id": "fam_2",
+      "assigned_villager_id": "vil_8",
+      "assigned_workers": [],
+      "is_dropped": false,
+      "stored_in_id": null,
+      "construction_order": {
+        "material_cost_copper": 5,
+        "living_wage_copper": 5,
+        "price_copper": 10,
+        "materials": {
+          "Wood": 5,
+          "Stone": 0
+        },
+        "food_unit_price_at_order": 1,
+        "id": "furn_17",
+        "order_type": "BUILD",
+        "status": "COMPLETE",
+        "payer_family_id": "fam_2",
+        "payer_id": "vil_6",
+        "builder_id": "vil_4",
+        "artisan_job": "Builder",
+        "commission_paid": true,
+        "builder_family_id": "fam_1",
+        "_claim_retry_at": 1795517909.5243776,
+        "paid_by_id": "vil_6",
+        "paid_by_family_id": "fam_2",
+        "paid_amount_copper": 10,
+        "paid_seq": 24,
+        "material_source_family_id": "fam_2",
+        "materials_delivered": {
+          "Wood": 5
+        },
+        "materials_committed": true,
+        "progress_ratio": 1.0
+      },
+      "construction_progress": 25.00000000000022,
+      "designated_target": null,
+      "carrier_id": null,
+      "condition": 1.0,
+      "inventory": {},
+      "currency": {},
+      "tool_conditions": {},
+      "tool_orders": [],
+      "break_check_day": 8,
+      "break_check_hour": 21.650799972303815,
+      "break_checked_today": true,
+      "station_quota_daily": 0,
+      "station_quota_today": 0,
+      "station_quota_day": -1,
+      "plant_tree_enabled": false,
+      "bound_mine_id": null
+    },
+    {
+      "id": "furn_18",
+      "furniture_type": "bed",
+      "gx": 0,
+      "gy": 3,
+      "rotation": 90,
+      "permit_id": "permit_5",
+      "family_id": "fam_2",
+      "assigned_villager_id": "vil_6",
+      "assigned_workers": [],
+      "is_dropped": false,
+      "stored_in_id": null,
+      "construction_order": {
+        "material_cost_copper": 5,
+        "living_wage_copper": 5,
+        "price_copper": 10,
+        "materials": {
+          "Wood": 5,
+          "Stone": 0
+        },
+        "food_unit_price_at_order": 1,
+        "id": "furn_18",
+        "order_type": "BUILD",
+        "status": "COMPLETE",
+        "payer_family_id": "fam_2",
+        "payer_id": "vil_6",
+        "builder_id": "vil_4",
+        "artisan_job": "Builder",
+        "commission_paid": true,
+        "builder_family_id": "fam_1",
+        "_claim_retry_at": 1795517929.5782216,
+        "paid_by_id": "vil_6",
+        "paid_by_family_id": "fam_2",
+        "paid_amount_copper": 10,
+        "paid_seq": 27,
+        "material_source_family_id": "fam_2",
+        "materials_delivered": {
+          "Wood": 5
+        },
+        "materials_committed": true,
+        "progress_ratio": 1.0
+      },
+      "construction_progress": 25.00000000000022,
+      "designated_target": null,
+      "carrier_id": null,
+      "condition": 1.0,
+      "inventory": {},
+      "currency": {},
+      "tool_conditions": {},
+      "tool_orders": [],
+      "break_check_day": 8,
+      "break_check_hour": 6.73437321327405,
+      "break_checked_today": true,
+      "station_quota_daily": 0,
+      "station_quota_today": 0,
+      "station_quota_day": -1,
+      "plant_tree_enabled": false,
+      "bound_mine_id": null
+    },
+    {
+      "id": "furn_19",
+      "furniture_type": "bed",
+      "gx": 0,
+      "gy": 5,
+      "rotation": 90,
+      "permit_id": "permit_5",
+      "family_id": "fam_2",
+      "assigned_villager_id": "vil_7",
+      "assigned_workers": [],
+      "is_dropped": false,
+      "stored_in_id": null,
+      "construction_order": {
+        "material_cost_copper": 5,
+        "living_wage_copper": 5,
+        "price_copper": 10,
+        "materials": {
+          "Wood": 5,
+          "Stone": 0
+        },
+        "food_unit_price_at_order": 1,
+        "id": "furn_19",
+        "order_type": "BUILD",
+        "status": "COMPLETE",
+        "payer_family_id": "fam_2",
+        "payer_id": "vil_6",
+        "builder_id": "vil_4",
+        "artisan_job": "Builder",
+        "commission_paid": true,
+        "builder_family_id": "fam_1",
+        "_claim_retry_at": 1795518453.2606184,
+        "paid_by_id": "vil_6",
+        "paid_by_family_id": "fam_2",
+        "paid_amount_copper": 10,
+        "paid_seq": 32,
+        "material_source_family_id": "fam_2",
+        "materials_delivered": {
+          "Wood": 5
+        },
+        "materials_committed": true,
+        "progress_ratio": 1.0
+      },
+      "construction_progress": 25.00000000000022,
+      "designated_target": null,
+      "carrier_id": null,
+      "condition": 1.0,
+      "inventory": {},
+      "currency": {},
+      "tool_conditions": {},
+      "tool_orders": [],
+      "break_check_day": 8,
+      "break_check_hour": 2.5628822235769126,
+      "break_checked_today": true,
+      "station_quota_daily": 0,
+      "station_quota_today": 0,
+      "station_quota_day": -1,
+      "plant_tree_enabled": false,
+      "bound_mine_id": null
+    },
+    {
+      "id": "furn_20",
+      "furniture_type": "confession_box",
+      "gx": -14,
+      "gy": 4,
+      "rotation": 90,
+      "permit_id": "permit_7",
+      "family_id": null,
+      "assigned_villager_id": null,
+      "assigned_workers": [],
+      "is_dropped": false,
+      "stored_in_id": null,
+      "construction_order": {
+        "material_cost_copper": 5,
+        "living_wage_copper": 5,
+        "price_copper": 10,
+        "materials": {
+          "Wood": 5,
+          "Stone": 0
+        },
+        "food_unit_price_at_order": 1,
+        "id": "furn_20",
+        "order_type": "BUILD",
+        "status": "COMPLETE",
+        "payer_family_id": null,
+        "payer_id": "landlord",
+        "builder_id": "vil_4",
+        "artisan_job": "Builder",
+        "commission_paid": true,
+        "payer_type": "landlord",
+        "builder_family_id": "fam_1",
+        "build_duration_seconds": 25.0,
+        "paid_by_id": "landlord",
+        "paid_amount_copper": 10,
+        "paid_seq": 23,
+        "material_source_family_id": "fam_1",
+        "materials_delivered": {
+          "Wood": 5
+        },
+        "materials_committed": true,
+        "progress_ratio": 1.0
+      },
+      "construction_progress": 25.00000000000022,
+      "designated_target": null,
+      "carrier_id": null,
+      "condition": 1.0,
+      "inventory": {},
+      "currency": {},
+      "tool_conditions": {},
+      "tool_orders": [],
+      "break_check_day": 8,
+      "break_check_hour": 16.18999799730486,
+      "break_checked_today": true,
+      "station_quota_daily": 0,
+      "station_quota_today": 0,
+      "station_quota_day": -1,
+      "plant_tree_enabled": false,
+      "bound_mine_id": null
+    },
+    {
+      "id": "furn_21",
+      "furniture_type": "bed",
+      "gx": -20,
+      "gy": 7,
+      "rotation": 0,
+      "permit_id": "permit_9",
+      "family_id": "fam_3",
+      "assigned_villager_id": "vil_11",
+      "assigned_workers": [],
+      "is_dropped": false,
+      "stored_in_id": null,
+      "construction_order": {
+        "material_cost_copper": 5,
+        "living_wage_copper": 5,
+        "price_copper": 10,
+        "materials": {
+          "Wood": 5,
+          "Stone": 0
+        },
+        "food_unit_price_at_order": 1,
+        "id": "furn_21",
+        "order_type": "BUILD",
+        "status": "COMPLETE",
+        "payer_family_id": "fam_3",
+        "payer_id": "vil_10",
+        "builder_id": "vil_4",
+        "artisan_job": "Builder",
+        "commission_paid": true,
+        "builder_family_id": "fam_1",
+        "paid_by_id": "vil_10",
+        "paid_by_family_id": "fam_3",
+        "paid_amount_copper": 10,
+        "paid_seq": 26,
+        "material_source_family_id": "fam_3",
+        "materials_delivered": {
+          "Wood": 5
+        },
+        "materials_committed": true,
+        "progress_ratio": 1.0
+      },
+      "construction_progress": 25.00000000000022,
+      "designated_target": null,
+      "carrier_id": null,
+      "condition": 1.0,
+      "inventory": {},
+      "currency": {},
+      "tool_conditions": {},
+      "tool_orders": [],
+      "break_check_day": 8,
+      "break_check_hour": 4.460488929260293,
+      "break_checked_today": true,
+      "station_quota_daily": 0,
+      "station_quota_today": 0,
+      "station_quota_day": -1,
+      "plant_tree_enabled": false,
+      "bound_mine_id": null
+    },
+    {
+      "id": "furn_22",
+      "furniture_type": "bed",
+      "gx": -18,
+      "gy": 7,
+      "rotation": 0,
+      "permit_id": "permit_9",
+      "family_id": "fam_3",
+      "assigned_villager_id": "vil_12",
+      "assigned_workers": [],
+      "is_dropped": false,
+      "stored_in_id": null,
+      "construction_order": {
+        "material_cost_copper": 5,
+        "living_wage_copper": 5,
+        "price_copper": 10,
+        "materials": {
+          "Wood": 5,
+          "Stone": 0
+        },
+        "food_unit_price_at_order": 1,
+        "id": "furn_22",
+        "order_type": "BUILD",
+        "status": "COMPLETE",
+        "payer_family_id": "fam_3",
+        "payer_id": "vil_10",
+        "builder_id": "vil_4",
+        "artisan_job": "Builder",
+        "commission_paid": true,
+        "builder_family_id": "fam_1",
+        "_claim_retry_at": 1795517967.0111172,
+        "paid_by_id": "vil_10",
+        "paid_by_family_id": "fam_3",
+        "paid_amount_copper": 10,
+        "paid_seq": 28,
+        "material_source_family_id": "fam_3",
+        "materials_delivered": {
+          "Wood": 5
+        },
+        "materials_committed": true,
+        "progress_ratio": 1.0
+      },
+      "construction_progress": 25.00000000000022,
+      "designated_target": null,
+      "carrier_id": null,
+      "condition": 1.0,
+      "inventory": {},
+      "currency": {},
+      "tool_conditions": {},
+      "tool_orders": [],
+      "break_check_day": 8,
+      "break_check_hour": 17.67257162132224,
+      "break_checked_today": true,
+      "station_quota_daily": 0,
+      "station_quota_today": 0,
+      "station_quota_day": -1,
+      "plant_tree_enabled": false,
+      "bound_mine_id": null
+    },
+    {
+      "id": "furn_23",
+      "furniture_type": "bed",
+      "gx": -17,
+      "gy": 7,
+      "rotation": 0,
+      "permit_id": "permit_9",
+      "family_id": "fam_3",
+      "assigned_villager_id": "vil_10",
+      "assigned_workers": [],
+      "is_dropped": false,
+      "stored_in_id": null,
+      "construction_order": {
+        "material_cost_copper": 5,
+        "living_wage_copper": 5,
+        "price_copper": 10,
+        "materials": {
+          "Wood": 5,
+          "Stone": 0
+        },
+        "food_unit_price_at_order": 1,
+        "id": "furn_23",
+        "order_type": "BUILD",
+        "status": "COMPLETE",
+        "payer_family_id": "fam_3",
+        "payer_id": "vil_10",
+        "builder_id": "vil_4",
+        "artisan_job": "Builder",
+        "commission_paid": true,
+        "builder_family_id": "fam_1",
+        "_claim_retry_at": 1795517987.0966022,
+        "paid_by_id": "vil_10",
+        "paid_by_family_id": "fam_3",
+        "paid_amount_copper": 10,
+        "paid_seq": 29,
+        "material_source_family_id": "fam_3",
+        "materials_delivered": {
+          "Wood": 5
+        },
+        "materials_committed": true,
+        "progress_ratio": 1.0
+      },
+      "construction_progress": 25.00000000000022,
+      "designated_target": null,
+      "carrier_id": null,
+      "condition": 1.0,
+      "inventory": {},
+      "currency": {},
+      "tool_conditions": {},
+      "tool_orders": [],
+      "break_check_day": 8,
+      "break_check_hour": 3.4640426168489666,
+      "break_checked_today": true,
+      "station_quota_daily": 0,
+      "station_quota_today": 0,
+      "station_quota_day": -1,
+      "plant_tree_enabled": false,
+      "bound_mine_id": null
+    },
+    {
+      "id": "furn_24",
+      "furniture_type": "household_storage",
+      "gx": 1,
+      "gy": 5,
+      "rotation": 0,
+      "permit_id": "permit_5",
+      "family_id": "fam_2",
+      "assigned_villager_id": null,
+      "assigned_workers": [],
+      "is_dropped": false,
+      "stored_in_id": null,
+      "construction_order": {
+        "material_cost_copper": 10,
+        "living_wage_copper": 5,
+        "price_copper": 15,
+        "materials": {
+          "Wood": 10,
+          "Stone": 0
+        },
+        "food_unit_price_at_order": 1,
+        "id": "furn_24",
+        "order_type": "BUILD",
+        "status": "COMPLETE",
+        "payer_family_id": "fam_2",
+        "payer_id": "vil_6",
+        "builder_id": "vil_4",
+        "artisan_job": "Builder",
+        "commission_paid": true,
+        "builder_family_id": "fam_1",
+        "_claim_retry_at": 1795518675.8144577,
+        "paid_by_id": "vil_6",
+        "paid_by_family_id": "fam_2",
+        "paid_amount_copper": 15,
+        "paid_seq": 34,
+        "material_source_family_id": "fam_2",
+        "materials_delivered": {
+          "Wood": 10
+        },
+        "materials_committed": true,
+        "progress_ratio": 1.0
+      },
+      "construction_progress": 25.00000000000022,
+      "designated_target": null,
+      "carrier_id": null,
+      "condition": 1.0,
+      "inventory": {},
+      "currency": {},
+      "tool_conditions": {},
+      "tool_orders": [],
+      "break_check_day": 8,
+      "break_check_hour": 11.808558261166421,
+      "break_checked_today": false,
+      "station_quota_daily": 0,
+      "station_quota_today": 0,
+      "station_quota_day": -1,
+      "plant_tree_enabled": false,
+      "bound_mine_id": null
+    },
+    {
+      "id": "furn_25",
+      "furniture_type": "household_storage",
+      "gx": -19,
+      "gy": 7,
+      "rotation": 0,
+      "permit_id": "permit_9",
+      "family_id": "fam_3",
+      "assigned_villager_id": null,
+      "assigned_workers": [],
+      "is_dropped": false,
+      "stored_in_id": null,
+      "construction_order": {
+        "material_cost_copper": 20,
+        "living_wage_copper": 5,
+        "price_copper": 25,
+        "materials": {
+          "Wood": 10,
+          "Stone": 0
+        },
+        "food_unit_price_at_order": 1,
+        "id": "furn_25",
+        "order_type": "BUILD",
+        "status": "COMPLETE",
+        "payer_family_id": "fam_3",
+        "payer_id": "vil_10",
+        "builder_id": "vil_4",
+        "artisan_job": "Builder",
+        "commission_paid": true,
+        "builder_family_id": "fam_1",
+        "paid_by_id": "vil_10",
+        "paid_by_family_id": "fam_3",
+        "paid_amount_copper": 25,
+        "paid_seq": 31,
+        "material_source_family_id": "fam_3",
+        "materials_delivered": {
+          "Wood": 10
+        },
+        "materials_committed": true,
+        "progress_ratio": 1.0
+      },
+      "construction_progress": 25.00000000000022,
+      "designated_target": null,
+      "carrier_id": null,
+      "condition": 1.0,
+      "inventory": {
+        "Water": 9,
+        "Copper": 7,
+        "Silver": 2
+      },
+      "currency": {},
+      "tool_conditions": {
+        "Hoe": [
+          "GOOD"
+        ]
+      },
+      "tool_orders": [],
+      "break_check_day": 8,
+      "break_check_hour": 8.615597531816142,
+      "break_checked_today": true,
+      "station_quota_daily": 0,
+      "station_quota_today": 0,
+      "station_quota_day": -1,
+      "plant_tree_enabled": false,
+      "bound_mine_id": null
+    }
+  ],
+  "families": [
+    {
+      "id": "fam_1",
+      "surname": "Fisher",
+      "assigned_permit_id": "permit_1",
+      "generations_present": [
+        1,
+        2,
+        3
+      ],
+      "pending_death_recovery": [],
+      "income_report_period": 0,
+      "income_report_by_source": {
+        "Public Builder Commissions": 188,
+        "Toolmaker Commissions": 80,
+        "Builder Commissions": 110
+      },
+      "income_report_last_day": 8,
+      "members": [
+        {
+          "id": "vil_1",
+          "first_name": "Hugh",
+          "last_name": "Fisher",
+          "gender": "Male",
+          "age": 67,
+          "generation": 1,
+          "role": "Grandfather",
+          "family_id": "fam_1",
+          "job": "Farmer",
+          "x": -338.91960713094824,
+          "y": -226.19008218068709,
+          "task": "IDLE",
+          "carrying_crop": 0,
+          "inventory": {
+            "Hoe": 1,
+            "Watering_Can": 1,
+            "Sickle": 1
+          },
+          "tool_conditions": {},
+          "currency": {},
+          "active_tool": null,
+          "has_water": true,
+          "water_day": 8,
+          "water_charges": 9999,
+          "assigned_bed_id": "furn_11",
+          "carrying_furniture_id": null,
+          "watering_timer": 0.0,
+          "tilling_timer": 0.0,
+          "station_carry": {},
+          "hunger": 73.92499999997925,
+          "thirst": 73.91666666664591,
+          "need_toilet": 56.8999999999902,
+          "faith": 72.1242664575207,
+          "sleep_need": 63.19999999998175,
+          "sleep_forced": false,
+          "sleeping_recharge_active": false,
+          "sleep_any_rest_active": false,
+          "sleep_schedule_task_state": null,
+          "pending_schedule_tasks": [],
+          "socage_tax_round": null,
+          "socage_tax_last_cycle": null,
+          "socage_tax_prepared_cycle": null,
+          "socage_tax_prepared_amount": 0,
+          "happiness": 100.0,
+          "happiness_effects": {
+            "leisure_per_hour": {
+              "amount": 5.705999999999994,
+              "expires_day": 8
+            },
+            "prayer_completed": {
+              "amount": 5.0,
+              "expires_day": 8
+            },
+            "needs_comfortable": {
+              "amount": 5.0,
+              "expires_day": 8
+            }
+          },
+          "happiness_trigger_days": {
+            "needs_comfortable": 8,
+            "need_low:toilet": 7,
+            "prayer_completed": 8,
+            "need_low:hunger": 8,
+            "need_low:thirst": 8,
+            "need_empty:toilet": 8,
+            "need_empty:hunger": 8,
+            "need_empty:thirst": 8
+          },
+          "happiness_food_day": 8,
+          "happiness_food_types": [
+            "Potato"
+          ],
+          "last_faith_decay_day": 8,
+          "prayer_attendance_day": null,
+          "church_tax_prepared_day": null,
+          "church_tax_prepared_amount": 0,
+          "last_faith_prayer_day": 8,
+          "last_confession_day": null,
+          "pending_commission_task": null,
+          "pending_commission_data": {},
+          "pending_commission_tasks": [],
+          "interrupted_task_state": null,
+          "activity_description": null,
+          "hunger_death_timer": null,
+          "thirst_death_timer": null,
+          "daily_food_consumed": 1,
+          "daily_water_consumed": 1,
+          "is_alive": true,
+          "status": "ALIVE",
+          "death_reason": null,
+          "death_day": null,
+          "carrying_corpse_id": null,
+          "burial_payment_target_corpse_id": null,
+          "burial_payment_gravedigger_id": null,
+          "builder_payment_order_id": null,
+          "builder_payment_builder_id": null,
+          "is_buried": false,
+          "is_picked_up": false
+        },
+        {
+          "id": "vil_2",
+          "first_name": "Mary",
+          "last_name": "Fisher",
+          "gender": "Female",
+          "age": 68,
+          "generation": 1,
+          "role": "Grandmother",
+          "family_id": "fam_1",
+          "job": "Farmer",
+          "x": -334.9826587803012,
+          "y": -160.8315171704046,
+          "task": "IDLE",
+          "carrying_crop": 0,
+          "inventory": {
+            "Hoe": 1,
+            "Watering_Can": 1,
+            "Sickle": 1
+          },
+          "tool_conditions": {},
+          "currency": {},
+          "active_tool": null,
+          "has_water": true,
+          "water_day": 8,
+          "water_charges": 9999,
+          "assigned_bed_id": "furn_14",
+          "carrying_furniture_id": null,
+          "watering_timer": 0.0,
+          "tilling_timer": 0.0,
+          "station_carry": {},
+          "hunger": 74.03333333331267,
+          "thirst": 74.02499999997933,
+          "need_toilet": 56.4499999999901,
+          "faith": 92.70177924637917,
+          "sleep_need": 63.18999999998175,
+          "sleep_forced": false,
+          "sleeping_recharge_active": false,
+          "sleep_any_rest_active": false,
+          "sleep_schedule_task_state": null,
+          "pending_schedule_tasks": [],
+          "socage_tax_round": null,
+          "socage_tax_last_cycle": null,
+          "socage_tax_prepared_cycle": null,
+          "socage_tax_prepared_amount": 0,
+          "happiness": 100.0,
+          "happiness_effects": {
+            "leisure_per_hour": {
+              "amount": 3.9419999999999313,
+              "expires_day": 8
+            },
+            "prayer_completed": {
+              "amount": 5.0,
+              "expires_day": 8
+            },
+            "needs_comfortable": {
+              "amount": 5.0,
+              "expires_day": 8
+            },
+            "confession_completed": {
+              "amount": 5.0,
+              "expires_day": 8
+            }
+          },
+          "happiness_trigger_days": {
+            "needs_comfortable": 8,
+            "need_low:toilet": 8,
+            "prayer_completed": 8,
+            "need_low:hunger": 8,
+            "need_low:thirst": 8,
+            "need_empty:toilet": 8,
+            "need_empty:hunger": 8,
+            "need_empty:thirst": 8
+          },
+          "happiness_food_day": 8,
+          "happiness_food_types": [
+            "Potato"
+          ],
+          "last_faith_decay_day": 8,
+          "prayer_attendance_day": null,
+          "church_tax_prepared_day": null,
+          "church_tax_prepared_amount": 0,
+          "last_faith_prayer_day": 8,
+          "last_confession_day": 8,
+          "pending_commission_task": null,
+          "pending_commission_data": {},
+          "pending_commission_tasks": [],
+          "interrupted_task_state": null,
+          "activity_description": null,
+          "hunger_death_timer": null,
+          "thirst_death_timer": null,
+          "daily_food_consumed": 1,
+          "daily_water_consumed": 1,
+          "is_alive": true,
+          "status": "ALIVE",
+          "death_reason": null,
+          "death_day": null,
+          "carrying_corpse_id": null,
+          "burial_payment_target_corpse_id": null,
+          "burial_payment_gravedigger_id": null,
+          "builder_payment_order_id": null,
+          "builder_payment_builder_id": null,
+          "is_buried": false,
+          "is_picked_up": false
+        },
+        {
+          "id": "vil_3",
+          "first_name": "Walter",
+          "last_name": "Fisher",
+          "gender": "Male",
+          "age": 52,
+          "generation": 2,
+          "role": "Father",
+          "family_id": "fam_1",
+          "job": "Farmer",
+          "x": -348.3427983699577,
+          "y": -300.25441143363804,
+          "task": "WATERING",
+          "carrying_crop": 0,
+          "inventory": {
+            "Hoe": 1,
+            "Watering_Can": 1,
+            "Sickle": 1
+          },
+          "tool_conditions": {},
+          "currency": {},
+          "active_tool": "Watering_Can",
+          "has_water": true,
+          "water_day": 8,
+          "water_charges": 9999,
+          "assigned_bed_id": "furn_12",
+          "carrying_furniture_id": null,
+          "watering_timer": 8.499999999999986,
+          "tilling_timer": 0.0,
+          "station_carry": {},
+          "hunger": 70.32499999997638,
+          "thirst": 70.34166666664306,
+          "need_toilet": 92.12499999999821,
+          "faith": 67.65141077283508,
+          "sleep_need": 63.18999999998175,
+          "sleep_forced": false,
+          "sleeping_recharge_active": false,
+          "sleep_any_rest_active": false,
+          "sleep_schedule_task_state": null,
+          "pending_schedule_tasks": [],
+          "socage_tax_round": null,
+          "socage_tax_last_cycle": null,
+          "socage_tax_prepared_cycle": null,
+          "socage_tax_prepared_amount": 0,
+          "happiness": 99.94999999999996,
+          "happiness_effects": {
+            "leisure_per_hour": {
+              "amount": 4.9499999999999655,
+              "expires_day": 8
+            },
+            "prayer_completed": {
+              "amount": 5.0,
+              "expires_day": 8
+            },
+            "needs_comfortable": {
+              "amount": 5.0,
+              "expires_day": 8
+            }
+          },
+          "happiness_trigger_days": {
+            "needs_comfortable": 8,
+            "need_low:toilet": 8,
+            "prayer_completed": 8,
+            "need_low:hunger": 8,
+            "need_low:thirst": 8,
+            "need_empty:toilet": 6,
+            "need_empty:hunger": 4,
+            "need_empty:thirst": 5
+          },
+          "happiness_food_day": 8,
+          "happiness_food_types": [
+            "Potato"
+          ],
+          "last_faith_decay_day": 8,
+          "prayer_attendance_day": null,
+          "church_tax_prepared_day": null,
+          "church_tax_prepared_amount": 0,
+          "last_faith_prayer_day": 8,
+          "last_confession_day": null,
+          "pending_commission_task": null,
+          "pending_commission_data": {},
+          "pending_commission_tasks": [],
+          "interrupted_task_state": null,
+          "activity_description": null,
+          "hunger_death_timer": null,
+          "thirst_death_timer": null,
+          "daily_food_consumed": 1,
+          "daily_water_consumed": 1,
+          "is_alive": true,
+          "status": "ALIVE",
+          "death_reason": null,
+          "death_day": null,
+          "carrying_corpse_id": null,
+          "burial_payment_target_corpse_id": null,
+          "burial_payment_gravedigger_id": null,
+          "builder_payment_order_id": null,
+          "builder_payment_builder_id": null,
+          "is_buried": false,
+          "is_picked_up": false
+        },
+        {
+          "id": "vil_4",
+          "first_name": "Cecily",
+          "last_name": "Fisher",
+          "gender": "Female",
+          "age": 39,
+          "generation": 2,
+          "role": "Mother",
+          "family_id": "fam_1",
+          "job": "Builder",
+          "x": -710.9701784432687,
+          "y": -343.1088058186971,
+          "task": "LEISURE",
+          "carrying_crop": 0,
+          "inventory": {
+            "Adze": 1,
+            "Saw": 1
+          },
+          "tool_conditions": {
+            "Adze": [
+              "GOOD"
+            ],
+            "Saw": [
+              "PRISTINE"
+            ]
+          },
+          "currency": {},
+          "active_tool": null,
+          "has_water": false,
+          "water_day": -1,
+          "water_charges": 0,
+          "assigned_bed_id": "furn_13",
+          "carrying_furniture_id": null,
+          "watering_timer": 0.0,
+          "tilling_timer": 0.0,
+          "station_carry": {},
+          "hunger": 70.7249999999767,
+          "thirst": 69.37499999997563,
+          "need_toilet": 83.62499999999628,
+          "faith": 21.64707746509783,
+          "sleep_need": 63.18999999998175,
+          "sleep_forced": false,
+          "sleeping_recharge_active": false,
+          "sleep_any_rest_active": false,
+          "sleep_schedule_task_state": null,
+          "pending_schedule_tasks": [],
+          "socage_tax_round": null,
+          "socage_tax_last_cycle": null,
+          "socage_tax_prepared_cycle": null,
+          "socage_tax_prepared_amount": 0,
+          "happiness": 100.0,
+          "happiness_effects": {
+            "leisure_per_hour": {
+              "amount": 7.998000000000081,
+              "expires_day": 8
+            },
+            "prayer_completed": {
+              "amount": 5.0,
+              "expires_day": 8
+            },
+            "needs_comfortable": {
+              "amount": 5.0,
+              "expires_day": 8
+            }
+          },
+          "happiness_trigger_days": {
+            "needs_comfortable": 8,
+            "need_low:toilet": 8,
+            "need_empty:toilet": 7,
+            "prayer_completed": 8,
+            "need_low:hunger": 8,
+            "need_low:thirst": 8,
+            "need_empty:hunger": 7,
+            "need_empty:thirst": 7
+          },
+          "happiness_food_day": 8,
+          "happiness_food_types": [
+            "Potato"
+          ],
+          "last_faith_decay_day": 8,
+          "prayer_attendance_day": null,
+          "church_tax_prepared_day": null,
+          "church_tax_prepared_amount": 0,
+          "last_faith_prayer_day": 8,
+          "last_confession_day": null,
+          "pending_commission_task": null,
+          "pending_commission_data": {},
+          "pending_commission_tasks": [],
+          "interrupted_task_state": null,
+          "activity_description": null,
+          "hunger_death_timer": null,
+          "thirst_death_timer": null,
+          "daily_food_consumed": 1,
+          "daily_water_consumed": 1,
+          "is_alive": true,
+          "status": "ALIVE",
+          "death_reason": null,
+          "death_day": null,
+          "carrying_corpse_id": null,
+          "burial_payment_target_corpse_id": null,
+          "burial_payment_gravedigger_id": null,
+          "builder_payment_order_id": null,
+          "builder_payment_builder_id": null,
+          "is_buried": false,
+          "is_picked_up": false
+        },
+        {
+          "id": "vil_5",
+          "first_name": "Emma",
+          "last_name": "Fisher",
+          "gender": "Female",
+          "age": 26,
+          "generation": 3,
+          "role": "Adult Daughter",
+          "family_id": "fam_1",
+          "job": "Toolmaker",
+          "x": -559.5559720279917,
+          "y": -343.5205050514747,
+          "task": "LEISURE",
+          "carrying_crop": 0,
+          "inventory": {
+            "Hammer": 1,
+            "Tongs": 1
+          },
+          "tool_conditions": {
+            "Hammer": [
+              "PRISTINE"
+            ],
+            "Tongs": [
+              "GOOD"
+            ]
+          },
+          "currency": {},
+          "active_tool": null,
+          "has_water": false,
+          "water_day": -1,
+          "water_charges": 0,
+          "assigned_bed_id": "furn_10",
+          "carrying_furniture_id": null,
+          "watering_timer": 0.0,
+          "tilling_timer": 0.0,
+          "station_carry": {},
+          "hunger": 70.7666666666434,
+          "thirst": 69.34999999997561,
+          "need_toilet": 82.72499999999607,
+          "faith": 41.381505954827766,
+          "sleep_need": 63.19999999998175,
+          "sleep_forced": false,
+          "sleeping_recharge_active": false,
+          "sleep_any_rest_active": false,
+          "sleep_schedule_task_state": null,
+          "pending_schedule_tasks": [
+            {
+              "task": "TOOLMAKER_SMELTING",
+              "schedule": "WORK",
+              "state": {
+                "current_work_tile": null,
+                "tilling_timer": 0.0,
+                "watering_timer": 0.0,
+                "well_draw_timer": 0.0,
+                "has_water": false,
+                "water_day": -1,
+                "water_charges": 0,
+                "carrying_crop": 0,
+                "carrying_res": null,
+                "carrying_amount": 0,
+                "water_collect_amount": 0,
+                "station_work_timer": 0.0,
+                "station_target_tile": null,
+                "station_phase": null,
+                "station_carry": {}
+              }
+            }
+          ],
+          "socage_tax_round": null,
+          "socage_tax_last_cycle": null,
+          "socage_tax_prepared_cycle": null,
+          "socage_tax_prepared_amount": 0,
+          "happiness": 100.0,
+          "happiness_effects": {
+            "leisure_per_hour": {
+              "amount": 10.212000000000165,
+              "expires_day": 8
+            },
+            "prayer_completed": {
+              "amount": 5.0,
+              "expires_day": 8
+            },
+            "needs_comfortable": {
+              "amount": 5.0,
+              "expires_day": 8
+            }
+          },
+          "happiness_trigger_days": {
+            "needs_comfortable": 8,
+            "need_low:toilet": 8,
+            "need_empty:toilet": 7,
+            "need_low:hunger": 8,
+            "need_low:thirst": 8,
+            "prayer_completed": 8,
+            "need_empty:hunger": 7,
+            "need_empty:thirst": 7
+          },
+          "happiness_food_day": 8,
+          "happiness_food_types": [
+            "Potato"
+          ],
+          "last_faith_decay_day": 8,
+          "prayer_attendance_day": null,
+          "church_tax_prepared_day": null,
+          "church_tax_prepared_amount": 0,
+          "last_faith_prayer_day": 8,
+          "last_confession_day": null,
+          "pending_commission_task": null,
+          "pending_commission_data": {},
+          "pending_commission_tasks": [],
+          "interrupted_task_state": null,
+          "activity_description": null,
+          "hunger_death_timer": null,
+          "thirst_death_timer": null,
+          "daily_food_consumed": 1,
+          "daily_water_consumed": 1,
+          "is_alive": true,
+          "status": "ALIVE",
+          "death_reason": null,
+          "death_day": null,
+          "carrying_corpse_id": null,
+          "burial_payment_target_corpse_id": null,
+          "burial_payment_gravedigger_id": null,
+          "builder_payment_order_id": null,
+          "builder_payment_builder_id": null,
+          "is_buried": false,
+          "is_picked_up": false
+        }
+      ]
+    },
+    {
+      "id": "fam_2",
+      "surname": "Potter",
+      "assigned_permit_id": "permit_5",
+      "generations_present": [
+        1,
+        2
+      ],
+      "pending_death_recovery": [],
+      "income_report_period": 0,
+      "income_report_by_source": {},
+      "income_report_last_day": 1,
+      "members": [
+        {
+          "id": "vil_6",
+          "first_name": "Henry",
+          "last_name": "Potter",
+          "gender": "Male",
+          "age": 67,
+          "generation": 1,
+          "role": "Grandfather",
+          "family_id": "fam_2",
+          "job": "Miner",
+          "x": 4490.306526169948,
+          "y": -1305.5536759651345,
+          "task": "STATION_WORK",
+          "carrying_crop": 0,
+          "inventory": {
+            "Pickaxe": 1,
+            "Sledgehammer": 1,
+            "Iron Ore": 36,
+            "Copper": 7
+          },
+          "tool_conditions": {
+            "Pickaxe": [
+              "PRISTINE"
+            ],
+            "Sledgehammer": [
+              "GOOD"
+            ]
+          },
+          "currency": {},
+          "active_tool": "Pickaxe",
+          "has_water": false,
+          "water_day": -1,
+          "water_charges": 0,
+          "assigned_bed_id": "furn_18",
+          "carrying_furniture_id": null,
+          "watering_timer": 0.0,
+          "tilling_timer": 0.0,
+          "station_carry": {},
+          "hunger": 76.78333333331486,
+          "thirst": 74.49166666664637,
+          "need_toilet": 56.53749999999012,
+          "faith": 94.59562890365984,
+          "sleep_need": 63.18999999998175,
+          "sleep_forced": false,
+          "sleeping_recharge_active": false,
+          "sleep_any_rest_active": false,
+          "sleep_schedule_task_state": null,
+          "pending_schedule_tasks": [],
+          "socage_tax_round": null,
+          "socage_tax_last_cycle": null,
+          "socage_tax_prepared_cycle": null,
+          "socage_tax_prepared_amount": 0,
+          "happiness": 99.75199999999995,
+          "happiness_effects": {
+            "leisure_per_hour": {
+              "amount": 4.751999999999958,
+              "expires_day": 8
+            },
+            "needs_comfortable": {
+              "amount": 5.0,
+              "expires_day": 8
+            },
+            "prayer_completed": {
+              "amount": 5.0,
+              "expires_day": 8
+            }
+          },
+          "happiness_trigger_days": {
+            "needs_comfortable": 8,
+            "need_low:toilet": 8,
+            "need_empty:toilet": 8,
+            "prayer_completed": 8,
+            "need_low:hunger": 7,
+            "need_low:thirst": 8,
+            "need_empty:hunger": 7,
+            "need_empty:thirst": 8
+          },
+          "happiness_food_day": 8,
+          "happiness_food_types": [
+            "Potato"
+          ],
+          "last_faith_decay_day": 8,
+          "prayer_attendance_day": null,
+          "church_tax_prepared_day": null,
+          "church_tax_prepared_amount": 0,
+          "last_faith_prayer_day": 8,
+          "last_confession_day": null,
+          "pending_commission_task": null,
+          "pending_commission_data": {},
+          "pending_commission_tasks": [],
+          "interrupted_task_state": null,
+          "activity_description": null,
+          "hunger_death_timer": null,
+          "thirst_death_timer": null,
+          "daily_food_consumed": 1,
+          "daily_water_consumed": 1,
+          "is_alive": true,
+          "status": "ALIVE",
+          "death_reason": null,
+          "death_day": null,
+          "carrying_corpse_id": null,
+          "burial_payment_target_corpse_id": null,
+          "burial_payment_gravedigger_id": null,
+          "builder_payment_order_id": null,
+          "builder_payment_builder_id": null,
+          "is_buried": false,
+          "is_picked_up": false
+        },
+        {
+          "id": "vil_7",
+          "first_name": "Mary",
+          "last_name": "Potter",
+          "gender": "Female",
+          "age": 71,
+          "generation": 1,
+          "role": "Grandmother",
+          "family_id": "fam_2",
+          "job": "Miner",
+          "x": -5383.554273831357,
+          "y": -1180.081518810135,
+          "task": "STATION_WORK",
+          "carrying_crop": 0,
+          "inventory": {
+            "Pickaxe": 1,
+            "Sledgehammer": 1,
+            "Stone": 36
+          },
+          "tool_conditions": {
+            "Pickaxe": [
+              "PRISTINE"
+            ],
+            "Sledgehammer": [
+              "PRISTINE"
+            ]
+          },
+          "currency": {},
+          "active_tool": "Pickaxe",
+          "has_water": false,
+          "water_day": -1,
+          "water_charges": 0,
+          "assigned_bed_id": null,
+          "carrying_furniture_id": null,
+          "watering_timer": 0.0,
+          "tilling_timer": 0.0,
+          "station_carry": {},
+          "hunger": 76.19999999998106,
+          "thirst": 74.43333333331299,
+          "need_toilet": 56.14999999999003,
+          "faith": 64.02664507551296,
+          "sleep_need": 36.52333333330593,
+          "sleep_forced": false,
+          "sleeping_recharge_active": false,
+          "sleep_any_rest_active": false,
+          "sleep_schedule_task_state": null,
+          "pending_schedule_tasks": [],
+          "socage_tax_round": null,
+          "socage_tax_last_cycle": null,
+          "socage_tax_prepared_cycle": null,
+          "socage_tax_prepared_amount": 0,
+          "happiness": 97.06799999999993,
+          "happiness_effects": {
+            "sleep_fatigue": {
+              "amount": -2.0,
+              "expires_day": 8
+            },
+            "leisure_per_hour": {
+              "amount": 4.067999999999932,
+              "expires_day": 8
+            },
+            "needs_comfortable": {
+              "amount": 5.0,
+              "expires_day": 8
+            },
+            "prayer_completed": {
+              "amount": 5.0,
+              "expires_day": 8
+            }
+          },
+          "happiness_trigger_days": {
+            "needs_comfortable": 8,
+            "need_low:toilet": 8,
+            "need_empty:toilet": 8,
+            "prayer_completed": 8,
+            "need_low:hunger": 7,
+            "need_low:thirst": 8,
+            "need_empty:hunger": 7,
+            "need_empty:thirst": 8
+          },
+          "happiness_food_day": 8,
+          "happiness_food_types": [
+            "Potato"
+          ],
+          "last_faith_decay_day": 8,
+          "prayer_attendance_day": null,
+          "church_tax_prepared_day": null,
+          "church_tax_prepared_amount": 0,
+          "last_faith_prayer_day": 8,
+          "last_confession_day": null,
+          "pending_commission_task": null,
+          "pending_commission_data": {},
+          "pending_commission_tasks": [],
+          "interrupted_task_state": null,
+          "activity_description": null,
+          "hunger_death_timer": null,
+          "thirst_death_timer": null,
+          "daily_food_consumed": 1,
+          "daily_water_consumed": 1,
+          "is_alive": true,
+          "status": "ALIVE",
+          "death_reason": null,
+          "death_day": null,
+          "carrying_corpse_id": null,
+          "burial_payment_target_corpse_id": null,
+          "burial_payment_gravedigger_id": null,
+          "builder_payment_order_id": null,
+          "builder_payment_builder_id": null,
+          "is_buried": false,
+          "is_picked_up": false
+        },
+        {
+          "id": "vil_8",
+          "first_name": "Geoffrey",
+          "last_name": "Potter",
+          "gender": "Male",
+          "age": 45,
+          "generation": 2,
+          "role": "Father",
+          "family_id": "fam_2",
+          "job": "Woodsman",
+          "x": 16.126054552445375,
+          "y": -1419.8890419669547,
+          "task": "STATION_WORK",
+          "carrying_crop": 0,
+          "inventory": {
+            "Spade": 1,
+            "Felling_Axe": 1,
+            "Wood": 40
+          },
+          "tool_conditions": {
+            "Spade": [
+              "PRISTINE"
+            ],
+            "Felling_Axe": [
+              "PRISTINE"
+            ]
+          },
+          "currency": {},
+          "active_tool": "Spade",
+          "has_water": false,
+          "water_day": -1,
+          "water_charges": 0,
+          "assigned_bed_id": "furn_17",
+          "carrying_furniture_id": null,
+          "watering_timer": 0.0,
+          "tilling_timer": 0.0,
+          "station_carry": {},
+          "hunger": 76.72499999998148,
+          "thirst": 74.458333333313,
+          "need_toilet": 57.937499999990436,
+          "faith": 75.37448120870698,
+          "sleep_need": 63.18999999998175,
+          "sleep_forced": false,
+          "sleeping_recharge_active": false,
+          "sleep_any_rest_active": false,
+          "sleep_schedule_task_state": null,
+          "pending_schedule_tasks": [],
+          "socage_tax_round": null,
+          "socage_tax_last_cycle": null,
+          "socage_tax_prepared_cycle": null,
+          "socage_tax_prepared_amount": 0,
+          "happiness": 99.43399999999994,
+          "happiness_effects": {
+            "leisure_per_hour": {
+              "amount": 4.433999999999946,
+              "expires_day": 8
+            },
+            "prayer_completed": {
+              "amount": 5.0,
+              "expires_day": 8
+            },
+            "needs_comfortable": {
+              "amount": 5.0,
+              "expires_day": 8
+            }
+          },
+          "happiness_trigger_days": {
+            "needs_comfortable": 8,
+            "need_low:toilet": 8,
+            "need_empty:toilet": 8,
+            "prayer_completed": 8,
+            "need_low:hunger": 7,
+            "need_low:thirst": 8,
+            "need_empty:hunger": 7,
+            "need_empty:thirst": 8
+          },
+          "happiness_food_day": 8,
+          "happiness_food_types": [
+            "Potato"
+          ],
+          "last_faith_decay_day": 8,
+          "prayer_attendance_day": null,
+          "church_tax_prepared_day": null,
+          "church_tax_prepared_amount": 0,
+          "last_faith_prayer_day": 8,
+          "last_confession_day": null,
+          "pending_commission_task": null,
+          "pending_commission_data": {},
+          "pending_commission_tasks": [],
+          "interrupted_task_state": null,
+          "activity_description": null,
+          "hunger_death_timer": null,
+          "thirst_death_timer": null,
+          "daily_food_consumed": 1,
+          "daily_water_consumed": 1,
+          "is_alive": true,
+          "status": "ALIVE",
+          "death_reason": null,
+          "death_day": null,
+          "carrying_corpse_id": null,
+          "burial_payment_target_corpse_id": null,
+          "burial_payment_gravedigger_id": null,
+          "builder_payment_order_id": null,
+          "builder_payment_builder_id": null,
+          "is_buried": false,
+          "is_picked_up": false
+        },
+        {
+          "id": "vil_9",
+          "first_name": "Agnes",
+          "last_name": "Potter",
+          "gender": "Female",
+          "age": 45,
+          "generation": 2,
+          "role": "Mother",
+          "family_id": "fam_2",
+          "job": "Woodsman",
+          "x": -439.98417198696677,
+          "y": -1302.4316233908462,
+          "task": "STATION_WORK",
+          "carrying_crop": 0,
+          "inventory": {
+            "Felling_Axe": 1,
+            "Spade": 1,
+            "Wood": 6
+          },
+          "tool_conditions": {
+            "Felling_Axe": [
+              "GOOD"
+            ],
+            "Spade": [
+              "PRISTINE",
+              "PRISTINE"
+            ]
+          },
+          "currency": {},
+          "active_tool": "Spade",
+          "has_water": false,
+          "water_day": -1,
+          "water_charges": 0,
+          "assigned_bed_id": "furn_16",
+          "carrying_furniture_id": null,
+          "watering_timer": 0.0,
+          "tilling_timer": 0.0,
+          "station_carry": {},
+          "hunger": 76.73333333331482,
+          "thirst": 74.50833333331305,
+          "need_toilet": 57.54999999999035,
+          "faith": 51.05829042762925,
+          "sleep_need": 63.18999999998175,
+          "sleep_forced": false,
+          "sleeping_recharge_active": false,
+          "sleep_any_rest_active": false,
+          "sleep_schedule_task_state": null,
+          "pending_schedule_tasks": [],
+          "socage_tax_round": null,
+          "socage_tax_last_cycle": null,
+          "socage_tax_prepared_cycle": null,
+          "socage_tax_prepared_amount": 0,
+          "happiness": 100.0,
+          "happiness_effects": {
+            "leisure_per_hour": {
+              "amount": 5.141999999999973,
+              "expires_day": 8
+            },
+            "prayer_completed": {
+              "amount": 5.0,
+              "expires_day": 8
+            },
+            "needs_comfortable": {
+              "amount": 5.0,
+              "expires_day": 8
+            }
+          },
+          "happiness_trigger_days": {
+            "needs_comfortable": 8,
+            "need_low:toilet": 7,
+            "need_empty:toilet": 8,
+            "prayer_completed": 8,
+            "need_low:hunger": 7,
+            "need_low:thirst": 8,
+            "need_empty:hunger": 7,
+            "need_empty:thirst": 8
+          },
+          "happiness_food_day": 8,
+          "happiness_food_types": [
+            "Potato"
+          ],
+          "last_faith_decay_day": 8,
+          "prayer_attendance_day": null,
+          "church_tax_prepared_day": null,
+          "church_tax_prepared_amount": 0,
+          "last_faith_prayer_day": 8,
+          "last_confession_day": null,
+          "pending_commission_task": null,
+          "pending_commission_data": {},
+          "pending_commission_tasks": [],
+          "interrupted_task_state": null,
+          "activity_description": null,
+          "hunger_death_timer": null,
+          "thirst_death_timer": null,
+          "daily_food_consumed": 1,
+          "daily_water_consumed": 1,
+          "is_alive": true,
+          "status": "ALIVE",
+          "death_reason": null,
+          "death_day": null,
+          "carrying_corpse_id": null,
+          "burial_payment_target_corpse_id": null,
+          "burial_payment_gravedigger_id": null,
+          "builder_payment_order_id": null,
+          "builder_payment_builder_id": null,
+          "is_buried": false,
+          "is_picked_up": false
+        }
+      ]
+    },
+    {
+      "id": "fam_3",
+      "surname": "Carter",
+      "assigned_permit_id": "permit_9",
+      "generations_present": [
+        2,
+        3
+      ],
+      "pending_death_recovery": [],
+      "income_report_period": 0,
+      "income_report_by_source": {
+        "Confession Offerings": 1
+      },
+      "income_report_last_day": 8,
+      "members": [
+        {
+          "id": "vil_10",
+          "first_name": "Robert",
+          "last_name": "Carter",
+          "gender": "Male",
+          "age": 51,
+          "generation": 2,
+          "role": "Father",
+          "family_id": "fam_3",
+          "job": "Gravedigger",
+          "x": -1180.9784171753026,
+          "y": 305.29186574481594,
+          "task": "LEISURE",
+          "carrying_crop": 0,
+          "inventory": {
+            "Hoe": 1
+          },
+          "tool_conditions": {},
+          "currency": {},
+          "active_tool": null,
+          "has_water": false,
+          "water_day": -1,
+          "water_charges": 0,
+          "assigned_bed_id": "furn_23",
+          "carrying_furniture_id": null,
+          "watering_timer": 0.0,
+          "tilling_timer": 0.0,
+          "station_carry": {},
+          "hunger": 74.26666666664619,
+          "thirst": 74.28333333331287,
+          "need_toilet": 84.91249999999657,
+          "faith": 59.64140332146637,
+          "sleep_need": 63.19999999998175,
+          "sleep_forced": false,
+          "sleeping_recharge_active": false,
+          "sleep_any_rest_active": false,
+          "sleep_schedule_task_state": null,
+          "pending_schedule_tasks": [],
+          "socage_tax_round": null,
+          "socage_tax_last_cycle": null,
+          "socage_tax_prepared_cycle": null,
+          "socage_tax_prepared_amount": 0,
+          "happiness": 100.0,
+          "happiness_effects": {
+            "leisure_per_hour": {
+              "amount": 17.184000000000427,
+              "expires_day": 8
+            },
+            "prayer_completed": {
+              "amount": 5.0,
+              "expires_day": 8
+            },
+            "needs_comfortable": {
+              "amount": 5.0,
+              "expires_day": 8
+            }
+          },
+          "happiness_trigger_days": {
+            "needs_comfortable": 8,
+            "prayer_completed": 8,
+            "need_low:toilet": 8,
+            "need_low:hunger": 8,
+            "need_low:thirst": 8,
+            "need_empty:hunger": 8,
+            "need_empty:thirst": 8
+          },
+          "happiness_food_day": 8,
+          "happiness_food_types": [
+            "Potato"
+          ],
+          "last_faith_decay_day": 8,
+          "prayer_attendance_day": null,
+          "church_tax_prepared_day": null,
+          "church_tax_prepared_amount": 0,
+          "last_faith_prayer_day": 8,
+          "last_confession_day": null,
+          "pending_commission_task": null,
+          "pending_commission_data": {},
+          "pending_commission_tasks": [],
+          "interrupted_task_state": null,
+          "activity_description": null,
+          "hunger_death_timer": null,
+          "thirst_death_timer": null,
+          "daily_food_consumed": 1,
+          "daily_water_consumed": 1,
+          "is_alive": true,
+          "status": "ALIVE",
+          "death_reason": null,
+          "death_day": null,
+          "carrying_corpse_id": null,
+          "burial_payment_target_corpse_id": null,
+          "burial_payment_gravedigger_id": null,
+          "builder_payment_order_id": null,
+          "builder_payment_builder_id": null,
+          "is_buried": false,
+          "is_picked_up": false
+        },
+        {
+          "id": "vil_11",
+          "first_name": "Alice",
+          "last_name": "Carter",
+          "gender": "Female",
+          "age": 49,
+          "generation": 2,
+          "role": "Mother",
+          "family_id": "fam_3",
+          "job": "Priest",
+          "x": -1079.6009072562715,
+          "y": 291.86286191529484,
+          "task": "LEISURE",
+          "carrying_crop": 0,
+          "inventory": {},
+          "tool_conditions": {},
+          "currency": {},
+          "active_tool": null,
+          "has_water": false,
+          "water_day": -1,
+          "water_charges": 0,
+          "assigned_bed_id": "furn_21",
+          "carrying_furniture_id": null,
+          "watering_timer": 0.0,
+          "tilling_timer": 0.0,
+          "station_carry": {},
+          "hunger": 75.0416666666468,
+          "thirst": 69.34999999997561,
+          "need_toilet": 84.51249999999648,
+          "faith": 79.36293080707715,
+          "sleep_need": 63.19999999998175,
+          "sleep_forced": false,
+          "sleeping_recharge_active": false,
+          "sleep_any_rest_active": false,
+          "sleep_schedule_task_state": null,
+          "pending_schedule_tasks": [],
+          "socage_tax_round": null,
+          "socage_tax_last_cycle": null,
+          "socage_tax_prepared_cycle": null,
+          "socage_tax_prepared_amount": 0,
+          "happiness": 100.0,
+          "happiness_effects": {
+            "leisure_per_hour": {
+              "amount": 16.5000000000004,
+              "expires_day": 8
+            },
+            "prayer_completed": {
+              "amount": 5.0,
+              "expires_day": 8
+            },
+            "needs_comfortable": {
+              "amount": 5.0,
+              "expires_day": 8
+            }
+          },
+          "happiness_trigger_days": {
+            "needs_comfortable": 8,
+            "prayer_completed": 8,
+            "need_low:toilet": 8,
+            "need_low:hunger": 8,
+            "need_low:thirst": 8,
+            "need_empty:hunger": 8
+          },
+          "happiness_food_day": 8,
+          "happiness_food_types": [
+            "Potato"
+          ],
+          "last_faith_decay_day": 8,
+          "prayer_attendance_day": null,
+          "church_tax_prepared_day": null,
+          "church_tax_prepared_amount": 0,
+          "last_faith_prayer_day": 8,
+          "last_confession_day": null,
+          "pending_commission_task": null,
+          "pending_commission_data": {},
+          "pending_commission_tasks": [],
+          "interrupted_task_state": null,
+          "activity_description": null,
+          "hunger_death_timer": null,
+          "thirst_death_timer": null,
+          "daily_food_consumed": 1,
+          "daily_water_consumed": 1,
+          "is_alive": true,
+          "status": "ALIVE",
+          "death_reason": null,
+          "death_day": null,
+          "carrying_corpse_id": null,
+          "burial_payment_target_corpse_id": null,
+          "burial_payment_gravedigger_id": null,
+          "builder_payment_order_id": null,
+          "builder_payment_builder_id": null,
+          "is_buried": false,
+          "is_picked_up": false
+        },
+        {
+          "id": "vil_12",
+          "first_name": "William",
+          "last_name": "Carter",
+          "gender": "Male",
+          "age": 26,
+          "generation": 3,
+          "role": "Adult Son",
+          "family_id": "fam_3",
+          "job": "Unassigned",
+          "x": -1196.7174794471566,
+          "y": 350.5684414673427,
+          "task": "LEISURE",
+          "carrying_crop": 0,
+          "inventory": {},
+          "tool_conditions": {},
+          "currency": {},
+          "active_tool": null,
+          "has_water": false,
+          "water_day": -1,
+          "water_charges": 0,
+          "assigned_bed_id": "furn_22",
+          "carrying_furniture_id": null,
+          "watering_timer": 0.0,
+          "tilling_timer": 0.0,
+          "station_carry": {},
+          "hunger": 74.63333333331315,
+          "thirst": 69.34999999997561,
+          "need_toilet": 86.29999999999688,
+          "faith": 75.85054667331654,
+          "sleep_need": 63.19999999998175,
+          "sleep_forced": false,
+          "sleeping_recharge_active": false,
+          "sleep_any_rest_active": false,
+          "sleep_schedule_task_state": null,
+          "pending_schedule_tasks": [],
+          "socage_tax_round": null,
+          "socage_tax_last_cycle": null,
+          "socage_tax_prepared_cycle": null,
+          "socage_tax_prepared_amount": 0,
+          "happiness": 93.19200000000046,
+          "happiness_effects": {
+            "leisure_per_hour": {
+              "amount": 18.32400000000047,
+              "expires_day": 8
+            },
+            "prayer_completed": {
+              "amount": 5.0,
+              "expires_day": 8
+            },
+            "needs_comfortable": {
+              "amount": 5.0,
+              "expires_day": 8
+            }
+          },
+          "happiness_trigger_days": {
+            "needs_comfortable": 8,
+            "prayer_completed": 8,
+            "need_low:toilet": 8,
+            "need_low:hunger": 8,
+            "need_low:thirst": 8,
+            "need_empty:hunger": 8
+          },
+          "happiness_food_day": 8,
+          "happiness_food_types": [
+            "Potato"
+          ],
+          "last_faith_decay_day": 8,
+          "prayer_attendance_day": null,
+          "church_tax_prepared_day": null,
+          "church_tax_prepared_amount": 0,
+          "last_faith_prayer_day": 8,
+          "last_confession_day": null,
+          "pending_commission_task": null,
+          "pending_commission_data": {},
+          "pending_commission_tasks": [],
+          "interrupted_task_state": null,
+          "activity_description": null,
+          "hunger_death_timer": null,
+          "thirst_death_timer": null,
+          "daily_food_consumed": 1,
+          "daily_water_consumed": 1,
+          "is_alive": true,
+          "status": "ALIVE",
+          "death_reason": null,
+          "death_day": null,
+          "carrying_corpse_id": null,
+          "burial_payment_target_corpse_id": null,
+          "burial_payment_gravedigger_id": null,
+          "builder_payment_order_id": null,
+          "builder_payment_builder_id": null,
+          "is_buried": false,
+          "is_picked_up": false
+        }
+      ]
+    }
+  ],
+  "servants": [
+    {
+      "id": "servant_1",
+      "name": "Servant Alden",
+      "x": -522.9352522534941,
+      "y": -38.132678589183115,
+      "work_priorities": {
+        "Building": 1,
+        "Hauling": 1,
+        "Cleaning": 0,
+        "Crafting": 0,
+        "Cooking": 0
+      },
+      "carrying_furniture_id": null,
+      "state": "IDLE",
+      "inventory": {},
+      "builder_commission_order_id": null,
+      "builder_commission_builder_id": null,
+      "builder_commission_fee_copper": 0,
+      "builder_commission_remaining_copper": 0,
+      "builder_commission_storage_tile": null,
+      "builder_commission_treasury_id": null
+    },
+    {
+      "id": "servant_2",
+      "name": "Servant Barnaby",
+      "x": -505.458482742964,
+      "y": -67.2153574430049,
+      "work_priorities": {
+        "Building": 1,
+        "Hauling": 1,
+        "Cleaning": 0,
+        "Crafting": 0,
+        "Cooking": 0
+      },
+      "carrying_furniture_id": null,
+      "state": "IDLE",
+      "inventory": {},
+      "builder_commission_order_id": null,
+      "builder_commission_builder_id": null,
+      "builder_commission_fee_copper": 0,
+      "builder_commission_remaining_copper": 0,
+      "builder_commission_storage_tile": null,
+      "builder_commission_treasury_id": null
+    }
+  ],
+  "schedules": {
+    "prayer_start_hour": 3,
+    "prayer_end_hour": 4,
+    "universal_schedule": [
+      "SLEEP",
+      "SLEEP",
+      "SLEEP",
+      "SLEEP",
+      "LEISURE",
+      "LEISURE",
+      "WORK",
+      "WORK",
+      "WORK",
+      "WORK",
+      "WORK",
+      "WORK",
+      "WORK",
+      "WORK",
+      "WORK",
+      "WORK",
+      "WORK",
+      "LEISURE",
+      "LEISURE",
+      "SLEEP",
+      "SLEEP",
+      "SLEEP",
+      "SLEEP",
+      "SLEEP"
+    ],
+    "universal_schedule_enabled": true,
+    "job_schedules": {
+      "Unassigned": [
+        "SLEEP",
+        "SLEEP",
+        "SLEEP",
+        "SLEEP",
+        "LEISURE",
+        "LEISURE",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "LEISURE",
+        "LEISURE",
+        "SLEEP",
+        "SLEEP",
+        "SLEEP",
+        "SLEEP",
+        "SLEEP"
+      ],
+      "Farmer": [
+        "SLEEP",
+        "SLEEP",
+        "SLEEP",
+        "SLEEP",
+        "LEISURE",
+        "LEISURE",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "LEISURE",
+        "LEISURE",
+        "SLEEP",
+        "SLEEP",
+        "SLEEP",
+        "SLEEP",
+        "SLEEP"
+      ],
+      "Builder": [
+        "SLEEP",
+        "SLEEP",
+        "SLEEP",
+        "SLEEP",
+        "LEISURE",
+        "LEISURE",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "LEISURE",
+        "LEISURE",
+        "SLEEP",
+        "SLEEP",
+        "SLEEP",
+        "SLEEP",
+        "SLEEP"
+      ],
+      "Blacksmith": [
+        "SLEEP",
+        "SLEEP",
+        "SLEEP",
+        "SLEEP",
+        "LEISURE",
+        "LEISURE",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "LEISURE",
+        "LEISURE",
+        "SLEEP",
+        "SLEEP",
+        "SLEEP",
+        "SLEEP",
+        "SLEEP"
+      ],
+      "Tax Collector": [
+        "SLEEP",
+        "SLEEP",
+        "SLEEP",
+        "SLEEP",
+        "LEISURE",
+        "LEISURE",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "LEISURE",
+        "LEISURE",
+        "SLEEP",
+        "SLEEP",
+        "SLEEP",
+        "SLEEP",
+        "SLEEP"
+      ],
+      "Baker": [
+        "SLEEP",
+        "SLEEP",
+        "SLEEP",
+        "SLEEP",
+        "LEISURE",
+        "LEISURE",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "LEISURE",
+        "LEISURE",
+        "SLEEP",
+        "SLEEP",
+        "SLEEP",
+        "SLEEP",
+        "SLEEP"
+      ],
+      "Fisherman": [
+        "SLEEP",
+        "SLEEP",
+        "SLEEP",
+        "SLEEP",
+        "LEISURE",
+        "LEISURE",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "LEISURE",
+        "LEISURE",
+        "SLEEP",
+        "SLEEP",
+        "SLEEP",
+        "SLEEP",
+        "SLEEP"
+      ],
+      "Priest": [
+        "SLEEP",
+        "SLEEP",
+        "SLEEP",
+        "PRAYER",
+        "LEISURE",
+        "LEISURE",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "LEISURE",
+        "LEISURE",
+        "SLEEP",
+        "SLEEP",
+        "SLEEP",
+        "SLEEP",
+        "SLEEP"
+      ],
+      "Gravedigger": [
+        "SLEEP",
+        "SLEEP",
+        "SLEEP",
+        "SLEEP",
+        "LEISURE",
+        "LEISURE",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "LEISURE",
+        "LEISURE",
+        "SLEEP",
+        "SLEEP",
+        "SLEEP",
+        "SLEEP",
+        "SLEEP"
+      ],
+      "Woodsman": [
+        "SLEEP",
+        "SLEEP",
+        "SLEEP",
+        "SLEEP",
+        "LEISURE",
+        "LEISURE",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "LEISURE",
+        "LEISURE",
+        "SLEEP",
+        "SLEEP",
+        "SLEEP",
+        "SLEEP",
+        "SLEEP"
+      ],
+      "Miner": [
+        "SLEEP",
+        "SLEEP",
+        "SLEEP",
+        "SLEEP",
+        "LEISURE",
+        "LEISURE",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "LEISURE",
+        "LEISURE",
+        "SLEEP",
+        "SLEEP",
+        "SLEEP",
+        "SLEEP",
+        "SLEEP"
+      ],
+      "Toolmaker": [
+        "SLEEP",
+        "SLEEP",
+        "SLEEP",
+        "SLEEP",
+        "LEISURE",
+        "LEISURE",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "LEISURE",
+        "LEISURE",
+        "SLEEP",
+        "SLEEP",
+        "SLEEP",
+        "SLEEP",
+        "SLEEP"
+      ]
+    }
+  },
+  "production_records": {},
+  "burial_commissions": [],
+  "confession_state": {
+    "queues": {
+      "permit_7": []
+    },
+    "active": {}
+  },
+  "taxation_state": {
+    "church_enabled": false,
+    "church_tax": {
+      "Gold": 0,
+      "Silver": 0,
+      "Copper": 1
+    },
+    "church_tax_paid_households_today": [],
+    "church_tax_last_day": 8,
+    "socage_enabled": false,
+    "socage_percent": 10,
+    "socage_report_period": 0,
+    "socage_report_collected_copper": 0
+  },
+  "immigration": {
+    "postings": {
+      "furn_5": {
+        "reward_gold": 1,
+        "posted": false,
+        "posted_day": 5,
+        "rolled_day": 6,
+        "arrival_times": []
+      }
+    },
+    "pending": [],
+    "counter": 3
+  }
+}

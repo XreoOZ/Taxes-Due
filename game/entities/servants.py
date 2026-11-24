@@ -12,6 +12,7 @@ from game.config import (
     TILE_SIZE,
     LOOSE_ITEM_ARRIVAL_DIST,
     INTERACTION_CONTACT_RADIUS,
+    CHEST_INTERACTION_RADIUS,
     SERVANT_COUNT,
     SERVANT_RADIUS,
     SERVANT_SPEED,
@@ -487,6 +488,80 @@ class Servant:
                 self.say("Refund returned to the Treasury, my Lord.", duration=2.5)
             return
 
+        if self.state in ("PUBLIC_TOOL_PICKUP", "PUBLIC_TOOL_DEPOSIT"):
+            subject = getattr(self, "public_tool_subject", None)
+            order = getattr(subject, "construction_order", None) if subject else None
+            workbench = getattr(self, "public_tool_workbench", None)
+            if not order or not workbench:
+                self.public_tool_subject = None
+                self.public_tool_workbench = None
+                self.public_tool_order_id = None
+                self.state = "IDLE"
+                return
+
+            tool_name = order.get("tool_name")
+            qty = int(order.get("qty_total", 1))
+
+            if self.state == "PUBLIC_TOOL_PICKUP":
+                approach_x, approach_y = workbench.get_approach_point(
+                    self.x, self.y, worker_id=self.id, all_entities=all_entities,
+                    tile_size=TILE_SIZE, bm=building_manager,
+                )
+                arrived = self._move_towards(
+                    approach_x, approach_y, dt, arrival_dist=CHEST_INTERACTION_RADIUS,
+                    all_servants=all_servants, player=player,
+                    building_manager=building_manager, all_entities=all_entities,
+                    furniture_manager=furniture_manager,
+                    interaction_target=workbench,
+                )
+                if arrived:
+                    take = qty
+                    if hasattr(workbench, "output_inventory") and isinstance(workbench.output_inventory, dict):
+                        curr = workbench.output_inventory.get(tool_name, 0)
+                        take = min(curr, qty) if curr > 0 else qty
+                        workbench.output_inventory[tool_name] = max(0, curr - take)
+                        if workbench.output_inventory[tool_name] <= 0:
+                            workbench.output_inventory.pop(tool_name, None)
+                    self.inventory[tool_name] = int(self.inventory.get(tool_name, 0)) + take
+                    self.state = "PUBLIC_TOOL_DEPOSIT"
+                    self.say(f"Picked up {take} {tool_name}; carrying to Landlord Storage Yard, my Lord.", duration=2.5)
+                return
+
+            if self.state == "PUBLIC_TOOL_DEPOSIT":
+                drop_tile = None
+                if stockpile_manager is not None and permit_manager is not None:
+                    drop_tile = stockpile_manager.get_available_storage_tile(permit_manager, tool_name)
+                if drop_tile is not None:
+                    dest_x = (drop_tile[0] + 0.5) * TILE_SIZE
+                    dest_y = (drop_tile[1] + 0.5) * TILE_SIZE
+                else:
+                    dest_x = self.x
+                    dest_y = self.y
+
+                arrived = self._move_towards(
+                    dest_x, dest_y, dt, arrival_dist=CHEST_INTERACTION_RADIUS,
+                    all_servants=all_servants, player=player,
+                    building_manager=building_manager, all_entities=all_entities,
+                    furniture_manager=furniture_manager,
+                )
+                if arrived:
+                    carried_qty = int(self.inventory.get(tool_name, 0))
+                    if carried_qty > 0 and stockpile_manager is not None:
+                        gx = drop_tile[0] if drop_tile else int(self.x // TILE_SIZE)
+                        gy = drop_tile[1] if drop_tile else int(self.y // TILE_SIZE)
+                        stockpile_manager.drop_resource(
+                            tool_name, carried_qty, gx, gy, owner_type="landlord"
+                        )
+                        self.inventory.pop(tool_name, None)
+                    order["status"] = "COMPLETE"
+                    order["progress_ratio"] = 1.0
+                    self.public_tool_subject = None
+                    self.public_tool_workbench = None
+                    self.public_tool_order_id = None
+                    self.state = "IDLE"
+                    self.say(f"Stored the forged {tool_name} in Landlord Storage Yard, my Lord!", duration=2.5)
+                return
+
         pending_demo = building_manager.get_pending_demolition()
         pending_site = building_manager.get_pending_site()
 
@@ -860,6 +935,8 @@ class Servant:
                             building_manager, furniture_manager,
                         )
                     stockpile_manager.drop_resource(self.carried_res, self.carried_amount, drop_gx, drop_gy, owner_type="villager", owner_id=str(self.target_grant_fam_id))
+                    from game.systems.economy.wealth_system import VillageWealthSystem
+                    VillageWealthSystem.mark_dirty()
 
                 if self.target_grant_order:
                     self.target_grant_order["delivered"] = self.target_grant_order.get("delivered", 0) + self.carried_amount
@@ -1562,6 +1639,14 @@ class Servant:
             self.target_grant_order["in_transit"] = max(0, self.target_grant_order.get("in_transit", 0) - self.target_grant_amount)
         if self.target_grant_stack and hasattr(self.target_grant_stack, "release_reservation"):
             self.target_grant_stack.release_reservation(self.target_grant_amount)
+        self.target_grant_order = None
+        self.target_grant_stack = None
+        self.target_grant_treasury = None
+        self.target_grant_pos = None
+        self.target_grant_dest = None
+        self.target_grant_fam_id = None
+        self.target_grant_res = None
+        self.target_grant_amount = 0
 
         # Refund restock order in_transit count (Agent 2)
         if self.target_restock_order:
@@ -2197,6 +2282,29 @@ class ServantManager:
             spawn_y = 60
             s = Servant(f"servant_{i+1}", names[i % len(names)], spawn_x, spawn_y)
             self.servants.append(s)
+
+    def assign_public_tool_pickup(self, subject, furniture_manager=None):
+        """Dispatches an available idle servant to pick up finished landlord tools
+        from a workbench output rack and deposit them in the Landlord Storage Yard."""
+        order = getattr(subject, "construction_order", None)
+        if not isinstance(order, dict) or order.get("status") != "READY_FOR_PICKUP":
+            return False
+        workbench = getattr(subject, "workbench", None)
+        if not workbench:
+            return False
+
+        for s in self.servants:
+            if (s.state in ("IDLE", "FOLLOWING", "STANDBY")
+                    and not getattr(s, "carried_res", None)
+                    and not getattr(s, "public_tool_order_id", None)
+                    and not getattr(s, "builder_commission_order_id", None)):
+                s.public_tool_order_id = order.get("id")
+                s.public_tool_workbench = workbench
+                s.public_tool_subject = subject
+                s.state = "PUBLIC_TOOL_PICKUP"
+                s.say("A tool order is ready at the workbench; fetching it for the Lord.", duration=2.5)
+                return True
+        return False
 
     def add_grant_order(self, family_id, item_type, amount):
         """Mendaftarkan tugas angkut bantuan royal grant dari storage Landlord ke rumah keluarga Villager"""

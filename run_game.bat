@@ -5,11 +5,11 @@ echo ===================================================
 echo Starting Taxes-Due (Village Building Prototype)
 echo ===================================================
 
-python main.py
+python main.py %*
 if %ERRORLEVEL% NEQ 0 (
     echo.
     echo Mencoba menjalankan dengan py launcher...
-    py -3 main.py
+    py -3 main.py %*
 )
 
 if %ERRORLEVEL% NEQ 0 (

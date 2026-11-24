@@ -401,6 +401,15 @@ def get_job_required_tools(job_id):
         return list(job_cfg["required_tools"])
     return []
 
+JOB_TOOL_SETS = {
+    "Farmer": ["Hoe", "Watering_Can", "Sickle"],
+    "Woodsman": ["Felling_Axe", "Spade"],
+    "Miner": ["Pickaxe", "Sledgehammer"],
+    "Builder": ["Saw", "Adze", "Hammer"],
+    "Gravedigger": ["Hoe"],
+    "Toolmaker": ["Hammer", "Tongs"],
+}
+
 def is_tool_item(item_name):
     """Mengecek apakah suatu nama item merupakan alat kerja terdaftar"""
     return item_name in TOOL_TYPES
@@ -774,6 +783,12 @@ AI_NEED_TOILET_URGENT_THRESHOLD = 20.0 # <= 20% triggers toilet seeking
 AI_NEED_TOILET_RESTORE = 100.0         # Restored when using toilet
 TOILET_USE_DURATION_HOURS = 0.25       # 15 in-game minutes
 TOILET_USE_DURATION_SECONDS = 5.0      # Real-time seconds for toilet usage
+
+# Smart Toilet Queue & Load Balancing Constants
+TOILET_QUEUE_DISTANCE_PENALTY = 350.0       # Distance penalty per queued villager (approx 5 sec walk equivalent)
+TOILET_OCCUPIED_DISTANCE_PENALTY = 350.0    # Distance penalty if toilet is currently occupied (approx 5 sec walk equivalent)
+TOILET_REEVALUATE_INTERVAL_SECONDS = 2.0   # Interval to check for better alternative toilets while walking or waiting
+TOILET_REEVALUATE_SCORE_MARGIN = 150.0     # Minimum score improvement required to switch target toilet (avoids flapping)
 
 
 

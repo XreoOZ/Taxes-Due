@@ -92,7 +92,7 @@ class ToolmakerSystem:
 
     @classmethod
     def create_tool_order(cls, workbench, tool_name, qty, payer_family_id=None,
-                          building_manager=None, villager_manager=None):
+                          building_manager=None, villager_manager=None, payer_id=None):
         """Queue a tool commission on a toolmaker workbench. Payer defaults to
         the landlord (player catalogue orders); household AI orders pass their
         family id and follow the normal household payment errand."""
@@ -110,7 +110,7 @@ class ToolmakerSystem:
             "status": "LANDLORD_PAYMENT_PENDING" if landlord_paid else "AWAITING_PAYMENT",
             "payer_family_id": payer_family_id,
             "payer_type": "landlord" if landlord_paid else "household",
-            "payer_id": "landlord" if landlord_paid else None,
+            "payer_id": "landlord" if landlord_paid else (str(payer_id) if payer_id is not None else None),
             "builder_id": None,
             "artisan_job": "Toolmaker",
             "commission_paid": False,
@@ -125,6 +125,25 @@ class ToolmakerSystem:
             workbench.tool_order_subjects = []
         workbench.tool_order_subjects.append(subject)
         return subject, None
+
+    @classmethod
+    def create_tool_set_order(cls, workbench, job_id, qty=1, payer_family_id=None,
+                              building_manager=None, villager_manager=None, payer_id=None):
+        """Queue a complete toolset for a job onto the workbench."""
+        from game.data.config import JOB_TOOL_SETS
+        tools = JOB_TOOL_SETS.get(job_id, [])
+        if not tools:
+            return None, f"Unknown job set: {job_id}"
+        created = []
+        for tool_name in tools:
+            sub, err = cls.create_tool_order(
+                workbench, tool_name, qty, payer_family_id=payer_family_id,
+                building_manager=building_manager, villager_manager=villager_manager,
+                payer_id=payer_id
+            )
+            if sub:
+                created.append(sub)
+        return created, None
 
     # ------------------------------------------------------------------
     # Helpers
@@ -281,7 +300,7 @@ class ToolmakerSystem:
                 continue
             if str(order.get("builder_id")) != str(toolmaker.id):
                 continue
-            if order.get("status") not in ("PAID", "CRAFTING", "AWAITING_MATERIAL", "DELIVERING"):
+            if order.get("status") not in ("PAID", "CRAFTING", "AWAITING_MATERIAL"):
                 continue
             BuilderSystem._ensure_paid_seq(order, furniture_manager, None)
             candidates.append((int(order.get("paid_seq", 0) or 0), s))
@@ -307,16 +326,9 @@ class ToolmakerSystem:
     @classmethod
     def _craft_step(cls, toolmaker, subject, dt, furniture_manager, building_manager,
                     villager_manager, all_entities, player, day_cycle,
-                    stockpile_manager=None):
+                    stockpile_manager=None, permit_manager=None):
         order = subject.construction_order
         chest = cls._family_chest(toolmaker, furniture_manager)
-
-        # DELIVERING: carry finished tools to the payer's storage.
-        if order.get("status") == "DELIVERING":
-            return cls._deliver_step(toolmaker, subject, dt, furniture_manager,
-                                     building_manager, all_entities, player,
-                                     stockpile_manager=stockpile_manager,
-                                     villager_manager=villager_manager)
 
         if order.get("status") == "PAID":
             order["status"] = "CRAFTING"
@@ -389,63 +401,89 @@ class ToolmakerSystem:
         order["craft_progress"] = float(order.get("craft_progress", 0.0)) + dt
         needed = max(1.0, float(order.get("unit_duration_seconds", 0.0) or cls._unit_seconds(day_cycle)))
         toolmaker._activity_total = needed
+        toolmaker.toolmaker_craft_timer = order["craft_progress"]
         if order["craft_progress"] >= needed:
             # Consume one unit's recipe from the household chest.
             for item, amount in TOOLMAKER_TOOL_RECIPE.items():
                 cls._take_from_chest(chest, item, int(amount))
             tool_name = order.get("tool_name")
-            toolmaker.inventory[tool_name] = int(toolmaker.inventory.get(tool_name, 0)) + 1
-            from game.systems.work.tool_condition import ToolConditionSystem
-            ToolConditionSystem.register_new_units(toolmaker, tool_name, 1)
             order["qty_done"] = int(order.get("qty_done", 0)) + 1
             order["craft_progress"] = 0.0
             order["unit_duration_seconds"] = cls._unit_seconds(day_cycle)
+            toolmaker.toolmaker_craft_timer = 0.0
+            toolmaker._activity_total = 0.0
+
+            # Store the finished tool on the workbench output rack for pickup
+            bench = subject.workbench
+            if not hasattr(bench, "output_inventory") or not isinstance(bench.output_inventory, dict):
+                bench.output_inventory = {}
+            bench.output_inventory[tool_name] = int(bench.output_inventory.get(tool_name, 0)) + 1
+
             remaining = int(order.get("qty_total", 1)) - int(order.get("qty_done", 0))
             if remaining <= 0:
-                order["status"] = "DELIVERING"
-                toolmaker.say(f"Finished the {order.get('qty_total')} {tool_name} order — delivering.", duration=2.5)
+                order["status"] = "READY_FOR_PICKUP"
+                toolmaker.task = "IDLE"
+                toolmaker.active_tool = None
+                toolmaker.say(f"Finished {order.get('qty_total')} {tool_name} — placed on workbench output rack for pickup!", duration=2.5)
             else:
-                toolmaker.say(f"Forged 1 {tool_name} ({order['qty_done']}/{order['qty_total']}).", duration=1.8)
+                toolmaker.say(f"Forged 1 {tool_name} ({order['qty_done']}/{order['qty_total']}) on workbench rack.", duration=1.8)
         return True
 
     @classmethod
     def _deliver_step(cls, toolmaker, subject, dt, furniture_manager,
                       building_manager, all_entities, player,
-                      stockpile_manager=None, villager_manager=None):
+                      stockpile_manager=None, villager_manager=None,
+                      permit_manager=None):
         order = subject.construction_order
         tool_name = order.get("tool_name")
         qty = int(order.get("qty_total", 1))
         carried = max(0, int(toolmaker.inventory.get(tool_name, 0)))
+
+        # Retrieve tools from toolmaker's family chest if they were deposited there
+        needed = qty - carried
+        if needed > 0:
+            toolmaker_chest = cls._family_chest(toolmaker, furniture_manager)
+            if toolmaker_chest:
+                in_chest = cls._chest_qty(toolmaker_chest, tool_name)
+                if in_chest > 0:
+                    taken = cls._take_from_chest(toolmaker_chest, tool_name, min(needed, in_chest))
+                    toolmaker.inventory[tool_name] = carried + taken
+                    carried += taken
+                    toolmaker.say(f"Retrieved {taken} {tool_name} from household chest for delivery.", duration=2.0)
+
+        # If still not carrying the tool, do NOT complete the order! Revert to CRAFTING to forge it.
         if carried <= 0:
-            order["status"] = "COMPLETE"
-            toolmaker.task = "IDLE"
+            order["status"] = "CRAFTING"
+            order["qty_done"] = 0
+            order["craft_progress"] = 0.0
+            toolmaker.task = "TOOLMAKER_CRAFTING"
+            toolmaker.say(f"I must forge the {tool_name} before I can deliver it.", duration=2.5)
             return True
 
-        # Destination: payer household chest, or Lord Treasury for landlord orders.
+        # Destination: payer household chest, or Landlord Storage Permit (stockpile) for landlord orders.
+        # Tools NEVER go into Lord Treasury Chest (treasury is coins/money only).
         payer_family = order.get("payer_family_id")
+        is_landlord = (order.get("payer_type") == "landlord" or payer_family in (None, "landlord"))
         dest_chest = None
-        if order.get("payer_type") == "landlord" or payer_family in (None, "landlord"):
-            from game.systems.economy.lord_treasury import LordTreasurySystem
-            dest_chest = LordTreasurySystem.get_chest(furniture_manager)
-        else:
+        if not is_landlord:
             dest_chest = furniture_manager.get_storage_for_family(str(payer_family))
 
         if dest_chest is None:
-            # No household chest: deliver the tools as owner-tagged loose
-            # stacks. Household payers get the drop placed on a tile inside
-            # their own permit (physically hauled there first) so the
-            # family's "safe at home" check stops retrieve/drop loops;
-            # landlord orders keep the at-feet fallback.
+            # Deliver the tools as owner-tagged loose stacks.
+            # Landlord orders are hauled to the official Storage Permit (stockpile yard).
+            # Household payers get the drop placed on a tile inside their own permit.
             if stockpile_manager is not None:
-                owner_type = "landlord" if order.get("payer_type") == "landlord" else "villager"
-                owner_id = None if order.get("payer_type") == "landlord" else str(payer_family)
+                owner_type = "landlord" if is_landlord else "villager"
+                owner_id = None if is_landlord else str(payer_family)
                 amount = min(carried, qty)
                 drop_tile = None
-                if owner_type == "villager":
-                    permit_manager = getattr(toolmaker, "permit_manager", None)
+                pm = permit_manager or getattr(toolmaker, "permit_manager", None)
+                if is_landlord and pm is not None:
+                    drop_tile = stockpile_manager.get_available_storage_tile(pm, tool_name)
+                elif owner_type == "villager":
                     vm = villager_manager or getattr(toolmaker, "villager_manager", None)
                     fam = None
-                    if permit_manager is not None and vm is not None:
+                    if pm is not None and vm is not None:
                         try:
                             fam = vm.get_family_by_id(str(payer_family))
                         except Exception:
@@ -454,7 +492,7 @@ class ToolmakerSystem:
                     if permit_id is not None:
                         from game.world.permits import resolve_household_ground_drop_tile
                         drop_tile = resolve_household_ground_drop_tile(
-                            permit_id, permit_manager, building_manager,
+                            permit_id, pm, building_manager,
                             furniture_manager=furniture_manager,
                             ref_x=toolmaker.x, ref_y=toolmaker.y)
                 if drop_tile is not None:
@@ -487,7 +525,10 @@ class ToolmakerSystem:
                 order["progress_ratio"] = 1.0
                 toolmaker.task = "IDLE"
                 toolmaker.active_tool = None
-                toolmaker.say(f"Dropped {amount} {tool_name} — the household has no chest.", duration=2.5)
+                if is_landlord:
+                    toolmaker.say(f"Delivered {amount} {tool_name} to Landlord Storage Yard.", duration=2.5)
+                else:
+                    toolmaker.say(f"Dropped {amount} {tool_name} — the household has no chest.", duration=2.5)
                 return True
             if not getattr(toolmaker, "speech_text", None):
                 toolmaker.say("The payer has no storage yet; tools are safe in my pack.", duration=3.0)
@@ -548,12 +589,13 @@ class ToolmakerSystem:
             BuilderSystem._claim_awaiting_order(
                 toolmaker, awaiting, villager_manager, furniture_manager, stockpile_manager)
 
-        # 2) Active craft/deliver order wins; otherwise smelt bars.
+        # 2) Active craft order wins; otherwise smelt bars.
         active = cls._craftable_order(toolmaker, furniture_manager)
         if active is not None:
             return cls._craft_step(toolmaker, active, dt, furniture_manager,
                                    building_manager, villager_manager, all_entities,
-                                   player, day_cycle, stockpile_manager=stockpile_manager)
+                                   player, day_cycle, stockpile_manager=stockpile_manager,
+                                   permit_manager=permit_manager)
 
         # 3) Automatic bar production keeps the household chest stocked.
         if cls._smelt_step(toolmaker, dt, furniture_manager, building_manager,

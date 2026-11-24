@@ -418,6 +418,15 @@ def main():
 
     start_fresh_game()
 
+    is_playtest = ("--playtest" in sys.argv) or (os.environ.get("PLAYTEST_BOT") == "1")
+    bot = None
+    if is_playtest:
+        from game.systems.bot.playtester_bot import PlaytesterBot
+        duration = int(os.environ.get("PLAYTEST_DURATION", 600))
+        bot = PlaytesterBot(duration_seconds=duration, map_type="island")
+        start_fresh_game(day_length_index=0, world_map_index=1, starter_index=0)
+        current_state = STATE_PLAYING
+
     # Floating Bottom Bar Action Buttons
     btn_confirm_rect = pygame.Rect(0, 0, 150, 36)
     btn_clear_rect = pygame.Rect(0, 0, 90, 36)
@@ -599,11 +608,25 @@ def main():
 
                 if toolmaker_catalog_modal.is_open:
                     tool_action = toolmaker_catalog_modal.handle_event(event)
-                    if tool_action and tool_action.startswith("tool_order_"):
+                    if tool_action and tool_action.startswith("tool_order_set_"):
                         try:
                             wb = toolmaker_catalog_modal.workbench or selected_furniture
                             toolmaker_catalog_modal.close()
-                            _, tool_name, qty_str = tool_action.split("_", 2)
+                            raw = tool_action.removeprefix("tool_order_set_")
+                            job_id, qty_str = raw.rsplit("_", 1)
+                            subjects, err = ToolmakerSystem.create_tool_set_order(
+                                wb, job_id, int(qty_str), payer_family_id=None,
+                                building_manager=building_manager, villager_manager=villager_manager)
+                            if err:
+                                print(f"[Toolmaker] set order failed: {err}")
+                        except Exception as exc:
+                            print(f"[Toolmaker] set order error: {exc}")
+                    elif tool_action and tool_action.startswith("tool_order_"):
+                        try:
+                            wb = toolmaker_catalog_modal.workbench or selected_furniture
+                            toolmaker_catalog_modal.close()
+                            raw = tool_action.removeprefix("tool_order_")
+                            tool_name, qty_str = raw.rsplit("_", 1)
                             subject, err = ToolmakerSystem.create_tool_order(
                                 wb, tool_name, int(qty_str), payer_family_id=None,
                                 building_manager=building_manager, villager_manager=villager_manager)
@@ -1823,7 +1846,11 @@ def main():
             sub_time = game_dt
             is_modal_open = raport_ui.is_open or settings_modal.is_open or save_modal.is_open or market_modal.is_open or add_item_modal.is_open or cheat_modal.is_open or help_modal.is_open or pending_starter_id is not None
             raport_ui.cheats_active = cheats_active
-            keys = pygame.key.get_pressed() if not is_modal_open else None
+            if bot is not None and not is_modal_open:
+                bot_keys = bot.get_player_keys(player, building_manager, furniture_manager, real_dt)
+                keys = bot_keys if bot_keys is not None else pygame.key.get_pressed()
+            else:
+                keys = pygame.key.get_pressed() if not is_modal_open else None
 
             profile_simulation_start = perf_counter() if profile_enabled else 0.0
             run_ai_scheduler = True
@@ -1864,9 +1891,9 @@ def main():
                 for _wb in ToolmakerSystem._toolmaker_workbenches(furniture_manager):
                     for _sub in getattr(_wb, "tool_order_subjects", []) or []:
                         _o = getattr(_sub, "construction_order", None)
-                        if (isinstance(_o, dict)
-                                and _o.get("status") == "LANDLORD_PAYMENT_PENDING"
-                                and _o.get("artisan_job") == "Toolmaker"
+                        if not isinstance(_o, dict) or _o.get("artisan_job") != "Toolmaker":
+                            continue
+                        if (_o.get("status") == "LANDLORD_PAYMENT_PENDING"
                                 and (not _o.get("_dispatch_retry_at")
                                      or perf_counter() >= float(_o["_dispatch_retry_at"]))):
                             _ok, _msg = BuilderSystem.request_public_commission(
@@ -1878,6 +1905,13 @@ def main():
                                 _o["_dispatch_retry_at"] = perf_counter() + 30.0
                             else:
                                 _o.pop("_dispatch_retry_at", None)
+                        elif (_o.get("status") == "READY_FOR_PICKUP"
+                                and _o.get("payer_type") == "landlord"
+                                and not _o.get("_pickup_dispatched")):
+                            if servant_manager is not None:
+                                assigned = servant_manager.assign_public_tool_pickup(_sub, furniture_manager)
+                                if assigned:
+                                    _o["_pickup_dispatched"] = True
 
             # Immigration: pending households travel/wait/leave at the Notice Board.
             if furniture_manager is not None and villager_manager is not None:
@@ -3160,11 +3194,11 @@ def main():
                     happiness_bg = pygame.Rect(cx + upx(68), bar_y1, upx(150), upx(14))
                     pygame.draw.rect(screen, (30, 41, 59), happiness_bg, border_radius=upx(4))
                     happiness_range = max(1.0, HAPPINESS_MAX_VALUE - HAPPINESS_MIN_VALUE)
-                    happiness_fill = max(0, int(150 * ((happiness_val - HAPPINESS_MIN_VALUE) / happiness_range)))
+                    happiness_fill = max(0, min(happiness_bg.width, int(round(happiness_bg.width * ((happiness_val - HAPPINESS_MIN_VALUE) / happiness_range)))))
                     if happiness_fill > 0:
-                        pygame.draw.rect(screen, happiness_color, (cx + upx(68), bar_y1, happiness_fill, upx(14)), border_radius=upx(4))
+                        pygame.draw.rect(screen, happiness_color, (happiness_bg.x, happiness_bg.y, happiness_fill, happiness_bg.height), border_radius=upx(4))
                     pygame.draw.rect(screen, (71, 85, 105), happiness_bg, width=1, border_radius=upx(4))
-                    screen.blit(ui_font(10, bold=True).render(happiness_band.get("label", "Happy"), True, happiness_color), (cx + upx(226), bar_y1))
+                    screen.blit(ui_font(10, bold=True).render(happiness_band.get("label", "Happy"), True, happiness_color), (happiness_bg.right + upx(8), bar_y1))
 
                 # Sleep follows happiness, then bodily needs and faith.
                 bar_y2 = bar_y1 + AI_PROFILE_NEED_ROW_HEIGHT
@@ -3176,11 +3210,11 @@ def main():
                     sleep_bg = pygame.Rect(cx + upx(68), bar_y2, upx(150), upx(14))
                     pygame.draw.rect(screen, (30, 41, 59), sleep_bg, border_radius=upx(4))
                     sleep_range = max(1.0, SLEEP_MAX_VALUE - SLEEP_MIN_VALUE)
-                    sleep_fill = max(0, int(150 * ((sleep_val - SLEEP_MIN_VALUE) / sleep_range)))
+                    sleep_fill = max(0, min(sleep_bg.width, int(round(sleep_bg.width * ((sleep_val - SLEEP_MIN_VALUE) / sleep_range)))))
                     if sleep_fill > 0:
-                        pygame.draw.rect(screen, sleep_color, (cx + upx(68), bar_y2, sleep_fill, upx(14)), border_radius=upx(4))
+                        pygame.draw.rect(screen, sleep_color, (sleep_bg.x, sleep_bg.y, sleep_fill, sleep_bg.height), border_radius=upx(4))
                     pygame.draw.rect(screen, (71, 85, 105), sleep_bg, width=1, border_radius=upx(4))
-                    screen.blit(ui_font(10, bold=True).render(f"{int(sleep_val)}% {sleep_status.replace('_', ' ').title()}", True, sleep_color), (cx + upx(226), bar_y2))
+                    screen.blit(ui_font(10, bold=True).render(f"{int(sleep_val)}% {sleep_status.replace('_', ' ').title()}", True, sleep_color), (sleep_bg.right + upx(8), bar_y2))
 
                 # Hunger, thirst, toilet, and faith follow the sleep bar.
                 bar_y3 = bar_y2 + AI_PROFILE_NEED_ROW_HEIGHT
@@ -3188,14 +3222,14 @@ def main():
                 screen.blit(ui_font(10, bold=True).render("Hunger:", True, (241, 245, 249)), (cx + upx(14), bar_y3))
                 h_bg = pygame.Rect(cx + upx(68), bar_y3, upx(150), upx(14))
                 pygame.draw.rect(screen, (30, 41, 59), h_bg, border_radius=upx(4))
-                h_fill = max(0, int(150 * (h_val / 100.0)))
+                h_fill = max(0, min(h_bg.width, int(round(h_bg.width * (h_val / 100.0)))))
                 if h_fill > 0:
                     h_c = (34, 197, 94) if h_val > 50 else ((234, 179, 8) if h_val > 20 else (239, 68, 68))
-                    pygame.draw.rect(screen, h_c, (cx + upx(68), bar_y3, h_fill, upx(14)), border_radius=upx(4))
+                    pygame.draw.rect(screen, h_c, (h_bg.x, h_bg.y, h_fill, h_bg.height), border_radius=upx(4))
                 pygame.draw.rect(screen, (71, 85, 105), h_bg, width=1, border_radius=upx(4))
                 h_str = f"{int(h_val)}%" if h_timer is None else f"{int(h_val)}% ({h_timer:.1f}h)"
                 h_color = (255, 255, 255) if h_timer is None else (239, 68, 68)
-                screen.blit(ui_font(10, bold=True).render(h_str, True, h_color), (cx + upx(226), bar_y3))
+                screen.blit(ui_font(10, bold=True).render(h_str, True, h_color), (h_bg.right + upx(8), bar_y3))
 
                 # Row 5: Thirst Bar
                 bar_y4 = bar_y3 + AI_PROFILE_NEED_ROW_HEIGHT
@@ -3203,14 +3237,14 @@ def main():
                 screen.blit(ui_font(10, bold=True).render("Thirst:", True, (241, 245, 249)), (cx + upx(14), bar_y4))
                 t_bg = pygame.Rect(cx + upx(68), bar_y4, upx(150), upx(14))
                 pygame.draw.rect(screen, (30, 41, 59), t_bg, border_radius=upx(4))
-                t_fill = max(0, int(150 * (t_val / 100.0)))
+                t_fill = max(0, min(t_bg.width, int(round(t_bg.width * (t_val / 100.0)))))
                 if t_fill > 0:
                     t_c = (56, 189, 248) if t_val > 50 else ((59, 130, 246) if t_val > 20 else (239, 68, 68))
-                    pygame.draw.rect(screen, t_c, (cx + upx(68), bar_y4, t_fill, upx(14)), border_radius=upx(4))
+                    pygame.draw.rect(screen, t_c, (t_bg.x, t_bg.y, t_fill, t_bg.height), border_radius=upx(4))
                 pygame.draw.rect(screen, (71, 85, 105), t_bg, width=1, border_radius=upx(4))
                 t_str = f"{int(t_val)}%" if t_timer is None else f"{int(t_val)}% ({t_timer:.1f}h)"
                 t_color = (255, 255, 255) if t_timer is None else (239, 68, 68)
-                screen.blit(ui_font(10, bold=True).render(t_str, True, t_color), (cx + upx(226), bar_y4))
+                screen.blit(ui_font(10, bold=True).render(t_str, True, t_color), (t_bg.right + upx(8), bar_y4))
 
                 # Row 6: Need Toilet Bar
                 bar_y5 = bar_y4 + AI_PROFILE_NEED_ROW_HEIGHT
@@ -3218,12 +3252,12 @@ def main():
                 screen.blit(ui_font(10, bold=True).render("Toilet:", True, (241, 245, 249)), (cx + upx(14), bar_y5))
                 tl_bg = pygame.Rect(cx + upx(68), bar_y5, upx(150), upx(14))
                 pygame.draw.rect(screen, (30, 41, 59), tl_bg, border_radius=upx(4))
-                tl_fill = max(0, int(150 * (tl_val / 100.0)))
+                tl_fill = max(0, min(tl_bg.width, int(round(tl_bg.width * (tl_val / 100.0)))))
                 if tl_fill > 0:
                     tl_c = (16, 185, 129) if tl_val > 50 else ((245, 158, 11) if tl_val > 20 else (239, 68, 68))
-                    pygame.draw.rect(screen, tl_c, (cx + upx(68), bar_y5, tl_fill, upx(14)), border_radius=upx(4))
+                    pygame.draw.rect(screen, tl_c, (tl_bg.x, tl_bg.y, tl_fill, tl_bg.height), border_radius=upx(4))
                 pygame.draw.rect(screen, (71, 85, 105), tl_bg, width=1, border_radius=upx(4))
-                screen.blit(ui_font(10, bold=True).render(f"{int(tl_val)}%", True, (255, 255, 255)), (cx + upx(226), bar_y5))
+                screen.blit(ui_font(10, bold=True).render(f"{int(tl_val)}%", True, (255, 255, 255)), (tl_bg.right + upx(8), bar_y5))
 
                 # Faith meter is individual and does not decay continuously like bodily needs.
                 info_y1 = bar_y5 + AI_PROFILE_NEED_ROW_HEIGHT + AI_PROFILE_INFO_SECTION_GAP
@@ -3233,12 +3267,12 @@ def main():
                     screen.blit(ui_font(10, bold=True).render("Faith:", True, (241, 245, 249)), (cx + upx(14), bar_y6))
                     faith_bg = pygame.Rect(cx + upx(68), bar_y6, upx(150), upx(14))
                     pygame.draw.rect(screen, (30, 41, 59), faith_bg, border_radius=upx(4))
-                    faith_fill = max(0, int(150 * (faith_val / 100.0)))
+                    faith_fill = max(0, min(faith_bg.width, int(round(faith_bg.width * (faith_val / 100.0)))))
                     if faith_fill > 0:
                         faith_color = (34, 197, 94) if faith_val > 50 else ((234, 179, 8) if faith_val > 20 else (239, 68, 68))
-                        pygame.draw.rect(screen, faith_color, (cx + upx(68), bar_y6, faith_fill, upx(14)), border_radius=upx(4))
+                        pygame.draw.rect(screen, faith_color, (faith_bg.x, faith_bg.y, faith_fill, faith_bg.height), border_radius=upx(4))
                     pygame.draw.rect(screen, (71, 85, 105), faith_bg, width=1, border_radius=upx(4))
-                    screen.blit(ui_font(10, bold=True).render(f"{int(faith_val)}%", True, (255, 255, 255)), (cx + upx(226), bar_y6))
+                    screen.blit(ui_font(10, bold=True).render(f"{int(faith_val)}%", True, (255, 255, 255)), (faith_bg.right + upx(8), bar_y6))
                     info_y1 = bar_y6 + AI_PROFILE_NEED_ROW_HEIGHT + AI_PROFILE_INFO_SECTION_GAP
                 inv_items = []
                 for it, c in getattr(selected_entity, "inventory", {}).items():
@@ -3439,6 +3473,30 @@ def main():
                 screen, player, permit_manager, building_manager, furniture_manager,
                 villager_manager, servant_manager, stockpile_manager,
             )
+
+        if bot is not None and current_state == STATE_PLAYING:
+            bot_ctx = {
+                "screen": screen,
+                "camera": camera,
+                "player": player,
+                "villager_manager": villager_manager,
+                "furniture_manager": furniture_manager,
+                "building_manager": building_manager,
+                "permit_manager": permit_manager,
+                "stockpile_manager": stockpile_manager,
+                "servant_manager": servant_manager,
+                "day_cycle": day_cycle,
+                "schedule_manager": schedule_manager,
+                "resources": resources,
+                "pending_starter_id": pending_starter_id,
+                "starter_confirm_tile": starter_confirm_tile,
+            }
+            bot.update(real_dt, bot_ctx)
+            if bot.selected_entity is not None:
+                selected_entity = bot.selected_entity
+            if bot_ctx.get("pending_starter_id") is None and pending_starter_id is not None:
+                pending_starter_id = None
+                starter_confirm_tile = None
 
         pygame.display.flip()
 

@@ -178,6 +178,11 @@ class BuilderSystem:
                 )
             )
         )
+        for furniture in getattr(furniture_manager, "furnitures", []):
+            for subject in (getattr(furniture, "tool_order_subjects", None) or []):
+                order = getattr(subject, "construction_order", None)
+                if isinstance(order, dict) and order.get("payer_type") == "landlord":
+                    candidates.append(subject)
         for site in candidates:
             order = getattr(site, "construction_order", None) or {}
             if order.get("status") not in ("AWAITING_PAYMENT", "LANDLORD_PAYMENT_PENDING"):
@@ -583,16 +588,27 @@ class BuilderSystem:
             if not pool:
                 order["status"] = "AWAITING_PAYMENT"
                 return False
+            pref = order.get("payer_id")
+            preferred_payer = next((m for m in pool if str(getattr(m, "id", "")) == str(pref)), None) if pref else None
             non_builder = [m for m in pool if str(getattr(m, "id", "")) != builder_id]
-            payer = (non_builder or pool)[0]
+            payer = preferred_payer or (non_builder or pool)[0]
             order["payer_id"] = str(payer.id)
-            order["status"] = "PAYMENT_REQUESTED"
+            carried_copper = to_copper(normalize_wallet(payer.inventory))
             from game.systems.work.commission_schedule import CommissionScheduleSystem
-            CommissionScheduleSystem.queue(
-                payer, "BUILDER_FEE_RETRIEVE",
-                builder_payment_order_id=order["id"],
-                builder_payment_builder_id=order.get("builder_id"),
-            )
+            if carried_copper >= fee:
+                order["status"] = "PAYMENT_TRAVELING"
+                CommissionScheduleSystem.queue(
+                    payer, "BUILDER_FEE_TRAVEL",
+                    builder_payment_order_id=order["id"],
+                    builder_payment_builder_id=order.get("builder_id"),
+                )
+            else:
+                order["status"] = "PAYMENT_REQUESTED"
+                CommissionScheduleSystem.queue(
+                    payer, "BUILDER_FEE_RETRIEVE",
+                    builder_payment_order_id=order["id"],
+                    builder_payment_builder_id=order.get("builder_id"),
+                )
             return True
         order["status"] = "LANDLORD_PAYMENT_PENDING"
         return True
@@ -670,6 +686,9 @@ class BuilderSystem:
             # the fee — otherwise draining the coin stacks aborts the payment
             # and strands the coins in the villager's inventory.
             carried_copper = to_copper(normalize_wallet(villager.inventory))
+            if carried_copper >= fee:
+                cls._finalize_fee_payment(villager, order, builder, fee, villager_manager, day_number)
+                return True
             if not chest_covers and carried_copper + stack_total + wallet_total < fee:
                 order["status"] = "AWAITING_PAYMENT"
                 villager.builder_payment_order_id = None
@@ -770,18 +789,25 @@ class BuilderSystem:
                     cls._ensure_paid_seq(order, furniture_manager, building_manager)
                     if str(getattr(villager, "family_id", "")) != str(getattr(builder, "family_id", "")):
                         from game.systems.economy.market_sales_report import MarketSalesReportSystem
+                        category = "Toolmaker Commissions" if order.get("order_type") == "TOOL_ORDER" else "Builder Commissions"
                         MarketSalesReportSystem.record_household_income(
                             villager_manager, getattr(builder, "family_id", None),
-                            "Builder Commissions", fee, day_number,
+                            category, fee, day_number,
                         )
-                    villager.say("Furniture commission paid.", duration=2.0)
-                    builder.say(f"Commission received: {fee} Copper. I will begin the order.", duration=2.5)
+                    if order.get("order_type") == "TOOL_ORDER":
+                        villager.say("Tool commission paid. Heading home.", duration=2.0)
+                        builder.say(f"Commission received: {fee} Copper. I will forge the {order.get('tool_name', 'tool')}.", duration=2.5)
+                    else:
+                        villager.say("Furniture commission paid.", duration=2.0)
+                        builder.say(f"Commission received: {fee} Copper. I will begin the order.", duration=2.5)
                 else:
                     order["status"] = "AWAITING_PAYMENT"
                     villager.say("I no longer have the full furniture commission.", duration=2.5)
                 villager.builder_payment_order_id = None
                 villager.builder_payment_builder_id = None
                 villager._resume_or_idle_after_need()
+                if order.get("order_type") == "TOOL_ORDER" and order.get("status") == "PAID":
+                    villager.task = "MISSING_TOOL"
             return True
 
         # BUILDER_FEE_LANDLORD_RETRIEVE is intercepted above: landlord storage
@@ -821,13 +847,22 @@ class BuilderSystem:
                 family_id if family_id is not None else builder.family_id
             )
         totals = dict(getattr(builder, "inventory", {}))
-        material_types = DEDICATED_JOBS.get("Builder", {}).get("material_stock_target", {})
         if chest:
-            for item in material_types:
-                totals[item] = totals.get(item, 0) + chest.inventory.get(item, 0)
-        # Loose stacks owned by the paying party also count as materials.
+            for item, count in getattr(chest, "inventory", {}).items():
+                totals[item] = totals.get(item, 0) + int(count)
+        # If family_id is specified and distinct from builder's own family,
+        # also count materials in the Builder's workshop chest:
+        if furniture_manager and family_id is not None and str(family_id) != str(getattr(builder, "family_id", "")):
+            builder_chest = furniture_manager.get_storage_for_family(builder.family_id)
+            if builder_chest:
+                for item, count in getattr(builder_chest, "inventory", {}).items():
+                    totals[item] = totals.get(item, 0) + int(count)
+        # Loose stacks owned by the paying party or the Builder also count as materials.
         for stack in cls._order_loose_stacks(builder, stockpile_manager, payer_type, family_id):
             totals[stack.resource_type] = totals.get(stack.resource_type, 0) + int(stack.amount)
+        if family_id is not None and str(family_id) != str(getattr(builder, "family_id", "")):
+            for stack in cls._family_loose_stacks(builder, stockpile_manager, builder.family_id):
+                totals[stack.resource_type] = totals.get(stack.resource_type, 0) + int(stack.amount)
         return chest, totals
 
     @classmethod
@@ -992,6 +1027,13 @@ class BuilderSystem:
         chest_can_supply = bool(chest) and any(
             int(chest.inventory.get(material, 0)) > 0 for material in remaining
         )
+        if not chest_can_supply and furniture_manager and getattr(builder, "family_id", None):
+            builder_chest = furniture_manager.get_storage_for_family(builder.family_id)
+            if builder_chest and builder_chest is not chest and any(
+                int(builder_chest.inventory.get(material, 0)) > 0 for material in remaining
+            ):
+                chest = builder_chest
+                chest_can_supply = True
         if chest_can_supply:
             chest_x, chest_y = chest.get_approach_point(
                 builder.x, builder.y, worker_id=builder.id,
@@ -1663,11 +1705,18 @@ class BuilderSystem:
                     public_site.build_progress += dt
                     duration = max(1.0, float(order.get("build_duration_seconds", 1.0)))
                     order["progress_ratio"] = min(1.0, public_site.build_progress / duration)
+                    builder._activity_total = duration
+                    builder.builder_work_timer = public_site.build_progress
                     if public_site.is_complete():
                         order["status"] = "COMPLETE"
                         order["progress_ratio"] = 1.0
                         builder.task = "IDLE"
+                        builder._activity_total = 0.0
+                        builder.builder_work_timer = 0.0
                         builder.say(f"Finished {public_site.name}.", duration=3.0)
+                else:
+                    builder._activity_total = 0.0
+                    builder.builder_work_timer = 0.0
                 return True
 
         if public_repair:
@@ -1731,12 +1780,19 @@ class BuilderSystem:
                 public_repair.construction_progress = getattr(public_repair, "construction_progress", 0.0) + dt
                 duration = max(1.0, float(order.get("build_duration_seconds", BUILDER_BUILD_DURATION_INGAME_HOURS)))
                 order["progress_ratio"] = min(1.0, public_repair.construction_progress / duration)
+                builder._activity_total = duration
+                builder.builder_work_timer = public_repair.construction_progress
                 if public_repair.construction_progress >= duration:
                     public_repair.condition = 1.0
                     order["status"] = "COMPLETE"
                     order["progress_ratio"] = 1.0
                     builder.task = "IDLE"
+                    builder._activity_total = 0.0
+                    builder.builder_work_timer = 0.0
                     builder.say(f"Repaired {public_repair.name}.", duration=3.0)
+            else:
+                builder._activity_total = 0.0
+                builder.builder_work_timer = 0.0
             return True
 
         active = furniture_active
@@ -1753,22 +1809,15 @@ class BuilderSystem:
             builder, furniture_manager, stockpile_manager,
             payer_type=order.get("payer_type"),
             family_id=order.get("payer_family_id"))
-        target_stock = cfg.get("material_stock_target", {}) if chest else {}
         is_repair = order.get("order_type") == "REPAIR"
         recipe = FURNITURE_TYPES.get(active.furniture_type, {})
         material_recipe = BUILDER_REPAIR_MATERIALS if is_repair else recipe.get("materials", {})
         required = {item: max(0, int(amount))
                     for item, amount in material_recipe.items() if int(amount) > 0}
-        missing = {} if is_repair else {item: max(0, int(target) - int(totals.get(item, 0)))
-                   for item, target in target_stock.items()
-                   if totals.get(item, 0) < target}
         short_recipe = {item: amount - int(totals.get(item, 0)) for item, amount in required.items()
                         if totals.get(item, 0) < amount}
-        if short_recipe:
-            missing.update({item: max(missing.get(item, 0), amount) for item, amount in short_recipe.items()})
-        if missing and cls._begin_restock(builder, missing, building_manager, furniture_manager, villager_manager,
-                                          payer_type=order.get("payer_type"),
-                                          family_id=order.get("payer_family_id")):
+        missing = dict(short_recipe)
+        if missing and cls._begin_restock(builder, missing, building_manager, furniture_manager, villager_manager):
             return True
         if short_recipe:
             builder.say("I need this furniture's materials, but none are available to buy right now.", duration=2.5)
@@ -1835,15 +1884,19 @@ class BuilderSystem:
         if arrived:
             day_seconds = day_cycle.day_length_seconds if day_cycle else DAY_LENGTH_OPTIONS[DEFAULT_DAY_LENGTH_INDEX]["seconds"]
             seconds_per_hour = day_seconds / 24
-            duration = seconds_per_hour * BUILDER_BUILD_DURATION_INGAME_HOURS
+            duration = max(1.0, seconds_per_hour * BUILDER_BUILD_DURATION_INGAME_HOURS)
             active.construction_progress += dt
-            order["progress_ratio"] = min(1.0, active.construction_progress / max(1.0, duration))
+            order["progress_ratio"] = min(1.0, active.construction_progress / duration)
+            builder._activity_total = duration
+            builder.builder_work_timer = active.construction_progress
             if active.construction_progress >= duration:
                 order["status"] = "COMPLETE"
                 order["progress_ratio"] = 1.0
                 if is_repair:
                     active.condition = 1.0
                 builder.task = "IDLE"
+                builder._activity_total = 0.0
+                builder.builder_work_timer = 0.0
                 builder.active_tool = None
                 builder.builder_payment_order_id = None
                 builder.builder_target_order_id = None
@@ -1851,6 +1904,9 @@ class BuilderSystem:
                 builder.builder_failed_approach_points = set()
                 builder.say(f"Repaired {active.name}." if is_repair else f"Finished {active.name}.", duration=3.0)
                 furniture_manager.invalidate_cache()
+        else:
+            builder._activity_total = 0.0
+            builder.builder_work_timer = 0.0
         return True
 
     @classmethod
