@@ -147,6 +147,19 @@ class TestBuilderAssetWorkRange(unittest.TestCase):
             ))
             update_restock.assert_called_once()
 
+    def test_repair_order_materials_is_one_wood_and_one_stone(self):
+        from game.data.structures import BUILDER_REPAIR_MATERIALS
+        self.assertEqual(BUILDER_REPAIR_MATERIALS, {"Wood": 1, "Stone": 1})
+
+        target = _RepairTarget()
+        order = BuilderSystem.create_repair_order(target)
+        self.assertEqual(order["materials"], {"Wood": 1, "Stone": 1})
+        # Default Wood (2) + Default Stone (3) = 5 copper material cost
+        self.assertEqual(order["material_cost_copper"], 5)
+        # Default food unit price (3) * 1 * 3 days = 9 copper living wage
+        self.assertEqual(order["living_wage_copper"], 9)
+        self.assertEqual(order["price_copper"], 14)
+
 
 if __name__ == "__main__":
     unittest.main()

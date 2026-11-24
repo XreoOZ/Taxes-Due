@@ -26,7 +26,7 @@ FURNITURE_DAILY_BREAK_CHANCE = 0.05
 
 BUILDER_REPAIR_FOOD_DAYS = 3
 
-BUILDER_REPAIR_MATERIALS = {"Wood": 2}
+BUILDER_REPAIR_MATERIALS = {"Wood": 1, "Stone": 1}
 
 
 # Building Visuals (RimWorld Cutaway Style)

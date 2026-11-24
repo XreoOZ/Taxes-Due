@@ -22,7 +22,7 @@ def make_payer(vid="v_rep", family_id="fam_payer"):
     payer = SimpleNamespace(
         id=vid, family_id=family_id, is_alive=True,
         task="IDLE", x=0.0, y=0.0,
-        inventory={"copper": 500},          # carried coins count toward fees
+        inventory={},
         hunger=100.0, thirst=100.0, need_toilet=100.0,
         pending_commission_tasks=[], pending_commission_task=None,
         pending_commission_data={}, interrupted_task_state=None,
@@ -36,6 +36,7 @@ def make_payer(vid="v_rep", family_id="fam_payer"):
 
 
 def make_family(fid, members, purse=None):
+    purse = {"copper": 500} if purse is None else purse
     fam = SimpleNamespace(id=fid, members=list(members), currency=dict(purse or {}))
     fam.get_available_recovery_representative = (
         lambda: next((m for m in fam.members
