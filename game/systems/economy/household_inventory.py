@@ -132,23 +132,34 @@ def get_household_possessions(fam, furniture_manager=None, stockpile_manager=Non
 
     # 3. Personal AI Villager Inventory & Carried Items
     for m in getattr(fam, "members", []):
+        counted_inventory = {}
         # A. Hand / Bag Inventory
         m_inv = getattr(m, "inventory", {})
         if isinstance(m_inv, dict):
             for it_name, it_count in m_inv.items():
-                _add_item(it_name, it_count)
+                if it_count and int(it_count) > 0:
+                    _add_item(it_name, it_count)
+                    c_name = canonical_item_name(it_name)
+                    if c_name:
+                        counted_inventory[c_name] = counted_inventory.get(c_name, 0) + int(it_count)
 
-        # B. Carried harvest crops
+        # B. Carried harvest crops (only count surplus not already represented in inventory)
         carried_crop = getattr(m, "carrying_crop", 0)
         if carried_crop > 0:
             c_type = getattr(m, "crop_type", "Potato") or "Potato"
-            _add_item(c_type, carried_crop)
+            canon_c = canonical_item_name(c_type)
+            extra_crop = max(0, carried_crop - counted_inventory.get(canon_c, 0))
+            if extra_crop > 0:
+                _add_item(c_type, extra_crop)
 
-        # C. Carried general resource
+        # C. Carried general resource (only count surplus not already represented in inventory)
         carried_res = getattr(m, "carrying_res", None)
         carried_amt = getattr(m, "carrying_amount", 0)
         if carried_res and carried_amt > 0:
-            _add_item(carried_res, carried_amt)
+            canon_r = canonical_item_name(carried_res)
+            extra_res = max(0, carried_amt - counted_inventory.get(canon_r, 0))
+            if extra_res > 0:
+                _add_item(carried_res, extra_res)
 
     # 4. In-Transit Deliveries by Royal Servants (Grant Items)
     if servant_manager:

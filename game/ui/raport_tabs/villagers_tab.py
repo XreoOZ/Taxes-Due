@@ -566,27 +566,27 @@ class VillagersMixin:
         surface.blit(self.font_badge.render("Hunger:", True, (241, 245, 249)), (dx + upx(20), dy + upx(58)))
         h_bar_bg = pygame.Rect(dx + upx(74), dy + upx(58), upx(120), upx(14))
         pygame.draw.rect(surface, (30, 41, 59), h_bar_bg, border_radius=upx(4))
-        h_fill_w = max(0, int(120 * (h_val / 100.0)))
+        h_fill_w = max(0, min(h_bar_bg.width, int(round(h_bar_bg.width * (h_val / 100.0)))))
         if h_fill_w > 0:
             h_col = (34, 197, 94) if h_val > 50 else ((234, 179, 8) if h_val > 20 else (239, 68, 68))
-            pygame.draw.rect(surface, h_col, (dx + upx(74), dy + upx(58), h_fill_w, upx(14)), border_radius=upx(4))
+            pygame.draw.rect(surface, h_col, (h_bar_bg.x, h_bar_bg.y, h_fill_w, h_bar_bg.height), border_radius=upx(4))
         pygame.draw.rect(surface, (71, 85, 105), h_bar_bg, width=1, border_radius=upx(4))
         h_txt_str = f"{int(h_val)}%" if h_timer is None else f"{int(h_val)}% ({h_timer:.1f}h)"
         h_pct = self.font_badge.render(h_txt_str, True, (255, 255, 255) if h_timer is None else (239, 68, 68))
-        surface.blit(h_pct, (dx + upx(200), dy + upx(58)))
+        surface.blit(h_pct, (h_bar_bg.right + upx(6), dy + upx(58)))
 
         # Thirst Bar
         surface.blit(self.font_badge.render("Thirst:", True, (241, 245, 249)), (dx + upx(276), dy + upx(58)))
         t_bar_bg = pygame.Rect(dx + upx(322), dy + upx(58), upx(120), upx(14))
         pygame.draw.rect(surface, (30, 41, 59), t_bar_bg, border_radius=upx(4))
-        t_fill_w = max(0, int(120 * (t_val / 100.0)))
+        t_fill_w = max(0, min(t_bar_bg.width, int(round(t_bar_bg.width * (t_val / 100.0)))))
         if t_fill_w > 0:
             t_col = (56, 189, 248) if t_val > 50 else ((59, 130, 246) if t_val > 20 else (239, 68, 68))
-            pygame.draw.rect(surface, t_col, (dx + upx(322), dy + upx(58), t_fill_w, upx(14)), border_radius=upx(4))
+            pygame.draw.rect(surface, t_col, (t_bar_bg.x, t_bar_bg.y, t_fill_w, t_bar_bg.height), border_radius=upx(4))
         pygame.draw.rect(surface, (71, 85, 105), t_bar_bg, width=1, border_radius=upx(4))
         t_txt_str = f"{int(t_val)}%" if t_timer is None else f"{int(t_val)}% ({t_timer:.1f}h)"
         t_pct = self.font_badge.render(t_txt_str, True, (255, 255, 255) if t_timer is None else (239, 68, 68))
-        surface.blit(t_pct, (dx + upx(448), dy + upx(58)))
+        surface.blit(t_pct, (t_bar_bg.right + upx(6), dy + upx(58)))
 
         # Bed Status & Active tool
         bed_status = f"Assigned Bed:  {member.assigned_bed_id}" if getattr(member, 'assigned_bed_id', None) else " Bed: None (Sleeping on Floor)"

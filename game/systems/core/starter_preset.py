@@ -468,6 +468,8 @@ class StarterPresetSystem:
             for f in getattr(furniture_manager, "furnitures", []):
                 if getattr(f, "is_dropped", False) or getattr(f, "stored_in_id", None):
                     continue
+                if getattr(f, "furniture_type", "") in ("lord_treasury", "lord_treasury_chest"):
+                    continue
                 fw = getattr(f, "footprint_dimensions", (1, 1))
                 f_tiles = {(f.grid_x + dx, f.grid_y + dy)
                            for dx in range(fw[0]) for dy in range(fw[1])}

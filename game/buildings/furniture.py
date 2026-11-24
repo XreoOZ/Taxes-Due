@@ -325,7 +325,7 @@ class Furniture:
                 "PAY" if "PAYMENT" in self.construction_order.get("status", "") or self.construction_order.get("status") == "AWAITING_PAYMENT" else "MATERIAL")
             label = self.font.render(label_text, True, (255, 255, 255))
             surface.blit(label, (sx + (scaled_t - label.get_width()) // 2, sy + 3))
-            if self.construction_order.get("status") == "BUILDING":
+            if self.construction_order.get("status") in ("BUILDING", "REPAIRING"):
                 progress = max(0.0, min(1.0, float(self.construction_order.get("progress_ratio", 0.0))))
                 margin = max(2, int(4 * camera.zoom))
                 bar_h = max(3, int(5 * camera.zoom))
@@ -517,6 +517,21 @@ class Furniture:
                 tx = rx + i * u * 0.32
                 pygame.draw.line(surface, (120, 80, 50), (tx, ry), (tx, ry + u * 0.45), max(1, u // 10))
                 pygame.draw.rect(surface, iron, (tx - u // 12, ry + u * 0.45, u // 6, u // 5), border_radius=1)
+
+            # Active tool forging progress bar
+            active_tool_order = next((s.construction_order for s in (getattr(self, "tool_order_subjects", None) or [])
+                                     if isinstance(getattr(s, "construction_order", None), dict)
+                                     and s.construction_order.get("status") == "CRAFTING"), None)
+            if active_tool_order:
+                prog = min(1.0, max(0.0, float(active_tool_order.get("craft_progress", 0.0)) / max(1.0, float(active_tool_order.get("unit_duration_seconds", 1.0)))))
+                bw = max(18, int(scaled_w * 0.7))
+                bh = max(3, int(4 * camera.zoom))
+                bx = sx + (scaled_w - bw) // 2
+                by = sy - bh - 2
+                pygame.draw.rect(surface, (15, 23, 42), (bx - 1, by - 1, bw + 2, bh + 2), border_radius=2)
+                fw = int(bw * prog)
+                if fw > 0:
+                    pygame.draw.rect(surface, (250, 204, 21), (bx, by, fw, bh), border_radius=2)
 
         elif self.furniture_type == "confession_box":
             frame = self.type_cfg.get("color_frame", (92, 57, 34))

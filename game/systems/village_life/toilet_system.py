@@ -10,6 +10,7 @@ Manages the gameplay logic for the Toilet building:
 6. Robust fault tolerance: destroyed toilets, full queues, or missing facilities.
 """
 
+import math
 import time
 from game.config import (
     TILE_SIZE,
@@ -20,6 +21,10 @@ from game.config import (
     AI_NEED_TOILET_RESTORE,
     AI_NEED_SEEK_COOLDOWN_SECONDS,
     TOILET_USE_DURATION_SECONDS,
+    TOILET_QUEUE_DISTANCE_PENALTY,
+    TOILET_OCCUPIED_DISTANCE_PENALTY,
+    TOILET_REEVALUATE_INTERVAL_SECONDS,
+    TOILET_REEVALUATE_SCORE_MARGIN,
 )
 from game.world.navigation.navigation import find_nearest_target
 
@@ -53,28 +58,68 @@ class ToiletSystem:
         ]
 
     @classmethod
+    def calculate_toilet_score(cls, villager, toilet):
+        """
+        Calculates the weighted cost/score for a villager to use a toilet.
+        Lower score is better.
+        Score = Distance + Occupancy Penalty + (Queue Count * Queue Penalty).
+        """
+        if not toilet:
+            return float("inf")
+
+        pos = toilet.get_center_world(TILE_SIZE)
+        if not pos:
+            return float("inf")
+
+        dx = pos[0] - getattr(villager, "x", 0.0)
+        dy = pos[1] - getattr(villager, "y", 0.0)
+        dist = math.hypot(dx, dy)
+
+        vid_str = str(getattr(villager, "id", villager))
+        active_user = getattr(toilet, "toilet_active_user", None) or getattr(toilet, "occupied_by", None)
+
+        # If the inquiring villager is already the active user inside, score is just current distance
+        if active_user == vid_str:
+            return dist
+
+        # Occupancy penalty: someone else is currently using it
+        occ_penalty = TOILET_OCCUPIED_DISTANCE_PENALTY if active_user is not None else 0.0
+
+        # Queue penalty: count others waiting ahead in queue
+        queue = getattr(toilet, "toilet_queue", [])
+        queue_count = sum(1 for q_vid in queue if q_vid != vid_str)
+        queue_penalty = queue_count * TOILET_QUEUE_DISTANCE_PENALTY
+
+        return dist + occ_penalty + queue_penalty
+
+    @classmethod
     def find_best_toilet(cls, villager, building_manager, furniture_manager=None):
         """
-        Finds the most suitable toilet for a villager:
-        - Selects the closest toilet; the existing queue handles occupancy.
+        Finds the most suitable toilet for a villager using queue-aware cost scoring:
+        - Balances geometric distance and waiting queue length to prevent bottlenecks.
         Returns: (toilet_building, is_free) or (None, False)
         """
         toilets = cls.get_completed_toilets(building_manager)
         if not toilets:
             return None, False
 
-        toilet, _, _ = find_nearest_target(
-            (villager.x, villager.y), toilets,
-            lambda building: building.get_center_world(TILE_SIZE),
-            building_manager=building_manager, furniture_manager=furniture_manager,
-        )
-        if not toilet:
+        best_toilet = None
+        best_score = float("inf")
+        vid_str = str(getattr(villager, "id", villager))
+
+        for toilet in toilets:
+            score = cls.calculate_toilet_score(villager, toilet)
+            if score < best_score:
+                best_score = score
+                best_toilet = toilet
+
+        if not best_toilet:
             return None, False
-        is_free = (
-            getattr(toilet, "toilet_active_user", None) is None
-            and not getattr(toilet, "toilet_queue", [])
-        )
-        return toilet, is_free
+
+        active_user = getattr(best_toilet, "toilet_active_user", None) or getattr(best_toilet, "occupied_by", None)
+        queue = getattr(best_toilet, "toilet_queue", [])
+        is_free = (active_user is None or active_user == vid_str) and (not queue or queue == [vid_str])
+        return best_toilet, is_free
 
     @classmethod
     def get_queue_position(cls, toilet, queue_idx, tile_size=TILE_SIZE):
@@ -201,6 +246,30 @@ class ToiletSystem:
                     task="SEEKING_TOILET",
                 )
                 return True
+
+        # Dynamic load balancing re-evaluation:
+        # Periodically check if another toilet has become significantly better (e.g. current one is backlogged).
+        villager.toilet_reeval_timer = getattr(villager, "toilet_reeval_timer", 0.0) + dt
+        if villager.toilet_reeval_timer >= TOILET_REEVALUATE_INTERVAL_SECONDS:
+            villager.toilet_reeval_timer = 0.0
+            vid_str = str(getattr(villager, "id", villager))
+            active_user = getattr(toilet, "toilet_active_user", None) or getattr(toilet, "occupied_by", None)
+            is_actively_relieving = (active_user == vid_str and getattr(villager, "toilet_use_timer", 0.0) > 0.0)
+            if not is_actively_relieving and len(all_toilets) > 1:
+                alt_toilet, _ = cls.find_best_toilet(villager, building_manager, furniture_manager)
+                if alt_toilet and alt_toilet != toilet:
+                    curr_score = cls.calculate_toilet_score(villager, toilet)
+                    alt_score = cls.calculate_toilet_score(villager, alt_toilet)
+                    if alt_score + TOILET_REEVALUATE_SCORE_MARGIN < curr_score:
+                        was_in_queue = (
+                            hasattr(toilet, "toilet_queue")
+                            and vid_str in getattr(toilet, "toilet_queue", [])
+                        )
+                        cls.release_toilet(villager, toilet)
+                        toilet = alt_toilet
+                        villager.target_toilet = alt_toilet
+                        if was_in_queue and not getattr(villager, "speech_text", None):
+                            villager.say("Line is too long, heading to another toilet!", duration=1.8)
 
         can_enter, target_pos = cls.request_toilet_access(villager, toilet, tile_size=TILE_SIZE)
         if not target_pos:

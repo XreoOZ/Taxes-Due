@@ -66,11 +66,18 @@ def get_irrelevant_tools_in_inventory(worker):
     inv = getattr(worker, "inventory", {})
     irrelevant = []
 
+    craftable = set()
+    if job_id == "Toolmaker":
+        from game.systems.work.toolmaker_system import ToolmakerSystem
+        craftable = set(ToolmakerSystem.craftable_tools())
+
     for item_name, count in inv.items():
         if count <= 0:
             continue
         if not is_tool_item(item_name):
             continue  # Bukan alat kerja (misal: Potato, Wood, Stone)
+        if job_id == "Toolmaker" and item_name in craftable:
+            continue  # Alat hasil tempaan / pesanan untuk diantar bukan alat kerja berlebih milik pribadi
 
         req_count = required.get(item_name, 0)
         excess = count - req_count

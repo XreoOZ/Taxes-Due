@@ -401,6 +401,8 @@ class Villager:
             return "Buying required job tools"
         elif task == "RETURNING_TOOLS":
             return "Returning unused tools to storage"
+        elif task == "PICKUP_TOOL_FROM_BENCH":
+            return "Picking up forged tool from workbench"
         elif task == "MISSING_TOOL":
             return f"Waiting for required tool ({self.job})"
         elif task == "RECOVER_DEATH_ITEMS":
@@ -661,6 +663,16 @@ class Villager:
         reg = GlobalPathRegistry.get_instance()
         reg.release_reservation(self.id)
 
+        # Release toilet reservation if deceased while seeking toilet
+        try:
+            toilet_target = getattr(self, "target_toilet", None)
+            if toilet_target is not None:
+                from game.systems.village_life.toilet_system import ToiletSystem
+                ToiletSystem.release_toilet(self, toilet_target)
+                self.target_toilet = None
+        except Exception:
+            pass
+
         # Release production-station claims/state (forest tree claims etc.)
         try:
             from game.systems.work.station_jobs import StationJobSystem
@@ -700,10 +712,12 @@ class Villager:
                     sm.drop_resource(it_name, count, cur_gx, cur_gy, owner_type="villager", owner_id=fam_str)
             if getattr(self, "active_tool", None) and self.inventory.get(self.active_tool, 0) == 0:
                 sm.drop_resource(self.active_tool, 1, cur_gx, cur_gy, owner_type="villager", owner_id=fam_str)
-            if getattr(self, "carrying_crop", 0) > 0:
+            if getattr(self, "carrying_crop", 0) > 0 and self.inventory.get("Potato", 0) == 0:
                 sm.drop_resource("Potato", self.carrying_crop, cur_gx, cur_gy, owner_type="villager", owner_id=fam_str)
-            if getattr(self, "carrying_res", None) and getattr(self, "carrying_amount", 0) > 0:
-                sm.drop_resource(self.carrying_res, self.carrying_amount, cur_gx, cur_gy, owner_type="villager", owner_id=fam_str)
+            c_res = getattr(self, "carrying_res", None)
+            c_amt = getattr(self, "carrying_amount", 0)
+            if c_res and c_amt > 0 and self.inventory.get(c_res, 0) == 0:
+                sm.drop_resource(c_res, c_amt, cur_gx, cur_gy, owner_type="villager", owner_id=fam_str)
             if hasattr(self, "currency") and isinstance(self.currency, dict):
                 for denom in ("Copper", "Silver", "Gold"):
                     c_amt = self.currency.get(denom, 0)
@@ -1103,11 +1117,20 @@ class Villager:
                     b.get_world_pos(TILE_SIZE)[0] - self.x,
                     b.get_world_pos(TILE_SIZE)[1] - self.y),
             )
+            # Ambil koin langsung dari peti rumah tangga sebelum memesan jika tersedia
+            quote = ToolmakerSystem.quote_tool_order(tool_name, qty, building_manager, villager_manager)
+            fee = int(quote.get("price_copper", 0)) if quote else 0
+            chest = furniture_manager.get_storage_for_family(str(self.family_id)) if furniture_manager else None
+            if chest and fee > 0:
+                from game.systems.work.builder_system import BuilderSystem
+                BuilderSystem._move_exact_value(chest.inventory, self.inventory, fee)
+
             subject, err = ToolmakerSystem.create_tool_order(
                 bench, tool_name, max(1, int(qty or 1)),
                 payer_family_id=str(self.family_id),
                 building_manager=building_manager,
                 villager_manager=villager_manager,
+                payer_id=str(self.id),
             )
             if subject is not None:
                 covered.add(tool_name)
@@ -1302,11 +1325,16 @@ class Villager:
 
     def _get_unneeded_inventory(self):
         required_tools = get_job_required_tools(self.job)
-        return {
-            item: amount - required_tools.get(item, 0)
-            for item, amount in self.inventory.items()
-            if amount > required_tools.get(item, 0)
-        }
+        from game.systems.work.toolmaker_system import ToolmakerSystem
+        craftable_tools = set(ToolmakerSystem.craftable_tools()) if self.job == "Toolmaker" else set()
+        unneeded = {}
+        for item, amount in self.inventory.items():
+            if self.job == "Toolmaker" and item in craftable_tools:
+                continue
+            req = required_tools.get(item, 0)
+            if amount > req:
+                unneeded[item] = amount - req
+        return unneeded
 
     def _deposit_unneeded_inventory(self, dt, furniture_manager, all_entities,
                                     player, building_manager):
@@ -2588,9 +2616,9 @@ class Villager:
                 )
                 return
 
-            # Kembalikan semua alat ke peti keluarga saat tidur malam
+            # Kembalikan semua alat ke peti keluarga saat tidur malam (kecuali Toolmaker membawa pesanan)
             chest = furniture_manager.get_storage_for_family(self.family_id) if furniture_manager else None
-            if chest:
+            if chest and self.job != "Toolmaker":
                 for tool in ("Hoe", "Sickle", "Watering_Can"):
                     amt = self.inventory.get(tool, 0)
                     if amt > 0:
@@ -2787,6 +2815,8 @@ class Villager:
                         cur_gx = drop_tile[0] if drop_tile else int(math.floor(self.x / TILE_SIZE))
                         cur_gy = drop_tile[1] if drop_tile else int(math.floor(self.y / TILE_SIZE))
                         stockpile_manager.drop_resource(carried_res, carried_amt, cur_gx, cur_gy, owner_type="villager", owner_id=self.family_id)
+                        from game.systems.economy.wealth_system import VillageWealthSystem
+                        VillageWealthSystem.mark_dirty()
                         self.say(f"Stored {carried_amt}x {carried_res} safely at home.", duration=2.5)
 
                     self.inventory[carried_res] = max(0, self.inventory.get(carried_res, 0) - carried_amt)
@@ -3025,7 +3055,9 @@ class Villager:
         )
         if irrelevant_tools and self.task not in (
                 "HAULING_FURNITURE", "FETCHING_FURNITURE", "HAULING_HOME",
-                "HAULING_POSSESSION_HOME", "FETCHING_POSSESSION"):
+                "HAULING_POSSESSION_HOME", "FETCHING_POSSESSION",
+                "TOOLMAKER_DELIVERING", "TOOLMAKER_CRAFTING", "TOOLMAKER_SMELTING",
+                "BUILDER_CONSTRUCTING", "BUILDER_REPAIRING"):
             storage_pos, storage_type, storage_obj = self._find_tool_storage(furniture_manager, stockpile_manager)
             if storage_pos:
                 dist = math.hypot(storage_pos[0] - self.x, storage_pos[1] - self.y)
@@ -3046,13 +3078,63 @@ class Villager:
                     self.active_tool = None
                     self._move_towards(storage_pos[0], storage_pos[1], dt, arrival_dist=TOOL_STOW_ARRIVAL_DIST, all_entities=all_entities, player=player, building_manager=building_manager, furniture_manager=furniture_manager, interaction_target=storage_obj)
                     return
+        elif self.task == "RETURNING_TOOLS":
+            self.task = "IDLE"
+
+        # Check if this villager has any completed tool orders waiting at the workbench
+        if sched_activity in ("WORK", "ANY") and furniture_manager:
+            from game.systems.work.toolmaker_system import ToolmakerSystem
+            ready_sub = None
+            for subject in ToolmakerSystem._tool_order_subjects(furniture_manager):
+                order = getattr(subject, "construction_order", None)
+                if not isinstance(order, dict) or order.get("status") != "READY_FOR_PICKUP":
+                    continue
+                p_id = order.get("payer_id")
+                p_fam = order.get("payer_family_id")
+                if (p_id is not None and str(p_id) == str(self.id)) or (p_fam is not None and str(p_fam) == str(self.family_id)):
+                    ready_sub = subject
+                    break
+
+            if ready_sub is not None:
+                bench = ready_sub.workbench
+                dest = bench.get_approach_point(
+                    self.x, self.y, worker_id=self.id, all_entities=all_entities,
+                    tile_size=TILE_SIZE, bm=building_manager
+                )
+                self.task = "PICKUP_TOOL_FROM_BENCH"
+                arrived = self._move_towards(
+                    dest[0], dest[1], dt, arrival_dist=CHEST_INTERACTION_RADIUS,
+                    all_entities=all_entities, player=player,
+                    building_manager=building_manager, furniture_manager=furniture_manager,
+                    interaction_target=bench
+                )
+                if arrived:
+                    order = ready_sub.construction_order
+                    tool_name = order.get("tool_name")
+                    qty = int(order.get("qty_total", 1))
+                    if hasattr(bench, "output_inventory") and isinstance(bench.output_inventory, dict):
+                        curr = bench.output_inventory.get(tool_name, 0)
+                        bench.output_inventory[tool_name] = max(0, curr - qty)
+                        if bench.output_inventory[tool_name] <= 0:
+                            bench.output_inventory.pop(tool_name, None)
+                    self.inventory[tool_name] = int(self.inventory.get(tool_name, 0)) + qty
+                    from game.systems.work.tool_condition import ToolConditionSystem
+                    ToolConditionSystem.register_new_units(self, tool_name, qty)
+                    order["status"] = "COMPLETE"
+                    order["progress_ratio"] = 1.0
+                    self.task = "IDLE"
+                    self.active_tool = tool_name
+                    self.say(f"Picked up my {tool_name} from the workbench! Ready to work.", duration=2.5)
+                return
 
         # B. Kumpulkan SEMUA alat kerja yang dibutuhkan untuk pekerjaan saat ini dalam satu kali kunjungan
         # Ketentuan: "Collect ALL tools relevant to the current job before starting work.
         # Do NOT collect one tool, perform one task, return to storage, and collect another tool."
         if self.task not in (
                 "HAULING_FURNITURE", "FETCHING_FURNITURE", "HAULING_HOME",
-                "HAULING_POSSESSION_HOME", "FETCHING_POSSESSION"):
+                "HAULING_POSSESSION_HOME", "FETCHING_POSSESSION",
+                "TOOLMAKER_DELIVERING", "TOOLMAKER_CRAFTING", "TOOLMAKER_SMELTING",
+                "BUILDER_CONSTRUCTING", "BUILDER_REPAIRING"):
             missing_tools = (
                 self.get_missing_job_tools()
                 if sched_activity in ("WORK", "ANY") else []
@@ -3097,21 +3179,35 @@ class Villager:
                         return
                     if self._ensure_tool_commissions(
                             missing_tools, building_manager, furniture_manager, villager_manager):
-                        # Commission queued/active — keep working, meeting needs
-                        # and doing chores while payment/forge/delivery runs.
+                        # Commission queued/active — wait at home while payment/forge/delivery runs.
+                        self.task = "MISSING_TOOL"
                         if not getattr(self, "speech_text", None):
-                            self.say("My tools are on order — the toolmaker will forge them.", duration=2.5)
-                    elif self.job == "Builder":
-                        # Builder commission errands (claiming orders, payment
-                        # requests, material hauling) do not need the saw/adze.
-                        # BuilderSystem gates only the actual build phase, so
-                        # fall through to update_worker instead of dead-ending.
+                            self.say("My tools are on order — waiting at home while toolmaker forges them.", duration=2.5)
+                    elif self.job in ("Builder", "Toolmaker"):
+                        # Builder/Toolmaker commission errands (claiming orders, payment
+                        # requests, material hauling) do not need the specific workpiece tools.
                         pass
                     else:
                         self.task = "MISSING_TOOL"
                         if not getattr(self, "speech_text", None):
                             self.say("My job tools are missing, and no market can supply an affordable required item.", duration=2.5)
                         return
+
+        if sched_activity in ("WORK", "ANY") and self.task == "MISSING_TOOL":
+            dest_x, dest_y = self._get_home_storage_dest(
+                permit_manager, building_manager, furniture_manager, all_entities=all_entities
+            )
+            dist = math.hypot(dest_x - self.x, dest_y - self.y)
+            if dist > CHEST_INTERACTION_RADIUS:
+                self._move_towards(
+                    dest_x, dest_y, dt, arrival_dist=CHEST_INTERACTION_RADIUS,
+                    all_entities=all_entities, player=player,
+                    building_manager=building_manager, furniture_manager=furniture_manager,
+                    exclusive_target=False,
+                )
+            else:
+                self.is_moving = False
+            return
 
         # -------------------------------------------------------------
         # Rutinitas 2: Jam Kerja (WORK / ANY)
@@ -3759,11 +3855,13 @@ class Villager:
         # -------------------------------------------------------------
         # Rutinitas 3: Waktu Santai / Istirahat (LEISURE / Chores Finished)
         # -------------------------------------------------------------
-        # Don't overwrite need tasks when idling
+        # Don't overwrite need or essential hauling tasks when idling
         need_tasks = ("SEEKING_FOOD", "SEEKING_WATER", "SEEKING_TOILET", "BUYING_FOOD_RETRIEVE_COINS",
                       "BUYING_FOOD_RETRIEVE_GROUND_COINS",
                       "BUYING_FOOD_TRAVEL_TO_MARKET", "BUYING_FOOD_HAULING_HOME", "COLLECTING_HOUSEHOLD_WATER",
-                      "HAULING_HOUSEHOLD_WATER", "DEPOSITING_UNUSED_ITEMS")
+                      "HAULING_HOUSEHOLD_WATER", "DEPOSITING_UNUSED_ITEMS",
+                      "HAULING_POSSESSION_HOME", "FETCHING_POSSESSION",
+                      "HAULING_DROPPED_FURNITURE", "HAULING_FURNITURE", "FETCHING_FURNITURE")
         if self.task not in need_tasks:
             # Station workers may clear leftover workstation stock during free
             # time — strictly after needs are satisfied (checked inside).
@@ -3857,6 +3955,20 @@ class Villager:
     def _resume_leisure_after_need_failure(self, dt, sched_activity, player, all_entities,
                                           building_manager, permit_manager, furniture_manager):
         """Keep leisure/anything schedules moving after a need has no available source."""
+        if getattr(self, "interrupted_task_state", None):
+            resumed = self.resume_interrupted_task(
+                permit_manager=permit_manager or getattr(self, "permit_manager", None),
+                building_manager=building_manager or getattr(self, "building_manager", None)
+            )
+            if resumed:
+                return
+        elif getattr(self, "carrying_res", None) and getattr(self, "carrying_amount", 0) > 0:
+            self.task = "HAULING_POSSESSION_HOME"
+            return
+        elif getattr(self, "carrying_crop", 0) > 0:
+            self.task = "HAULING_HOME"
+            return
+
         self.task = "LEISURE" if sched_activity in ("LEISURE", "ANY") else "IDLE"
         self.active_tool = None
         if sched_activity in ("LEISURE", "ANY"):
@@ -4219,6 +4331,12 @@ class Villager:
             timer = getattr(self, "station_work_timer", 0.0)
         elif task in ("FETCHING_WATER", "COLLECTING_HOUSEHOLD_WATER", "SEEKING_WATER"):
             timer = getattr(self, "well_draw_timer", 0.0)
+        elif task in ("BUILDER_CONSTRUCTING", "BUILDER_REPAIRING", "BUILDING", "REPAIRING"):
+            timer = getattr(self, "builder_work_timer", 0.0)
+        elif task == "TOOLMAKER_CRAFTING":
+            timer = getattr(self, "toolmaker_craft_timer", 0.0)
+        elif task == "TOOLMAKER_SMELTING":
+            timer = getattr(self, "toolmaker_smelt_timer", 0.0)
         else:
             return None
         return min(1.0, max(0.0, timer / total))
@@ -4317,7 +4435,9 @@ class Villager:
                 active_t = "Watering_Can"
             elif self.task == "HARVESTING":
                 active_t = "Sickle"
-            elif self.task in ("BUILDING", "REPAIRING"):
+            elif self.task in ("BUILDING", "REPAIRING", "BUILDER_CONSTRUCTING", "BUILDER_REPAIRING"):
+                active_t = "Saw"
+            elif self.task in ("TOOLMAKER_CRAFTING", "TOOLMAKER_SMELTING"):
                 active_t = "Hammer"
 
         if active_t == "Hoe":
@@ -4449,7 +4569,7 @@ class Villager:
                                    max(1, int(2 * camera.zoom)))
 
         elif active_t == "Hammer":
-            is_building = (self.task in ("BUILDING", "REPAIRING") and not getattr(self, "is_moving", False))
+            is_building = (self.task in ("BUILDING", "REPAIRING", "BUILDER_CONSTRUCTING", "BUILDER_REPAIRING", "TOOLMAKER_CRAFTING", "TOOLMAKER_SMELTING") and not getattr(self, "is_moving", False))
             shaft_len = int(14 * camera.zoom)
             head_w = max(4, int(8 * camera.zoom))
             head_h = max(3, int(5 * camera.zoom))
