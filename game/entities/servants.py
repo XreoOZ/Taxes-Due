@@ -555,6 +555,9 @@ class Servant:
                         self.inventory.pop(tool_name, None)
                     order["status"] = "COMPLETE"
                     order["progress_ratio"] = 1.0
+                    if self.public_tool_workbench:
+                        from game.systems.work.toolmaker_system import ToolmakerSystem
+                        ToolmakerSystem.clean_completed_orders(self.public_tool_workbench)
                     self.public_tool_subject = None
                     self.public_tool_workbench = None
                     self.public_tool_order_id = None

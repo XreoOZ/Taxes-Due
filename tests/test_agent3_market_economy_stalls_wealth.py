@@ -297,6 +297,10 @@ class TestMarketEconomyStallsWealth(unittest.TestCase):
 
         class DummyScheduleManager:
             job_schedules = {}
+            def to_dict(self):
+                return {}
+            def load_from_dict(self, data):
+                pass
 
         data = serialize_game_state(
             dc, {"Wood": 10}, DummyPlayer(),

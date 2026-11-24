@@ -92,8 +92,9 @@ from game.ui.modals.cheat_modal import CheatModal
 from game.ui.modals.builder_catalog_modal import BuilderCatalogModal
 from game.ui.modals.toolmaker_catalog_modal import ToolmakerCatalogModal
 from game.ui.modals.help_modal import HelpModal
-from game.systems.work.toolmaker_system import ToolmakerSystem
+from game.systems.work.toolmaker_system import ToolmakerSystem, ToolOrderSubject
 from game.systems.work.tool_condition import ToolConditionSystem
+from game.systems.work.builder_system import BuilderSystem
 from game.ui.path_debug_overlay import PathDebugOverlay
 from game.ui.map_overlay import MapOverlay
 from game.systems.economy.production_distribution import ProductionDistributionSystem
@@ -114,6 +115,20 @@ from game.ui.ui_theme import ui_font, upx
 
 STATE_MENU = "menu"
 STATE_PLAYING = "playing"
+
+_alpha_surface_cache = {}
+
+def get_alpha_surface(w, h, color_rgba):
+    """Reuse cached alpha surfaces for grid overlays to avoid per-frame allocations."""
+    key = (int(w), int(h), tuple(color_rgba))
+    surf = _alpha_surface_cache.get(key)
+    if surf is None:
+        if len(_alpha_surface_cache) > 256:
+            _alpha_surface_cache.clear()
+        surf = pygame.Surface((max(1, int(w)), max(1, int(h))), pygame.SRCALPHA)
+        surf.fill(color_rgba)
+        _alpha_surface_cache[key] = surf
+    return surf
 
 def get_rect_tiles(start_pt, cur_pt):
     """Mengembalikan set koordinat tile (gx, gy) di dalam bounding box dua titik"""
@@ -439,6 +454,7 @@ def main():
     running = True
     wealth_context_timer = 0.0
     autosave_elapsed = 0.0
+    commission_sweep_timer = 0.0
     profile_enabled = os.environ.get("TAXES_DUE_PROFILE", "").strip().lower() in ("1", "true", "yes")
     profile_elapsed = 0.0
     profile_frame_count = 0
@@ -610,7 +626,7 @@ def main():
                     tool_action = toolmaker_catalog_modal.handle_event(event)
                     if tool_action and tool_action.startswith("tool_order_set_"):
                         try:
-                            wb = toolmaker_catalog_modal.workbench or selected_furniture
+                            wb = toolmaker_catalog_modal.workbench or getattr(toolmaker_catalog_modal, "last_workbench", None) or selected_furniture
                             toolmaker_catalog_modal.close()
                             raw = tool_action.removeprefix("tool_order_set_")
                             job_id, qty_str = raw.rsplit("_", 1)
@@ -619,11 +635,18 @@ def main():
                                 building_manager=building_manager, villager_manager=villager_manager)
                             if err:
                                 print(f"[Toolmaker] set order failed: {err}")
+                            elif subjects:
+                                for sub in subjects:
+                                    BuilderSystem.request_public_commission(
+                                        sub, None, servant_manager, villager_manager,
+                                        building_manager, day_cycle=day_cycle,
+                                        stockpile_manager=stockpile_manager,
+                                        furniture_manager=furniture_manager)
                         except Exception as exc:
                             print(f"[Toolmaker] set order error: {exc}")
                     elif tool_action and tool_action.startswith("tool_order_"):
                         try:
-                            wb = toolmaker_catalog_modal.workbench or selected_furniture
+                            wb = toolmaker_catalog_modal.workbench or getattr(toolmaker_catalog_modal, "last_workbench", None) or selected_furniture
                             toolmaker_catalog_modal.close()
                             raw = tool_action.removeprefix("tool_order_")
                             tool_name, qty_str = raw.rsplit("_", 1)
@@ -632,8 +655,53 @@ def main():
                                 building_manager=building_manager, villager_manager=villager_manager)
                             if err:
                                 print(f"[Toolmaker] order failed: {err}")
+                            elif subject:
+                                BuilderSystem.request_public_commission(
+                                    subject, None, servant_manager, villager_manager,
+                                    building_manager, day_cycle=day_cycle,
+                                    stockpile_manager=stockpile_manager,
+                                    furniture_manager=furniture_manager)
                         except Exception as exc:
                             print(f"[Toolmaker] order error: {exc}")
+                    elif tool_action and tool_action.startswith("tool_take_"):
+                        try:
+                            wb = toolmaker_catalog_modal.workbench or getattr(toolmaker_catalog_modal, "last_workbench", None) or selected_furniture
+                            tool_name = tool_action.removeprefix("tool_take_")
+                            if wb and hasattr(wb, "output_inventory") and isinstance(wb.output_inventory, dict):
+                                curr = wb.output_inventory.get(tool_name, 0)
+                                if curr > 0:
+                                    wb.output_inventory[tool_name] = curr - 1
+                                    if wb.output_inventory[tool_name] <= 0:
+                                        wb.output_inventory.pop(tool_name, None)
+                                    player.inventory[tool_name] = int(player.inventory.get(tool_name, 0)) + 1
+                                    ToolConditionSystem.register_new_units(player, tool_name, 1)
+                                    player.say(f"Took 1 {tool_name.replace('_', ' ')} from the workbench output rack.", duration=2.5)
+                        except Exception as exc:
+                            print(f"[Toolmaker] take error: {exc}")
+                    elif tool_action and tool_action.startswith("tool_haul_"):
+                        try:
+                            wb = toolmaker_catalog_modal.workbench or getattr(toolmaker_catalog_modal, "last_workbench", None) or selected_furniture
+                            tool_name = tool_action.removeprefix("tool_haul_")
+                            if wb and servant_manager:
+                                matching_sub = None
+                                for s in (getattr(wb, "tool_order_subjects", None) or []):
+                                    o = getattr(s, "construction_order", None)
+                                    if isinstance(o, dict) and o.get("status") == "READY_FOR_PICKUP" and o.get("tool_name") == tool_name:
+                                        matching_sub = s
+                                        break
+                                if not matching_sub:
+                                    pseudo_order = {
+                                        "id": f"toolpickup:{wb.id}:{tool_name}",
+                                        "status": "READY_FOR_PICKUP",
+                                        "tool_name": tool_name,
+                                        "qty_total": 1,
+                                        "payer_type": "landlord",
+                                    }
+                                    matching_sub = ToolOrderSubject(wb, pseudo_order)
+                                servant_manager.assign_public_tool_pickup(matching_sub, furniture_manager)
+                                player.say(f"Ordered servant to haul {tool_name.replace('_', ' ')} to the storage yard.", duration=2.5)
+                        except Exception as exc:
+                            print(f"[Toolmaker] haul error: {exc}")
                     continue
 
                 # World map overlay (M): fullscreen view-only map; WASD keeps working.
@@ -820,7 +888,6 @@ def main():
                                     rotation=planning_building_rotation
                                 )
                                 if started and b_cfg.get("builder_commissionable"):
-                                    from game.systems.work.builder_system import BuilderSystem
                                     BuilderSystem.dispatch_pending_public_commissions(
                                         building_manager, servant_manager, villager_manager,
                                         furniture_manager, day_cycle=day_cycle,
@@ -840,7 +907,6 @@ def main():
                                     rotation=planning_building_rotation
                                 )
                                 if started and b_cfg.get("builder_commissionable"):
-                                    from game.systems.work.builder_system import BuilderSystem
                                     BuilderSystem.dispatch_pending_public_commissions(
                                         building_manager, servant_manager, villager_manager,
                                         furniture_manager, day_cycle=day_cycle,
@@ -1842,8 +1908,11 @@ def main():
                 p.update_growth(day_dt, current_day=cur_day_time)
 
             # Substep physics/entities so high speed multiplier (Fast 2x, Very Fast 4x) never tunnels through walls
-            MAX_PHYSICS_SUB_DT = 0.02  # Maximum 20ms per physics integration step
-            sub_time = game_dt
+            MAX_PHYSICS_SUB_DT = 0.033  # ~30 Hz minimum physics integration step
+            MAX_PHYSICS_SUBSTEPS = 3    # Cap substeps to prevent simulation spiral of death during frame drops
+            sub_steps = min(MAX_PHYSICS_SUBSTEPS, max(1, math.ceil(game_dt / MAX_PHYSICS_SUB_DT))) if game_dt > 0.0 else 0
+            step_dt = game_dt / sub_steps if sub_steps > 0 else 0.0
+
             is_modal_open = raport_ui.is_open or settings_modal.is_open or save_modal.is_open or market_modal.is_open or add_item_modal.is_open or cheat_modal.is_open or help_modal.is_open or pending_starter_id is not None
             raport_ui.cheats_active = cheats_active
             if bot is not None and not is_modal_open:
@@ -1854,8 +1923,7 @@ def main():
 
             profile_simulation_start = perf_counter() if profile_enabled else 0.0
             run_ai_scheduler = True
-            while sub_time > 0.0:
-                step_dt = min(sub_time, MAX_PHYSICS_SUB_DT)
+            for _step in range(sub_steps):
                 if not is_modal_open:
                     player.handle_input(keys, step_dt, building_manager, TILE_SIZE)
                 building_manager.update(step_dt)
@@ -1874,50 +1942,53 @@ def main():
                     run_ai_scheduler=run_ai_scheduler, ai_dt=game_dt,
                 )
                 run_ai_scheduler = False
-                sub_time -= step_dt
             if profile_enabled:
                 profile_simulation_ms += (perf_counter() - profile_simulation_start) * 1000.0
 
             # Dead/reassigned artisans: dissolve their commission queues and
             # spawn refund errands for PAID orders.
             if furniture_manager is not None and villager_manager is not None:
-                from game.systems.work.builder_system import BuilderSystem
-                BuilderSystem.sweep_dead_commission_orders(
-                    building_manager, furniture_manager, villager_manager,
-                    servant_manager=servant_manager, stockpile_manager=stockpile_manager,
-                    day_cycle=day_cycle)
-                # Landlord-paid tool orders need the same servant treasury
-                # courier dispatch as public builder commissions.
-                for _wb in ToolmakerSystem._toolmaker_workbenches(furniture_manager):
-                    for _sub in getattr(_wb, "tool_order_subjects", []) or []:
-                        _o = getattr(_sub, "construction_order", None)
-                        if not isinstance(_o, dict) or _o.get("artisan_job") != "Toolmaker":
-                            continue
-                        if (_o.get("status") == "LANDLORD_PAYMENT_PENDING"
-                                and (not _o.get("_dispatch_retry_at")
-                                     or perf_counter() >= float(_o["_dispatch_retry_at"]))):
-                            _ok, _msg = BuilderSystem.request_public_commission(
-                                _sub, None, servant_manager, villager_manager,
-                                building_manager, day_cycle=day_cycle,
-                                stockpile_manager=stockpile_manager,
-                                furniture_manager=furniture_manager)
-                            if not _ok:
-                                _o["_dispatch_retry_at"] = perf_counter() + 30.0
-                            else:
-                                _o.pop("_dispatch_retry_at", None)
-                        elif (_o.get("status") == "READY_FOR_PICKUP"
-                                and _o.get("payer_type") == "landlord"
-                                and not _o.get("_pickup_dispatched")):
-                            if servant_manager is not None:
-                                assigned = servant_manager.assign_public_tool_pickup(_sub, furniture_manager)
-                                if assigned:
-                                    _o["_pickup_dispatched"] = True
+                commission_sweep_timer -= real_dt
+                if commission_sweep_timer <= 0.0:
+                    commission_sweep_timer = 0.5
+                    BuilderSystem.sweep_dead_commission_orders(
+                        building_manager, furniture_manager, villager_manager,
+                        servant_manager=servant_manager, stockpile_manager=stockpile_manager,
+                        day_cycle=day_cycle)
+                    ToolmakerSystem.sweep_unpayable_orders(furniture_manager, villager_manager)
+                    # Landlord-paid tool orders need the same servant treasury
+                    # courier dispatch as public builder commissions.
+                    for _wb in ToolmakerSystem._toolmaker_workbenches(furniture_manager):
+                        for _sub in getattr(_wb, "tool_order_subjects", []) or []:
+                            _o = getattr(_sub, "construction_order", None)
+                            if not isinstance(_o, dict) or _o.get("artisan_job") != "Toolmaker":
+                                continue
+                            if (_o.get("status") == "LANDLORD_PAYMENT_PENDING"
+                                    and (not _o.get("_dispatch_retry_at")
+                                         or perf_counter() >= float(_o["_dispatch_retry_at"]))):
+                                _ok, _msg = BuilderSystem.request_public_commission(
+                                    _sub, None, servant_manager, villager_manager,
+                                    building_manager, day_cycle=day_cycle,
+                                    stockpile_manager=stockpile_manager,
+                                    furniture_manager=furniture_manager)
+                                if not _ok:
+                                    _o["_dispatch_retry_at"] = perf_counter() + 30.0
+                                else:
+                                    _o.pop("_dispatch_retry_at", None)
+                            elif (_o.get("status") == "READY_FOR_PICKUP"
+                                    and _o.get("payer_type") == "landlord"
+                                    and not _o.get("_pickup_dispatched")):
+                                if servant_manager is not None:
+                                    assigned = servant_manager.assign_public_tool_pickup(_sub, furniture_manager)
+                                    if assigned:
+                                        _o["_pickup_dispatched"] = True
 
             # Immigration: pending households travel/wait/leave at the Notice Board.
             if furniture_manager is not None and villager_manager is not None:
                 from game.systems.village_life.immigration_system import get_immigration_system
-                _imm_ents = villager_manager.get_all_villagers() + servant_manager.servants
-                get_immigration_system().update(
+                _imm_sys = get_immigration_system()
+                _imm_ents = (villager_manager.get_all_villagers() + servant_manager.servants) if _imm_sys.pending else ()
+                _imm_sys.update(
                     game_dt, day_cycle, furniture_manager, villager_manager,
                     servant_manager=servant_manager, building_manager=building_manager,
                     player=player, all_entities=_imm_ents)
@@ -1970,8 +2041,9 @@ def main():
             if ambient_surf:
                 screen.blit(ambient_surf, (0, 0))
 
-            route_actors = villager_manager.get_all_villagers() + servant_manager.servants
-            path_debug_overlay.draw_routes(screen, camera, route_actors)
+            if path_debug_overlay.enabled:
+                route_actors = villager_manager.get_all_villagers() + servant_manager.servants
+                path_debug_overlay.draw_routes(screen, camera, route_actors)
 
             # -------------------------------------------------------------
             # 6. OVERLAYS: PERMIT PLANNING MODE
@@ -1983,8 +2055,7 @@ def main():
                 # A. Render All Already Placed Tiles
                 for (gx, gy) in planning_permit_tiles:
                     sx, sy = camera.world_to_screen(gx * TILE_SIZE, gy * TILE_SIZE)
-                    t_surf = pygame.Surface((scaled_t, scaled_t), pygame.SRCALPHA)
-                    t_surf.fill((56, 189, 248, 110))
+                    t_surf = get_alpha_surface(scaled_t, scaled_t, (56, 189, 248, 110))
                     screen.blit(t_surf, (sx, sy))
                     pygame.draw.rect(screen, (56, 189, 248), (sx, sy, scaled_t, scaled_t), width=1)
 
@@ -1993,8 +2064,7 @@ def main():
                     cur_box = get_rect_tiles(permit_drag_start, (m_gx, m_gy))
                     for (gx, gy) in cur_box:
                         sx, sy = camera.world_to_screen(gx * TILE_SIZE, gy * TILE_SIZE)
-                        t_surf = pygame.Surface((scaled_t, scaled_t), pygame.SRCALPHA)
-                        t_surf.fill((34, 197, 94, 100))
+                        t_surf = get_alpha_surface(scaled_t, scaled_t, (34, 197, 94, 100))
                         screen.blit(t_surf, (sx, sy))
                         pygame.draw.rect(screen, (34, 197, 94), (sx, sy, scaled_t, scaled_t), width=1)
 
@@ -2003,8 +2073,7 @@ def main():
                     cur_box = get_rect_tiles(permit_erase_start, (m_gx, m_gy))
                     for (gx, gy) in cur_box:
                         sx, sy = camera.world_to_screen(gx * TILE_SIZE, gy * TILE_SIZE)
-                        t_surf = pygame.Surface((scaled_t, scaled_t), pygame.SRCALPHA)
-                        t_surf.fill((239, 68, 68, 120))
+                        t_surf = get_alpha_surface(scaled_t, scaled_t, (239, 68, 68, 120))
                         screen.blit(t_surf, (sx, sy))
                         pygame.draw.rect(screen, (239, 68, 68), (sx, sy, scaled_t, scaled_t), width=1)
 
@@ -2062,9 +2131,8 @@ def main():
                     # A. Render All Current Tiles
                     for (gx, gy) in planning_permit_tiles:
                         sx, sy = camera.world_to_screen(gx * TILE_SIZE, gy * TILE_SIZE)
-                        t_surf = pygame.Surface((scaled_t, scaled_t), pygame.SRCALPHA)
                         is_new = (gx, gy) not in original_permit_tiles
-                        t_surf.fill((34, 197, 94, 110) if is_new else (56, 189, 248, 110))
+                        t_surf = get_alpha_surface(scaled_t, scaled_t, (34, 197, 94, 110) if is_new else (56, 189, 248, 110))
                         screen.blit(t_surf, (sx, sy))
                         pygame.draw.rect(screen, (34, 197, 94) if is_new else (56, 189, 248), (sx, sy, scaled_t, scaled_t), width=1)
 
@@ -2073,8 +2141,7 @@ def main():
                         cur_box = get_rect_tiles(permit_drag_start, (m_gx, m_gy))
                         for (gx, gy) in cur_box:
                             sx, sy = camera.world_to_screen(gx * TILE_SIZE, gy * TILE_SIZE)
-                            t_surf = pygame.Surface((scaled_t, scaled_t), pygame.SRCALPHA)
-                            t_surf.fill((34, 197, 94, 120))
+                            t_surf = get_alpha_surface(scaled_t, scaled_t, (34, 197, 94, 120))
                             screen.blit(t_surf, (sx, sy))
                             pygame.draw.rect(screen, (34, 197, 94), (sx, sy, scaled_t, scaled_t), width=1)
 
@@ -2083,8 +2150,7 @@ def main():
                         cur_box = get_rect_tiles(permit_erase_start, (m_gx, m_gy))
                         for (gx, gy) in cur_box:
                             sx, sy = camera.world_to_screen(gx * TILE_SIZE, gy * TILE_SIZE)
-                            t_surf = pygame.Surface((scaled_t, scaled_t), pygame.SRCALPHA)
-                            t_surf.fill((239, 68, 68, 130))
+                            t_surf = get_alpha_surface(scaled_t, scaled_t, (239, 68, 68, 130))
                             screen.blit(t_surf, (sx, sy))
                             pygame.draw.rect(screen, (239, 68, 68), (sx, sy, scaled_t, scaled_t), width=1)
 
@@ -2143,8 +2209,7 @@ def main():
                 # A. Render All Planned Tiles
                 for (gx, gy) in planning_building_tiles:
                     sx, sy = camera.world_to_screen(gx * TILE_SIZE, gy * TILE_SIZE)
-                    t_surf = pygame.Surface((scaled_t, scaled_t), pygame.SRCALPHA)
-                    t_surf.fill((30, 58, 138, 110))
+                    t_surf = get_alpha_surface(scaled_t, scaled_t, (30, 58, 138, 110))
                     screen.blit(t_surf, (sx, sy))
                     pygame.draw.rect(screen, (59, 130, 246), (sx, sy, scaled_t, scaled_t), width=1)
 
@@ -2185,8 +2250,7 @@ def main():
                     fit_tint = (34, 197, 94, 100) if can_fit else (239, 68, 68, 100)
                     for (gx, gy) in preview_box:
                         sx, sy = camera.world_to_screen(gx * TILE_SIZE, gy * TILE_SIZE)
-                        t_surf = pygame.Surface((scaled_t, scaled_t), pygame.SRCALPHA)
-                        t_surf.fill(fit_tint)
+                        t_surf = get_alpha_surface(scaled_t, scaled_t, fit_tint)
                         screen.blit(t_surf, (sx, sy))
                         pygame.draw.rect(screen, (34, 197, 94) if can_fit else (239, 68, 68), (sx, sy, scaled_t, scaled_t), width=1)
                     if planning_building_type == "tax_house":
@@ -2205,8 +2269,7 @@ def main():
                     cur_box = get_rect_tiles(building_drag_start, (m_gx, m_gy))
                     for (gx, gy) in cur_box:
                         sx, sy = camera.world_to_screen(gx * TILE_SIZE, gy * TILE_SIZE)
-                        t_surf = pygame.Surface((scaled_t, scaled_t), pygame.SRCALPHA)
-                        t_surf.fill((34, 197, 94, 90))
+                        t_surf = get_alpha_surface(scaled_t, scaled_t, (34, 197, 94, 90))
                         screen.blit(t_surf, (sx, sy))
                         pygame.draw.rect(screen, (34, 197, 94), (sx, sy, scaled_t, scaled_t), width=1)
 
@@ -2215,8 +2278,7 @@ def main():
                     cur_box = get_rect_tiles(building_erase_start, (m_gx, m_gy))
                     for (gx, gy) in cur_box:
                         sx, sy = camera.world_to_screen(gx * TILE_SIZE, gy * TILE_SIZE)
-                        t_surf = pygame.Surface((scaled_t, scaled_t), pygame.SRCALPHA)
-                        t_surf.fill((239, 68, 68, 120))
+                        t_surf = get_alpha_surface(scaled_t, scaled_t, (239, 68, 68, 120))
                         screen.blit(t_surf, (sx, sy))
                         pygame.draw.rect(screen, (239, 68, 68), (sx, sy, scaled_t, scaled_t), width=1)
 
@@ -2532,8 +2594,8 @@ def main():
                 for (gx, ty) in planning_road_tiles:
                     sx, sy = camera.world_to_screen(gx * TILE_SIZE, ty * TILE_SIZE)
                     valid = road_tile_valid_draw(gx, ty)
-                    t_surf = pygame.Surface((scaled_t, scaled_t), pygame.SRCALPHA)
-                    t_surf.fill((r_cfg["color"] + (upx(150),)) if valid else (239, 68, 68, 110))
+                    road_color = (r_cfg["color"] + (upx(150),)) if valid else (239, 68, 68, 110)
+                    t_surf = get_alpha_surface(scaled_t, scaled_t, road_color)
                     screen.blit(t_surf, (sx, sy))
                     pygame.draw.rect(screen, (255, 255, 255) if valid else (239, 68, 68),
                                      (sx, sy, scaled_t, scaled_t), width=1)
@@ -2541,9 +2603,8 @@ def main():
                 # Hover cursor tile
                 sx, sy = camera.world_to_screen(m_gx * TILE_SIZE, m_gy * TILE_SIZE)
                 hover_valid = road_tile_valid_draw(m_gx, m_gy)
-                h_surf = pygame.Surface((scaled_t, scaled_t), pygame.SRCALPHA)
-                h_col = r_cfg["color"] if hover_valid else (239, 68, 68)
-                h_surf.fill(h_col + (upx(90),))
+                h_col = (r_cfg["color"] if hover_valid else (239, 68, 68)) + (upx(90),)
+                h_surf = get_alpha_surface(scaled_t, scaled_t, h_col)
                 screen.blit(h_surf, (sx, sy))
                 pygame.draw.rect(screen, (255, 255, 255) if hover_valid else (239, 68, 68),
                                  (sx, sy, scaled_t, scaled_t), width=2)
@@ -2608,16 +2669,14 @@ def main():
                 for mark in destroy_marks:
                     for (gx, ty) in mark_tiles(mark):
                         sx, sy = camera.world_to_screen(gx * TILE_SIZE, ty * TILE_SIZE)
-                        t_surf = pygame.Surface((scaled_t, scaled_t), pygame.SRCALPHA)
-                        t_surf.fill((220, 38, 38, 90))
+                        t_surf = get_alpha_surface(scaled_t, scaled_t, (220, 38, 38, 90))
                         screen.blit(t_surf, (sx, sy))
                         pygame.draw.rect(screen, (239, 68, 68),
                                          (sx, sy, scaled_t, scaled_t), width=1)
 
                 # Hover highlight
                 sx, sy = camera.world_to_screen(m_gx * TILE_SIZE, m_gy * TILE_SIZE)
-                h_surf = pygame.Surface((scaled_t, scaled_t), pygame.SRCALPHA)
-                h_surf.fill((250, 204, 21, 70))
+                h_surf = get_alpha_surface(scaled_t, scaled_t, (250, 204, 21, 70))
                 screen.blit(h_surf, (sx, sy))
                 pygame.draw.rect(screen, (250, 204, 21),
                                  (sx, sy, scaled_t, scaled_t), width=1)
@@ -2762,6 +2821,12 @@ def main():
                         else "Awaiting payment"
                     )
                     det_txt = f"Commission: {fee_txt} | {payment_txt}"
+                elif selected_furniture.furniture_type == "toolmaker_workbench":
+                    inv = getattr(selected_furniture, "output_inventory", {}) or {}
+                    inv_str = ", ".join(f"{v}x {k.replace('_', ' ')}" for k, v in inv.items() if v > 0)
+                    orders = [s for s in (getattr(selected_furniture, "tool_order_subjects", None) or [])
+                              if getattr(s, "construction_order", {}).get("status") not in (None, "COMPLETE")]
+                    det_txt = f"Output Rack: {inv_str or 'Empty'} ({len(orders)} active orders)"
                 elif selected_furniture.furniture_type == "bed":
                     det_txt = f"Assigned: {selected_furniture.assigned_villager_id or 'Vacant Bed'}"
                 else:

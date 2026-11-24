@@ -21,6 +21,8 @@ from game.data.config import (
     HOUSEHOLD_STALL_HAUL_CAPACITY,
     MARKET_TRADEABLE_ITEMS,
     MARKET_DEFAULT_HOUSEHOLD_SALE_PERCENT,
+    MARKET_HOUSEHOLD_SALE_PERCENT_MIN,
+    MARKET_HOUSEHOLD_SALE_PERCENT_MAX,
 )
 
 
@@ -221,12 +223,16 @@ class HouseholdStallSystem:
 
     @classmethod
     def set_item_allocation(cls, market, item_name, percentage):
-        """Sets the independent allocation percentage (0..100) for a specific item."""
+        """Sets the independent allocation percentage (10..100) for a specific item."""
         if not market:
             return
         if not hasattr(market, "item_allocations") or not isinstance(market.item_allocations, dict):
             market.item_allocations = {}
-        pct = max(0, min(100, int(percentage)))
+        if not hasattr(market, "sale_items") or not isinstance(market.sale_items, list):
+            market.sale_items = []
+        if item_name not in market.sale_items:
+            market.sale_items.append(item_name)
+        pct = max(MARKET_HOUSEHOLD_SALE_PERCENT_MIN, min(MARKET_HOUSEHOLD_SALE_PERCENT_MAX, int(percentage)))
         market.item_allocations[item_name] = pct
         if isinstance(getattr(market, "household_sale_limits", None), dict):
             market.household_sale_limits.pop(item_name, None)
@@ -266,10 +272,11 @@ class HouseholdStallSystem:
 
     @classmethod
     def get_item_allocation(cls, market, item_name):
-        """Gets configured allocation percentage for an item (default 0)."""
+        """Gets configured allocation percentage for an item (default 20, min 10, max 100)."""
         if not market or not hasattr(market, "item_allocations") or not isinstance(market.item_allocations, dict):
-            return 0
-        return market.item_allocations.get(item_name, 0)
+            return MARKET_DEFAULT_HOUSEHOLD_SALE_PERCENT
+        val = market.item_allocations.get(item_name, MARKET_DEFAULT_HOUSEHOLD_SALE_PERCENT)
+        return max(MARKET_HOUSEHOLD_SALE_PERCENT_MIN, min(MARKET_HOUSEHOLD_SALE_PERCENT_MAX, int(val)))
 
     @classmethod
     def retain_household_owned_sale_items(cls, market, furniture_manager,
@@ -281,7 +288,8 @@ class HouseholdStallSystem:
         )
         market.sale_items = [item for item in getattr(market, "sale_items", []) if item in owned]
         market.item_allocations = {
-            item: percentage for item, percentage in getattr(market, "item_allocations", {}).items()
+            item: max(MARKET_HOUSEHOLD_SALE_PERCENT_MIN, min(MARKET_HOUSEHOLD_SALE_PERCENT_MAX, int(percentage)))
+            for item, percentage in getattr(market, "item_allocations", {}).items()
             if item in market.sale_items
         }
         return list(market.sale_items)
@@ -304,7 +312,7 @@ class HouseholdStallSystem:
 
         if item_name not in MARKET_TRADEABLE_ITEMS or item_name not in getattr(market, "sale_items", []):
             return 0
-        pct = max(0, min(100, int(getattr(market, "item_allocations", {}).get(
+        pct = max(MARKET_HOUSEHOLD_SALE_PERCENT_MIN, min(MARKET_HOUSEHOLD_SALE_PERCENT_MAX, int(getattr(market, "item_allocations", {}).get(
             item_name, getattr(market, "household_sale_percent", MARKET_DEFAULT_HOUSEHOLD_SALE_PERCENT)
         ))))
         if pct <= 0:

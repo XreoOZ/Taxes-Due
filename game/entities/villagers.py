@@ -11,6 +11,7 @@ from collections import defaultdict
 from game.config import (
     VILLAGER_RADIUS,
     VILLAGER_SPEED,
+    VILLAGER_PHASE_THROUGH_OBSTACLES,
     VILLAGER_INVENTORY_CAPACITY,
     BUILDER_TOOL_SWING_SPEED,
     BUILDER_TOOL_SWING_ANGLE,
@@ -119,7 +120,7 @@ from game.systems.economy.market_service import MarketService
 from game.systems.core.ai_simulation_scheduler import AISimulationScheduler
 from game.systems.economy.household_inventory import get_inventory_room
 from game.systems.core.spatial_entities import SpatialEntityIndex
-from game.systems.economy.currency import to_copper, normalize_wallet, from_copper, canonical_denomination
+from game.systems.economy.currency import to_copper, normalize_wallet, from_copper, canonical_denomination, compact_currency_wallet
 from game.systems.work.job_tool_system import (
     get_job_required_tools,
     get_missing_tools_for_worker,
@@ -403,6 +404,10 @@ class Villager:
             return "Returning unused tools to storage"
         elif task == "PICKUP_TOOL_FROM_BENCH":
             return "Picking up forged tool from workbench"
+        elif task == "COMMISSIONING_TOOL_RETRIEVE_COINS":
+            return "Retrieving coins for tool commission"
+        elif task == "COMMISSIONING_TOOL_TRAVEL":
+            return "Walking to toolmaker to commission tool"
         elif task == "MISSING_TOOL":
             return f"Waiting for required tool ({self.job})"
         elif task == "RECOVER_DEATH_ITEMS":
@@ -1100,6 +1105,7 @@ class Villager:
         active_statuses = {
             "AWAITING_PAYMENT", "PAYMENT_REQUESTED", "PAYMENT_TRAVELING",
             "PAID", "CRAFTING", "AWAITING_MATERIAL", "DELIVERING",
+            "READY_FOR_PICKUP",
         }
         covered = set()
         for subject in ToolmakerSystem._tool_order_subjects(furniture_manager):
@@ -1107,33 +1113,44 @@ class Villager:
             if (order.get("payer_family_id") == str(self.family_id)
                     and order.get("status") in active_statuses):
                 covered.add(order.get("tool_name"))
+
+        if all(tool_name in covered for tool_name, _ in missing_tools):
+            return True
+
+        if getattr(self, "task", None) in ("COMMISSIONING_TOOL_RETRIEVE_COINS", "COMMISSIONING_TOOL_TRAVEL"):
+            return False
+
         craftable = set(ToolmakerSystem.craftable_tools())
+        chest = furniture_manager.get_storage_for_family(str(self.family_id)) if furniture_manager else None
+        pocket_funds = to_copper(normalize_wallet(self.inventory))
+        chest_funds = to_copper(normalize_wallet(chest.inventory)) if chest else 0
+        total_funds = pocket_funds + chest_funds
+
         for tool_name, qty in missing_tools:
             if tool_name in covered or tool_name not in craftable:
                 continue
+            quote = ToolmakerSystem.quote_tool_order(tool_name, qty, building_manager, villager_manager)
+            fee = int(quote.get("price_copper", 0)) if quote else 0
+            if total_funds < fee:
+                # Cannot afford: do NOT create phantom order!
+                continue
+
             bench = min(
                 benches,
                 key=lambda b: math.hypot(
                     b.get_world_pos(TILE_SIZE)[0] - self.x,
                     b.get_world_pos(TILE_SIZE)[1] - self.y),
             )
-            # Ambil koin langsung dari peti rumah tangga sebelum memesan jika tersedia
-            quote = ToolmakerSystem.quote_tool_order(tool_name, qty, building_manager, villager_manager)
-            fee = int(quote.get("price_copper", 0)) if quote else 0
-            chest = furniture_manager.get_storage_for_family(str(self.family_id)) if furniture_manager else None
-            if chest and fee > 0:
-                from game.systems.work.builder_system import BuilderSystem
-                BuilderSystem._move_exact_value(chest.inventory, self.inventory, fee)
+            self.commission_tool_name = tool_name
+            self.commission_tool_qty = max(1, int(qty or 1))
+            self.commission_tool_fee = fee
+            self.commission_tool_bench = bench
+            if pocket_funds >= fee:
+                self.task = "COMMISSIONING_TOOL_TRAVEL"
+            else:
+                self.task = "COMMISSIONING_TOOL_RETRIEVE_COINS"
+            return False
 
-            subject, err = ToolmakerSystem.create_tool_order(
-                bench, tool_name, max(1, int(qty or 1)),
-                payer_family_id=str(self.family_id),
-                building_manager=building_manager,
-                villager_manager=villager_manager,
-                payer_id=str(self.id),
-            )
-            if subject is not None:
-                covered.add(tool_name)
         return all(tool_name in covered for tool_name, _ in missing_tools)
 
     def get_irrelevant_tools(self):
@@ -1625,7 +1642,6 @@ class Villager:
         # Work availability is probed per job, not inferred from the current task.
         no_work_available = False
         if sched_activity == "WORK":
-            from game.data.config import DEDICATED_JOBS
             job_cfg = DEDICATED_JOBS.get(self.job, {})
             if self.job in (None, "Unassigned") or job_cfg.get("wip"):
                 no_work_available = True
@@ -2234,7 +2250,6 @@ class Villager:
                 amount = stockpile_manager.take_from_stack(stack, min(stack.amount, amount_needed))
                 if amount > 0 and denomination:
                     self.inventory[denomination] = self.inventory.get(denomination, 0) + amount
-                    from game.systems.economy.currency import compact_currency_wallet
                     compact_currency_wallet(self.inventory)
                 self.target_loose_stack = None
                 if to_copper(normalize_wallet(self.inventory)) >= getattr(self, "purchase_target_price", 0):
@@ -3048,6 +3063,128 @@ class Villager:
                     self.job_tool_purchase_items = {}
                 return
 
+        # -------------------------------------------------------------
+        # Rutinitas 1.8: Tool Commissioning Workflow (Physical errand)
+        # -------------------------------------------------------------
+        tool_commission_tasks = {
+            "COMMISSIONING_TOOL_RETRIEVE_COINS",
+            "COMMISSIONING_TOOL_TRAVEL",
+        }
+        if (sched_activity in ("WORK", "ANY")
+                and self.task in tool_commission_tasks):
+            bench = getattr(self, "commission_tool_bench", None)
+            tool_name = getattr(self, "commission_tool_name", None)
+            fee = int(getattr(self, "commission_tool_fee", 0))
+            qty = int(getattr(self, "commission_tool_qty", 1))
+
+            if not bench or not tool_name:
+                self.task = "IDLE"
+                self.commission_tool_bench = None
+                self.commission_tool_name = None
+                self.commission_tool_fee = 0
+                self.commission_tool_qty = 1
+                return
+
+            chest = furniture_manager.get_storage_for_family(self.family_id) if furniture_manager else None
+
+            if self.task == "COMMISSIONING_TOOL_RETRIEVE_COINS":
+                pocket_funds = to_copper(normalize_wallet(self.inventory))
+                if pocket_funds >= fee:
+                    self.task = "COMMISSIONING_TOOL_TRAVEL"
+                elif chest:
+                    chest_x, chest_y = chest.get_world_pos(TILE_SIZE)
+                    arrived = self._move_towards(
+                        chest_x, chest_y, dt, arrival_dist=CHEST_INTERACTION_RADIUS,
+                        all_entities=all_entities, player=player,
+                        building_manager=building_manager, furniture_manager=furniture_manager,
+                        interaction_target=chest,
+                    )
+                    if arrived:
+                        from game.systems.work.builder_system import BuilderSystem
+                        success = BuilderSystem._move_exact_value(chest.inventory, self.inventory, fee)
+                        if success:
+                            self.task = "COMMISSIONING_TOOL_TRAVEL"
+                        else:
+                            self.task = "MISSING_TOOL"
+                            self.say(f"Our household cannot afford to commission a {tool_name.replace('_', ' ')}.", duration=2.5)
+                            self.commission_tool_bench = None
+                            self.commission_tool_name = None
+                else:
+                    self.task = "MISSING_TOOL"
+                    self.say(f"Our household cannot afford to commission a {tool_name.replace('_', ' ')}.", duration=2.5)
+                    self.commission_tool_bench = None
+                    self.commission_tool_name = None
+                return
+
+            if self.task == "COMMISSIONING_TOOL_TRAVEL":
+                dest = bench.get_approach_point(
+                    self.x, self.y, worker_id=self.id, all_entities=all_entities,
+                    tile_size=TILE_SIZE, bm=building_manager
+                )
+                arrived = self._move_towards(
+                    dest[0], dest[1], dt, arrival_dist=CHEST_INTERACTION_RADIUS,
+                    all_entities=all_entities, player=player,
+                    building_manager=building_manager, furniture_manager=furniture_manager,
+                    interaction_target=bench,
+                )
+                if arrived:
+                    from game.systems.work.toolmaker_system import ToolmakerSystem
+                    from game.systems.work.builder_system import BuilderSystem
+                    subject, err = ToolmakerSystem.create_tool_order(
+                        bench, tool_name, qty,
+                        payer_family_id=str(self.family_id),
+                        building_manager=building_manager,
+                        villager_manager=villager_manager,
+                        payer_id=str(self.id),
+                    )
+                    if subject is not None:
+                        order = subject.construction_order
+                        toolmakers = [v for v in (villager_manager.get_all_villagers() if villager_manager else [])
+                                      if getattr(v, "job", None) == "Toolmaker" and getattr(v, "is_alive", True)]
+                        toolmaker = toolmakers[0] if toolmakers else None
+                        if toolmaker:
+                            order["builder_id"] = str(toolmaker.id)
+                            order["builder_family_id"] = str(getattr(toolmaker, "family_id", "") or "")
+
+                        if toolmaker:
+                            target_inv = toolmaker.inventory
+                        else:
+                            if not hasattr(bench, "coin_inventory") or not isinstance(bench.coin_inventory, dict):
+                                bench.coin_inventory = {}
+                            target_inv = bench.coin_inventory
+
+                        paid_ok = True
+                        if fee > 0:
+                            paid_ok = BuilderSystem._move_exact_value(self.inventory, target_inv, fee)
+
+                        if paid_ok:
+                            order["status"] = "PAID"
+                            order["commission_paid"] = True
+                            order["paid_by_id"] = str(self.id)
+                            order["paid_by_family_id"] = str(self.family_id)
+                            order["paid_amount_copper"] = fee
+                            BuilderSystem._ensure_paid_seq(order, furniture_manager, building_manager)
+                            if toolmaker and str(getattr(self, "family_id", "")) != str(getattr(toolmaker, "family_id", "")):
+                                from game.systems.economy.market_sales_report import MarketSalesReportSystem
+                                MarketSalesReportSystem.record_household_income(
+                                    villager_manager, getattr(toolmaker, "family_id", None),
+                                    "Toolmaker Commissions", fee, getattr(day_cycle, "day_number", 1),
+                                )
+                                toolmaker.say(f"Commission received: {fee} Copper. I will forge the {tool_name.replace('_', ' ')}.", duration=2.5)
+                            self.say(f"Commissioned {qty} {tool_name.replace('_', ' ')} from the Toolmaker!", duration=2.5)
+                        else:
+                            order["status"] = "AWAITING_PAYMENT"
+                            self.say("I did not have enough coins on hand to complete the commission.", duration=2.5)
+                    else:
+                        self.say("Could not place tool commission.", duration=2.5)
+
+                    self.task = "MISSING_TOOL"
+                    self.commission_tool_bench = None
+                    self.commission_tool_name = None
+                    self.commission_tool_fee = 0
+                    self.commission_tool_qty = 1
+                return
+
         # A. Kembalikan HANYA alat kerja yang tidak lagi relevan (misal setelah berganti job) atau alat berlebih
         irrelevant_tools = (
             self.get_irrelevant_tools()
@@ -3082,7 +3219,11 @@ class Villager:
             self.task = "IDLE"
 
         # Check if this villager has any completed tool orders waiting at the workbench
-        if sched_activity in ("WORK", "ANY") and furniture_manager:
+        can_check_pickup = (
+            (sched_activity in ("WORK", "ANY", "LEISURE") or self.task == "MISSING_TOOL")
+            and furniture_manager is not None
+        )
+        if can_check_pickup:
             from game.systems.work.toolmaker_system import ToolmakerSystem
             ready_sub = None
             for subject in ToolmakerSystem._tool_order_subjects(furniture_manager):
@@ -3112,19 +3253,30 @@ class Villager:
                     order = ready_sub.construction_order
                     tool_name = order.get("tool_name")
                     qty = int(order.get("qty_total", 1))
+                    take = qty
                     if hasattr(bench, "output_inventory") and isinstance(bench.output_inventory, dict):
                         curr = bench.output_inventory.get(tool_name, 0)
-                        bench.output_inventory[tool_name] = max(0, curr - qty)
+                        take = min(curr, qty) if curr > 0 else qty
+                        bench.output_inventory[tool_name] = max(0, curr - take)
                         if bench.output_inventory[tool_name] <= 0:
                             bench.output_inventory.pop(tool_name, None)
-                    self.inventory[tool_name] = int(self.inventory.get(tool_name, 0)) + qty
+                    self.inventory[tool_name] = int(self.inventory.get(tool_name, 0)) + take
                     from game.systems.work.tool_condition import ToolConditionSystem
-                    ToolConditionSystem.register_new_units(self, tool_name, qty)
+                    ToolConditionSystem.register_new_units(self, tool_name, take)
                     order["status"] = "COMPLETE"
                     order["progress_ratio"] = 1.0
-                    self.task = "IDLE"
-                    self.active_tool = tool_name
-                    self.say(f"Picked up my {tool_name} from the workbench! Ready to work.", duration=2.5)
+                    from game.systems.work.toolmaker_system import ToolmakerSystem
+                    ToolmakerSystem.clean_completed_orders(bench)
+
+                    req_tools = self.get_job_required_tools() if getattr(self, "job", None) else []
+                    if tool_name in req_tools:
+                        self.task = "IDLE"
+                        self.active_tool = tool_name
+                        self.say(f"Picked up my {tool_name.replace('_', ' ')} from the workbench! Ready to work.", duration=2.5)
+                    else:
+                        self.task = "HAULING_HOME"
+                        self.active_tool = None
+                        self.say(f"Picked up {take} {tool_name.replace('_', ' ')} for the household; taking it home.", duration=2.5)
                 return
 
         # B. Kumpulkan SEMUA alat kerja yang dibutuhkan untuk pekerjaan saat ini dalam satu kali kunjungan
@@ -3134,7 +3286,8 @@ class Villager:
                 "HAULING_FURNITURE", "FETCHING_FURNITURE", "HAULING_HOME",
                 "HAULING_POSSESSION_HOME", "FETCHING_POSSESSION",
                 "TOOLMAKER_DELIVERING", "TOOLMAKER_CRAFTING", "TOOLMAKER_SMELTING",
-                "BUILDER_CONSTRUCTING", "BUILDER_REPAIRING"):
+                "BUILDER_CONSTRUCTING", "BUILDER_REPAIRING", "PICKUP_TOOL_FROM_BENCH",
+                "COMMISSIONING_TOOL_RETRIEVE_COINS", "COMMISSIONING_TOOL_TRAVEL"):
             missing_tools = (
                 self.get_missing_job_tools()
                 if sched_activity in ("WORK", "ANY") else []
@@ -3177,12 +3330,16 @@ class Villager:
                         self.job_tool_purchase_items = purchase_items
                         self.task = "BUYING_JOB_TOOLS_RETRIEVE_COINS"
                         return
+                    if getattr(self, "task", None) in ("COMMISSIONING_TOOL_RETRIEVE_COINS", "COMMISSIONING_TOOL_TRAVEL"):
+                        return
                     if self._ensure_tool_commissions(
                             missing_tools, building_manager, furniture_manager, villager_manager):
                         # Commission queued/active — wait at home while payment/forge/delivery runs.
                         self.task = "MISSING_TOOL"
                         if not getattr(self, "speech_text", None):
                             self.say("My tools are on order — waiting at home while toolmaker forges them.", duration=2.5)
+                    elif getattr(self, "task", None) in ("COMMISSIONING_TOOL_RETRIEVE_COINS", "COMMISSIONING_TOOL_TRAVEL"):
+                        return
                     elif self.job in ("Builder", "Toolmaker"):
                         # Builder/Toolmaker commission errands (claiming orders, payment
                         # requests, material hauling) do not need the specific workpiece tools.
@@ -3190,7 +3347,7 @@ class Villager:
                     else:
                         self.task = "MISSING_TOOL"
                         if not getattr(self, "speech_text", None):
-                            self.say("My job tools are missing, and no market can supply an affordable required item.", duration=2.5)
+                            self.say("My job tools are missing, and our household cannot afford to commission new tools.", duration=2.5)
                         return
 
         if sched_activity in ("WORK", "ANY") and self.task == "MISSING_TOOL":
@@ -3935,7 +4092,9 @@ class Villager:
                     return
 
         # Evaluasi Household Market Stall (Stall Chores during Leisure Time)
-        if (sched_activity in FREE_TIME_SCHEDULE_ACTIVITIES
+        if getattr(self, "stall_chores_cooldown", 0.0) > 0.0:
+            self.stall_chores_cooldown = max(0.0, self.stall_chores_cooldown - dt)
+        elif (sched_activity in FREE_TIME_SCHEDULE_ACTIVITIES
                 and self.task in ("IDLE", "LEISURE", "STROLLING")):
             from game.systems.economy.household_stall_system import HouseholdStallSystem
             started = HouseholdStallSystem.check_and_start_stall_chores(
@@ -3944,6 +4103,7 @@ class Villager:
             )
             if started:
                 return
+            self.stall_chores_cooldown = 1.5
 
         if sched_activity in FREE_TIME_SCHEDULE_ACTIVITIES:
             self._idle_behavior(
@@ -4087,6 +4247,55 @@ class Villager:
         self.is_waiting_for_path = False
         self._move_towards(self.idle_target[0], self.idle_target[1], dt, arrival_dist=16, all_entities=all_entities, player=player, building_manager=building_manager, furniture_manager=furniture_manager, exclusive_target=False)
 
+    def _find_phase_escape_tile(self, building_manager, furniture_manager):
+        """Nearest fully-free tile when trapped inside untraversable tiles
+        (solid structures / furniture footprints). A* cannot route out of
+        blocked tiles, but phase-through villagers can walk straight out."""
+        gx = int(math.floor(self.x / TILE_SIZE))
+        gy = int(math.floor(self.y / TILE_SIZE))
+
+        # Fast exit: if current tile has no solid building, villager is not trapped
+        b = building_manager.get_building_at(gx, gy) if building_manager else None
+        is_cur_building_blocked = b is not None and (getattr(b, "is_solid", False) or not getattr(b, "door_pos", None))
+        if VILLAGER_PHASE_THROUGH_OBSTACLES and not is_cur_building_blocked:
+            return None
+
+        furniture_tiles = (furniture_manager.get_occupied_tiles()
+                           if furniture_manager and hasattr(furniture_manager, "get_occupied_tiles")
+                           else set())
+
+        def _blocked_tile(tx, ty):
+            bt = building_manager.get_building_at(tx, ty) if building_manager else None
+            if bt is not None and (getattr(bt, "is_solid", False) or not getattr(bt, "door_pos", None)):
+                return True
+            if VILLAGER_PHASE_THROUGH_OBSTACLES:
+                return False
+            return (tx, ty) in furniture_tiles
+
+        if not _blocked_tile(gx, gy):
+            return None
+
+        from collections import deque
+        from game.world.island import is_land_world
+        max_radius = 12
+        visited = {(gx, gy)}
+        queue = deque([(gx, gy, 0)])
+        while queue:
+            cx, cy, depth = queue.popleft()
+            if depth >= max_radius:
+                continue
+            for nx, ny in ((cx + 1, cy), (cx - 1, cy), (cx, cy + 1), (cx, cy - 1)):
+                if (nx, ny) in visited:
+                    continue
+                visited.add((nx, ny))
+                if not _blocked_tile(nx, ny):
+                    wx = (nx + 0.5) * TILE_SIZE
+                    wy = (ny + 0.5) * TILE_SIZE
+                    if is_land_world(wx, wy, TILE_SIZE):
+                        return (wx, wy)
+                queue.append((nx, ny, depth + 1))
+        return None
+
     def _move_towards(self, tx, ty, dt, arrival_dist=10, all_entities=None, player=None, building_manager=None, furniture_manager=None, exclusive_target=False, recover_blocked_routes=False, interaction_target=None):
         if getattr(self, "player_avoid_speech_cooldown", 0.0) > 0.0:
             self.player_avoid_speech_cooldown = max(0.0, self.player_avoid_speech_cooldown - dt)
@@ -4113,9 +4322,26 @@ class Villager:
             self.route_state = ROUTE_STATE_COMPLETED
             return True
 
+        # Phase-through unstuck: trapped inside untraversable tiles (solid
+        # structures / furniture footprints) A* cannot route out — walk
+        # straight to the nearest free tile; normal pathing resumes outside.
+        if VILLAGER_PHASE_THROUGH_OBSTACLES and building_manager is not None:
+            escape_pos = self._find_phase_escape_tile(building_manager, furniture_manager)
+            if escape_pos is not None:
+                edx = escape_pos[0] - self.x
+                edy = escape_pos[1] - self.y
+                edist = math.hypot(edx, edy)
+                if edist > TILE_SIZE * 0.1:
+                    step = min(self.speed * dt, edist)
+                    self.x += (edx / edist) * step
+                    self.y += (edy / edist) * step
+                    self.is_moving = True
+                return False
+
         target_dist = math.hypot(tx - (self.path_target[0] if self.path_target else 999999),
                                  ty - (self.path_target[1] if self.path_target else 999999))
         target_changed = self.path_target is None or target_dist > PATH_WAYPOINT_TOLERANCE
+        nav_furniture_manager = None if VILLAGER_PHASE_THROUGH_OBSTACLES else furniture_manager
         needs_new_path = (
             target_changed
             or (self.current_path and self.path_index >= len(self.current_path))
@@ -4128,7 +4354,7 @@ class Villager:
                 self.path_retry_timer = 0.0
             cand_path = find_navigation_path(
                 (self.x, self.y), (tx, ty), building_manager,
-                furniture_manager=furniture_manager, tile_size=TILE_SIZE,
+                furniture_manager=nav_furniture_manager, tile_size=TILE_SIZE,
                 avoid_tiles=self.stuck_blocked_tiles if recover_blocked_routes else None,
             )
 
@@ -4154,7 +4380,7 @@ class Villager:
         # the actor cuts corners instead of retracing the stale polyline.
         steer_idx = resolve_steer_index(
             self, (self.x, self.y), self.current_path, self.path_index, dt,
-            building_manager, furniture_manager=furniture_manager,
+            building_manager, furniture_manager=nav_furniture_manager,
             tile_size=TILE_SIZE,
             avoid_tiles=self.stuck_blocked_tiles if recover_blocked_routes else None,
         )
@@ -4259,7 +4485,7 @@ class Villager:
             if not is_land_world(self.x, self.y, TILE_SIZE):
                 self.x, self.y = step_ox, step_oy
                 break
-            if building_manager:
+            if building_manager and not VILLAGER_PHASE_THROUGH_OBSTACLES:
                 self.x, self.y = building_manager.resolve_collision(self.x, self.y, self.radius, TILE_SIZE, old_x=step_ox, old_y=step_oy)
 
         if building_manager:
@@ -5171,66 +5397,67 @@ class VillagerManager:
             )
             self.ai_updates_since_profile += self.last_ai_update_count
 
-        # Spatial buckets keep the existing gentle separation local instead of
-        # checking every villager pair on every physics substep.
-        cell_size = max(1.0, VILLAGER_SEPARATION_CELL_SIZE)
-        neighbor_span = max(
-            1,
-            math.ceil(max(VILLAGER_SLEEPING_SEPARATION_DISTANCE,
-                          VILLAGER_MICRO_SEPARATION_DISTANCE) / cell_size),
-        )
-        doorway_clearance_ids = set()
-        if building_manager:
-            doorway_clearance_ids = {
-                id(villager) for villager in all_vils
-                if getattr(villager, "is_alive", True)
-                and building_manager.is_near_any_door(
-                    villager.x, villager.y, min_dist=DOORWAY_IDLE_MIN_DISTANCE
-                )
-            }
-        for _ in range(VILLAGER_SEPARATION_PASSES):
-            cells = defaultdict(list)
-            for index, villager in enumerate(all_vils):
-                if getattr(villager, "is_alive", True):
-                    cell = (math.floor(villager.x / cell_size), math.floor(villager.y / cell_size))
-                    cells[cell].append(index)
+        # Spatial buckets keep gentle separation local and throttled to rendered frames
+        # instead of running multiple spatial hashing passes on every physics substep.
+        if run_ai_scheduler:
+            cell_size = max(1.0, VILLAGER_SEPARATION_CELL_SIZE)
+            neighbor_span = max(
+                1,
+                math.ceil(max(VILLAGER_SLEEPING_SEPARATION_DISTANCE,
+                              VILLAGER_MICRO_SEPARATION_DISTANCE) / cell_size),
+            )
+            doorway_clearance_ids = set()
+            if building_manager:
+                doorway_clearance_ids = {
+                    id(villager) for villager in all_vils
+                    if getattr(villager, "is_alive", True)
+                    and building_manager.is_near_any_door(
+                        villager.x, villager.y, min_dist=DOORWAY_IDLE_MIN_DISTANCE
+                    )
+                }
+            for _ in range(VILLAGER_SEPARATION_PASSES):
+                cells = defaultdict(list)
+                for index, villager in enumerate(all_vils):
+                    if getattr(villager, "is_alive", True):
+                        cell = (math.floor(villager.x / cell_size), math.floor(villager.y / cell_size))
+                        cells[cell].append(index)
 
-            for i, v1 in enumerate(all_vils):
-                if not getattr(v1, "is_alive", True):
-                    continue
-                cell_x = math.floor(v1.x / cell_size)
-                cell_y = math.floor(v1.y / cell_size)
-                nearby_indices = (
-                    j
-                    for cx in range(cell_x - neighbor_span, cell_x + neighbor_span + 1)
-                    for cy in range(cell_y - neighbor_span, cell_y + neighbor_span + 1)
-                    for j in cells.get((cx, cy), ())
-                    if j > i
-                )
-                for j in nearby_indices:
-                    v2 = all_vils[j]
-                    if id(v1) in doorway_clearance_ids or id(v2) in doorway_clearance_ids:
+                for i, v1 in enumerate(all_vils):
+                    if not getattr(v1, "is_alive", True):
                         continue
-                    dx = v1.x - v2.x
-                    dy = v1.y - v2.y
-                    dist = math.hypot(dx, dy)
-                    if dist < VILLAGER_MICRO_SEPARATION_DISTANCE:
-                        push = (VILLAGER_MICRO_SEPARATION_PUSH_DISTANCE - dist) if dist > 0.001 else VILLAGER_MICRO_SEPARATION_PUSH_DISTANCE
-                        angle = (i * 1.57 + j * 0.785)
-                        nx = (dx / dist) if dist > 0.001 else math.cos(angle)
-                        ny = (dy / dist) if dist > 0.001 else math.sin(angle)
-                        v1.x += nx * (push * 0.6)
-                        v1.y += ny * (push * 0.6)
-                        v2.x -= nx * (push * 0.6)
-                        v2.y -= ny * (push * 0.6)
-                    elif (getattr(v1, "task", "") == "SLEEPING"
-                          and getattr(v2, "task", "") == "SLEEPING"
-                          and dist < VILLAGER_SLEEPING_SEPARATION_DISTANCE):
-                        push = (VILLAGER_SLEEPING_SEPARATION_DISTANCE - dist) * 0.5
-                        v1.x += (dx / dist) * push
-                        v1.y += (dy / dist) * push
-                        v2.x -= (dx / dist) * push
-                        v2.y -= (dy / dist) * push
+                    cell_x = math.floor(v1.x / cell_size)
+                    cell_y = math.floor(v1.y / cell_size)
+                    nearby_indices = (
+                        j
+                        for cx in range(cell_x - neighbor_span, cell_x + neighbor_span + 1)
+                        for cy in range(cell_y - neighbor_span, cell_y + neighbor_span + 1)
+                        for j in cells.get((cx, cy), ())
+                        if j > i
+                    )
+                    for j in nearby_indices:
+                        v2 = all_vils[j]
+                        if id(v1) in doorway_clearance_ids or id(v2) in doorway_clearance_ids:
+                            continue
+                        dx = v1.x - v2.x
+                        dy = v1.y - v2.y
+                        dist = math.hypot(dx, dy)
+                        if dist < VILLAGER_MICRO_SEPARATION_DISTANCE:
+                            push = (VILLAGER_MICRO_SEPARATION_PUSH_DISTANCE - dist) if dist > 0.001 else VILLAGER_MICRO_SEPARATION_PUSH_DISTANCE
+                            angle = (i * 1.57 + j * 0.785)
+                            nx = (dx / dist) if dist > 0.001 else math.cos(angle)
+                            ny = (dy / dist) if dist > 0.001 else math.sin(angle)
+                            v1.x += nx * (push * 0.6)
+                            v1.y += ny * (push * 0.6)
+                            v2.x -= nx * (push * 0.6)
+                            v2.y -= ny * (push * 0.6)
+                        elif (getattr(v1, "task", "") == "SLEEPING"
+                              and getattr(v2, "task", "") == "SLEEPING"
+                              and dist < VILLAGER_SLEEPING_SEPARATION_DISTANCE):
+                            push = (VILLAGER_SLEEPING_SEPARATION_DISTANCE - dist) * 0.5
+                            v1.x += (dx / dist) * push
+                            v1.y += (dy / dist) * push
+                            v2.x -= (dx / dist) * push
+                            v2.y -= (dy / dist) * push
 
         old_vil_pos = [(v.x, v.y) for v in all_vils]
 
@@ -5252,7 +5479,7 @@ class VillagerManager:
                     v1.y += (dy / p_dist) * overlap
 
         # Resolusi benturan dinding setelah relaksasi personal space (cegah tembus dinding saat berdesakan)
-        if building_manager:
+        if building_manager and not VILLAGER_PHASE_THROUGH_OBSTACLES:
             for idx, v1 in enumerate(all_vils):
                 ox, oy = old_vil_pos[idx]
                 if v1.x != ox or v1.y != oy:

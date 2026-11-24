@@ -288,6 +288,7 @@ def serialize_game_state(day_cycle, resources, player, permit_manager, building_
             "carrier_id": getattr(f, "carrier_id", None),
             "condition": getattr(f, "condition", 1.0),
             "inventory": dict(getattr(f, "inventory", {})),
+            "output_inventory": dict(getattr(f, "output_inventory", {}) or {}),
             "currency": dict(getattr(f, "currency", {})),
             "tool_conditions": {k: list(v) for k, v in (getattr(f, "tool_conditions", {}) or {}).items()},
             "tool_orders": [dict(s.construction_order) for s in (getattr(f, "tool_order_subjects", None) or []) if getattr(s, "construction_order", None)],
@@ -701,6 +702,7 @@ def deserialize_game_state(data, day_cycle, resources, player, permit_manager, b
         f.plant_tree_enabled = f_d.get("plant_tree_enabled", False)
         f.bound_mine_id = f_d.get("bound_mine_id", None)
         f.tool_conditions = {k: list(v2) for k, v2 in (f_d.get("tool_conditions", {}) or {}).items()}
+        f.output_inventory = dict(f_d.get("output_inventory", {}) or {})
         f.tool_order_subjects = []
         for order_d in f_d.get("tool_orders", []) or []:
             from game.systems.work.toolmaker_system import ToolOrderSubject

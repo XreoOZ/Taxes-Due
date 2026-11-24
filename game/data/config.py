@@ -13,7 +13,7 @@ from game.data.catalog import (
     SCHEDULE_ACTIVITY_TASK_PREFIXES, SCHEDULE_ACTIVITY_TASK_STATE_FIELDS, SCHEDULE_ANY, SCHEDULE_LEISURE, SCHEDULE_NON_WORK_TASKS, SCHEDULE_PRAYER,
     SCHEDULE_SLEEP, SCHEDULE_TYPES, SCHEDULE_WORK, STARTER_FAMILY_SIZE, STARTER_PRESETS, TILLING_DURATION_INGAME_HOURS,
     TOOLMAKER_BAR_DAILY_CAP, TOOLMAKER_BAR_RECIPE, TOOLMAKER_BAR_SMELT_INGAME_MINUTES, TOOLMAKER_BAR_STOCK_TARGET, TOOLMAKER_TOOL_MAX_INGAME_HOURS, TOOLMAKER_TOOL_MIN_INGAME_HOURS,
-    TOOLMAKER_TOOL_RECIPE, TOOL_CONDITION_CHECK_EVERY_DAYS, TOOL_CONDITION_DEGRADE_CHANCE, TOOL_CONDITION_STAGES, TOOL_TYPES, TREE_WOOD_YIELD_MAX,
+    TOOLMAKER_TOOL_RECIPE, TOOL_CONDITION_CHECK_EVERY_DAYS, TOOL_CONDITION_DEGRADE_CHANCE, TOOL_CONDITION_STAGES, TOOL_TYPES, TREE_WOOD_YIELD_DISTRIBUTION, TREE_WOOD_YIELD_MAX,
     TREE_WOOD_YIELD_MIN, VILLAGER_FEMALE_NAMES, VILLAGER_MALE_NAMES, VILLAGER_SURNAMES, WATERING_DURATION_INGAME_HOURS, WATERING_DURATION_SECONDS,
     WEEKDAY_NAMES, WOODSMAN_CUT_INGAME_HOURS, WOODSMAN_PLANT_INGAME_HOURS, WOODSMAN_WORKSTATION_TILES, WORKSTATION_DEFAULT_QUOTA_DAILY, WORKSTATION_MAX_WORKERS,
     WORKSTATION_QUOTA_STEP, WORK_TYPES,
@@ -30,7 +30,9 @@ from game.data.structures import (
 from game.data.economy import (
     BUILDER_INSUFFICIENT_LANDLORD_COIN_MESSAGES, CHURCH_TAX_HAPPINESS_TIERS_COPPER, CURRENCY_DENOMINATIONS, DEFAULT_CHURCH_TAX, DEFAULT_ITEM_PRICES, DEFAULT_RESOURCES,
     DEFAULT_SOCAGE_TAX_ENABLED, DEFAULT_SOCAGE_TAX_PERCENT, DENOMINATION_CAP, EXCHANGE_RATES, HAPPINESS_WEALTH_DENOMINATION, HOUSEHOLD_STALL_HAUL_CAPACITY,
-    MARKET_CURRENCY_DENOMINATIONS, MARKET_DEFAULT_HOUSEHOLD_SALE_PERCENT, MARKET_PERCENT_STEP, MARKET_QUANTITY_DEFAULT, MARKET_QUANTITY_MAX, MARKET_RESTOCK_ORDER_TIMEOUT_SECONDS, MARKET_SALES_REPORT_PERIOD_DAYS,
+    MARKET_CURRENCY_DENOMINATIONS, MARKET_DEFAULT_HOUSEHOLD_SALE_PERCENT,
+    MARKET_HOUSEHOLD_SALE_PERCENT_MIN, MARKET_HOUSEHOLD_SALE_PERCENT_MAX,
+    MARKET_PERCENT_STEP, MARKET_QUANTITY_DEFAULT, MARKET_QUANTITY_MAX, MARKET_RESTOCK_ORDER_TIMEOUT_SECONDS, MARKET_SALES_REPORT_PERIOD_DAYS,
     MARKET_TRADEABLE_ITEMS, MARKET_WEALTH_CONTEXT_REFRESH_SECONDS, MARKET_WEALTH_PRICE_ELASTICITY, MARKET_WEALTH_PRICE_FACTOR_MAX, MARKET_WEALTH_PRICE_FACTOR_MIN, MARKET_WEALTH_REFERENCE_DAYS,
     MAX_STACK_SIZE, MAX_TILE_CAPACITY, NO_CHURCH_TAX_HAPPINESS_BONUS, SOCAGE_TAX_GREETING_LINES, SOCAGE_TAX_HAPPINESS_REPLIES, SOCAGE_TAX_HAPPINESS_TIERS,
     SOCAGE_TAX_INTERVAL_DAYS, SOCAGE_TAX_QUICK_STEP, TAX_COLLECTOR_STATION_ARRIVAL_DISTANCE, TAX_UNHAPPINESS_DURATION_DAYS, VILLAGER_HUD_COUNT_REFRESH_SECONDS, VILLAGER_INVENTORY_CAPACITY,
@@ -134,10 +136,11 @@ SERVANT_TELEPORT_SEARCH_RADIUS_TILES = 10
 SERVANT_MAX_TELEPORTS_PER_TARGET = 2
 ENTITY_AVOIDANCE_RADIUS = 56.0
 SERVANT_YIELD_FORCE = 60.0
-# AI servants phase through walls/furniture/narrow passages: they still compute
+# AI servants & villagers phase through walls/furniture/narrow passages: they still compute
 # and follow normal A* paths, but skip building collision resolution so a 1-tile
-# gap or wall edge can't permanently stall them. Player & villagers unaffected.
+# gap or wall edge can't permanently stall them. Player unaffected.
 SERVANT_PHASE_THROUGH_OBSTACLES = True
+VILLAGER_PHASE_THROUGH_OBSTACLES = True
 # Radius (tiles) searched around an intended ground-drop/delivery point for
 # the nearest villager-reachable tile, so dropped goods never land on water,
 # inside solid structures, or on furniture footprints members cannot path to.
@@ -268,11 +271,58 @@ MINE_SPAWN_GUARANTEE_DIST_MAX_TILES = 100
 MINE_SPAWN_KIND_RATIO = {"Stone Mine": 3, "Iron Mine": 1}  # exact island-wide ratio
 # Yield per in-game hour by tier (unlimited deposits; tier = speed only).
 MINE_YIELD_PER_INGAME_HOUR = {
-    1: {"name": "Scarce", "min": 1, "max": 1},
-    2: {"name": "Low", "min": 1, "max": 2},
-    3: {"name": "Normal", "min": 2, "max": 2},
-    4: {"name": "Rich", "min": 3, "max": 4},
-    5: {"name": "Abundant", "min": 4, "max": 4},
+    1: {
+        "name": "Scarce",
+        "min": 0,
+        "max": 1,
+        "yield_distribution": [
+            {"amount": 0, "weight": 0.50},
+            {"amount": 1, "weight": 0.50},
+        ],
+    },
+    2: {
+        "name": "Low",
+        "min": 0,
+        "max": 1,
+        "yield_distribution": [
+            {"amount": 0, "weight": 0.30},
+            {"amount": 1, "weight": 0.70},
+        ],
+    },
+    3: {
+        "name": "Normal",
+        "min": 1,
+        "max": 1,
+        "yield_distribution": [
+            {"amount": 1, "weight": 1.00},
+        ],
+    },
+    4: {
+        "name": "Rich",
+        "min": 1,
+        "max": 2,
+        "yield_distribution": [
+            {"amount": 1, "weight": 0.80},
+            {"amount": 2, "weight": 0.20},
+        ],
+    },
+    5: {
+        "name": "Very Rich",
+        "min": 1,
+        "max": 2,
+        "yield_distribution": [
+            {"amount": 1, "weight": 0.50},
+            {"amount": 2, "weight": 0.50},
+        ],
+    },
+    6: {
+        "name": "Abundant",
+        "min": 2,
+        "max": 2,
+        "yield_distribution": [
+            {"amount": 2, "weight": 1.00},
+        ],
+    },
 }
 MINE_TYPE_TABLE = {
     "Stone Mine": {"output_item": "Stone", "color": (203, 213, 225)},

@@ -25,6 +25,8 @@ from game.data.config import (
     MARKET_QUANTITY_MAX,
     MARKET_CURRENCY_DENOMINATIONS,
     MARKET_DEFAULT_HOUSEHOLD_SALE_PERCENT,
+    MARKET_HOUSEHOLD_SALE_PERCENT_MIN,
+    MARKET_HOUSEHOLD_SALE_PERCENT_MAX,
     TILE_SIZE,
 )
 from game.systems.economy.currency import (
@@ -640,8 +642,9 @@ class MarketProfileModal:
     def _num_field_value(self, fld):
         mkt = self.target_market
         if fld["kind"] == "alloc":
-            return int(mkt.item_allocations.get(
+            val = int(mkt.item_allocations.get(
                 fld["item"], MARKET_DEFAULT_HOUSEHOLD_SALE_PERCENT))
+            return max(MARKET_HOUSEHOLD_SALE_PERCENT_MIN, min(MARKET_HOUSEHOLD_SALE_PERCENT_MAX, val))
         return int(mkt.prices.get(fld["item"], DEFAULT_ITEM_PRICES.get(fld["item"], 1)))
 
     def _commit_num_field(self):
@@ -652,21 +655,26 @@ class MarketProfileModal:
         if fld is None or not text.isdigit():
             return
         mkt = self.target_market
-        val = max(int(fld.get("min", 0)), min(int(fld.get("max", 9999999)), int(text)))
+        min_val = int(fld.get("min", MARKET_HOUSEHOLD_SALE_PERCENT_MIN if fld.get("kind") == "alloc" else 0))
+        max_val = int(fld.get("max", MARKET_HOUSEHOLD_SALE_PERCENT_MAX if fld.get("kind") == "alloc" else 9999999))
+        val = max(min_val, min(max_val, int(text)))
         if fld["kind"] == "alloc":
             HouseholdStallSystem.set_item_allocation(mkt, fld["item"], val)
         elif fld["kind"] == "price":
             mkt.auto_pricing = False
             mkt.prices[fld["item"]] = val
 
-    def _draw_num_input(self, surface, key, rect, display_value):
+    def _draw_num_input(self, surface, key, rect, display_value, is_percent=False):
         active = (self.num_input.active_key == key)
         bg = (15, 23, 42) if not active else (30, 58, 138)
         border = (250, 204, 21) if active else (71, 85, 105)
         pygame.draw.rect(surface, bg, rect, border_radius=upx(4))
         pygame.draw.rect(surface, border, rect, width=2 if active else 1, border_radius=upx(4))
-        txt = (self.num_input.text + "_") if active else str(display_value)
-        t = self.font_badge.render(txt, True, (255, 255, 255))
+        if active:
+            txt = (self.num_input.text + "_") + ("%" if is_percent else "")
+        else:
+            txt = f"{display_value}%" if is_percent else str(display_value)
+        t = self.font_badge.render(txt, True, (250, 204, 21) if is_percent else (255, 255, 255))
         surface.blit(t, (rect.centerx - t.get_width() // 2,
                          rect.centery - t.get_height() // 2))
 
@@ -693,10 +701,26 @@ class MarketProfileModal:
 
         table = pygame.Rect(mx + upx(24), row_top, self.modal_w - upx(48), upx(24))
         pygame.draw.rect(surface, (30, 41, 59), table, border_radius=upx(4))
-        labels = ((mx + upx(36), "ITEM"), (mx + upx(174), "STOCK"), (mx + upx(250), "PRICE"), (mx + upx(326), "SALE %" if assigned else "PRICE"), (mx + (upx(352) if assigned else upx(394)), "QTY"), (mx + upx(468), "RESTOCK"))
-        if not assigned:
-            labels += ((mx + upx(570), "WITHDRAW"),)
-        labels += ((mx + (upx(558) if assigned else upx(660)), "REMOVE"),)
+        if assigned:
+            labels = (
+                (mx + upx(36), "ITEM"),
+                (mx + upx(174), "STOCK"),
+                (mx + upx(250), "PRICE"),
+                (mx + upx(334), "SALE %"),
+                (mx + upx(468), "RESTOCK"),
+                (mx + upx(558), "REMOVE"),
+            )
+        else:
+            labels = (
+                (mx + upx(36), "ITEM"),
+                (mx + upx(174), "STOCK"),
+                (mx + upx(250), "PRICE"),
+                (mx + upx(326), "PRICE"),
+                (mx + upx(394), "QTY"),
+                (mx + upx(468), "RESTOCK"),
+                (mx + upx(570), "WITHDRAW"),
+                (mx + upx(660), "REMOVE"),
+            )
         for x, label in labels:
             surface.blit(self.font_badge.render(label, True, COLOR_TEXT_MUTED), (x, row_top + upx(5)))
 
@@ -719,12 +743,15 @@ class MarketProfileModal:
             surface.blit(self.font_badge.render(f"{price_display['Gold']}g {price_display['Silver']}s {price_display['Copper']}c", True, (250, 204, 21)), (mx + upx(250), row_y + upx(13)))
 
             if assigned:
-                pct = max(0, min(100, int(getattr(mkt, "item_allocations", {}).get(item_name, MARKET_DEFAULT_HOUSEHOLD_SALE_PERCENT))))
+                pct = max(MARKET_HOUSEHOLD_SALE_PERCENT_MIN, min(MARKET_HOUSEHOLD_SALE_PERCENT_MAX,
+                    int(getattr(mkt, "item_allocations", {}).get(item_name, MARKET_DEFAULT_HOUSEHOLD_SALE_PERCENT))))
                 pct_key = ("num", "alloc", item_name)
-                pct_rect = pygame.Rect(mx + upx(328), row_y + upx(5), upx(44), upx(28))
+                pct_rect = pygame.Rect(mx + upx(330), row_y + upx(5), upx(52), upx(26))
                 self.num_fields[pct_key] = {"rect": pct_rect, "kind": "alloc",
-                                            "item": item_name, "min": 0, "max": 100}
-                self._draw_num_input(surface, pct_key, pct_rect, pct)
+                                            "item": item_name,
+                                            "min": MARKET_HOUSEHOLD_SALE_PERCENT_MIN,
+                                            "max": MARKET_HOUSEHOLD_SALE_PERCENT_MAX}
+                self._draw_num_input(surface, pct_key, pct_rect, pct, is_percent=True)
             else:
                 price_key = ("num", "price", item_name)
                 price_rect = pygame.Rect(mx + upx(328), row_y + upx(5), upx(48), upx(28))
@@ -764,6 +791,8 @@ class MarketProfileModal:
                 # Lord BUY row: qty + BUY button. Coins come from the Lord
                 # Treasury; a servant hauls the goods to landlord storage.
                 y2 = row_y + upx(33)
+                surface.blit(self.font_badge.render("Lord Buy:", True, COLOR_TEXT_MUTED),
+                             (mx + upx(260), y2 + upx(4)))
                 qty_rect = pygame.Rect(mx + upx(330), y2, upx(46), upx(22))
                 self.buy_qty_rects[item_name] = qty_rect
                 qty_text = self.quantity_values.setdefault(item_name, str(MARKET_QUANTITY_DEFAULT))

@@ -580,18 +580,27 @@ class BuildingManager:
         """Mengecek apakah posisi (x, y) terlalu dekat dengan celah pintu atau koridor threshold pintu bangunan mana pun"""
         # *** ESTABLISHED — DO NOT REMOVE ***
         # PERF: door anchors are cached per navigation revision — this runs for
-        # every living villager every frame, so keep it allocation-free.
+        # every living villager every frame, so keep it allocation-free and avoid sqrt.
         anchors = self._get_door_anchors(tile_size)
         near_center = min_dist
+        near_center_sq = near_center * near_center
         near_side = min_dist * 0.75
+        near_side_sq = near_side * near_side
         for i in range(0, len(anchors), 3):
             cx, cy = anchors[i]
-            if math.hypot(x - cx, y - cy) < near_center:
+            dx = abs(x - cx)
+            dy = abs(y - cy)
+            if dx < near_center and dy < near_center and (dx * dx + dy * dy) < near_center_sq:
                 return True
             d_out = anchors[i + 1]
+            dx_out = abs(x - d_out[0])
+            dy_out = abs(y - d_out[1])
+            if dx_out < near_side and dy_out < near_side and (dx_out * dx_out + dy_out * dy_out) < near_side_sq:
+                return True
             d_in = anchors[i + 2]
-            if math.hypot(x - d_out[0], y - d_out[1]) < near_side or \
-               math.hypot(x - d_in[0], y - d_in[1]) < near_side:
+            dx_in = abs(x - d_in[0])
+            dy_in = abs(y - d_in[1])
+            if dx_in < near_side and dy_in < near_side and (dx_in * dx_in + dy_in * dy_in) < near_side_sq:
                 return True
         return False
 

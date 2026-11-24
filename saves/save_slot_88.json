@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-11-23 11:21",
+  "timestamp": "2026-11-24 22:49",
   "world": {
     "type": "infinite",
     "seed": null
@@ -182,9 +182,12 @@
       "carrier_id": null,
       "condition": 1.0,
       "inventory": {},
+      "output_inventory": {},
       "currency": {},
+      "tool_conditions": {},
+      "tool_orders": [],
       "break_check_day": 1,
-      "break_check_hour": 3.3564354669966896,
+      "break_check_hour": 23.58108196474079,
       "break_checked_today": false,
       "station_quota_daily": 0,
       "station_quota_today": 0,
@@ -223,6 +226,7 @@
           "inventory": {
             "Silver": 1
           },
+          "tool_conditions": {},
           "currency": {},
           "active_tool": null,
           "has_water": false,
@@ -274,8 +278,8 @@
           "carrying_corpse_id": null,
           "burial_payment_target_corpse_id": null,
           "burial_payment_gravedigger_id": null,
-          "carpenter_payment_order_id": null,
-          "carpenter_payment_carpenter_id": null,
+          "builder_payment_order_id": null,
+          "builder_payment_builder_id": null,
           "is_buried": false,
           "is_picked_up": false
         }
@@ -298,12 +302,12 @@
       "carrying_furniture_id": null,
       "state": "IDLE",
       "inventory": {},
-      "carpenter_commission_order_id": null,
-      "carpenter_commission_carpenter_id": null,
-      "carpenter_commission_fee_copper": 0,
-      "carpenter_commission_remaining_copper": 0,
-      "carpenter_commission_storage_tile": null,
-      "carpenter_commission_treasury_id": null
+      "builder_commission_order_id": null,
+      "builder_commission_builder_id": null,
+      "builder_commission_fee_copper": 0,
+      "builder_commission_remaining_copper": 0,
+      "builder_commission_storage_tile": null,
+      "builder_commission_treasury_id": null
     },
     {
       "id": "servant_2",
@@ -320,12 +324,12 @@
       "carrying_furniture_id": null,
       "state": "IDLE",
       "inventory": {},
-      "carpenter_commission_order_id": null,
-      "carpenter_commission_carpenter_id": null,
-      "carpenter_commission_fee_copper": 0,
-      "carpenter_commission_remaining_copper": 0,
-      "carpenter_commission_storage_tile": null,
-      "carpenter_commission_treasury_id": null
+      "builder_commission_order_id": null,
+      "builder_commission_builder_id": null,
+      "builder_commission_fee_copper": 0,
+      "builder_commission_remaining_copper": 0,
+      "builder_commission_storage_tile": null,
+      "builder_commission_treasury_id": null
     }
   ],
   "schedules": {
@@ -438,32 +442,6 @@
         "SLEEP"
       ],
       "Blacksmith": [
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "SLEEP",
-        "LEISURE",
-        "LEISURE",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "WORK",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "LEISURE",
-        "SLEEP",
-        "SLEEP"
-      ],
-      "Carpenter": [
         "SLEEP",
         "SLEEP",
         "SLEEP",
@@ -646,6 +624,32 @@
         "SLEEP"
       ],
       "Miner": [
+        "SLEEP",
+        "SLEEP",
+        "SLEEP",
+        "SLEEP",
+        "SLEEP",
+        "SLEEP",
+        "LEISURE",
+        "LEISURE",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "WORK",
+        "LEISURE",
+        "LEISURE",
+        "LEISURE",
+        "LEISURE",
+        "SLEEP",
+        "SLEEP"
+      ],
+      "Toolmaker": [
         "SLEEP",
         "SLEEP",
         "SLEEP",

@@ -497,6 +497,20 @@ class NaturalResourceManager:
         return int(cfg["min"]), int(cfg["max"])
 
     @staticmethod
+    def roll_mine_yield(mine):
+        cfg = MINE_YIELD_PER_INGAME_HOUR.get(int(mine.get("tier", 3)),
+                                             MINE_YIELD_PER_INGAME_HOUR[3])
+        dist = cfg.get("yield_distribution")
+        if dist:
+            return random.choices(
+                [int(entry["amount"]) for entry in dist],
+                weights=[float(entry["weight"]) for entry in dist],
+            )[0]
+        lo = int(cfg.get("min", 1))
+        hi = int(cfg.get("max", lo))
+        return random.randint(lo, hi)
+
+    @staticmethod
     def mine_tier_name(mine):
         cfg = MINE_YIELD_PER_INGAME_HOUR.get(int(mine.get("tier", 3)),
                                              MINE_YIELD_PER_INGAME_HOUR[3])

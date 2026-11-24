@@ -155,8 +155,9 @@ class WorkersMixin:
                     if mine is not None:
                         tier_name = NaturalResourceManager.mine_tier_name(mine)
                         lo, hi = NaturalResourceManager.mine_yield_range(mine)
+                        rate_str = f"{lo}/hr" if lo == hi else f"{lo}-{hi}/hr"
                         info = self.font_badge.render(
-                            f"{mine['kind']} · {tier_name} ({lo}-{hi}/hr)", True, COLOR_TEXT_MUTED)
+                            f"{mine['kind']} · {tier_name} ({rate_str})", True, COLOR_TEXT_MUTED)
                         surface.blit(info, (card.x + upx(14), row3_y + upx(4)))
 
                 # Row 4: workstation stock (unlimited, filtered)

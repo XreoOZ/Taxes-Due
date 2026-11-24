@@ -34,7 +34,12 @@ WOODSMAN_PLANT_INGAME_HOURS = 0.25       # 15 in-game minutes per replant
 
 TREE_WOOD_YIELD_MIN = 1
 
-TREE_WOOD_YIELD_MAX = 3
+TREE_WOOD_YIELD_MAX = 2
+
+TREE_WOOD_YIELD_DISTRIBUTION = [
+    {"amount": 1, "weight": 0.80},
+    {"amount": 2, "weight": 0.20},
+]
 
 WOODSMAN_WORKSTATION_TILES = 4           # Woodsman Lodge footprint (square)
 

@@ -49,10 +49,11 @@ class ToolmakerCatalogModal:
         self.modal_rect = None
         self.close_rect = None
         self.viewport_rect = None
-        self.current_tab = "JOB_SETS"  # "JOB_SETS" or "SINGLE_TOOLS"
+        self.current_tab = "JOB_SETS"  # "JOB_SETS", "SINGLE_TOOLS", or "OUTPUT_RACK"
         self.tab_rects = {}
         self.order_rects = {}
         self.qty_rects = {}
+        self.rack_action_rects = {}
         self.quantity_values = {}
         self.scroll_y = 0
         self.max_scroll = 0
@@ -65,6 +66,9 @@ class ToolmakerCatalogModal:
 
     def open(self, workbench):
         self.workbench = workbench
+        self.last_workbench = workbench
+        if workbench:
+            ToolmakerSystem.clean_completed_orders(workbench)
         self.is_open = True
         self.scroll_y = 0
         self.status_message = None
@@ -73,6 +77,8 @@ class ToolmakerCatalogModal:
 
     def close(self):
         self.is_open = False
+        if self.workbench:
+            self.last_workbench = self.workbench
         self.workbench = None
         self._focused_qty = None
 
@@ -117,6 +123,15 @@ class ToolmakerCatalogModal:
                     self.quantity_values.setdefault(item_name, "1")
                     return None
             if self.viewport_rect and self.viewport_rect.collidepoint(event.pos):
+                if self.current_tab == "OUTPUT_RACK":
+                    for act_key, rect in self.rack_action_rects.items():
+                        if rect.collidepoint(event.pos):
+                            if act_key.startswith("TAKE|"):
+                                _, tool_name = act_key.split("|", 1)
+                                return f"tool_take_{tool_name}"
+                            elif act_key.startswith("HAUL|"):
+                                _, tool_name = act_key.split("|", 1)
+                                return f"tool_haul_{tool_name}"
                 for order_key, rect in self.order_rects.items():
                     if rect.collidepoint(event.pos):
                         if order_key.startswith("SET|"):
@@ -174,7 +189,9 @@ class ToolmakerCatalogModal:
 
         title = self.font_title.render("TOOLMAKER WORKBENCH", True, COLOR_TEXT_TITLE)
         surface.blit(title, (modal_x + upx(24), modal_y + upx(18)))
-        subtitle = self.font_sub.render("Commission forge work: Pick up completed tools at the workbench output rack.", True, COLOR_TEXT_MUTED)
+        rack = getattr(self.workbench, "output_inventory", {}) or {}
+        rack_str = ", ".join(f"{v}x {k.replace('_', ' ')}" for k, v in rack.items() if v > 0) or "Empty"
+        subtitle = self.font_sub.render(f"Output Rack: {rack_str} | Pick up completed tools at this workbench.", True, (134, 239, 172) if rack_str != "Empty" else COLOR_TEXT_MUTED)
         surface.blit(subtitle, (modal_x + upx(26), modal_y + upx(46)))
 
         self.close_rect = pygame.Rect(modal_x + modal_w - upx(42), modal_y + upx(16), upx(26), upx(26))
@@ -187,16 +204,23 @@ class ToolmakerCatalogModal:
         tab_y = modal_y + upx(72)
         tab_h = upx(32)
         self.tab_rects = {
-            "JOB_SETS": pygame.Rect(modal_x + upx(24), tab_y, upx(130), tab_h),
-            "SINGLE_TOOLS": pygame.Rect(modal_x + upx(162), tab_y, upx(140), tab_h),
+            "JOB_SETS": pygame.Rect(modal_x + upx(24), tab_y, upx(120), tab_h),
+            "SINGLE_TOOLS": pygame.Rect(modal_x + upx(152), tab_y, upx(130), tab_h),
+            "OUTPUT_RACK": pygame.Rect(modal_x + upx(290), tab_y, upx(180), tab_h),
         }
+        tot_rack = sum(v for v in rack.values() if v > 0)
         for tab_name, tab_rect in self.tab_rects.items():
             is_active = (self.current_tab == tab_name)
             bg_col = (37, 99, 235) if is_active else (30, 41, 59)
             border_col = (147, 197, 253) if is_active else (71, 85, 105)
             pygame.draw.rect(surface, bg_col, tab_rect, border_radius=upx(6))
             pygame.draw.rect(surface, border_col, tab_rect, width=1 if not is_active else 2, border_radius=upx(6))
-            lbl_txt = "JOB SETS" if tab_name == "JOB_SETS" else "SINGLE TOOLS"
+            if tab_name == "JOB_SETS":
+                lbl_txt = "JOB SETS"
+            elif tab_name == "SINGLE_TOOLS":
+                lbl_txt = "SINGLE TOOLS"
+            else:
+                lbl_txt = f"WORKBENCH RACK ({tot_rack})"
             lbl = self.font_badge.render(lbl_txt, True, (255, 255, 255) if is_active else COLOR_TEXT_MUTED)
             surface.blit(lbl, (tab_rect.centerx - lbl.get_width() // 2, tab_rect.centery - lbl.get_height() // 2))
 
@@ -272,7 +296,7 @@ class ToolmakerCatalogModal:
                 surface.blit(order_label, (order_rect.centerx - order_label.get_width() // 2,
                                            order_rect.centery - order_label.get_height() // 2))
 
-        else:
+        elif self.current_tab == "SINGLE_TOOLS":
             # SINGLE_TOOLS tab
             tools = ToolmakerSystem.craftable_tools()
             row_h = upx(64)
@@ -319,6 +343,129 @@ class ToolmakerCatalogModal:
                 order_label = self.font_badge.render("Forge Tool", True, (255, 255, 255))
                 surface.blit(order_label, (order_rect.centerx - order_label.get_width() // 2,
                                            order_rect.centery - order_label.get_height() // 2))
+
+        elif self.current_tab == "OUTPUT_RACK":
+            self.rack_action_rects = {}
+            rack_items = [(k, v) for k, v in rack.items() if v > 0]
+            orders = [s for s in getattr(self.workbench, "tool_order_subjects", [])
+                      if getattr(s, "construction_order", None)
+                      and s.construction_order.get("status") not in (None, "COMPLETE")]
+
+            content_h = upx(30) + (len(rack_items) * upx(60) if rack_items else upx(40)) + upx(36) + (len(orders) * upx(60) if orders else upx(40)) + upx(20)
+            self.max_scroll = max(0, content_h - self.viewport_rect.height)
+            self.scroll_y = max(0, min(self.scroll_y, self.max_scroll))
+
+            cur_y = self.viewport_rect.y - self.scroll_y
+
+            # Section 1: Output Rack
+            lbl_rack = self.font_badge.render("FINISHED TOOLS ON WORKBENCH OUTPUT RACK (READY FOR PICKUP)", True, (253, 224, 71))
+            surface.blit(lbl_rack, (self.viewport_rect.x + upx(4), cur_y))
+            cur_y += upx(24)
+
+            if not rack_items:
+                empty_row = pygame.Rect(self.viewport_rect.x, cur_y, self.viewport_rect.width, upx(38))
+                pygame.draw.rect(surface, (15, 23, 42), empty_row, border_radius=upx(6))
+                pygame.draw.rect(surface, (51, 65, 85), empty_row, width=1, border_radius=upx(6))
+                txt = self.font_sub.render("Output rack is empty. Completed tools will appear here when forged.", True, COLOR_TEXT_MUTED)
+                surface.blit(txt, (empty_row.x + upx(14), empty_row.y + upx(10)))
+                cur_y += upx(46)
+            else:
+                for tool_name, qty in rack_items:
+                    row = pygame.Rect(self.viewport_rect.x, cur_y, self.viewport_rect.width, upx(52))
+                    pygame.draw.rect(surface, (15, 23, 42), row, border_radius=upx(7))
+                    pygame.draw.rect(surface, (52, 211, 153), row, width=1, border_radius=upx(7))
+
+                    t_name = self.font_body.render(f"{qty}x {tool_name.replace('_', ' ')}", True, (255, 255, 255))
+                    surface.blit(t_name, (row.x + upx(14), row.y + upx(8)))
+                    t_desc = self.font_sub.render("Available on workbench rack — villagers pick up here, or take/haul manually.", True, (134, 239, 172))
+                    surface.blit(t_desc, (row.x + upx(14), row.y + upx(28)))
+
+                    # Take 1 button
+                    btn_take = pygame.Rect(row.right - upx(260), row.y + upx(10), upx(100), upx(32))
+                    self.rack_action_rects[f"TAKE|{tool_name}"] = btn_take
+                    t_hov = btn_take.collidepoint(pygame.mouse.get_pos())
+                    pygame.draw.rect(surface, (37, 99, 235) if not t_hov else (59, 130, 246), btn_take, border_radius=upx(5))
+                    pygame.draw.rect(surface, (147, 197, 253), btn_take, width=1, border_radius=upx(5))
+                    take_lbl = self.font_badge.render("Take 1", True, (255, 255, 255))
+                    surface.blit(take_lbl, (btn_take.centerx - take_lbl.get_width() // 2, btn_take.centery - take_lbl.get_height() // 2))
+
+                    # Haul to Stockpile button
+                    btn_haul = pygame.Rect(row.right - upx(150), row.y + upx(10), upx(140), upx(32))
+                    self.rack_action_rects[f"HAUL|{tool_name}"] = btn_haul
+                    h_hov = btn_haul.collidepoint(pygame.mouse.get_pos())
+                    pygame.draw.rect(surface, (202, 138, 4) if not h_hov else (234, 179, 8), btn_haul, border_radius=upx(5))
+                    pygame.draw.rect(surface, (253, 224, 71), btn_haul, width=1, border_radius=upx(5))
+                    haul_lbl = self.font_badge.render("Haul to Yard", True, (15, 23, 42))
+                    surface.blit(haul_lbl, (btn_haul.centerx - haul_lbl.get_width() // 2, btn_haul.centery - haul_lbl.get_height() // 2))
+
+                    cur_y += upx(60)
+
+            cur_y += upx(10)
+            # Section 2: Active Commissions
+            lbl_orders = self.font_badge.render("COMMISSIONS ON THIS WORKBENCH", True, (253, 224, 71))
+            surface.blit(lbl_orders, (self.viewport_rect.x + upx(4), cur_y))
+            cur_y += upx(24)
+
+            if not orders:
+                empty_row = pygame.Rect(self.viewport_rect.x, cur_y, self.viewport_rect.width, upx(38))
+                pygame.draw.rect(surface, (15, 23, 42), empty_row, border_radius=upx(6))
+                pygame.draw.rect(surface, (51, 65, 85), empty_row, width=1, border_radius=upx(6))
+                txt = self.font_sub.render("No commissions currently queued on this workbench.", True, COLOR_TEXT_MUTED)
+                surface.blit(txt, (empty_row.x + upx(14), empty_row.y + upx(10)))
+            else:
+                for sub in orders:
+                    o = sub.construction_order
+                    o_row = pygame.Rect(self.viewport_rect.x, cur_y, self.viewport_rect.width, upx(52))
+                    pygame.draw.rect(surface, (15, 23, 42), o_row, border_radius=upx(7))
+                    pygame.draw.rect(surface, (51, 65, 85), o_row, width=1, border_radius=upx(7))
+
+                    t_name = o.get("tool_name", "Tool").replace("_", " ")
+                    q_done = int(o.get("qty_done", 0))
+                    q_tot = int(o.get("qty_total", 1))
+                    t_txt = self.font_body.render(f"{t_name} (Qty: {q_done}/{q_tot})", True, (255, 255, 255))
+                    surface.blit(t_txt, (o_row.x + upx(14), o_row.y + upx(8)))
+
+                    p_type = o.get("payer_type")
+                    p_fam = o.get("payer_family_id")
+                    fam_name = "Landlord"
+                    if p_type != "landlord" and p_fam and villager_manager:
+                        fam = villager_manager.get_family_by_id(str(p_fam))
+                        if fam:
+                            fam_name = f"The {fam.surname} Family"
+                        else:
+                            fam_name = f"Household {p_fam}"
+
+                    p_txt = self.font_sub.render(f"Payer: {fam_name}", True, COLOR_TEXT_MUTED)
+                    surface.blit(p_txt, (o_row.x + upx(14), o_row.y + upx(28)))
+
+                    # Status badge
+                    st = o.get("status", "UNKNOWN")
+                    if st == "READY_FOR_PICKUP":
+                        st_txt = "Ready for Pickup"
+                        st_col = (34, 197, 94)
+                    elif st == "CRAFTING":
+                        prog = int(float(o.get("craft_progress", 0.0)) * 100)
+                        st_txt = f"Forging ({prog}%)"
+                        st_col = (56, 189, 248)
+                    elif st == "PAID":
+                        st_txt = "Paid — In Queue"
+                        st_col = (147, 197, 253)
+                    elif st == "AWAITING_PAYMENT":
+                        st_txt = "Awaiting Household Payment"
+                        st_col = (250, 204, 21)
+                    elif st == "LANDLORD_PAYMENT_PENDING":
+                        st_txt = "Awaiting Treasury Courier"
+                        st_col = (251, 146, 60)
+                    elif st == "COMPLETE":
+                        st_txt = "Completed"
+                        st_col = (148, 163, 184)
+                    else:
+                        st_txt = st
+                        st_col = (203, 213, 225)
+
+                    badge = self.font_badge.render(st_txt, True, st_col)
+                    surface.blit(badge, (o_row.right - badge.get_width() - upx(16), o_row.y + upx(16)))
+                    cur_y += upx(60)
 
         surface.set_clip(old_clip)
         if self.status_message:

@@ -22,6 +22,7 @@ from game.data.config import (
     WOODSMAN_PLANT_INGAME_HOURS,
     TREE_WOOD_YIELD_MIN,
     TREE_WOOD_YIELD_MAX,
+    TREE_WOOD_YIELD_DISTRIBUTION,
     AI_CRITICAL_NEED_THRESHOLD,
 )
 from game.world.natural_resources import (
@@ -447,7 +448,13 @@ class StationJobSystem:
             villager._activity_total = needed
             if villager.station_work_timer >= needed:
                 if nr.cut_tree(target[0], target[1]):
-                    yield_amt = random.randint(TREE_WOOD_YIELD_MIN, TREE_WOOD_YIELD_MAX)
+                    if TREE_WOOD_YIELD_DISTRIBUTION:
+                        yield_amt = random.choices(
+                            [int(entry["amount"]) for entry in TREE_WOOD_YIELD_DISTRIBUTION],
+                            weights=[float(entry["weight"]) for entry in TREE_WOOD_YIELD_DISTRIBUTION],
+                        )[0]
+                    else:
+                        yield_amt = random.randint(TREE_WOOD_YIELD_MIN, TREE_WOOD_YIELD_MAX)
                     room = villager.get_inventory_room()
                     stored = min(yield_amt, max(0, room))
                     if stored > 0:
@@ -524,14 +531,17 @@ class StationJobSystem:
             quota_remaining = (quota_daily - produced) if quota_daily > 0 else 10 ** 9
             if quota_remaining <= 0:
                 break
-            villager.station_work_timer -= one_game_hour
-            yield_amt = random.randint(lo, hi)
-            stored = min(yield_amt, max(0, villager.get_inventory_room()), quota_remaining)
-            if stored <= 0:
+            if villager.get_inventory_room() <= 0:
                 break
-            villager.inventory[output_item] = villager.inventory.get(output_item, 0) + stored
-            station.station_quota_today = produced + stored
-            villager.say(f"Mined {stored} {output_item}.", duration=1.6)
+            villager.station_work_timer -= one_game_hour
+            yield_amt = NaturalResourceManager.roll_mine_yield(mine)
+            stored = min(yield_amt, max(0, villager.get_inventory_room()), quota_remaining)
+            if stored > 0:
+                villager.inventory[output_item] = villager.inventory.get(output_item, 0) + stored
+                station.station_quota_today = produced + stored
+                villager.say(f"Mined {stored} {output_item}.", duration=1.6)
+            else:
+                villager.say(f"Mined no {output_item} this hour.", duration=1.2)
         return True
 
     # ------------------------------------------------------------------

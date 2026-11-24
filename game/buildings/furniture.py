@@ -22,6 +22,8 @@ class Furniture:
         self.assigned_villager_id = assigned_villager_id  # For beds: 1 bed = 1 villager
         self.rotation = int(rotation) % 360
         self.inventory = {}  # For chests: {item_name: amount}
+        self.output_inventory = {}  # For workbenches: {item_name: amount} waiting on output rack
+        self.tool_order_subjects = []  # Active tool commissions attached to this workbench
         self.is_dropped = False  # True when lot was deleted/revoked (becomes a droppable item on the ground)
         self.stored_in_id = None
         self.construction_order = None

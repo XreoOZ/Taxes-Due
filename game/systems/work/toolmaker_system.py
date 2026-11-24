@@ -161,6 +161,41 @@ class ToolmakerSystem:
         return out
 
     @classmethod
+    def clean_completed_orders(cls, workbench):
+        """Remove completed orders from workbench subjects so they don't linger."""
+        if workbench and hasattr(workbench, "tool_order_subjects") and isinstance(workbench.tool_order_subjects, list):
+            workbench.tool_order_subjects = [
+                s for s in workbench.tool_order_subjects
+                if getattr(s, "construction_order", {}).get("status") not in (None, "COMPLETE")
+            ]
+
+    @classmethod
+    def sweep_unpayable_orders(cls, furniture_manager, villager_manager):
+        """Cancel and purge completed orders or unpayable household orders from all workbenches."""
+        from game.systems.economy.currency import to_copper, normalize_wallet
+        for wb in cls._toolmaker_workbenches(furniture_manager):
+            cls.clean_completed_orders(wb)
+            subs = list(getattr(wb, "tool_order_subjects", []) or [])
+            for sub in subs:
+                order = getattr(sub, "construction_order", None)
+                if not isinstance(order, dict):
+                    continue
+                st = order.get("status")
+                if st in ("AWAITING_PAYMENT", "PAYMENT_REQUESTED") and order.get("payer_type") != "landlord":
+                    payer_fam = order.get("payer_family_id")
+                    if payer_fam and furniture_manager:
+                        chest = furniture_manager.get_storage_for_family(str(payer_fam))
+                        fee = int(order.get("price_copper", 0))
+                        payer_v = next((v for v in (villager_manager.get_all_villagers() if villager_manager else [])
+                                        if str(v.id) == str(order.get("payer_id"))), None)
+                        pocket_funds = to_copper(normalize_wallet(getattr(payer_v, "inventory", {}))) if payer_v else 0
+                        chest_funds = to_copper(normalize_wallet(getattr(chest, "inventory", {}))) if chest else 0
+                        if pocket_funds + chest_funds < fee:
+                            # Cannot afford! Cancel and remove phantom order
+                            if sub in wb.tool_order_subjects:
+                                wb.tool_order_subjects.remove(sub)
+
+    @classmethod
     def _tool_order_subjects(cls, furniture_manager):
         subjects = []
         for wb in cls._toolmaker_workbenches(furniture_manager):
@@ -310,6 +345,27 @@ class ToolmakerSystem:
         return candidates[0][1]
 
     @classmethod
+    def _ready_delivery_orders(cls, toolmaker, furniture_manager):
+        """Find finished orders on toolmaker workbenches that are ready for delivery."""
+        from time import perf_counter
+        out = []
+        for s in cls._tool_order_subjects(furniture_manager):
+            order = getattr(s, "construction_order", None)
+            if not isinstance(order, dict):
+                continue
+            b_id = order.get("builder_id")
+            if b_id is not None and str(b_id) != str(toolmaker.id):
+                continue
+            st = order.get("status")
+            if st == "DELIVERING":
+                out.append(s)
+            elif st == "READY_FOR_PICKUP":
+                grace = float(order.get("_pickup_grace_until", 0.0))
+                if perf_counter() >= grace:
+                    out.append(s)
+        return out
+
+    @classmethod
     def _order_materials_ready(cls, order, chest):
         """Next unit's recipe must be in the toolmaker's household chest."""
         for item, amount in TOOLMAKER_TOOL_RECIPE.items():
@@ -421,7 +477,9 @@ class ToolmakerSystem:
 
             remaining = int(order.get("qty_total", 1)) - int(order.get("qty_done", 0))
             if remaining <= 0:
+                from time import perf_counter
                 order["status"] = "READY_FOR_PICKUP"
+                order["_pickup_grace_until"] = perf_counter() + 15.0
                 toolmaker.task = "IDLE"
                 toolmaker.active_tool = None
                 toolmaker.say(f"Finished {order.get('qty_total')} {tool_name} — placed on workbench output rack for pickup!", duration=2.5)
@@ -439,7 +497,19 @@ class ToolmakerSystem:
         qty = int(order.get("qty_total", 1))
         carried = max(0, int(toolmaker.inventory.get(tool_name, 0)))
 
-        # Retrieve tools from toolmaker's family chest if they were deposited there
+        # Retrieve tools from workbench output rack or toolmaker's family chest
+        needed = qty - carried
+        bench = getattr(subject, "workbench", None)
+        if needed > 0 and bench and hasattr(bench, "output_inventory") and isinstance(bench.output_inventory, dict):
+            in_rack = bench.output_inventory.get(tool_name, 0)
+            if in_rack > 0:
+                taken = min(needed, in_rack)
+                bench.output_inventory[tool_name] -= taken
+                if bench.output_inventory[tool_name] <= 0:
+                    bench.output_inventory.pop(tool_name, None)
+                toolmaker.inventory[tool_name] = carried + taken
+                carried += taken
+
         needed = qty - carried
         if needed > 0:
             toolmaker_chest = cls._family_chest(toolmaker, furniture_manager)
@@ -523,6 +593,7 @@ class ToolmakerSystem:
                         conds.pop(tool_name, None)
                 order["status"] = "COMPLETE"
                 order["progress_ratio"] = 1.0
+                cls.clean_completed_orders(subject.workbench)
                 toolmaker.task = "IDLE"
                 toolmaker.active_tool = None
                 if is_landlord:
@@ -555,6 +626,7 @@ class ToolmakerSystem:
                     conds.pop(tool_name, None)
             order["status"] = "COMPLETE"
             order["progress_ratio"] = 1.0
+            cls.clean_completed_orders(subject.workbench)
             toolmaker.task = "IDLE"
             toolmaker.active_tool = None
             toolmaker.say(f"Delivered {amount} {tool_name} to {dest_chest.name if hasattr(dest_chest,'name') else 'storage'}.", duration=2.5)
@@ -589,13 +661,21 @@ class ToolmakerSystem:
             BuilderSystem._claim_awaiting_order(
                 toolmaker, awaiting, villager_manager, furniture_manager, stockpile_manager)
 
-        # 2) Active craft order wins; otherwise smelt bars.
+        # 2) Active craft order wins; otherwise deliver ready orders; otherwise smelt bars.
         active = cls._craftable_order(toolmaker, furniture_manager)
         if active is not None:
             return cls._craft_step(toolmaker, active, dt, furniture_manager,
                                    building_manager, villager_manager, all_entities,
                                    player, day_cycle, stockpile_manager=stockpile_manager,
                                    permit_manager=permit_manager)
+
+        ready_deliveries = cls._ready_delivery_orders(toolmaker, furniture_manager)
+        if ready_deliveries:
+            return cls._deliver_step(toolmaker, ready_deliveries[0], dt, furniture_manager,
+                                     building_manager, all_entities, player,
+                                     stockpile_manager=stockpile_manager,
+                                     villager_manager=villager_manager,
+                                     permit_manager=permit_manager)
 
         # 3) Automatic bar production keeps the household chest stocked.
         if cls._smelt_step(toolmaker, dt, furniture_manager, building_manager,

@@ -49,18 +49,20 @@ class AISimulationScheduler:
             actor._ai_tick_delay = delay - delay_consumed
             frame_dt -= delay_consumed
             elapsed = max(0.0, float(getattr(actor, "_ai_tick_accumulator", 0.0))) + frame_dt
-            while elapsed >= actor_interval:
+            steps = 0
+            while elapsed >= actor_interval and steps < 2:
                 actor._ai_render_previous_position = (actor.x, actor.y)
                 update_actor(actor, actor_interval)
                 updates += 1
                 elapsed -= actor_interval
+                steps += 1
                 actor_interval = (
                     active_interval
                     if getattr(actor, "is_moving", False) or getattr(actor, "is_waiting_for_path", False)
                     else interval
                 )
                 actor._ai_tick_interval = actor_interval
-            actor._ai_tick_accumulator = elapsed
+            actor._ai_tick_accumulator = min(elapsed, actor_interval)
         return updates
 
     @staticmethod

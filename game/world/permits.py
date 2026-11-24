@@ -1213,16 +1213,15 @@ class PermitManager:
                 p.tiles_w * tile_size, p.tiles_h * tile_size,
             )
         ]
-        occupied_map = {}
-        for p in visible_permits:
-            occupied_map[p.id] = sum(
-                p.overlaps_building(entity)
-                for entity in (
-                    list(building_manager.buildings)
-                    + list(building_manager.construction_sites)
-                    + list(getattr(building_manager, "demolition_sites", []))
-                )
-            )
+        all_structures = (
+            list(building_manager.buildings)
+            + list(building_manager.construction_sites)
+            + list(getattr(building_manager, "demolition_sites", []))
+        ) if visible_permits else []
+        occupied_map = {
+            p.id: sum(p.overlaps_building(entity) for entity in all_structures)
+            for p in visible_permits
+        }
 
         scaled_tile = int(tile_size * camera.zoom)
 

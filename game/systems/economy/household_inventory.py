@@ -28,6 +28,8 @@ def get_inventory_room(inventory, capacity):
     return max(0, int(capacity) - get_inventory_load(inventory))
 
 
+_CANONICAL_ITEM_NAME_CACHE = {}
+
 def canonical_item_name(raw_name):
     """
     Returns the canonical display name for an item or resource without hardcoding logic.
@@ -36,43 +38,59 @@ def canonical_item_name(raw_name):
     """
     if not raw_name or not isinstance(raw_name, str):
         return ""
+    cached = _CANONICAL_ITEM_NAME_CACHE.get(raw_name)
+    if cached is not None:
+        return cached
+
     name_str = raw_name.replace("(WIP)", "").replace("(wip)", "").strip()
     name_lower = name_str.lower()
 
+    result = None
     # 1. Check Tool Types
     for tool_id, tool_data in TOOL_TYPES.items():
         t_name = tool_data.get("name", tool_id).replace("(WIP)", "").replace("(wip)", "").strip()
         if name_lower in (tool_id.lower(), t_name.lower()):
-            return t_name
+            result = t_name
+            break
 
     # Known tool aliases in codebase (legacy/multilingual)
-    if name_lower == "cangkul":
-        return TOOL_TYPES.get("Hoe", {}).get("name", "Hoe")
-    if name_lower == "sabit":
-        return TOOL_TYPES.get("Sickle", {}).get("name", "Sickle")
-    if name_lower in ("siraman", "wateringcan", "watering_can"):
-        return TOOL_TYPES.get("Watering_Can", {}).get("name", "Watering Can")
+    if result is None:
+        if name_lower == "cangkul":
+            result = TOOL_TYPES.get("Hoe", {}).get("name", "Hoe")
+        elif name_lower == "sabit":
+            result = TOOL_TYPES.get("Sickle", {}).get("name", "Sickle")
+        elif name_lower in ("siraman", "wateringcan", "watering_can"):
+            result = TOOL_TYPES.get("Watering_Can", {}).get("name", "Watering Can")
 
     # 2. Check Crop Types
-    for crop_id, crop_data in CROP_TYPES.items():
-        c_name = crop_data.get("name", crop_id.capitalize()).replace("(WIP)", "").replace("(wip)", "").strip()
-        if name_lower in (crop_id.lower(), c_name.lower()):
-            return c_name
+    if result is None:
+        for crop_id, crop_data in CROP_TYPES.items():
+            c_name = crop_data.get("name", crop_id.capitalize()).replace("(WIP)", "").replace("(wip)", "").strip()
+            if name_lower in (crop_id.lower(), c_name.lower()):
+                result = c_name
+                break
 
     # 3. Check Currency Denominations
-    c_denom = canonical_denomination(name_str)
-    if c_denom:
-        return c_denom
+    if result is None:
+        c_denom = canonical_denomination(name_str)
+        if c_denom:
+            result = c_denom
 
     # 4. Check Default Resources
-    for res_id in DEFAULT_RESOURCES:
-        if name_lower == res_id.lower():
-            if res_id.lower() == "food":
-                return "Potato"
-            return res_id
+    if result is None:
+        for res_id in DEFAULT_RESOURCES:
+            if name_lower == res_id.lower():
+                result = "Potato" if res_id.lower() == "food" else res_id
+                break
 
     # 5. Generic fallback for future items (e.g. "bread" -> "Bread", "iron_ore" -> "Iron Ore")
-    return name_str.replace("_", " ").title()
+    if result is None:
+        result = name_str.replace("_", " ").title()
+
+    if len(_CANONICAL_ITEM_NAME_CACHE) > 512:
+        _CANONICAL_ITEM_NAME_CACHE.clear()
+    _CANONICAL_ITEM_NAME_CACHE[raw_name] = result
+    return result
 
 
 def get_household_possessions(fam, furniture_manager=None, stockpile_manager=None, servant_manager=None):
