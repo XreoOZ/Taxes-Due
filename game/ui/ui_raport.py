@@ -178,6 +178,8 @@ class RaportUI(
         self.schedule_preset_btn_rects = {}
         self.schedule_back_btn_rect = None
         self.universal_schedule_btn_rect = None
+        self.schedule_feedback_msg = ""
+        self.schedule_feedback_ok = True
 
         # Member Job Assignment State
         self.member_job_btn_rects = {}
@@ -373,6 +375,8 @@ class RaportUI(
         self.crop_picker_permit_id = None
         self.selected_job_id = None
         self.selected_schedule_job_id = None
+        self.schedule_feedback_msg = ""
+        self.schedule_feedback_ok = True
         self.job_search_text = ""
         self.job_search_active = False
         self.job_search_rect = None
@@ -672,6 +676,49 @@ class RaportUI(
             self.close()
         else:
             self.open()
+
+    def _handle_schedule_clicks(self, mouse_pos, schedule_manager):
+        """Shared click handler for both Schedule tab and Jobs-embedded Schedule sub-view."""
+        if self.schedule_back_btn_rect and self.schedule_back_btn_rect.collidepoint(mouse_pos):
+            self.selected_schedule_job_id = None
+            self.schedule_feedback_msg = ""
+            return "back_to_jobs" if self.active_tab == 5 else "back_to_schedule_jobs"
+
+        if not schedule_manager:
+            return None
+
+        for brush_type, rect in self.schedule_brush_btn_rects.items():
+            if rect.collidepoint(mouse_pos):
+                self.selected_schedule_brush = brush_type
+                self.schedule_feedback_msg = ""
+                return f"select_brush_{brush_type}"
+
+        for hour_idx, rect in self.schedule_hour_cell_rects.items():
+            if rect.collidepoint(mouse_pos):
+                ok, msg = schedule_manager.paint_hour_activity(
+                    self.selected_schedule_job_id, hour_idx, self.selected_schedule_brush
+                )
+                self.schedule_feedback_ok = ok
+                self.schedule_feedback_msg = msg
+                return f"paint_hour_{hour_idx}_{self.selected_schedule_brush}"
+
+        for preset_name, rect in self.schedule_preset_btn_rects.items():
+            if rect.collidepoint(mouse_pos):
+                self.schedule_feedback_msg = ""
+                if preset_name == "standard":
+                    schedule_manager.reset_to_default(self.selected_schedule_job_id)
+                elif preset_name == "hardwork":
+                    sched = ["SLEEP"] * 5 + ["LEISURE"] + ["WORK"] * 15 + ["LEISURE"] + ["SLEEP"] * 2
+                    for h in range(24):
+                        if not schedule_manager.is_prayer_hour(h):
+                            schedule_manager.set_hour_activity(self.selected_schedule_job_id, h, sched[h])
+                elif preset_name == "relaxed":
+                    sched = ["SLEEP"] * 7 + ["LEISURE"] * 2 + ["WORK"] * 7 + ["LEISURE"] * 6 + ["SLEEP"] * 2
+                    for h in range(24):
+                        if not schedule_manager.is_prayer_hour(h):
+                            schedule_manager.set_hour_activity(self.selected_schedule_job_id, h, sched[h])
+                return f"apply_schedule_preset_{preset_name}"
+        return None
 
     def handle_event(self, event, building_manager, permit_manager, resources, servant_manager=None, villager_manager=None, schedule_manager=None, day_cycle=None, stockpile_manager=None, furniture_manager=None, production_system=None):
         if stockpile_manager is not None:
@@ -1167,33 +1214,9 @@ class RaportUI(
                             self.selected_schedule_job_id = job_id
                             return f"select_schedule_job_{job_id}"
                 else:
-                    if self.schedule_back_btn_rect and self.schedule_back_btn_rect.collidepoint(mouse_pos):
-                        self.selected_schedule_job_id = None
-                        return "back_to_schedule_jobs"
-
-                    for brush_type, rect in self.schedule_brush_btn_rects.items():
-                        if rect.collidepoint(mouse_pos):
-                            self.selected_schedule_brush = brush_type
-                            return f"select_brush_{brush_type}"
-
-                    for hour_idx, rect in self.schedule_hour_cell_rects.items():
-                        if rect.collidepoint(mouse_pos):
-                            schedule_manager.set_hour_activity(self.selected_schedule_job_id, hour_idx, self.selected_schedule_brush)
-                            return f"paint_hour_{hour_idx}_{self.selected_schedule_brush}"
-
-                    for preset_name, rect in self.schedule_preset_btn_rects.items():
-                        if rect.collidepoint(mouse_pos):
-                            if preset_name == "standard":
-                                schedule_manager.reset_to_default(self.selected_schedule_job_id)
-                            elif preset_name == "hardwork":
-                                sched = ["SLEEP"]*5 + ["LEISURE"] + ["WORK"]*15 + ["LEISURE"] + ["SLEEP"]*2
-                                for h in range(24):
-                                    schedule_manager.set_hour_activity(self.selected_schedule_job_id, h, sched[h])
-                            elif preset_name == "relaxed":
-                                sched = ["SLEEP"]*7 + ["LEISURE"]*2 + ["WORK"]*7 + ["LEISURE"]*6 + ["SLEEP"]*2
-                                for h in range(24):
-                                    schedule_manager.set_hour_activity(self.selected_schedule_job_id, h, sched[h])
-                            return f"apply_schedule_preset_{preset_name}"
+                    res = self._handle_schedule_clicks(mouse_pos, schedule_manager)
+                    if res is not None:
+                        return res
 
         # 7. Tab 4: Villagers & Family Clans Management
         elif self.active_tab == 4:
@@ -1359,34 +1382,9 @@ class RaportUI(
 
             # Sub-view A: 24-Hour Schedule Matrix for Selected Job
             if self.selected_schedule_job_id is not None:
-                if self.schedule_back_btn_rect and self.schedule_back_btn_rect.collidepoint(mouse_pos):
-                    self.selected_schedule_job_id = None
-                    return "back_to_jobs"
-
-                if schedule_manager:
-                    for brush_type, rect in self.schedule_brush_btn_rects.items():
-                        if rect.collidepoint(mouse_pos):
-                            self.selected_schedule_brush = brush_type
-                            return f"select_brush_{brush_type}"
-
-                    for hour_idx, rect in self.schedule_hour_cell_rects.items():
-                        if rect.collidepoint(mouse_pos):
-                            schedule_manager.set_hour_activity(self.selected_schedule_job_id, hour_idx, self.selected_schedule_brush)
-                            return f"paint_hour_{hour_idx}_{self.selected_schedule_brush}"
-
-                    for preset_name, rect in self.schedule_preset_btn_rects.items():
-                        if rect.collidepoint(mouse_pos):
-                            if preset_name == "standard":
-                                schedule_manager.reset_to_default(self.selected_schedule_job_id)
-                            elif preset_name == "hardwork":
-                                sched = ["SLEEP"]*5 + ["LEISURE"] + ["WORK"]*15 + ["LEISURE"] + ["SLEEP"]*2
-                                for h in range(24):
-                                    schedule_manager.set_hour_activity(self.selected_schedule_job_id, h, sched[h])
-                            elif preset_name == "relaxed":
-                                sched = ["SLEEP"]*7 + ["LEISURE"]*2 + ["WORK"]*7 + ["LEISURE"]*6 + ["SLEEP"]*2
-                                for h in range(24):
-                                    schedule_manager.set_hour_activity(self.selected_schedule_job_id, h, sched[h])
-                            return f"apply_schedule_preset_{preset_name}"
+                res = self._handle_schedule_clicks(mouse_pos, schedule_manager)
+                if res is not None:
+                    return res
 
             # Sub-view B: Worker Roster for Selected Job
             elif self.selected_job_id is not None:

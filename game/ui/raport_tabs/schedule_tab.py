@@ -55,10 +55,12 @@ class ScheduleMixin:
 
         self.schedule_brush_btn_rects = {}
         bx = tool_rect.x + upx(100)
+        brush_count = max(1, len(SCHEDULE_TYPES))
+        avail_brush_w = max(upx(300), tool_rect.right - bx - upx(12))
+        brush_gap = upx(8)
+        brush_w = min(upx(102), (avail_brush_w - (brush_count - 1) * brush_gap) // brush_count)
         for b_id, b_info in SCHEDULE_TYPES.items():
-            if b_id == "PRAYER":
-                continue
-            b_btn = pygame.Rect(bx, tool_rect.y + upx(5), upx(96), upx(28))
+            b_btn = pygame.Rect(bx, tool_rect.y + upx(5), brush_w, upx(28))
             self.schedule_brush_btn_rects[b_id] = b_btn
             is_sel = (self.selected_schedule_brush == b_id)
             col = b_info["color"]
@@ -73,7 +75,7 @@ class ScheduleMixin:
 
             t_lbl = self.font_badge.render(f"{b_info['name']}", True, lbl_col)
             surface.blit(t_lbl, (b_btn.centerx - t_lbl.get_width() // 2, b_btn.centery - t_lbl.get_height() // 2))
-            bx += upx(104)
+            bx += brush_w + brush_gap
 
         # 3. Prayer Time Contiguous Block Adjustment Banner (universal schedule)
         if schedule_manager:
@@ -82,11 +84,11 @@ class ScheduleMixin:
             pygame.draw.rect(surface, (30, 27, 46), pr_banner, border_radius=upx(6))
             pygame.draw.rect(surface, (168, 85, 247), pr_banner, width=1, border_radius=upx(6))
 
-            pr_head = self.font_badge.render("⛪ DECREED PRAYER TIME BLOCK (ALL GUILDS ATTEND):", True, (216, 180, 254))
+            pr_head = self.font_badge.render("DECREED PRAYER BLOCK (Contiguous, Min 1h — Paint adjacent or type hours):", True, (216, 180, 254))
             surface.blit(pr_head, (pr_banner.x + upx(12), pr_banner.y + upx(10)))
 
             # Start Hour typable input
-            ctrl_x = pr_banner.right - upx(280)
+            ctrl_x = pr_banner.right - upx(240)
             surface.blit(self.font_badge.render("Start:", True, COLOR_TEXT_MUTED), (ctrl_x, pr_banner.y + upx(10)))
             s_key = ("num", "prayer_start", 0)
             s_rect = pygame.Rect(ctrl_x + upx(42), pr_banner.y + upx(6), upx(34), upx(24))
@@ -114,6 +116,11 @@ class ScheduleMixin:
         # 3. Timetable Grid (24 boxes)
         day_sched_title = f"{job_name} 24-Hour Timeline (Click hour slot to apply paint tool):"
         surface.blit(self.font_sub.render(day_sched_title, True, (241, 245, 249)), (mx + upx(24), grid_y))
+        fb_msg = getattr(self, "schedule_feedback_msg", "")
+        if fb_msg:
+            fb_col = (74, 222, 128) if getattr(self, "schedule_feedback_ok", True) else (248, 113, 113)
+            fb_surf = self.font_badge.render(fb_msg, True, fb_col)
+            surface.blit(fb_surf, (mx + self.modal_w - upx(24) - fb_surf.get_width(), grid_y + upx(2)))
 
         sched = schedule_manager.get_schedule_view(self.selected_schedule_job_id) if schedule_manager else list(DEFAULT_JOB_SCHEDULE)
         grid_bar_y = grid_y + upx(24)

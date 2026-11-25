@@ -95,22 +95,60 @@ class ScheduleManager:
         hour = int(current_hour) % len(schedule)
         return schedule[hour]
 
-    def set_hour_activity(self, job_id, hour_idx, activity_type, day=None):
+    def paint_hour_activity(self, job_id, hour_idx, activity_type):
+        """Paint one hour slot while strictly enforcing a single contiguous Prayer block (>= 1 hour).
+
+        Returns ``(success: bool, message: str)``.
+        Rules:
+        - Painting PRAYER only expands adjacent boundaries (start - 1 or end). Non-adjacent cells
+          are rejected so the prayer block cannot be split.
+        - Painting another activity over an existing PRAYER cell only removes outer edge hours
+          (start or end - 1) and only when current prayer duration >= 2 hours (minimum 1 hour
+          must always remain). Interior prayer hours cannot be erased because that splits the block.
+        """
         if activity_type not in SCHEDULE_TYPES or not 0 <= hour_idx < 24:
-            return False
+            return False, "Invalid hour or activity."
+
+        s, e = self.prayer_start_hour, self.prayer_end_hour
+
         if activity_type == SCHEDULE_PRAYER:
-            return False
+            if s <= hour_idx < e:
+                return True, f"Prayer Time: {s:02d}:00 - {e:02d}:00 ({e - s}h)"
+            if hour_idx == s - 1:
+                self.set_prayer_time(s - 1, e)
+                ns, ne = self.prayer_start_hour, self.prayer_end_hour
+                return True, f"Prayer Time expanded: {ns:02d}:00 - {ne:02d}:00 ({ne - ns}h)"
+            if hour_idx == e:
+                self.set_prayer_time(s, e + 1)
+                ns, ne = self.prayer_start_hour, self.prayer_end_hour
+                return True, f"Prayer Time expanded: {ns:02d}:00 - {ne:02d}:00 ({ne - ns}h)"
+            return False, f"Cannot split Prayer Time! Paint an adjacent hour ({max(0, s - 1):02d}:00 or {min(23, e):02d}:00)."
+
+        # Non-PRAYER brush over a current PRAYER hour -> shrink from edge only if duration >= 2h
         if self.is_prayer_hour(hour_idx):
-            return False
+            duration = e - s
+            if duration <= 1:
+                return False, "Cannot remove: Prayer Time requires a minimum of 1 contiguous hour."
+            if hour_idx == s:
+                self.set_prayer_time(s + 1, e)
+            elif hour_idx == e - 1:
+                self.set_prayer_time(s, e - 1)
+            else:
+                return False, "Cannot erase middle Prayer hour! It would split the Prayer block."
+
         if job_id == UNIVERSAL_SCHEDULE_ID:
             self.universal_schedule[hour_idx] = activity_type
             self.universal_schedule_enabled = True
             for existing_job_id in list(self.job_schedules):
                 self.job_schedules[existing_job_id] = list(self.universal_schedule)
             self._sync_priest_prayer_block()
-            return True
+            return True, ""
         self.get_schedule(job_id)[hour_idx] = activity_type
-        return True
+        return True, ""
+
+    def set_hour_activity(self, job_id, hour_idx, activity_type, day=None):
+        ok, _msg = self.paint_hour_activity(job_id, hour_idx, activity_type)
+        return ok
 
     def set_activity(self, job_id, hour_idx, activity_type, day=None):
         return self.set_hour_activity(job_id, hour_idx, activity_type)
