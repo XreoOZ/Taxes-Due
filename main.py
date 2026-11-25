@@ -121,6 +121,7 @@ from game.systems.core.cheat_system import apply_add_item_cheat, clean_resources
 from game.systems.work.activity_preview import ActivityPreviewSystem
 from game.systems.village_life.happiness_system import HappinessSystem
 from game.ui.bottom_dock import BottomDockUI
+from game.ui.village_alerts_hud import VillageAlertsHUD
 from game.ui.ui_theme import ui_font, upx
 
 STATE_MENU = "menu"
@@ -245,6 +246,7 @@ def main():
     world = World(tile_size=TILE_SIZE)
     resource_hud = ResourceHUD()
     bottom_dock = BottomDockUI()
+    village_alerts_hud = VillageAlertsHUD()
     raport_ui = RaportUI()
     market_modal = MarketProfileModal()
     add_item_modal = AddItemModal()
@@ -461,6 +463,7 @@ def main():
     wealth_context_timer = 0.0
     autosave_elapsed = 0.0
     commission_sweep_timer = 0.0
+    alerts_refresh_timer = 0.0
     profile_enabled = os.environ.get("TAXES_DUE_PROFILE", "").strip().lower() in ("1", "true", "yes")
     profile_elapsed = 0.0
     profile_frame_count = 0
@@ -730,6 +733,27 @@ def main():
                 if not any_modal_open:
                     speed_action = speed_controller.handle_event(event)
                     if speed_action is not None:
+                        continue
+
+                    alert_action = village_alerts_hud.handle_event(event)
+                    if alert_action:
+                        act = alert_action.get("action")
+                        tgt = alert_action.get("target_id")
+                        if act in ("TOGGLE_COLLAPSE", "HANDLED"):
+                            continue
+                        if act == "BUILD_WELL":
+                            planning_mode = "BUILDING"
+                            planning_building_type = "well"
+                            planning_building_rotation = 0
+                            planning_building_tiles.clear()
+                            planned_door_tile = None
+                            planned_door_side = "bottom"
+                            continue
+                        if act == "FOCUS_TILE" and tgt:
+                            camera.target_x = tgt[0]
+                            camera.target_y = tgt[1]
+                            continue
+                        raport_ui.execute_alert_action(act, tgt)
                         continue
 
                     # Bottom Action Dock & Palette input handling
@@ -1526,6 +1550,11 @@ def main():
                                 servant_manager=servant_manager
                             )
                             raport_ui.destroying_furniture_id = None
+                        elif action == "alert_focus_tile" and getattr(raport_ui, "pending_focus_world_pos", None):
+                            fx, fy = raport_ui.pending_focus_world_pos
+                            camera.target_x = fx
+                            camera.target_y = fy
+                            raport_ui.pending_focus_world_pos = None
                         elif action and action.startswith("edit_permit_"):
                             pid = action.replace("edit_permit_", "")
                             target_p = next((p for p in permit_manager.permits if p.id == pid), None)
@@ -1734,6 +1763,11 @@ def main():
                                 servant_manager=servant_manager
                             )
                             raport_ui.destroying_furniture_id = None
+                        elif action == "alert_focus_tile" and getattr(raport_ui, "pending_focus_world_pos", None):
+                            fx, fy = raport_ui.pending_focus_world_pos
+                            camera.target_x = fx
+                            camera.target_y = fy
+                            raport_ui.pending_focus_world_pos = None
                         elif action and action.startswith("edit_permit_"):
                             pid = action.replace("edit_permit_", "")
                             target_p = next((p for p in permit_manager.permits if p.id == pid), None)
@@ -3345,6 +3379,26 @@ def main():
                     not_surf = ui_font(10, bold=True).render(cheat_notice, True, (250, 204, 21))
                     not_rect = not_surf.get_rect(right=screen_w - resource_hud.margin, top=btn_add_item_cheat_rect.bottom + 6)
                     screen.blit(not_surf, not_rect)
+
+            # 10.6. Right-Side Notice Board HUD (Village Alerts)
+            alerts_refresh_timer -= real_dt
+            if alerts_refresh_timer <= 0.0:
+                alerts_refresh_timer = 0.25
+                village_alerts_hud.refresh(
+                    villager_manager=villager_manager,
+                    permit_manager=permit_manager,
+                    building_manager=building_manager,
+                    furniture_manager=furniture_manager,
+                    stockpile_manager=stockpile_manager,
+                    servant_manager=servant_manager,
+                )
+            if not any_modal_open and pending_starter_id is None:
+                alerts_top_y = (
+                    (btn_add_item_cheat_rect.bottom + upx(24))
+                    if cheats_active
+                    else (resource_hud.margin + res_card_h + upx(10))
+                )
+                village_alerts_hud.draw(screen, screen_w - resource_hud.margin, alerts_top_y)
 
             # 10.8. Bottom Action Dock & Quick Palette (Intuitive Building & Zones)
             any_modal_open = bool(

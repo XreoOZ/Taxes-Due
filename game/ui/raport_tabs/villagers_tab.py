@@ -304,8 +304,14 @@ class VillagersMixin:
             f_title = self.font_title.render(f"Household: The {fam.surname} Family", True, (241, 245, 249))
             surface.blit(f_title, (mx + upx(24) + back_w + upx(14), cy - upx(4)))
 
-            # Button: [📦 Household Possession]
-            self.household_possession_btn_rect = None
+            # Button: [Household Possession & Grant] on View 2 Header Right
+            hp_w = upx(172)
+            self.household_possession_btn_rect = pygame.Rect(mx + self.modal_w - upx(24) - hp_w, cy - upx(4), hp_w, upx(28))
+            hp_hov = self.household_possession_btn_rect.collidepoint(mouse_pos)
+            pygame.draw.rect(surface, (202, 138, 4) if hp_hov else (161, 98, 7), self.household_possession_btn_rect, border_radius=upx(6))
+            pygame.draw.rect(surface, (250, 204, 21), self.household_possession_btn_rect, width=1, border_radius=upx(6))
+            hp_lbl = self.font_badge.render("Possessions / Grant", True, (255, 255, 255))
+            surface.blit(hp_lbl, (self.household_possession_btn_rect.centerx - hp_lbl.get_width() // 2, self.household_possession_btn_rect.centery - hp_lbl.get_height() // 2))
 
             # Land Deed & Household Status Banner
             banner_y = cy + upx(30)
@@ -313,20 +319,36 @@ class VillagersMixin:
             pygame.draw.rect(surface, (24, 34, 52), banner_rect, border_radius=upx(8))
             pygame.draw.rect(surface, (71, 85, 105), banner_rect, width=1, border_radius=upx(8))
 
+            self.assign_permit_btn_rects = {}
+            self.revoke_deed_btn_rect = None
+            self.open_assign_lot_btn_rect = None
+            self.household_view_permit_btn_rect = None
+
             p_assigned = next((p for p in permit_manager.permits if p.id == fam.assigned_permit_id), None)
             if p_assigned:
                 d_txt = f"Land Deed: Assigned to {p_assigned.name} ({len(p_assigned.tiles)} tiles)"
                 d_col = (34, 197, 94)
-                self.household_view_permit_btn_rect = pygame.Rect(banner_rect.right - upx(108), banner_rect.y + upx(4), upx(96), upx(22))
+                self.revoke_deed_btn_rect = pygame.Rect(banner_rect.right - upx(86), banner_rect.y + upx(6), upx(76), upx(24))
+                r_hover = self.revoke_deed_btn_rect.collidepoint(mouse_pos)
+                pygame.draw.rect(surface, (220, 38, 38) if r_hover else (153, 27, 27), self.revoke_deed_btn_rect, border_radius=upx(4))
+                r_lbl = self.font_badge.render("Revoke", True, (255, 255, 255))
+                surface.blit(r_lbl, (self.revoke_deed_btn_rect.centerx - r_lbl.get_width() // 2, self.revoke_deed_btn_rect.centery - r_lbl.get_height() // 2))
+
+                self.household_view_permit_btn_rect = pygame.Rect(self.revoke_deed_btn_rect.x - upx(100), banner_rect.y + upx(6), upx(92), upx(24))
                 vp_hov = self.household_view_permit_btn_rect.collidepoint(mouse_pos)
                 pygame.draw.rect(surface, (37, 99, 235) if vp_hov else (30, 41, 59), self.household_view_permit_btn_rect, border_radius=upx(4))
                 pygame.draw.rect(surface, (96, 165, 250), self.household_view_permit_btn_rect, width=1, border_radius=upx(4))
                 vp_lbl = self.font_badge.render("View Permit", True, (255, 255, 255))
                 surface.blit(vp_lbl, (self.household_view_permit_btn_rect.centerx - vp_lbl.get_width() // 2, self.household_view_permit_btn_rect.centery - vp_lbl.get_height() // 2))
             else:
-                self.household_view_permit_btn_rect = None
                 d_txt = "Land Deed: Unassigned — Living at Town Center"
                 d_col = (245, 158, 11)
+                self.open_assign_lot_btn_rect = pygame.Rect(banner_rect.right - upx(132), banner_rect.y + upx(6), upx(122), upx(24))
+                al_hov = self.open_assign_lot_btn_rect.collidepoint(mouse_pos)
+                pygame.draw.rect(surface, (16, 185, 129) if al_hov else (5, 150, 105), self.open_assign_lot_btn_rect, border_radius=upx(4))
+                pygame.draw.rect(surface, (74, 222, 128), self.open_assign_lot_btn_rect, width=1, border_radius=upx(4))
+                al_lbl = self.font_badge.render("+ Assign House", True, (255, 255, 255))
+                surface.blit(al_lbl, (self.open_assign_lot_btn_rect.centerx - al_lbl.get_width() // 2, self.open_assign_lot_btn_rect.centery - al_lbl.get_height() // 2))
 
             # Row 1: Deed & Population
             pop_summary = f"{d_txt}   |   Living Population: {fam.living_member_count} Members"
@@ -363,20 +385,9 @@ class VillagersMixin:
             surface.blit(self.font_badge.render(income_text, True, (250, 204, 21)),
                          (banner_rect.x + upx(14), banner_rect.y + upx(52)))
 
-            # Button: [Assign / Change Deed]
-            self.assign_permit_btn_rects = {}
-            self.revoke_deed_btn_rect = None
-            self.open_assign_lot_btn_rect = None
-
-            if p_assigned:
-                self.revoke_deed_btn_rect = pygame.Rect(banner_rect.right - upx(92), banner_rect.y + upx(12), upx(84), upx(28))
-                r_hover = self.revoke_deed_btn_rect.collidepoint(mouse_pos)
-                pygame.draw.rect(surface, (220, 38, 38) if r_hover else (153, 27, 27), self.revoke_deed_btn_rect, border_radius=upx(5))
-                r_lbl = self.font_badge.render("Revoke", True, (255, 255, 255))
-                surface.blit(r_lbl, (self.revoke_deed_btn_rect.centerx - r_lbl.get_width() // 2, self.revoke_deed_btn_rect.centery - r_lbl.get_height() // 2))
-
             # Member Roster Grouped by Generation
             self.member_inventory_btn_rects.clear()
+            self.member_job_btn_rects.clear()
             y_cur = banner_y + upx(80)
             m_header = self.font_sub.render(f"Household Members Roster ({fam.member_count} Members across {fam.get_generation_label()}):", True, COLOR_TEXT_TITLE)
             surface.blit(m_header, (mx + upx(24), y_cur))
@@ -411,13 +422,19 @@ class VillagersMixin:
                         n_lbl = self.font_badge.render(f"H: {h_val}% | T: {t_val}%", True, need_col)
                         surface.blit(n_lbl, (m_card.right - upx(340), m_card.y + upx(7)))
 
-
-                    # Dedicated Job Badge
-                    job_cfg = DEDICATED_JOBS.get(getattr(m, "job", "Farmer"), {})
-                    job_title = job_cfg.get("title", getattr(m, "job", "Worker"))
+                    # Clickable Dedicated Job Badge
+                    cur_job = getattr(m, "job", "Unassigned") or "Unassigned"
+                    job_cfg = DEDICATED_JOBS.get(cur_job, {})
+                    job_title = job_cfg.get("title", cur_job)
                     job_badge = pygame.Rect(m_card.right - upx(230), m_card.y + upx(4), upx(110), upx(22))
-                    pygame.draw.rect(surface, (20, 83, 45), job_badge, border_radius=upx(4))
-                    pygame.draw.rect(surface, (34, 197, 94), job_badge, width=1, border_radius=upx(4))
+                    if getattr(m, "is_alive", True):
+                        self.member_job_btn_rects[m.id] = job_badge
+                    j_hov = getattr(m, "is_alive", True) and job_badge.collidepoint(mouse_pos)
+                    is_idle = cur_job in ("Unassigned", "Unemployed", "Peasant", "")
+                    j_bg = (146, 64, 14) if (is_idle and j_hov) else ((120, 53, 15) if is_idle else ((22, 101, 52) if j_hov else (20, 83, 45)))
+                    j_bd = (245, 158, 11) if is_idle else (34, 197, 94)
+                    pygame.draw.rect(surface, j_bg, job_badge, border_radius=upx(4))
+                    pygame.draw.rect(surface, j_bd, job_badge, width=1, border_radius=upx(4))
                     j_txt = self.font_badge.render(job_title, True, (240, 253, 244))
                     surface.blit(j_txt, (job_badge.centerx - j_txt.get_width() // 2, job_badge.centery - j_txt.get_height() // 2))
 

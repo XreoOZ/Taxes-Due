@@ -58,6 +58,10 @@ from game.systems.work.workplace_system import (
     get_job_workplaces,
     workplace_workers,
     workplace_capacity,
+    workplace_base_capacity,
+    set_workplace_max_workers,
+    set_job_worker_count,
+    change_workplace_workers,
     assigned_ids,
     auto_sort_all_workers,
     workplace_job_workers,
@@ -79,11 +83,13 @@ from game.ui.raport_tabs.workers_tab import WorkersMixin
 from game.ui.raport_tabs.immigrant_tab import ImmigrantMixin
 from game.ui.raport_tabs.tax_tab import TaxMixin
 from game.ui.raport_tabs.planning_tab import PlanningMixin
+from game.ui.raport_tabs.town_hall_tab import TownHallMixin
 
 from game.ui.raport_tabs.common import GRANTABLE_ITEMS
 from game.ui.ui_theme import ui_font, upx
 
 class RaportUI(
+    TownHallMixin,
     BuildingMixin,
     PermitMixin,
     PriorityMixin,
@@ -96,7 +102,7 @@ class RaportUI(
 ):
     def __init__(self):
         self.is_open = False
-        self.active_tab = 0  # 0: Buildings, 1: Area Permits, 2: Priority, 3: Schedule, 4: Villagers, 5: Workers
+        self.active_tab = 9  # Default to Town Hall Overview; indices 0..8 preserved for backward compatibility
         self.show_build_menu = False
         self.show_structures_menu = False
         self.show_furniture_menu = False
@@ -114,7 +120,7 @@ class RaportUI(
         # Left HUD Button (Town Ledger)
         self.btn_left_rect = pygame.Rect(upx(16), upx(200), upx(116), upx(42))
 
-        # Tabs
+        # Tabs (keep 0..8 fixed so existing shortcuts/tests stay intact; 9 = Town Hall Overview)
         self.tabs = [
             {"id": "building", "title": "Buildings", "wip": False},
             {"id": "permit", "title": "Permits", "wip": False},
@@ -125,7 +131,15 @@ class RaportUI(
             {"id": "immigrant", "title": "Immigrant", "wip": False},
             {"id": "tax", "title": "Taxes", "wip": False},
             {"id": "planning", "title": "Roadmap", "wip": True},
+            {"id": "town_hall", "title": "Town Hall", "wip": False},
         ]
+        # Display Town Hall & daily-management tabs first from left to right
+        self.tab_display_order = [9, 4, 5, 6, 7, 0, 1, 2, 3, 8]
+        self.town_hall_action_btns = []
+        self.town_hall_scroll_y = 0
+        self.town_hall_max_scroll = 0
+        self.town_hall_viewport_rect = None
+        self.pending_focus_world_pos = None
 
         # Building Category Navigation State
         self.selected_building_category = None  # None = Root Category View; cat_id = Category Filtered View
@@ -311,6 +325,9 @@ class RaportUI(
         self.job_schedule_btn_rects = {}
         self.worker_assign_btn_rects = {}
         self.worker_unassign_btn_rects = {}
+        self.job_worker_step_rects = {}
+        self.workplace_worker_step_rects = {}
+        self.workplace_max_step_rects = {}
         self.job_search_text = ""
         self.job_search_active = False
         self.job_search_rect = None
@@ -529,16 +546,19 @@ class RaportUI(
                 return 0
             s, e = schedule_manager.get_prayer_hours()
             return int(s if kind == "prayer_start" else e)
+        if kind == "job_workers":
+            workplaces = get_job_workplaces(pl, permit_manager, furniture_manager, building_manager)
+            return sum(len(workplace_job_workers(wp, pl, villager_manager)) for wp in workplaces)
         if kind == "workplace_workers":
             ws = self._num_field_station(fld, permit_manager, furniture_manager, building_manager)
             if ws is None:
                 return 0
-            from game.systems.work.workplace_system import workplace_job_workers
             return len(workplace_job_workers(ws, pl[0], villager_manager))
         if kind == "workplace_max":
             ws = self._num_field_station(fld, permit_manager, furniture_manager, building_manager)
-            if ws is not None and ws[0] == "permit":
-                return int(getattr(ws[1], "max_workers", 0))
+            if ws is not None:
+                cap = workplace_capacity(ws)
+                return int(cap) if cap is not None else int(getattr(ws[1], "max_workers", 0))
             return 0
         if kind == "workplace_quota":
             ws = self._num_field_station(fld, permit_manager, furniture_manager, building_manager)
@@ -578,13 +598,14 @@ class RaportUI(
                 return
             s, e = schedule_manager.get_prayer_hours()
             schedule_manager.set_prayer_time(s, min(24, max(val, s + 1)))
+        elif kind == "job_workers":
+            set_job_worker_count(
+                pl, val, permit_manager, furniture_manager, villager_manager, building_manager
+            )
         elif kind == "workplace_workers":
             ws = self._num_field_station(fld, permit_manager, furniture_manager, building_manager)
             if ws is None or not villager_manager:
                 return
-            from game.systems.work.workplace_system import (
-                change_workplace_workers, workplace_job_workers,
-            )
             job_id = pl[0]
             cur = len(workplace_job_workers(ws, job_id, villager_manager))
             while cur < val:
@@ -599,12 +620,13 @@ class RaportUI(
                 cur -= 1
         elif kind == "workplace_max":
             ws = self._num_field_station(fld, permit_manager, furniture_manager, building_manager)
-            if ws is not None and ws[0] == "permit":
-                p = ws[1]
-                cur = int(getattr(p, "max_workers", 0))
-                permit_manager.change_max_workers(
-                    p.id, val - cur, villager_manager,
-                    furniture_manager=furniture_manager, auto_assign=False)
+            if ws is not None:
+                set_workplace_max_workers(
+                    pl[0], ws, val,
+                    permit_manager=permit_manager,
+                    furniture_manager=furniture_manager,
+                    villager_manager=villager_manager,
+                )
         elif kind == "workplace_quota":
             ws = self._num_field_station(fld, permit_manager, furniture_manager, building_manager)
             if ws is not None and ws[0] == "furniture":
@@ -753,6 +775,11 @@ class RaportUI(
                     and self.jobs_max_scroll > 0):
                 self.jobs_scroll_y = max(0, min(self.jobs_scroll_y - event.y * upx(36), self.jobs_max_scroll))
                 return "jobs_scroll"
+            if (self.is_open and self.active_tab == 9
+                    and self.town_hall_viewport_rect and self.town_hall_viewport_rect.collidepoint(pygame.mouse.get_pos())
+                    and self.town_hall_max_scroll > 0):
+                self.town_hall_scroll_y = max(0, min(self.town_hall_scroll_y - event.y * upx(36), self.town_hall_max_scroll))
+                return "town_hall_scroll"
             return None
 
         # Scrollbar Dragging with Mouse Motion
@@ -1257,24 +1284,31 @@ class RaportUI(
 
                         return "member_inventory_blocked"
 
+                    # Open Possessions & Grant directly from View 2 Header
+                    if self.household_possession_btn_rect and self.household_possession_btn_rect.collidepoint(mouse_pos):
+                        self.show_household_possession = True
+                        self.show_assign_permit_picker = False
+                        return f"open_household_possession_{self.selected_family_id}"
+
                     # Member inventory buttons on cards
                     for mem_id, btn_rect in list(self.member_inventory_btn_rects.items()):
                         if btn_rect.collidepoint(mouse_pos):
                             self.selected_member_inventory_id = mem_id
                             return f"open_member_inventory_{mem_id}"
 
-                    # Interactive Member Job Assignment: Cycle job directly
+                    # Interactive Member Job Assignment: Cycle non-WIP jobs directly
                     for mem_id, btn_rect in list(self.member_job_btn_rects.items()):
                         if btn_rect.collidepoint(mouse_pos):
                             fam = villager_manager.get_family_by_id(self.selected_family_id)
                             if fam:
                                 mem = next((m for m in fam.members if m.id == mem_id), None)
                                 if mem:
-                                    job_keys = list(DEDICATED_JOBS.keys())
-                                    cur_idx = job_keys.index(mem.job) if mem.job in job_keys else 0
-                                    next_job = job_keys[(cur_idx + 1) % len(job_keys)]
-                                    mem.set_job(next_job)
-                                    return f"cycle_job_{mem_id}_{next_job}"
+                                    job_keys = [k for k, cfg in DEDICATED_JOBS.items() if not cfg.get("wip", False)]
+                                    if job_keys:
+                                        cur_idx = job_keys.index(mem.job) if mem.job in job_keys else 0
+                                        next_job = job_keys[(cur_idx + 1) % len(job_keys)]
+                                        mem.set_job(next_job)
+                                        return f"cycle_job_{mem_id}_{next_job}"
 
                     # Contextual Navigation: Jump to Permit from Household
                     if self.household_view_permit_btn_rect and self.household_view_permit_btn_rect.collidepoint(mouse_pos):
@@ -1420,6 +1454,27 @@ class RaportUI(
                         self.selected_workstation_job_id = None
                         self.highlight_workplace_key = None
                         return "back_to_workstations"
+                    for (job_id, station_key, delta), rect in list(getattr(self, "workplace_worker_step_rects", {}).items()):
+                        if rect.collidepoint(mouse_pos) and self.jobs_viewport_rect and self.jobs_viewport_rect.collidepoint(mouse_pos):
+                            workplaces = get_job_workplaces(job_id, permit_manager, furniture_manager, building_manager)
+                            ws = next((w for w in workplaces if self._workplace_key(w) == station_key), None)
+                            if ws is not None:
+                                change_workplace_workers(job_id, ws, delta, permit_manager, furniture_manager, villager_manager, building_manager)
+                            return f"workplace_worker_step_{job_id}_{delta}"
+                    for (job_id, station_key, delta), rect in list(getattr(self, "workplace_max_step_rects", {}).items()):
+                        if rect.collidepoint(mouse_pos) and self.jobs_viewport_rect and self.jobs_viewport_rect.collidepoint(mouse_pos):
+                            workplaces = get_job_workplaces(job_id, permit_manager, furniture_manager, building_manager)
+                            ws = next((w for w in workplaces if self._workplace_key(w) == station_key), None)
+                            if ws is not None:
+                                cur_cap = workplace_capacity(ws)
+                                cur_val = int(cur_cap) if cur_cap is not None else int(getattr(ws[1], "max_workers", 2))
+                                set_workplace_max_workers(
+                                    job_id, ws, cur_val + delta,
+                                    permit_manager=permit_manager,
+                                    furniture_manager=furniture_manager,
+                                    villager_manager=villager_manager,
+                                )
+                            return f"workplace_max_step_{job_id}_{delta}"
                     for key, rect in list(self.workplace_crop_btn_rects.items()):
                         if rect.collidepoint(mouse_pos):
                             job_id, station_key = key
@@ -1455,6 +1510,16 @@ class RaportUI(
                         unassign_all_workers(permit_manager, furniture_manager, villager_manager,
                                              building_manager=building_manager)
                     return "unassign_all"
+
+                for (job_id, delta), rect in list(getattr(self, "job_worker_step_rects", {}).items()):
+                    if rect.collidepoint(mouse_pos) and self.jobs_viewport_rect and self.jobs_viewport_rect.collidepoint(mouse_pos):
+                        if villager_manager:
+                            workplaces = get_job_workplaces(job_id, permit_manager, furniture_manager, building_manager)
+                            cur_filled = sum(len(workplace_job_workers(wp, job_id, villager_manager)) for wp in workplaces)
+                            set_job_worker_count(
+                                job_id, cur_filled + delta, permit_manager, furniture_manager, villager_manager, building_manager
+                            )
+                        return f"job_worker_step_{job_id}_{delta}"
 
                 for job_id, rect in self.job_select_btn_rects.items():
                     if rect.collidepoint(mouse_pos) and self.jobs_viewport_rect and self.jobs_viewport_rect.collidepoint(mouse_pos):
@@ -1586,7 +1651,50 @@ class RaportUI(
                 self.planning_page += 1
                 return "planning_page_next"
 
+        # 10. Tab 9: Town Hall Action Center
+        elif self.active_tab == 9:
+            for btn_rect, alert in list(getattr(self, "town_hall_action_btns", [])):
+                if btn_rect.collidepoint(mouse_pos):
+                    return self.execute_alert_action(alert["action_type"], alert.get("target_id"))
+
         return None
+
+    def execute_alert_action(self, action_type, target_id=None):
+        """Route a clicked alert (from Notice Board HUD or Town Hall) to its fix."""
+        if action_type == "OPEN_TOWN_HALL":
+            self.is_open = True
+            self.active_tab = 9
+            return "open_town_hall"
+        if action_type == "OPEN_HOUSEHOLD" and target_id is not None:
+            self.open_household_directly(target_id)
+            return f"alert_open_household_{target_id}"
+        if action_type == "OPEN_GRANT" and target_id is not None:
+            self.open_possession_directly(target_id)
+            self.show_grant_dialog = True
+            self.grant_amounts = {}
+            self.grant_scroll_y = 0
+            self.grant_is_dragging_scrollbar = False
+            self.active_grant_input_item = None
+            return f"alert_open_grant_{target_id}"
+        if action_type == "OPEN_JOBS":
+            self.is_open = True
+            self.active_tab = 5
+            self.selected_job_id = None
+            self.selected_workstation_job_id = None
+            return "alert_open_jobs"
+        if action_type == "OPEN_IMMIGRANT":
+            self.is_open = True
+            self.active_tab = 6
+            return "alert_open_immigrant"
+        if action_type == "BUILD_WELL":
+            self.selected_building_type = "well"
+            self.close()
+            return "alert_build_well"
+        if action_type == "FOCUS_TILE" and target_id is not None:
+            self.pending_focus_world_pos = target_id
+            self.close()
+            return "alert_focus_tile"
+        return "handled"
 
     def draw(self, surface, building_manager, permit_manager, resources, servant_manager=None, villager_manager=None, schedule_manager=None, day_cycle=None, furniture_manager=None, stockpile_manager=None, production_system=None):
         self._init_fonts()
@@ -1635,23 +1743,20 @@ class RaportUI(
         close_surf = self.font_btn.render("X", True, close_col)
         surface.blit(close_surf, (self.close_btn_rect.x + upx(5), self.close_btn_rect.y + 1))
 
-        # Tabs
-        self.tab_rects = []
+        # Tabs (rendered in display order, stored at true index in tab_rects)
+        self.tab_rects = [pygame.Rect(-upx(9999), -upx(9999), 0, 0) for _ in self.tabs]
         tab_x = mx + upx(20)
         tab_y = my + upx(50)
-        tab_spacing = upx(8)
-        visible_tabs = [t for t in self.tabs if not t.get("hidden", False)]
-        avail_w = self.modal_w - upx(40) - ((len(visible_tabs) - 1) * tab_spacing)
-        tab_w = avail_w // len(visible_tabs)
+        tab_spacing = upx(6)
+        visible_indices = [idx for idx in self.tab_display_order if idx < len(self.tabs) and not self.tabs[idx].get("hidden", False)]
+        avail_w = self.modal_w - upx(40) - ((len(visible_indices) - 1) * tab_spacing)
+        tab_w = avail_w // max(1, len(visible_indices))
         tab_h = upx(32)
 
-        for i, tab in enumerate(self.tabs):
-            if tab.get("hidden", False):
-                self.tab_rects.append(pygame.Rect(-upx(9999), -upx(9999), 0, 0))
-                continue
-
+        for i in visible_indices:
+            tab = self.tabs[i]
             t_rect = pygame.Rect(tab_x, tab_y, tab_w, tab_h)
-            self.tab_rects.append(t_rect)
+            self.tab_rects[i] = t_rect
             is_active = (i == self.active_tab)
 
             t_bg = COLOR_TAB_ACTIVE if is_active else COLOR_TAB_INACTIVE
@@ -1660,11 +1765,11 @@ class RaportUI(
                 pygame.draw.rect(surface, (96, 165, 250), t_rect, width=1, border_radius=upx(6))
 
             txt_c = (255, 255, 255) if is_active else COLOR_TEXT_MUTED
-            t_surf = self.font_tab.render(tab["title"], True, txt_c)
+            t_surf = self.font_badge.render(tab["title"], True, txt_c) if len(visible_indices) >= 9 else self.font_tab.render(tab["title"], True, txt_c)
 
             if tab["wip"]:
-                wip_w = upx(26)
-                wip_h = upx(14)
+                wip_w = upx(24)
+                wip_h = upx(13)
                 wip_rect = pygame.Rect(tab_x + tab_w - wip_w - upx(4), tab_y + (tab_h - wip_h) // 2, wip_w, wip_h)
                 pygame.draw.rect(surface, COLOR_BADGE_WIP, wip_rect, border_radius=3)
                 w_txt = self.font_badge.render("WIP", True, (0, 0, 0))
@@ -1700,6 +1805,8 @@ class RaportUI(
             self._draw_tax_tab(surface, mx, content_y, villager_manager, permit_manager, furniture_manager=furniture_manager, production_system=production_system, resources=resources, building_manager=building_manager, stockpile_manager=stockpile_manager, day_cycle=day_cycle, servant_manager=servant_manager)
         elif self.active_tab == 8:
             self._draw_planning_tab(surface, mx, content_y)
+        elif self.active_tab == 9:
+            self._draw_town_hall_tab(surface, mx, content_y, villager_manager, permit_manager, building_manager, furniture_manager=furniture_manager, stockpile_manager=stockpile_manager, servant_manager=servant_manager)
 
 
 

@@ -4,6 +4,14 @@ import pygame
 from game.config import COLOR_BADGE_WIP, COLOR_TEXT_MUTED, COLOR_TEXT_TITLE, DEDICATED_JOBS
 from game.systems.economy.production_distribution import ProductionDistributionSystem
 from game.systems.work.schedule import UNIVERSAL_SCHEDULE_ID
+from game.systems.work.workplace_system import (
+    assigned_ids,
+    get_job_workplaces,
+    workplace_base_capacity,
+    workplace_capacity,
+    workplace_job_workers,
+    workplace_workers,
+)
 from game.ui.ui_theme import ui_font, upx
 
 
@@ -16,12 +24,59 @@ class WorkersMixin:
             object_id = f"{getattr(obj, 'building_type', kind)}:{getattr(obj, 'grid_x', 0)}:{getattr(obj, 'grid_y', 0)}"
         return f"{kind}:{object_id}"
 
+    def _draw_stepper(self, surface, x, y, h, key, kind, payload, value, min_val, max_val,
+                      step_rects_dict, step_key_prefix, mouse_pos, can_inc=True, can_dec=True):
+        """Draw compact [ - ] [ typable num ] [ + ] control and register hitboxes."""
+        btn_w = upx(22)
+        num_w = upx(32)
+        gap = upx(2)
+
+        minus_rect = pygame.Rect(x, y, btn_w, h)
+        num_rect = pygame.Rect(minus_rect.right + gap, y, num_w, h)
+        plus_rect = pygame.Rect(num_rect.right + gap, y, btn_w, h)
+
+        dec_enabled = can_dec and (value > min_val)
+        inc_enabled = can_inc and (value < max_val)
+
+        m_hov = dec_enabled and minus_rect.collidepoint(mouse_pos)
+        m_bg = (51, 65, 85) if m_hov else ((30, 41, 59) if dec_enabled else (20, 27, 40))
+        m_border = (96, 165, 250) if dec_enabled else (51, 65, 85)
+        pygame.draw.rect(surface, m_bg, minus_rect, border_radius=upx(4))
+        pygame.draw.rect(surface, m_border, minus_rect, width=1, border_radius=upx(4))
+        m_txt = self.font_badge.render("-", True, (255, 255, 255) if dec_enabled else (100, 116, 139))
+        surface.blit(m_txt, m_txt.get_rect(center=minus_rect.center))
+        if dec_enabled:
+            step_rects_dict[(*step_key_prefix, -1)] = minus_rect
+
+        self.num_fields[key] = {
+            "rect": num_rect,
+            "kind": kind,
+            "payload": payload,
+            "min": min_val,
+            "max": max_val,
+        }
+        self._draw_num_input(surface, key, num_rect, value)
+
+        p_hov = inc_enabled and plus_rect.collidepoint(mouse_pos)
+        p_bg = (37, 99, 235) if p_hov else ((30, 58, 138) if inc_enabled else (20, 27, 40))
+        p_border = (96, 165, 250) if inc_enabled else (51, 65, 85)
+        pygame.draw.rect(surface, p_bg, plus_rect, border_radius=upx(4))
+        pygame.draw.rect(surface, p_border, plus_rect, width=1, border_radius=upx(4))
+        p_txt = self.font_badge.render("+", True, (255, 255, 255) if inc_enabled else (100, 116, 139))
+        surface.blit(p_txt, p_txt.get_rect(center=plus_rect.center))
+        if inc_enabled:
+            step_rects_dict[(*step_key_prefix, 1)] = plus_rect
+
+        return minus_rect.x, plus_rect.right
+
     def _draw_workplaces_view(self, surface, mx, cy, villager_manager, permit_manager, furniture_manager, building_manager=None):
-        from game.systems.work.workplace_system import get_job_workplaces, workplace_workers, workplace_job_workers, workplace_capacity
         # This sub-view draws no sort buttons — clear stale rects so clicks
         # here can't trigger the directory-level handlers.
         self.auto_sort_all_btn_rect = None
         self.unassign_all_btn_rect = None
+        self.job_worker_step_rects = {}
+        self.workplace_worker_step_rects = {}
+        self.workplace_max_step_rects = {}
         job_id = self.selected_workstation_job_id
         job_cfg = DEDICATED_JOBS.get(job_id, {})
         mouse_pos = pygame.mouse.get_pos()
@@ -50,7 +105,7 @@ class WorkersMixin:
                           and (obj_cfg.get("station_inventory_items")
                                or obj_cfg.get("station_inventory_mine_bound")))
             is_farm_permit = is_permit and getattr(obj, "permit_type", "") == "farm"
-            card_h = (upx(104) if is_farm_permit else upx(84)) if is_permit else (upx(118) if is_station else upx(54))
+            card_h = (upx(104) if is_farm_permit else upx(84)) if is_permit else (upx(118) if is_station else upx(58))
             card = pygame.Rect(mx + upx(24), y, self.modal_w - upx(48), card_h)
             pygame.draw.rect(surface, (24, 34, 52), card, border_radius=upx(7))
             pygame.draw.rect(surface, (51, 65, 85), card, width=1, border_radius=upx(7))
@@ -62,37 +117,82 @@ class WorkersMixin:
             label = self.font_sub.render(station_name, True, (241, 245, 249))
             surface.blit(label, (card.x + upx(14), card.y + upx(8)))
             station_cap = workplace_capacity((kind, obj))
+            base_cap = workplace_base_capacity((kind, obj))
             detail_txt = f"{len(station_workers)} workers" if station_cap is None else f"{len(station_workers)} / {station_cap} workers"
             detail = self.font_body.render(detail_txt, True, COLOR_TEXT_MUTED)
             surface.blit(detail, (card.x + upx(14), card.y + upx(29)))
             wk_key = ("num", "workplace_workers", (job_id, station_key))
-            # Worker-count input sits right next to its "N / cap workers" label
-            # instead of floating in the top-right corner.
-            wk_rect = pygame.Rect(card.x + upx(14) + detail.get_width() + upx(10), card.y + upx(22), upx(38), upx(26))
-            self.num_fields[wk_key] = {"rect": wk_rect, "kind": "workplace_workers",
-                                       "payload": (job_id, station_key),
-                                       "min": 0, "max": station_cap if station_cap is not None else 99}
-            self._draw_num_input(surface, wk_key, wk_rect, len(station_workers))
+            self._draw_stepper(
+                surface,
+                card.x + upx(14) + detail.get_width() + upx(10),
+                card.y + upx(22),
+                upx(24),
+                wk_key,
+                "workplace_workers",
+                (job_id, station_key),
+                len(station_workers),
+                0,
+                station_cap if station_cap is not None else 99,
+                self.workplace_worker_step_rects,
+                (job_id, station_key),
+                mouse_pos,
+            )
+
+            # Max worker cap control on EVERY workplace (lowerable; capped at hardware base_cap if fixed)
+            max_limit = base_cap if base_cap is not None else 99
+            cur_max = station_cap if station_cap is not None else int(getattr(obj, "max_workers", 2))
+            max_key = ("num", "workplace_max", (job_id, station_key))
+            if is_permit:
+                row2_y = card.y + upx(52)
+                max_lbl = self.font_badge.render("Max Slots:", True, COLOR_TEXT_MUTED)
+                surface.blit(max_lbl, (card.x + upx(14), row2_y + upx(4)))
+                self._draw_stepper(
+                    surface,
+                    card.x + upx(82),
+                    row2_y - 1,
+                    upx(24),
+                    max_key,
+                    "workplace_max",
+                    (job_id, station_key),
+                    cur_max,
+                    0,
+                    max_limit,
+                    self.workplace_max_step_rects,
+                    (job_id, station_key),
+                    mouse_pos,
+                )
+            else:
+                max_lbl = self.font_badge.render(f"Max (cap {max_limit}):", True, COLOR_TEXT_MUTED)
+                stepper_total_w = upx(22) + upx(32) + upx(22) + upx(4)
+                max_x = card.right - upx(14) - stepper_total_w
+                surface.blit(max_lbl, (max_x - max_lbl.get_width() - upx(8), card.y + upx(14)))
+                self._draw_stepper(
+                    surface,
+                    max_x,
+                    card.y + upx(10),
+                    upx(24),
+                    max_key,
+                    "workplace_max",
+                    (job_id, station_key),
+                    cur_max,
+                    0,
+                    max_limit,
+                    self.workplace_max_step_rects,
+                    (job_id, station_key),
+                    mouse_pos,
+                )
 
             if is_permit:
-                # Row 2: typable worker cap + crop selector (farms)
-                row2_y = card.y + upx(50)
-                max_lbl = self.font_badge.render("Max:", True, COLOR_TEXT_MUTED)
-                surface.blit(max_lbl, (card.x + upx(14), row2_y + upx(4)))
-                cur_max = int(getattr(obj, "max_workers", 2))
-                max_key = ("num", "workplace_max", (job_id, station_key))
-                max_rect = pygame.Rect(card.x + upx(52), row2_y - 2, upx(36), upx(26))
-                self.num_fields[max_key] = {"rect": max_rect, "kind": "workplace_max",
-                                            "payload": (job_id, station_key), "min": 0, "max": 99}
-                self._draw_num_input(surface, max_key, max_rect, cur_max)
+                # Row 2: crop selector (farms)
+                row2_y = card.y + upx(52)
 
                 if getattr(obj, "permit_type", "") == "farm":
                     crop_name = getattr(obj, "crop", None) or "No crop"
                     crop_lbl = self.font_badge.render(f"Crop: {crop_name}", True, COLOR_TEXT_MUTED)
-                    surface.blit(crop_lbl, (card.x + upx(160), row2_y + upx(4)))
+                    surface.blit(crop_lbl, (card.x + upx(184), row2_y + upx(4)))
                     # Select button hugs the Crop label instead of the far
                     # right edge of the card.
-                    crop_btn = pygame.Rect(card.x + upx(160) + crop_lbl.get_width() + upx(10), row2_y - 2, upx(76), upx(28))
+                    crop_btn = pygame.Rect(card.x + upx(184) + crop_lbl.get_width() + upx(10), row2_y - 2, upx(76), upx(28))
                     self.workplace_crop_btn_rects[(job_id, self._workplace_key((kind, obj)))] = crop_btn
                     cb_hov = crop_btn.collidepoint(mouse_pos)
                     pygame.draw.rect(surface, (22, 101, 52) if cb_hov else (20, 83, 45), crop_btn, border_radius=upx(5))
@@ -257,6 +357,9 @@ class WorkersMixin:
             self.job_select_btn_rects = {}
             self.job_workstation_btn_rects = {}
             self.job_schedule_btn_rects = {}
+            self.job_worker_step_rects = {}
+            self.workplace_worker_step_rects = {}
+            self.workplace_max_step_rects = {}
 
             all_vils = villager_manager.get_all_villagers() if villager_manager else []
             idle_vils = sum(
@@ -296,10 +399,6 @@ class WorkersMixin:
                     # Mirror the Workstations view: staffed/capacity aggregated
                     # across this job's actual workplaces (permits, furniture,
                     # buildings) instead of raw job-title headcount.
-                    from game.systems.work.workplace_system import (
-                        get_job_workplaces, workplace_capacity,
-                        workplace_job_workers,
-                    )
                     workplaces = get_job_workplaces(job_id, permit_manager, furniture_manager, building_manager)
                     total_cap = 0
                     filled = 0
@@ -316,18 +415,42 @@ class WorkersMixin:
                     else:
                         stat_str = f"No workplaces yet — {job_desc}"
                         stat_col = COLOR_TEXT_MUTED
-                    if len(stat_str) > 75:
-                        stat_str = stat_str[:72] + "..."
+                    if len(stat_str) > 64:
+                        stat_str = stat_str[:61] + "..."
                     surface.blit(self.font_body.render(stat_str, True, stat_col), (card_rect.x + upx(46), card_rect.y + upx(30)))
 
-                    # Action Buttons: Workstations & roster (per-job schedules removed —
-                    # the Universal Schedule button above edits every job at once)
+                    # Action Buttons: [- num +]  [View Workers]  [Workstations]
                     btn_w = upx(104)
                     btn_h = upx(30)
                     btn_y = card_rect.y + upx(14)
                     action_gap = upx(6)
                     ws_rect = pygame.Rect(card_rect.right - upx(14) - btn_w, btn_y, btn_w, btn_h)
                     vw_rect = pygame.Rect(ws_rect.x - action_gap - btn_w, btn_y, btn_w, btn_h)
+
+                    # Quick Worker Stepper [ - ] [ input number ] [ + ] beside View Workers
+                    if job_id != "Unassigned" and workplaces:
+                        stepper_w = upx(22) + upx(2) + upx(32) + upx(2) + upx(22)
+                        step_x = vw_rect.x - upx(10) - stepper_w
+                        step_y = card_rect.y + upx(16)
+                        jw_key = ("num", "job_workers", job_id)
+                        self._draw_stepper(
+                            surface,
+                            step_x,
+                            step_y,
+                            upx(26),
+                            jw_key,
+                            "job_workers",
+                            job_id,
+                            filled,
+                            0,
+                            total_cap,
+                            self.job_worker_step_rects,
+                            (job_id,),
+                            mouse_pos,
+                            can_inc=(filled < total_cap and idle_vils > 0),
+                            can_dec=(filled > 0),
+                        )
+
                     self.job_workstation_btn_rects[job_id] = ws_rect
                     ws_hover = ws_rect.collidepoint(mouse_pos)
                     pygame.draw.rect(surface, (14, 116, 144) if ws_hover else (15, 23, 42), ws_rect, border_radius=upx(6))
@@ -388,7 +511,6 @@ class WorkersMixin:
             job_vils.sort(key=lambda v: ((getattr(villager_manager.get_family_by_id(v.family_id), "surname", "") if villager_manager else ""), str(v.full_name)))
 
             # Summary banner
-            from game.systems.work.workplace_system import assigned_ids
             workforce_assigned = assigned_ids(permit_manager, furniture_manager, building_manager)
             assigned_vils = [v for v in job_vils if str(v.id) in workforce_assigned]
             unassigned_count = len(job_vils) - len(assigned_vils)

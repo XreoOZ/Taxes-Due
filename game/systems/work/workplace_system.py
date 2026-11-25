@@ -63,13 +63,102 @@ def workplace_job_workers(workplace, job_id, villager_manager):
             if str(getattr(worker_by_id.get(str(worker_id)), "job", "")) == str(job_id)]
 
 
+def workplace_base_capacity(workplace):
+    """Hard station limit for furniture/building workplaces; None for expandable permits."""
+    kind, obj = workplace
+    if kind == "permit":
+        return None
+    return max(0, int(getattr(obj, "type_cfg", {}).get("max_workers", 1)))
+
+
 def workplace_capacity(workplace):
-    """Worker capacity of a workplace (permit max_workers or furniture/building max_workers)."""
+    """Effective worker capacity (respects lowered custom max_workers, capped at hardware limit)."""
     kind, obj = workplace
     if kind == "permit":
         from game.world.permits import permit_worker_cap
         return permit_worker_cap(obj)
-    return max(0, int(getattr(obj, "type_cfg", {}).get("max_workers", 1)))
+    base_cap = workplace_base_capacity(workplace)
+    custom_cap = getattr(obj, "max_workers", None)
+    if custom_cap is None:
+        return base_cap
+    return max(0, min(base_cap, int(custom_cap)))
+
+
+def set_workplace_max_workers(job_id, workplace, new_max, permit_manager=None, furniture_manager=None, villager_manager=None):
+    """Adjust effective max workers for a workplace.
+
+    Hardware-capped stations (furniture/buildings) can be reduced down to 0
+    (e.g. 0/2 -> 0/1) but never raised above base_cap (0/2 cannot become 0/3).
+    Excess assigned workers are cleanly released to Unassigned.
+    """
+    kind, obj = workplace
+    if kind == "permit":
+        cur = int(getattr(obj, "max_workers", 2))
+        target = max(0, int(new_max))
+        if permit_manager and target != cur:
+            permit_manager.change_max_workers(
+                obj.id, target - cur, villager_manager,
+                furniture_manager=furniture_manager, auto_assign=False,
+            )
+        return target
+
+    base_cap = workplace_base_capacity(workplace)
+    clamped = max(0, min(base_cap, int(new_max)))
+    obj.max_workers = clamped
+    if villager_manager:
+        workers = workplace_workers(workplace)
+        while len(workplace_job_workers(workplace, job_id, villager_manager)) > clamped:
+            job_workers = workplace_job_workers(workplace, job_id, villager_manager)
+            if not job_workers:
+                break
+            wid = job_workers[-1]
+            workers[:] = [item for item in workers if str(item) != str(wid)]
+            worker = next((v for v in villager_manager.get_all_villagers() if str(v.id) == str(wid)), None)
+            if worker:
+                worker.set_job("Unassigned")
+    return clamped
+
+
+def set_job_worker_count(job_id, target_count, permit_manager, furniture_manager, villager_manager, building_manager=None):
+    """Set total staffed workers for a job, filling topmost workplaces first.
+
+    - Increasing fills workplaces[0] up to its capacity before moving to workplaces[1], etc.
+    - Decreasing removes workers from the bottommost filled workplace first.
+    - Never exceeds the combined capacity of existing workplaces.
+    Returns the resulting assigned worker count.
+    """
+    if not villager_manager:
+        return 0
+    workplaces = get_job_workplaces(job_id, permit_manager, furniture_manager, building_manager)
+    if not workplaces:
+        return 0
+
+    total_cap = sum((workplace_capacity(wp) or 0) for wp in workplaces)
+    target = max(0, min(total_cap, int(target_count)))
+    filled = sum(len(workplace_job_workers(wp, job_id, villager_manager)) for wp in workplaces)
+
+    if target > filled:
+        for wp in workplaces:
+            cap = workplace_capacity(wp)
+            while filled < target and (cap is None or len(workplace_workers(wp)) < cap):
+                if not change_workplace_workers(
+                    job_id, wp, 1, permit_manager, furniture_manager, villager_manager, building_manager
+                ):
+                    break
+                filled += 1
+            if filled >= target:
+                break
+    elif target < filled:
+        for wp in reversed(workplaces):
+            while filled > target and len(workplace_job_workers(wp, job_id, villager_manager)) > 0:
+                if not change_workplace_workers(
+                    job_id, wp, -1, permit_manager, furniture_manager, villager_manager, building_manager
+                ):
+                    break
+                filled -= 1
+            if filled <= target:
+                break
+    return filled
 
 
 def change_workplace_workers(job_id, workplace, delta, permit_manager, furniture_manager, villager_manager, building_manager=None):
