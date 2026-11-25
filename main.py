@@ -466,10 +466,16 @@ def main():
     profile_frame_count = 0
     profile_frame_ms = 0.0
     profile_simulation_ms = 0.0
+    any_modal_open = False
     while running:
         real_dt = min(clock.tick(FPS) / 1000.0, 0.1)
         profile_frame_start = perf_counter() if profile_enabled else 0.0
         game_dt = min(speed_controller.get_game_dt(real_dt), MAX_FRAME_GAME_DT)
+        any_modal_open = bool(
+            raport_ui.is_open or settings_modal.is_open or save_modal.is_open
+            or market_modal.is_open or add_item_modal.is_open or cheat_modal.is_open
+            or help_modal.is_open or builder_catalog_modal.is_open or toolmaker_catalog_modal.is_open
+        )
         if current_state == STATE_PLAYING and (settings_modal.is_open or save_modal.is_open or cheat_modal.is_open or help_modal.is_open):
             game_dt = 0.0
 
@@ -3341,6 +3347,11 @@ def main():
                     screen.blit(not_surf, not_rect)
 
             # 10.8. Bottom Action Dock & Quick Palette (Intuitive Building & Zones)
+            any_modal_open = bool(
+                raport_ui.is_open or settings_modal.is_open or save_modal.is_open
+                or market_modal.is_open or add_item_modal.is_open or cheat_modal.is_open
+                or help_modal.is_open or builder_catalog_modal.is_open or toolmaker_catalog_modal.is_open
+            )
             if not any_modal_open and pending_starter_id is None:
                 planning_info = {}
                 if planning_mode == "BUILDING" and planning_building_type:
