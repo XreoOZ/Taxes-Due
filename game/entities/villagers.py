@@ -1401,13 +1401,16 @@ class Villager:
         return False
 
     def _get_home_building(self, permit_manager, building_manager):
-        if not self.assigned_permit_id or not building_manager:
+        if not self.assigned_permit_id or not building_manager or not permit_manager:
             return None
-        p = next((p for p in permit_manager.permits if p.id == self.assigned_permit_id), None)
+        permits = getattr(permit_manager, "permits", None)
+        if not permits:
+            return None
+        p = next((p for p in permits if getattr(p, "id", None) == self.assigned_permit_id), None)
         if not p:
             return None
-        for b in building_manager.buildings:
-            if p.overlaps_building(b):
+        for b in getattr(building_manager, "buildings", []):
+            if hasattr(p, "overlaps_building") and p.overlaps_building(b):
                 return b
         return None
 
@@ -1423,11 +1426,12 @@ class Villager:
             if hasattr(home_b, "get_approach_point"):
                 return home_b.get_approach_point(self.x, self.y, worker_id=self.id, all_entities=all_entities, tile_size=TILE_SIZE, bm=building_manager)
             return home_b.get_center_world(TILE_SIZE)
-        if self.assigned_permit_id:
-            p = next((p for p in permit_manager.permits if p.id == self.assigned_permit_id), None)
+        if self.assigned_permit_id and permit_manager:
+            permits = getattr(permit_manager, "permits", None) or []
+            p = next((p for p in permits if getattr(p, "id", None) == self.assigned_permit_id), None)
             if p:
                 return (p.grid_x + p.tiles_w / 2.0) * TILE_SIZE, (p.grid_y + p.tiles_h / 2.0) * TILE_SIZE
-        return 0.0, 0.0
+        return self.x, self.y
 
     def _get_household_loose_drop_tile(self, permit_manager, building_manager,
                                        furniture_manager=None):
@@ -1468,35 +1472,53 @@ class Villager:
         return unneeded
 
     def _deposit_unneeded_inventory(self, dt, furniture_manager, all_entities,
-                                    player, building_manager):
+                                    player, building_manager, stockpile_manager=None,
+                                    permit_manager=None):
         chest = furniture_manager.get_storage_for_family(self.family_id) if furniture_manager else None
-        if not chest:
-            self.task = "IDLE"
-            return False
+        if chest:
+            target = chest.get_approach_point(
+                self.x, self.y, worker_id=self.id, all_entities=all_entities,
+                tile_size=TILE_SIZE, bm=building_manager,
+            ) if hasattr(chest, "get_approach_point") else chest.get_world_pos(TILE_SIZE)
+            interaction_target = chest
+        else:
+            target = self._get_home_storage_dest(
+                permit_manager, building_manager, furniture_manager, all_entities=all_entities,
+            )
+            interaction_target = None
 
-        target = chest.get_approach_point(
-            self.x, self.y, worker_id=self.id, all_entities=all_entities,
-            tile_size=TILE_SIZE, bm=building_manager,
-        )
         arrived = self._move_towards(
             target[0], target[1], dt, arrival_dist=CHEST_INTERACTION_RADIUS,
             all_entities=all_entities, player=player,
             building_manager=building_manager, furniture_manager=furniture_manager,
-            interaction_target=chest,
+            interaction_target=interaction_target,
         )
         if arrived:
             deposited = []
-            for item, amount in self._get_unneeded_inventory().items():
+            drop_tile = self._get_household_loose_drop_tile(
+                permit_manager, building_manager, furniture_manager
+            ) if not chest else None
+            cur_gx = drop_tile[0] if drop_tile else int(math.floor(self.x / TILE_SIZE))
+            cur_gy = drop_tile[1] if drop_tile else int(math.floor(self.y / TILE_SIZE))
+
+            for item, amount in list(self._get_unneeded_inventory().items()):
                 if amount <= 0:
                     continue
-                chest.store_item(item, amount)
+                if chest:
+                    chest.store_item(item, amount)
+                elif stockpile_manager:
+                    stockpile_manager.drop_resource(
+                        item, amount, cur_gx, cur_gy,
+                        owner_type="villager", owner_id=str(self.family_id),
+                    )
                 self.inventory[item] -= amount
                 if self.inventory[item] <= 0:
                     self.inventory.pop(item, None)
                 deposited.append((item, amount))
             if deposited:
                 summary = ", ".join(f"{amount}x {item}" for item, amount in deposited)
-                self.say(f"Stored unused items in household chest: {summary}.", duration=2.5)
+                loc_txt = "household chest" if chest else "home"
+                self.say(f"Stored unused items in {loc_txt}: {summary}.", duration=2.5)
             self.task = "IDLE"
             self.active_tool = None
         return True
@@ -1835,8 +1857,12 @@ class Villager:
                               and ToolmakerSystem._chest_qty(chest, "Iron Bar") < TOOLMAKER_BAR_STOCK_TARGET)
                 needs_spare = ToolmakerSystem.has_spare_craft_ready(self, furniture_manager)
                 no_work_available = not (has_order or needs_wood or needs_bars or needs_spare)
+            elif self.job == "Priest":
+                church_p = ChurchSystem.get_church_permit(permit_manager) if permit_manager else None
+                has_confession = ConfessionSystem.has_pending_requests_for_priest(self, permit_manager) if permit_manager else False
+                no_work_available = not (church_p or has_confession)
             else:
-                # Generic fallback for every other job (Priest, WIP jobs, and any
+                # Generic fallback for every other job (WIP jobs, and any
                 # future job): counts as having work only while actually executing
                 # a WORK-schedule task. Otherwise they get leisure/needs behavior.
                 no_work_available = (
@@ -2557,7 +2583,8 @@ class Villager:
 
         if self.task == "DEPOSITING_UNUSED_ITEMS":
             self._deposit_unneeded_inventory(
-                dt, furniture_manager, all_entities, player, building_manager
+                dt, furniture_manager, all_entities, player, building_manager,
+                stockpile_manager=stockpile_manager, permit_manager=permit_manager,
             )
             return
 
@@ -2653,15 +2680,34 @@ class Villager:
                     fam_id = getattr(self, "family_id", None)
                     chest = furniture_manager.get_storage_for_family(fam_id) if (furniture_manager and fam_id) else None
                     priest_copper = to_copper(getattr(self, "inventory", {}))
-                    if chest and priest_copper > 0:
-                        cx, cy = chest.get_world_pos(TILE_SIZE)
-                        dist_to_chest = math.hypot(self.x - cx, self.y - cy)
-                        if dist_to_chest > 20.0:
+                    if priest_copper > 0:
+                        if chest:
+                            cx, cy = chest.get_world_pos(TILE_SIZE)
+                            interaction_target = chest
+                        else:
+                            cx, cy = self._get_home_storage_dest(
+                                permit_manager, building_manager, furniture_manager,
+                                all_entities=all_entities,
+                            )
+                            interaction_target = None
+                        dist_to_dest = math.hypot(self.x - cx, self.y - cy)
+                        if dist_to_dest > 20.0:
                             self.task = "RETURNING_TITHES_HOME"
-                            self._move_towards(cx, cy, dt, arrival_dist=16, all_entities=all_entities, player=player, building_manager=building_manager, furniture_manager=furniture_manager, interaction_target=chest)
+                            self._move_towards(
+                                cx, cy, dt, arrival_dist=16,
+                                all_entities=all_entities, player=player,
+                                building_manager=building_manager,
+                                furniture_manager=furniture_manager,
+                                interaction_target=interaction_target,
+                            )
                             return
                         else:
-                            ChurchSystem.priest_deposit_tithes_home(self, furniture_manager)
+                            ChurchSystem.priest_deposit_tithes_home(
+                                self, furniture_manager,
+                                stockpile_manager=stockpile_manager,
+                                permit_manager=permit_manager,
+                                building_manager=building_manager,
+                            )
 
 
         if ConfessionSystem.update_villager(
@@ -2714,11 +2760,11 @@ class Villager:
         # Rutinitas 1: Tidur Malam (SLEEP)
         # -------------------------------------------------------------
         if sched_activity == "SLEEP":
-            if (self._get_unneeded_inventory() and furniture_manager
-                    and furniture_manager.get_storage_for_family(self.family_id)):
+            if self._get_unneeded_inventory():
                 self.task = "DEPOSITING_UNUSED_ITEMS"
                 self._deposit_unneeded_inventory(
-                    dt, furniture_manager, all_entities, player, building_manager
+                    dt, furniture_manager, all_entities, player, building_manager,
+                    stockpile_manager=stockpile_manager, permit_manager=permit_manager,
                 )
                 return
 
@@ -4106,11 +4152,11 @@ class Villager:
         self.active_tool = None
 
         if (sched_activity in FREE_TIME_SCHEDULE_ACTIVITIES
-                and self._get_unneeded_inventory() and furniture_manager
-                and furniture_manager.get_storage_for_family(self.family_id)):
+                and self._get_unneeded_inventory()):
             self.task = "DEPOSITING_UNUSED_ITEMS"
             self._deposit_unneeded_inventory(
-                dt, furniture_manager, all_entities, player, building_manager
+                dt, furniture_manager, all_entities, player, building_manager,
+                stockpile_manager=stockpile_manager, permit_manager=permit_manager,
             )
             return
 

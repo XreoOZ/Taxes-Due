@@ -318,6 +318,10 @@ class ChurchSystem:
             representative.church_tax_prepared_amount = 0
             return 0
         chest = furniture_manager.get_storage_for_family(fam_id) if furniture_manager else None
+        if chest and hasattr(chest, "currency") and isinstance(chest.currency, dict):
+            for den, cnt in chest.currency.items():
+                if cnt > 0 and chest.inventory.get(den, 0) == 0:
+                    chest.inventory[den] = cnt
         source = getattr(chest, "inventory", None) if chest else None
         available = to_copper(normalize_wallet(source))
         amount = min(due, available)
@@ -327,6 +331,8 @@ class ChurchSystem:
             success, _ = transfer_exact_value(source, representative.inventory, amount)
             if not success:
                 amount = 0
+            elif chest and hasattr(chest, "currency") and isinstance(chest.currency, dict):
+                chest.currency.update(normalize_wallet(chest.inventory))
         representative.church_tax_prepared_day = day
         representative.church_tax_prepared_amount = amount
         if amount > 0:
@@ -400,6 +406,8 @@ class ChurchSystem:
         transfer_success, _ = transfer_exact_value(representative.inventory, priest.inventory, paid_copper)
 
         if transfer_success:
+            if hasattr(priest, "currency") and isinstance(priest.currency, dict):
+                priest.currency.update(normalize_wallet(priest.inventory))
             VillageWealthSystem.mark_dirty()
             representative.church_tax_prepared_amount = 0
             cls.mark_tax_paid(fam_id, church_permit)
@@ -503,18 +511,17 @@ class ChurchSystem:
             del inst.occupied_prayer_tiles[tile]
 
     @classmethod
-    def priest_deposit_tithes_home(cls, priest, furniture_manager):
+    def priest_deposit_tithes_home(cls, priest, furniture_manager, stockpile_manager=None,
+                                   permit_manager=None, building_manager=None):
         """
         Deposits all collected tithes from priest's personal currency
-        into their assigned household chest.
+        into their assigned household chest, or drops on home lot if chestless.
         """
         if not priest or not isinstance(getattr(priest, "inventory", None), dict):
             return 0
 
         fam_id = getattr(priest, "family_id", None)
         chest = furniture_manager.get_storage_for_family(fam_id) if (furniture_manager and fam_id) else None
-        if not chest:
-            return 0
 
         from game.systems.economy.currency import canonical_denomination
         inventory_wallet = normalize_wallet(priest.inventory)
@@ -531,10 +538,32 @@ class ChurchSystem:
             for key in list(wallet):
                 if canonical_denomination(key):
                     del wallet[key]
-        priest.inventory.update({den: count for den, count in combined_wallet.items() if count > 0})
-        transfer_exact_value(priest.inventory, chest.inventory, total_deposited_copper)
 
-        priest.say(f"Deposited {total_deposited_copper}c tithes into household chest.", duration=2.5)
+        if hasattr(priest, "currency") and isinstance(priest.currency, dict):
+            priest.currency.update({"Copper": 0, "Silver": 0, "Gold": 0})
+
+        if chest:
+            priest.inventory.update({den: count for den, count in combined_wallet.items() if count > 0})
+            transfer_exact_value(priest.inventory, chest.inventory, total_deposited_copper)
+            if hasattr(chest, "currency") and isinstance(chest.currency, dict):
+                for den, count in combined_wallet.items():
+                    chest.currency[den] = chest.currency.get(den, 0) + count
+            priest.say(f"Deposited {total_deposited_copper}c tithes into household chest.", duration=2.5)
+        elif stockpile_manager:
+            from game.world.permits import resolve_household_ground_drop_tile
+            assigned_pid = getattr(priest, "assigned_permit_id", None)
+            drop_tile = resolve_household_ground_drop_tile(
+                assigned_pid, permit_manager, building_manager,
+                furniture_manager=furniture_manager, ref_x=priest.x, ref_y=priest.y,
+            ) if (assigned_pid and permit_manager) else None
+            cur_gx = drop_tile[0] if drop_tile else int(math.floor(priest.x / TILE_SIZE))
+            cur_gy = drop_tile[1] if drop_tile else int(math.floor(priest.y / TILE_SIZE))
+            for den, count in combined_wallet.items():
+                if count > 0:
+                    stockpile_manager.drop_resource(den, count, cur_gx, cur_gy, owner_type="villager", owner_id=str(fam_id))
+            priest.say(f"Deposited {total_deposited_copper}c tithes at home.", duration=2.5)
+        else:
+            priest.say(f"Deposited {total_deposited_copper}c tithes at home.", duration=2.5)
         return total_deposited_copper
 
     @classmethod

@@ -20,7 +20,7 @@ DEMOLISH_DURATION_SECONDS = 5.0
 
 DEMOLITION_REFUND_RATIO = 0.5  # 50% resource refund when demolishing buildings
 
-BUILDER_BUILD_DURATION_INGAME_HOURS = 1.0
+BUILDER_BUILD_DURATION_INGAME_HOURS = 20.0 / 60.0  # 20 in-game minutes
 
 FURNITURE_DAILY_BREAK_CHANCE = 0.05
 
@@ -474,9 +474,9 @@ GRAVE_COST_WOOD = 1
 
 GRAVE_COST_STONE = 1
 
-GRAVE_DIG_HOURS = 1.0           # Exactly 1 in-game hour digging
+GRAVE_DIG_HOURS = 20.0 / 60.0   # 20 in-game minutes digging
 
-GRAVE_BURY_HOURS = 0.5          # Exactly 30 in-game minutes burial
+GRAVE_BURY_HOURS = 20.0 / 60.0  # 20 in-game minutes burial
 
 GRAVE_REUSE_DAYS = 30.0         # Reusable after 30 in-game days
 

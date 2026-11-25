@@ -16,9 +16,9 @@ DEFAULT_PLOT_MAX_WORKERS = 2
 # Farming Task Durations & Dispersion Settings (Config-Driven, Zero Hardcode)
 # Farm task durations per tile, in in-game hours.
 # *** ESTABLISHED — user-requested 30 in-game minutes each ***
-WATERING_DURATION_INGAME_HOURS = 0.5  # 30 in-game minutes per tile
+WATERING_DURATION_INGAME_HOURS = 0.25  # 15 in-game minutes per tile
 
-TILLING_DURATION_INGAME_HOURS = 0.5   # 30 in-game minutes per tile
+TILLING_DURATION_INGAME_HOURS = 0.25   # 15 in-game minutes per tile
 
 FARM_TILE_DISPERSION_ENABLED = False           # False = farmers sweep tiles nearest-first in order; True = spread workers apart
 
@@ -28,9 +28,11 @@ FARM_TILE_PROXIMITY_PENALTY_NEAR = 1500.0      # Penalty for tiles within 2.5 gr
 
 FARM_TILE_ARRIVAL_DIST = 20.0                  # Arrival radius inside target work tile
 
-WOODSMAN_CUT_INGAME_HOURS = 0.5          # 30 in-game minutes per tree
+WOODSMAN_CUT_INGAME_HOURS = 0.25         # 15 in-game minutes per tree
 
 WOODSMAN_PLANT_INGAME_HOURS = 0.25       # 15 in-game minutes per replant
+
+MINER_WORK_INGAME_HOURS = 20.0 / 60.0    # 20 in-game minutes per mining cycle
 
 TREE_WOOD_YIELD_MIN = 1
 
@@ -69,13 +71,13 @@ TOOLMAKER_BAR_STOCK_TARGET = 10
 
 TOOLMAKER_BAR_DAILY_CAP = 10
 
-# Tool forging: every craftable tool costs this per unit, build time is a
-# per-unit RNG roll between min and max in-game hours.
+# Tool forging: every craftable tool costs this per unit, build time is
+# 20 in-game minutes (1/3 in-game hour) per tool.
 TOOLMAKER_TOOL_RECIPE = {"Wood": 2, "Iron Bar": 3}
 
-TOOLMAKER_TOOL_MIN_INGAME_HOURS = 1.0
+TOOLMAKER_TOOL_MIN_INGAME_HOURS = 20.0 / 60.0
 
-TOOLMAKER_TOOL_MAX_INGAME_HOURS = 2.0
+TOOLMAKER_TOOL_MAX_INGAME_HOURS = 20.0 / 60.0
 
 # Spare set kept in the toolmaker's household chest for quick replacement
 TOOLMAKER_SPARE_TOOLS_TARGET = 1

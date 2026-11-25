@@ -17,6 +17,7 @@ import random
 
 from game.data.config import (
     DEDICATED_JOBS,
+    MINER_WORK_INGAME_HOURS,
     TILE_SIZE,
     WOODSMAN_CUT_INGAME_HOURS,
     WOODSMAN_PLANT_INGAME_HOURS,
@@ -177,15 +178,22 @@ class StationJobSystem:
 
         if to_station:
             dest = cls.station_point(station, villager, all_entities, building_manager)
+            target_obj = station
             task = "STATION_DEPOSIT_STATION"
         else:
             chest = cls.chest_for(villager, furniture_manager)
-            if chest is None:
-                return False
-            dest = chest.get_approach_point(
-                villager.x, villager.y, villager.id, all_entities,
-                TILE_SIZE, building_manager,
-            ) or chest.get_world_pos(TILE_SIZE)
+            if chest is not None:
+                dest = chest.get_approach_point(
+                    villager.x, villager.y, villager.id, all_entities,
+                    TILE_SIZE, building_manager,
+                ) or chest.get_world_pos(TILE_SIZE)
+                target_obj = chest
+            else:
+                dest = villager._get_home_storage_dest(
+                    permit_manager, building_manager, furniture_manager,
+                    all_entities=all_entities,
+                )
+                target_obj = None
             task = "STATION_DEPOSIT_CHEST"
 
         villager.task = task
@@ -198,7 +206,7 @@ class StationJobSystem:
             dest[0], dest[1], dt, arrival_dist=24,
             all_entities=all_entities, player=player,
             building_manager=building_manager, furniture_manager=furniture_manager,
-            interaction_target=station if to_station else chest,
+            interaction_target=target_obj,
         )
         if not arrived:
             return True
@@ -213,21 +221,35 @@ class StationJobSystem:
             villager.say("Deposited output into the workstation.", duration=1.5)
         else:
             chest = cls.chest_for(villager, furniture_manager)
+            # Bagi hasil: only the villager's own household share lands in
+            # their chest/home; co-workers' households are deposited directly.
+            own_share = cls._split_household_shares(
+                villager, station, carried, furniture_manager,
+                stockpile_manager, permit_manager, villager_manager,
+                day_cycle,
+            )
+            for item, amt in carried.items():
+                villager.inventory[item] = villager.inventory.get(item, 0) - amt
+                if villager.inventory[item] <= 0:
+                    villager.inventory.pop(item, None)
             if chest is not None:
-                # Bagi hasil: only the villager's own household share lands in
-                # their chest; co-workers' households are deposited directly.
-                own_share = cls._split_household_shares(
-                    villager, station, carried, furniture_manager,
-                    stockpile_manager, permit_manager, villager_manager,
-                    day_cycle,
-                )
-                for item, amt in carried.items():
-                    villager.inventory[item] = villager.inventory.get(item, 0) - amt
-                    if villager.inventory[item] <= 0:
-                        villager.inventory.pop(item, None)
                 for item, amt in own_share.items():
                     chest.store_item(item, amt)
                 villager.say("Deposited output into the household chest.", duration=1.5)
+            elif stockpile_manager:
+                drop_tile = villager._get_household_loose_drop_tile(
+                    permit_manager, building_manager, furniture_manager
+                )
+                cur_gx = drop_tile[0] if drop_tile else int(math.floor(villager.x / TILE_SIZE))
+                cur_gy = drop_tile[1] if drop_tile else int(math.floor(villager.y / TILE_SIZE))
+                for item, amt in own_share.items():
+                    stockpile_manager.drop_resource(
+                        item, amt, cur_gx, cur_gy,
+                        owner_type="villager", owner_id=str(villager.family_id)
+                    )
+                villager.say("Deposited output at home.", duration=1.5)
+            else:
+                villager.say("Deposited output at home.", duration=1.5)
         villager.station_work_timer = 0.0
         villager.carrying_res = None
         villager.carrying_amount = 0
@@ -308,19 +330,26 @@ class StationJobSystem:
         villager._station_carry_active = True
 
         chest = cls.chest_for(villager, furniture_manager)
-        if chest is None:
-            return False
-        dest = chest.get_approach_point(
-            villager.x, villager.y, villager.id, all_entities,
-            TILE_SIZE, building_manager,
-        ) or chest.get_world_pos(TILE_SIZE)
+        if chest is not None:
+            dest = chest.get_approach_point(
+                villager.x, villager.y, villager.id, all_entities,
+                TILE_SIZE, building_manager,
+            ) or chest.get_world_pos(TILE_SIZE)
+            target_obj = chest
+        else:
+            dest = villager._get_home_storage_dest(
+                permit_manager, building_manager, furniture_manager,
+                all_entities=all_entities,
+            )
+            target_obj = None
+
         villager.task = "STATION_LEFTOVER_DELIVER"
         villager.active_tool = None
         arrived = villager._move_towards(
             dest[0], dest[1], dt, arrival_dist=24,
             all_entities=all_entities, player=player,
             building_manager=building_manager, furniture_manager=furniture_manager,
-            interaction_target=chest,
+            interaction_target=target_obj,
         )
         if not arrived:
             return True
@@ -330,13 +359,29 @@ class StationJobSystem:
             villager, station, carry, furniture_manager,
             stockpile_manager, permit_manager, villager_manager, day_cycle,
         )
-        for item, amt in own_share.items():
-            chest.store_item(item, amt)
+        if chest is not None:
+            for item, amt in own_share.items():
+                chest.store_item(item, amt)
+            villager.say("Moved leftover workstation stock to the household chest.", duration=1.8)
+        elif stockpile_manager:
+            drop_tile = villager._get_household_loose_drop_tile(
+                permit_manager, building_manager, furniture_manager
+            )
+            cur_gx = drop_tile[0] if drop_tile else int(math.floor(villager.x / TILE_SIZE))
+            cur_gy = drop_tile[1] if drop_tile else int(math.floor(villager.y / TILE_SIZE))
+            for item, amt in own_share.items():
+                stockpile_manager.drop_resource(
+                    item, amt, cur_gx, cur_gy,
+                    owner_type="villager", owner_id=str(villager.family_id)
+                )
+            villager.say("Moved leftover workstation stock home.", duration=1.8)
+        else:
+            villager.say("Moved leftover workstation stock home.", duration=1.8)
+
         villager.station_carry = {}
         villager.carrying_res = None
         villager.carrying_amount = 0
         villager._station_carry_active = False
-        villager.say("Moved leftover workstation stock to the household chest.", duration=1.8)
         return True
 
     @classmethod
@@ -523,17 +568,18 @@ class StationJobSystem:
             villager.station_work_timer = 0.0
             return True  # inventory full -> deposit flow handles next tick
 
+        mine_interval = max(0.5, one_game_hour * MINER_WORK_INGAME_HOURS)
         villager.station_work_timer += dt
-        villager._activity_total = one_game_hour
+        villager._activity_total = mine_interval
         quota_daily = int(getattr(station, "station_quota_daily", 0) or 0)
-        while villager.station_work_timer >= one_game_hour:
+        while villager.station_work_timer >= mine_interval:
             produced = int(getattr(station, "station_quota_today", 0) or 0)
             quota_remaining = (quota_daily - produced) if quota_daily > 0 else 10 ** 9
             if quota_remaining <= 0:
                 break
             if villager.get_inventory_room() <= 0:
                 break
-            villager.station_work_timer -= one_game_hour
+            villager.station_work_timer -= mine_interval
             yield_amt = NaturalResourceManager.roll_mine_yield(mine)
             stored = min(yield_amt, max(0, villager.get_inventory_room()), quota_remaining)
             if stored > 0:

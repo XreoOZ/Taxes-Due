@@ -82,7 +82,7 @@ class ConfessionSystem:
             request["state"] = "READY"
             return True
 
-        chest = furniture_manager.get_storage_for_family(villager.family_id) if furniture_manager else None
+        chest = furniture_manager.get_storage_for_family(villager.family_id) if hasattr(furniture_manager, "get_storage_for_family") else None
         if not chest:
             request["fee_offer"] = min(due, personal_value)
             request["payment_ready"] = True
@@ -673,7 +673,7 @@ class ConfessionSystem:
         chest = furniture_manager.get_furniture_by_id(chest_id) if chest_id is not None else None
         if (chest and str(getattr(chest, "family_id", "")) != str(family_id)):
             chest = None
-        if not chest and family_id is not None:
+        if not chest and family_id is not None and hasattr(furniture_manager, "get_storage_for_family"):
             chest = furniture_manager.get_storage_for_family(family_id)
         if not chest:
             return False

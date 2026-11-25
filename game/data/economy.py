@@ -54,16 +54,16 @@ DEFAULT_ITEM_PRICES = {
     "Wood": 2,         # 1 Wood = 2 Copper
     "Stone": 3,        # 1 Stone = 3 Copper
     "Water": 2,
-    "Hoe": 8,
-    "Sickle": 6,
-    "Watering_Can": 8,
-    "Saw": 12,
+    "Hoe": 10,
+    "Sickle": 10,
+    "Watering_Can": 10,
+    "Saw": 10,
     "Adze": 10,
-    "Felling_Axe": 15,
-    "Spade": 8,
-    "Pickaxe": 14,
+    "Felling_Axe": 10,
+    "Spade": 10,
+    "Pickaxe": 10,
     "Sledgehammer": 10,
-    "Hammer": 12,
+    "Hammer": 10,
     "Tongs": 10,
     "Iron Ore": 4,      # Raw ore; base for smelting cost
     "Iron Bar": 10,     # Smelted bar: ore + wood + labor priced in

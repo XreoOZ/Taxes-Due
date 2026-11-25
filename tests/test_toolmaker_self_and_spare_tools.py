@@ -125,6 +125,12 @@ class TestToolmakerSelfAndSpareTools(unittest.TestCase):
             1,
         )
 
+    def test_toolmaker_forging_duration_is_20_ingame_minutes(self):
+        from types import SimpleNamespace
+        from game.systems.work.toolmaker_system import ToolmakerSystem
+        day_cycle = SimpleNamespace(day_length_seconds=1200.0)
+        self.assertAlmostEqual(ToolmakerSystem._unit_seconds(day_cycle), 50.0 / 3.0)
+
 
 if __name__ == "__main__":
     unittest.main()
