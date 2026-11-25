@@ -1,9 +1,11 @@
 """
 Bottom Dock UI — Primary In-Game Action Bar & Quick Palette.
 Provides an intuitive, zero-friction building and planning workflow:
-- Always visible at the bottom of the screen during normal gameplay.
-- Categorized tabs (Structures, Furniture, Zones, Roads, Demolish, Ledger).
-- Expanding quick palette above the dock to pick items without opening full-screen modals.
+- 5 Compact primary tabs (Building, Zones, Roads, Demolish, Ledger).
+- Hierarchical Sub-Tray for Building with instant sub-category pills:
+  [Structures] [Civic/Public] [Workstations] [Furniture].
+- Procedural vector icons (100% resolution independent, no emoji glyph bugs).
+- Quick palette above the dock to pick items without opening full-screen modals.
 - Interactive planning pill with clear keyboard hints and one-click confirm/cancel.
 """
 
@@ -25,27 +27,34 @@ from game.ui.item_icons import draw_item_icon
 
 class BottomDockUI:
     def __init__(self):
-        self.active_category = None  # None | "structures" | "furniture" | "zones" | "roads"
+        self.active_category = None  # None | "building" | "zones" | "roads"
+        self.active_building_subcat = "structures"  # "structures" | "public" | "workstations" | "furniture"
         self.hovered_item = None
         self.tooltip_text = None
 
         # Rect caches for mouse collision
         self.category_btn_rects = {}
+        self.subcat_pill_rects = {}
         self.item_card_rects = {}
         self.pill_confirm_rect = pygame.Rect(0, 0, 0, 0)
         self.pill_cancel_rect = pygame.Rect(0, 0, 0, 0)
         self.pill_clear_rect = pygame.Rect(0, 0, 0, 0)
 
-        # Tab definitions
+        # 5 Primary Tab definitions (compact, zero overlap)
         self.tabs = [
-            {"id": "structures", "label": "Structures", "icon": "🏠", "hotkey": "B"},
-            {"id": "public", "label": "Civic/Public", "icon": "🏛️", "hotkey": "C"},
-            {"id": "workstations", "label": "Workstations", "icon": "⚙️", "hotkey": "T"},
-            {"id": "furniture", "label": "Furniture", "icon": "🪑", "hotkey": "F"},
-            {"id": "zones", "label": "Zones", "icon": "🌾", "hotkey": "Z"},
-            {"id": "roads", "label": "Roads", "icon": "🛣️", "hotkey": "P"},
-            {"id": "demolish", "label": "Demolish", "icon": "❌", "hotkey": "X"},
-            {"id": "ledger", "label": "Ledger", "icon": "📋", "hotkey": "R"},
+            {"id": "building", "label": "Building", "hotkey": "B"},
+            {"id": "zones", "label": "Zones", "hotkey": "Z"},
+            {"id": "roads", "label": "Roads", "hotkey": "P"},
+            {"id": "demolish", "label": "Demolish", "hotkey": "X"},
+            {"id": "ledger", "label": "Ledger", "hotkey": "R"},
+        ]
+
+        # 4 Sub-categories under Building
+        self.building_subcats = [
+            {"id": "structures", "label": "Structures", "hotkey": "B"},
+            {"id": "public", "label": "Civic/Public", "hotkey": "C"},
+            {"id": "workstations", "label": "Workstations", "hotkey": "T"},
+            {"id": "furniture", "label": "Furniture", "hotkey": "F"},
         ]
 
     def close_palette(self):
@@ -54,8 +63,11 @@ class BottomDockUI:
 
     def get_items_for_category(self, cat_id):
         """Returns ordered list of items for the selected category."""
+        # If building is requested, resolve to the current active subcategory
+        target_cat = self.active_building_subcat if cat_id == "building" else cat_id
+
         items = []
-        if cat_id == "structures":
+        if target_cat == "structures":
             order = ["wooden_structure", "stone_structure"]
             for k in order:
                 if k in BUILDING_TYPES:
@@ -75,7 +87,7 @@ class BottomDockUI:
                         "size_str": size_str,
                         "rotatable": cfg.get("rotatable", True),
                     })
-        elif cat_id == "public":
+        elif target_cat == "public":
             # 1. Public Buildings (Civic amenities maintained by Lord)
             b_order = ["well", "toilet", "market", "tax_house"]
             for k in b_order:
@@ -117,7 +129,7 @@ class BottomDockUI:
                         "size_str": f"{fw}x{fh}",
                         "rotatable": cfg.get("rotatable", True),
                     })
-        elif cat_id == "workstations":
+        elif target_cat == "workstations":
             order = ["builder_workbench", "toolmaker_workbench", "woodsman_lodge", "miner_workstation"]
             for k in order:
                 if k in FURNITURE_TYPES:
@@ -138,7 +150,7 @@ class BottomDockUI:
                         "size_str": f"{fw}x{fh}",
                         "rotatable": cfg.get("rotatable", True),
                     })
-        elif cat_id == "furniture":
+        elif target_cat == "furniture":
             order = ["bed", "household_storage", "lord_treasury_chest"]
             for k in order:
                 if k in FURNITURE_TYPES:
@@ -159,7 +171,7 @@ class BottomDockUI:
                         "size_str": f"{fw}x{fh}",
                         "rotatable": cfg.get("rotatable", True),
                     })
-        elif cat_id == "zones":
+        elif target_cat == "zones":
             order = ["farm", "housing", "storage", "market", "church", "cemetery", "landlord_private"]
             for k in order:
                 if k in PERMIT_TYPES:
@@ -174,7 +186,7 @@ class BottomDockUI:
                         "size_str": "Area",
                         "rotatable": False,
                     })
-        elif cat_id == "roads":
+        elif target_cat == "roads":
             order = ["dirt_road", "stone_road", "luxury_road"]
             for k in order:
                 if k in ROAD_TYPES:
@@ -210,16 +222,32 @@ class BottomDockUI:
             # Hotkey handlers (only when text input in other modals is NOT active)
             if planning_mode == "NONE":
                 if event.key == pygame.K_b:
-                    self.active_category = None if self.active_category == "structures" else "structures"
+                    if self.active_category == "building" and self.active_building_subcat == "structures":
+                        self.close_palette()
+                    else:
+                        self.active_category = "building"
+                        self.active_building_subcat = "structures"
                     return {"action": "HANDLED"}
                 elif event.key == pygame.K_c:
-                    self.active_category = None if self.active_category == "public" else "public"
+                    if self.active_category == "building" and self.active_building_subcat == "public":
+                        self.close_palette()
+                    else:
+                        self.active_category = "building"
+                        self.active_building_subcat = "public"
                     return {"action": "HANDLED"}
                 elif event.key in (pygame.K_t, pygame.K_k):
-                    self.active_category = None if self.active_category == "workstations" else "workstations"
+                    if self.active_category == "building" and self.active_building_subcat == "workstations":
+                        self.close_palette()
+                    else:
+                        self.active_category = "building"
+                        self.active_building_subcat = "workstations"
                     return {"action": "HANDLED"}
                 elif event.key == pygame.K_f:
-                    self.active_category = None if self.active_category == "furniture" else "furniture"
+                    if self.active_category == "building" and self.active_building_subcat == "furniture":
+                        self.close_palette()
+                    else:
+                        self.active_category = "building"
+                        self.active_building_subcat = "furniture"
                     return {"action": "HANDLED"}
                 elif event.key == pygame.K_z:
                     self.active_category = None if self.active_category == "zones" else "zones"
@@ -248,11 +276,17 @@ class BottomDockUI:
                     return {"action": "PILL_CLEAR"}
                 return None
 
-            # 2. Check Palette Item Cards if category open
+            # 2. Check Palette Sub-Category Pills (when building category is active)
+            if self.active_category == "building":
+                for sub_id, rect in self.subcat_pill_rects.items():
+                    if rect.collidepoint(m_pos):
+                        self.active_building_subcat = sub_id
+                        return {"action": "HANDLED"}
+
+            # 3. Check Palette Item Cards if category open
             if self.active_category is not None:
                 for item_id, rect in self.item_card_rects.items():
                     if rect.collidepoint(m_pos):
-                        # Find item info
                         items = self.get_items_for_category(self.active_category)
                         chosen = next((it for it in items if it["id"] == item_id), None)
                         self.close_palette()
@@ -263,7 +297,7 @@ class BottomDockUI:
                                 "id": chosen["id"]
                             }
 
-            # 3. Check Dock Category Buttons
+            # 4. Check Dock Category Buttons
             for tab_id, rect in self.category_btn_rects.items():
                 if rect.collidepoint(m_pos):
                     if tab_id == "ledger":
@@ -272,24 +306,53 @@ class BottomDockUI:
                     elif tab_id == "demolish":
                         self.close_palette()
                         return {"action": "TOGGLE_DEMOLISH"}
+                    elif tab_id == "building":
+                        self.active_category = None if self.active_category == "building" else "building"
+                        return {"action": "HANDLED"}
                     else:
-                        if self.active_category == tab_id:
-                            self.active_category = None
-                        else:
-                            self.active_category = tab_id
+                        self.active_category = None if self.active_category == tab_id else tab_id
                         return {"action": "HANDLED"}
 
-            # Clicking anywhere outside palette and dock closes palette
+            # 5. Clicking anywhere outside palette and dock closes palette
             if self.active_category is not None:
                 self.close_palette()
 
         elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 3:
-            # Right click closes palette if open
+            # Right-click cancels palette
             if self.active_category is not None:
                 self.close_palette()
                 return {"action": "HANDLED"}
 
         return None
+
+    def _draw_tab_icon(self, surface, tab_id, cx, cy, is_active):
+        """Renders crisp procedural vector mini-icons (zero emoji glyph dependency)."""
+        col = (255, 255, 255) if is_active else (203, 213, 225)
+        if tab_id == "building":
+            # House shape
+            pygame.draw.polygon(surface, col, [(cx, cy - upx(5)), (cx - upx(6), cy), (cx + upx(6), cy)])
+            pygame.draw.rect(surface, col, (cx - upx(4), cy, upx(8), upx(5)))
+        elif tab_id == "zones":
+            # Dashed perimeter zone shape
+            pygame.draw.rect(surface, col, (cx - upx(5), cy - upx(5), upx(10), upx(10)), width=1)
+            pygame.draw.rect(surface, col, (cx - upx(2), cy - upx(2), upx(4), upx(4)))
+        elif tab_id == "roads":
+            # Path road lanes
+            pygame.draw.line(surface, col, (cx - upx(4), cy - upx(5)), (cx - upx(4), cy + upx(5)), 2)
+            pygame.draw.line(surface, col, (cx + upx(4), cy - upx(5)), (cx + upx(4), cy + upx(5)), 2)
+            pygame.draw.line(surface, col, (cx, cy - upx(2)), (cx, cy + upx(2)), 1)
+        elif tab_id == "demolish":
+            # Red/white cross
+            dcol = (239, 68, 68) if not is_active else (255, 255, 255)
+            pygame.draw.line(surface, dcol, (cx - upx(5), cy - upx(5)), (cx + upx(5), cy + upx(5)), 2)
+            pygame.draw.line(surface, dcol, (cx - upx(5), cy + upx(5)), (cx + upx(5), cy - upx(5)), 2)
+        elif tab_id == "ledger":
+            # Document sheet
+            pygame.draw.rect(surface, col, (cx - upx(4), cy - upx(5), upx(8), upx(10)), border_radius=1)
+            bg = (15, 23, 42) if not is_active else (37, 99, 235)
+            pygame.draw.line(surface, bg, (cx - upx(2), cy - upx(3)), (cx + upx(2), cy - upx(3)), 1)
+            pygame.draw.line(surface, bg, (cx - upx(2), cy), (cx + upx(2), cy), 1)
+            pygame.draw.line(surface, bg, (cx - upx(2), cy + upx(3)), (cx, cy + upx(3)), 1)
 
     def draw(self, surface, planning_mode="NONE", planning_info=None):
         """Renders the Bottom Dock or Planning Pill."""
@@ -303,11 +366,11 @@ class BottomDockUI:
         if self.active_category is not None:
             self._draw_sub_tray(surface, screen_w, screen_h)
 
-        # 2. Draw Bottom Dock Bar
+        # 2. Draw Bottom Dock Bar (5 Compact Tabs)
         tab_count = len(self.tabs)
-        btn_w = upx(88)
+        btn_w = upx(96)
         btn_h = upx(38)
-        gap = upx(5)
+        gap = upx(6)
         bar_w = (btn_w * tab_count) + (gap * (tab_count - 1)) + upx(16)
         bar_h = btn_h + upx(12)
         bar_x = (screen_w - bar_w) // 2
@@ -315,7 +378,7 @@ class BottomDockUI:
 
         # Background surface with rounded border
         dock_surf = pygame.Surface((bar_w, bar_h), pygame.SRCALPHA)
-        pygame.draw.rect(dock_surf, (15, 23, 42, 230), (0, 0, bar_w, bar_h), border_radius=upx(10))
+        pygame.draw.rect(dock_surf, (15, 23, 42, 235), (0, 0, bar_w, bar_h), border_radius=upx(10))
         pygame.draw.rect(dock_surf, (51, 65, 85, 255), (0, 0, bar_w, bar_h), width=1, border_radius=upx(10))
         surface.blit(dock_surf, (bar_x, bar_y))
 
@@ -350,10 +413,14 @@ class BottomDockUI:
             pygame.draw.rect(surface, bg_col, rect, border_radius=upx(6))
             pygame.draw.rect(surface, border_col, rect, width=1, border_radius=upx(6))
 
-            # Icon & Label
-            lbl = f"{tab['icon']} {tab['label']}"
-            txt_surf = ui_font(10, bold=True).render(lbl, True, text_col)
-            surface.blit(txt_surf, txt_surf.get_rect(center=(rect.centerx, rect.centery - upx(4))))
+            # Procedural Vector Icon
+            icon_cx = rect.left + upx(18)
+            icon_cy = rect.centery - upx(5)
+            self._draw_tab_icon(surface, tab_id, icon_cx, icon_cy, is_active)
+
+            # Label (Clean Typography)
+            txt_surf = ui_font(10, bold=True).render(tab["label"], True, text_col)
+            surface.blit(txt_surf, txt_surf.get_rect(midleft=(rect.left + upx(30), rect.centery - upx(5))))
 
             # Hotkey badge (subtle)
             hk_surf = ui_font(8).render(f"[{tab['hotkey']}]", True, (148, 163, 184) if not is_active else (191, 219, 254))
@@ -374,25 +441,69 @@ class BottomDockUI:
         gap = upx(8)
         padding = upx(10)
 
-        tray_w = (card_w * item_count) + (gap * (item_count - 1)) + (padding * 2)
-        tray_h = card_h + (padding * 2)
-        tray_x = max(upx(8), (screen_w - tray_w) // 2)
-        tray_y = screen_h - upx(56) - tray_h - upx(12)
+        row2_w = (card_w * item_count) + (gap * (item_count - 1))
 
-        # Background
+        # Check if building category has sub-pills row
+        has_subcats = (self.active_category == "building")
+        row1_h = upx(28) if has_subcats else 0
+        row1_gap = upx(8) if has_subcats else 0
+
+        subcat_w = upx(105)
+        subcat_gap = upx(6)
+        row1_w = (subcat_w * len(self.building_subcats)) + (subcat_gap * (len(self.building_subcats) - 1)) if has_subcats else 0
+
+        tray_w = max(row1_w, row2_w) + (padding * 2)
+        tray_h = row1_h + row1_gap + card_h + (padding * 2)
+
+        tray_x = (screen_w - tray_w) // 2
+        dock_h = upx(38) + upx(12)
+        tray_y = screen_h - dock_h - upx(8) - tray_h - upx(6)
+
+        # Background container
         tray_surf = pygame.Surface((tray_w, tray_h), pygame.SRCALPHA)
-        pygame.draw.rect(tray_surf, (15, 23, 42, 245), (0, 0, tray_w, tray_h), border_radius=upx(10))
-        pygame.draw.rect(tray_surf, (71, 85, 105, 255), (0, 0, tray_w, tray_h), width=1, border_radius=upx(10))
+        pygame.draw.rect(tray_surf, (15, 23, 42, 240), (0, 0, tray_w, tray_h), border_radius=upx(10))
+        pygame.draw.rect(tray_surf, (51, 65, 85, 255), (0, 0, tray_w, tray_h), width=1, border_radius=upx(10))
         surface.blit(tray_surf, (tray_x, tray_y))
 
+        # Clear rect caches for new frame
+        self.subcat_pill_rects.clear()
         self.item_card_rects.clear()
+
+        # Row 1: Sub-category Pills (only when building is active)
+        if has_subcats:
+            subcat_start_x = tray_x + (tray_w - row1_w) // 2
+            subcat_y = tray_y + padding
+            cur_sub_x = subcat_start_x
+
+            for subcat in self.building_subcats:
+                sub_id = subcat["id"]
+                sub_rect = pygame.Rect(cur_sub_x, subcat_y, subcat_w, row1_h)
+                self.subcat_pill_rects[sub_id] = sub_rect
+
+                is_active = (self.active_building_subcat == sub_id)
+                is_hover = sub_rect.collidepoint(m_pos)
+
+                bg_col = (37, 99, 235) if is_active else ((30, 41, 59) if is_hover else (15, 23, 42, 200))
+                border_col = (96, 165, 250) if is_active else ((100, 116, 139) if is_hover else (51, 65, 85))
+                text_col = (255, 255, 255) if is_active else ((241, 245, 249) if is_hover else (203, 213, 225))
+
+                pygame.draw.rect(surface, bg_col, sub_rect, border_radius=upx(6))
+                pygame.draw.rect(surface, border_col, sub_rect, width=1, border_radius=upx(6))
+
+                lbl_txt = f"{subcat['label']} [{subcat['hotkey']}]"
+                lbl_surf = ui_font(9, bold=True).render(lbl_txt, True, text_col)
+                surface.blit(lbl_surf, lbl_surf.get_rect(center=sub_rect.center))
+
+                cur_sub_x += subcat_w + subcat_gap
+
+        # Row 2: Item Cards
+        cards_start_x = tray_x + (tray_w - row2_w) // 2
+        cards_y = tray_y + padding + row1_h + row1_gap
+        cur_card_x = cards_start_x
         hovered_item_info = None
 
-        cur_x = tray_x + padding
-        cur_y = tray_y + padding
-
         for item in items:
-            rect = pygame.Rect(cur_x, cur_y, card_w, card_h)
+            rect = pygame.Rect(cur_card_x, cards_y, card_w, card_h)
             self.item_card_rects[item["id"]] = rect
             is_hover = rect.collidepoint(m_pos)
             if is_hover:
@@ -420,7 +531,7 @@ class BottomDockUI:
             cost_surf = ui_font(9).render(item["cost_str"], True, (250, 204, 21))
             surface.blit(cost_surf, cost_surf.get_rect(center=(rect.centerx, rect.top + upx(50))))
 
-            cur_x += card_w + gap
+            cur_card_x += card_w + gap
 
         # Tooltip for hovered item
         if hovered_item_info:

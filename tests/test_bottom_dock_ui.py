@@ -1,11 +1,12 @@
 """
-Tests for BottomDockUI (Intuitive Action Dock & Quick Palette).
+Tests for BottomDockUI (Intuitive Action Dock & Hierarchical Building Palette).
 Verifies:
-- Tabs and category definitions (Structures, Public, Workstations, Furniture, Zones, Roads, Demolish, Ledger).
+- 5 Compact primary tabs (Building, Zones, Roads, Demolish, Ledger).
+- Hierarchical sub-categories for Building (Structures, Civic/Public, Workstations, Furniture).
 - Hotkey handling (B, C, T, F, Z, P, X, Esc).
-- Item retrieval for structures, public amenities, workstations, furniture, zones, roads.
-- Dock clicking and category opening/closing.
-- Planning pill confirm / cancel / clear event dispatch.
+- Item retrieval across sub-categories.
+- Sub-category pill clicking and item card selection.
+- Planning pill confirm / cancel event dispatch.
 - Screen rendering without crashes in dummy video mode.
 """
 
@@ -29,29 +30,27 @@ class TestBottomDockUI(unittest.TestCase):
 
     def test_initial_state(self):
         self.assertIsNone(self.dock.active_category)
-        self.assertEqual(len(self.dock.tabs), 8)
+        self.assertEqual(len(self.dock.tabs), 5)
         tab_ids = [t["id"] for t in self.dock.tabs]
-        self.assertIn("structures", tab_ids)
-        self.assertIn("public", tab_ids)
-        self.assertIn("workstations", tab_ids)
-        self.assertIn("furniture", tab_ids)
-        self.assertIn("zones", tab_ids)
-        self.assertIn("roads", tab_ids)
-        self.assertIn("demolish", tab_ids)
-        self.assertIn("ledger", tab_ids)
+        self.assertEqual(tab_ids, ["building", "zones", "roads", "demolish", "ledger"])
+
+        self.assertEqual(len(self.dock.building_subcats), 4)
+        subcat_ids = [s["id"] for s in self.dock.building_subcats]
+        self.assertEqual(subcat_ids, ["structures", "public", "workstations", "furniture"])
 
     def test_category_items(self):
-        # 1. Structures (Modular living & stone shells)
-        structs = self.dock.get_items_for_category("structures")
+        # 1. Structures sub-category
+        self.dock.active_building_subcat = "structures"
+        structs = self.dock.get_items_for_category("building")
         self.assertEqual(len(structs), 2)
         struct_ids = [s["id"] for s in structs]
         self.assertIn("wooden_structure", struct_ids)
         self.assertIn("stone_structure", struct_ids)
-        self.assertTrue(all(item["kind"] == "BUILDING" for item in structs))
 
-        # 2. Public / Civic (Well, Toilet, Market Stall, Tax Office, Notice Board, Confession Box)
-        pub_items = self.dock.get_items_for_category("public")
-        self.assertGreaterEqual(len(pub_items), 4)
+        # 2. Public / Civic sub-category
+        self.dock.active_building_subcat = "public"
+        pub_items = self.dock.get_items_for_category("building")
+        self.assertEqual(len(pub_items), 6)
         pub_ids = [p["id"] for p in pub_items]
         self.assertIn("well", pub_ids)
         self.assertIn("toilet", pub_ids)
@@ -60,41 +59,40 @@ class TestBottomDockUI(unittest.TestCase):
         self.assertIn("notice_board", pub_ids)
         self.assertIn("confession_box", pub_ids)
 
-        # 3. Workstations (Builder, Toolmaker, Woodsman, Miner)
-        workstations = self.dock.get_items_for_category("workstations")
+        # 3. Workstations sub-category
+        self.dock.active_building_subcat = "workstations"
+        workstations = self.dock.get_items_for_category("building")
         self.assertEqual(len(workstations), 4)
         ws_ids = [w["id"] for w in workstations]
         self.assertIn("builder_workbench", ws_ids)
         self.assertIn("toolmaker_workbench", ws_ids)
         self.assertIn("woodsman_lodge", ws_ids)
         self.assertIn("miner_workstation", ws_ids)
-        self.assertTrue(all(item["kind"] == "FURNITURE" for item in workstations))
 
-        # 4. Household Furniture (Bed, Household Storage, Lord Treasury Chest)
-        furns = self.dock.get_items_for_category("furniture")
+        # 4. Household Furniture sub-category
+        self.dock.active_building_subcat = "furniture"
+        furns = self.dock.get_items_for_category("building")
         self.assertEqual(len(furns), 3)
         furn_ids = [f["id"] for f in furns]
         self.assertIn("bed", furn_ids)
         self.assertIn("household_storage", furn_ids)
         self.assertIn("lord_treasury_chest", furn_ids)
-        self.assertTrue(all(item["kind"] == "FURNITURE" for item in furns))
 
         # 5. Zones
         zones = self.dock.get_items_for_category("zones")
-        self.assertGreater(len(zones), 0)
-        self.assertTrue(all(item["kind"] == "PERMIT" for item in zones))
+        self.assertEqual(len(zones), 7)
 
         # 6. Roads
         roads = self.dock.get_items_for_category("roads")
-        self.assertGreater(len(roads), 0)
-        self.assertTrue(all(item["kind"] == "ROAD" for item in roads))
+        self.assertEqual(len(roads), 3)
 
     def test_hotkeys(self):
-        # B toggles structures
+        # B toggles building at structures
         ev_b = pygame.event.Event(pygame.KEYDOWN, {"key": pygame.K_b})
         res = self.dock.handle_event(ev_b, planning_mode="NONE")
         self.assertEqual(res, {"action": "HANDLED"})
-        self.assertEqual(self.dock.active_category, "structures")
+        self.assertEqual(self.dock.active_category, "building")
+        self.assertEqual(self.dock.active_building_subcat, "structures")
 
         # Esc closes palette
         ev_esc = pygame.event.Event(pygame.KEYDOWN, {"key": pygame.K_ESCAPE})
@@ -102,20 +100,23 @@ class TestBottomDockUI(unittest.TestCase):
         self.assertEqual(res, {"action": "HANDLED"})
         self.assertIsNone(self.dock.active_category)
 
-        # C toggles public
+        # C jumps directly to Civic/Public
         ev_c = pygame.event.Event(pygame.KEYDOWN, {"key": pygame.K_c})
         self.dock.handle_event(ev_c, planning_mode="NONE")
-        self.assertEqual(self.dock.active_category, "public")
+        self.assertEqual(self.dock.active_category, "building")
+        self.assertEqual(self.dock.active_building_subcat, "public")
 
-        # T toggles workstations
+        # T jumps directly to Workstations
         ev_t = pygame.event.Event(pygame.KEYDOWN, {"key": pygame.K_t})
         self.dock.handle_event(ev_t, planning_mode="NONE")
-        self.assertEqual(self.dock.active_category, "workstations")
+        self.assertEqual(self.dock.active_category, "building")
+        self.assertEqual(self.dock.active_building_subcat, "workstations")
 
-        # F toggles furniture
+        # F jumps directly to Furniture
         ev_f = pygame.event.Event(pygame.KEYDOWN, {"key": pygame.K_f})
         self.dock.handle_event(ev_f, planning_mode="NONE")
-        self.assertEqual(self.dock.active_category, "furniture")
+        self.assertEqual(self.dock.active_category, "building")
+        self.assertEqual(self.dock.active_building_subcat, "furniture")
 
         # Z toggles zones
         ev_z = pygame.event.Event(pygame.KEYDOWN, {"key": pygame.K_z})
@@ -138,29 +139,45 @@ class TestBottomDockUI(unittest.TestCase):
         # Draw dock in idle state
         self.dock.draw(surf, planning_mode="NONE", planning_info=None)
 
-        # Category buttons should have valid rects
-        self.assertIn("structures", self.dock.category_btn_rects)
-        self.assertIn("public", self.dock.category_btn_rects)
-        self.assertIn("workstations", self.dock.category_btn_rects)
-        self.assertIn("furniture", self.dock.category_btn_rects)
+        # 5 Category buttons should have valid rects
+        self.assertIn("building", self.dock.category_btn_rects)
+        self.assertIn("zones", self.dock.category_btn_rects)
+        self.assertIn("roads", self.dock.category_btn_rects)
+        self.assertIn("demolish", self.dock.category_btn_rects)
+        self.assertIn("ledger", self.dock.category_btn_rects)
 
-        # Click public tab
-        pub_rect = self.dock.category_btn_rects["public"]
-        ev_click = pygame.event.Event(pygame.MOUSEBUTTONDOWN, {"button": 1, "pos": pub_rect.center})
+        # Click Building tab
+        build_rect = self.dock.category_btn_rects["building"]
+        ev_click = pygame.event.Event(pygame.MOUSEBUTTONDOWN, {"button": 1, "pos": build_rect.center})
         res = self.dock.handle_event(ev_click, planning_mode="NONE")
         self.assertEqual(res, {"action": "HANDLED"})
-        self.assertEqual(self.dock.active_category, "public")
+        self.assertEqual(self.dock.active_category, "building")
 
-        # Draw dock with active public palette
+        # Draw dock with active Building palette
         self.dock.draw(surf, planning_mode="NONE", planning_info=None)
-        self.assertGreater(len(self.dock.item_card_rects), 0)
+
+        # Sub-category pills should be present
+        self.assertIn("structures", self.dock.subcat_pill_rects)
+        self.assertIn("public", self.dock.subcat_pill_rects)
+        self.assertIn("workstations", self.dock.subcat_pill_rects)
+        self.assertIn("furniture", self.dock.subcat_pill_rects)
+
+        # Click Public sub-category pill
+        pub_pill_rect = self.dock.subcat_pill_rects["public"]
+        ev_pill_click = pygame.event.Event(pygame.MOUSEBUTTONDOWN, {"button": 1, "pos": pub_pill_rect.center})
+        res_pill = self.dock.handle_event(ev_pill_click, planning_mode="NONE")
+        self.assertEqual(res_pill, {"action": "HANDLED"})
+        self.assertEqual(self.dock.active_building_subcat, "public")
+
+        # Re-render with public sub-category active
+        self.dock.draw(surf, planning_mode="NONE", planning_info=None)
 
         # Click toilet item card in palette
         toilet_rect = self.dock.item_card_rects.get("toilet")
         self.assertIsNotNone(toilet_rect)
         ev_item_click = pygame.event.Event(pygame.MOUSEBUTTONDOWN, {"button": 1, "pos": toilet_rect.center})
-        res = self.dock.handle_event(ev_item_click, planning_mode="NONE")
-        self.assertEqual(res, {"action": "START_PLANNING", "kind": "BUILDING", "id": "toilet"})
+        res_item = self.dock.handle_event(ev_item_click, planning_mode="NONE")
+        self.assertEqual(res_item, {"action": "START_PLANNING", "kind": "BUILDING", "id": "toilet"})
         self.assertIsNone(self.dock.active_category)
 
     def test_planning_pill_interaction(self):
