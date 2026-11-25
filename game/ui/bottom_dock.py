@@ -38,7 +38,9 @@ class BottomDockUI:
 
         # Tab definitions
         self.tabs = [
-            {"id": "structures", "label": "Structures", "icon": "🔨", "hotkey": "B"},
+            {"id": "structures", "label": "Structures", "icon": "🏠", "hotkey": "B"},
+            {"id": "public", "label": "Civic/Public", "icon": "🏛️", "hotkey": "C"},
+            {"id": "workstations", "label": "Workstations", "icon": "⚙️", "hotkey": "T"},
             {"id": "furniture", "label": "Furniture", "icon": "🪑", "hotkey": "F"},
             {"id": "zones", "label": "Zones", "icon": "🌾", "hotkey": "Z"},
             {"id": "roads", "label": "Roads", "icon": "🛣️", "hotkey": "P"},
@@ -54,7 +56,7 @@ class BottomDockUI:
         """Returns ordered list of items for the selected category."""
         items = []
         if cat_id == "structures":
-            order = ["wooden_structure", "stone_structure", "well", "toilet", "market", "tax_house"]
+            order = ["wooden_structure", "stone_structure"]
             for k in order:
                 if k in BUILDING_TYPES:
                     cfg = BUILDING_TYPES[k]
@@ -73,11 +75,71 @@ class BottomDockUI:
                         "size_str": size_str,
                         "rotatable": cfg.get("rotatable", True),
                     })
+        elif cat_id == "public":
+            # 1. Public Buildings (Civic amenities maintained by Lord)
+            b_order = ["well", "toilet", "market", "tax_house"]
+            for k in b_order:
+                if k in BUILDING_TYPES:
+                    cfg = BUILDING_TYPES[k]
+                    name = cfg.get("name", k)
+                    w_cost = cfg.get("cost_wood", 0)
+                    s_cost = cfg.get("cost_stone", 0)
+                    cost_str = f"{w_cost}W {s_cost}S" if (w_cost or s_cost) else "Free"
+                    fixed = cfg.get("fixed_tiles_count")
+                    size_str = "2x2" if fixed == 4 else ("1x1" if fixed == 1 else ("3x2" if fixed == 6 else "Drag"))
+                    items.append({
+                        "id": k,
+                        "kind": "BUILDING",
+                        "name": name,
+                        "desc": cfg.get("desc", ""),
+                        "cost_str": cost_str,
+                        "size_str": size_str,
+                        "rotatable": cfg.get("rotatable", True),
+                    })
+            # 2. Public Fixtures
+            f_order = ["notice_board", "confession_box"]
+            for k in f_order:
+                if k in FURNITURE_TYPES:
+                    cfg = FURNITURE_TYPES[k]
+                    name = cfg.get("name", k)
+                    mat = cfg.get("materials", {})
+                    w = mat.get("Wood", 0)
+                    s = mat.get("Stone", 0)
+                    cost_str = f"{w}W {s}S" if (w or s) else "Free"
+                    fw = cfg.get("width_tiles", 1)
+                    fh = cfg.get("height_tiles", 1)
+                    items.append({
+                        "id": k,
+                        "kind": "FURNITURE",
+                        "name": name,
+                        "desc": cfg.get("desc", ""),
+                        "cost_str": cost_str,
+                        "size_str": f"{fw}x{fh}",
+                        "rotatable": cfg.get("rotatable", True),
+                    })
+        elif cat_id == "workstations":
+            order = ["builder_workbench", "toolmaker_workbench", "woodsman_lodge", "miner_workstation"]
+            for k in order:
+                if k in FURNITURE_TYPES:
+                    cfg = FURNITURE_TYPES[k]
+                    name = cfg.get("name", k)
+                    mat = cfg.get("materials", {})
+                    w = mat.get("Wood", 0)
+                    s = mat.get("Stone", 0)
+                    cost_str = f"{w}W {s}S" if (w or s) else "Free"
+                    fw = cfg.get("width_tiles", 1)
+                    fh = cfg.get("height_tiles", 1)
+                    items.append({
+                        "id": k,
+                        "kind": "FURNITURE",
+                        "name": name,
+                        "desc": cfg.get("desc", ""),
+                        "cost_str": cost_str,
+                        "size_str": f"{fw}x{fh}",
+                        "rotatable": cfg.get("rotatable", True),
+                    })
         elif cat_id == "furniture":
-            order = [
-                "bed", "household_storage", "builder_workbench", "toolmaker_workbench",
-                "woodsman_lodge", "miner_workstation", "notice_board", "confession_box", "lord_treasury_chest"
-            ]
+            order = ["bed", "household_storage", "lord_treasury_chest"]
             for k in order:
                 if k in FURNITURE_TYPES:
                     cfg = FURNITURE_TYPES[k]
@@ -149,6 +211,12 @@ class BottomDockUI:
             if planning_mode == "NONE":
                 if event.key == pygame.K_b:
                     self.active_category = None if self.active_category == "structures" else "structures"
+                    return {"action": "HANDLED"}
+                elif event.key == pygame.K_c:
+                    self.active_category = None if self.active_category == "public" else "public"
+                    return {"action": "HANDLED"}
+                elif event.key in (pygame.K_t, pygame.K_k):
+                    self.active_category = None if self.active_category == "workstations" else "workstations"
                     return {"action": "HANDLED"}
                 elif event.key == pygame.K_f:
                     self.active_category = None if self.active_category == "furniture" else "furniture"
@@ -237,10 +305,10 @@ class BottomDockUI:
 
         # 2. Draw Bottom Dock Bar
         tab_count = len(self.tabs)
-        btn_w = upx(94)
+        btn_w = upx(88)
         btn_h = upx(38)
-        gap = upx(6)
-        bar_w = (btn_w * tab_count) + (gap * (tab_count - 1)) + upx(20)
+        gap = upx(5)
+        bar_w = (btn_w * tab_count) + (gap * (tab_count - 1)) + upx(16)
         bar_h = btn_h + upx(12)
         bar_x = (screen_w - bar_w) // 2
         bar_y = screen_h - bar_h - upx(8)
@@ -254,7 +322,7 @@ class BottomDockUI:
         m_pos = pygame.mouse.get_pos()
         self.category_btn_rects.clear()
 
-        cur_x = bar_x + upx(10)
+        cur_x = bar_x + upx(8)
         cur_y = bar_y + upx(6)
 
         for tab in self.tabs:
@@ -284,7 +352,7 @@ class BottomDockUI:
 
             # Icon & Label
             lbl = f"{tab['icon']} {tab['label']}"
-            txt_surf = ui_font(11, bold=True).render(lbl, True, text_col)
+            txt_surf = ui_font(10, bold=True).render(lbl, True, text_col)
             surface.blit(txt_surf, txt_surf.get_rect(center=(rect.centerx, rect.centery - upx(4))))
 
             # Hotkey badge (subtle)
