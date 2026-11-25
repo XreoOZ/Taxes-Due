@@ -31,6 +31,7 @@ from game.data.config import (
 from game.systems.economy.currency import normalize_wallet, to_copper
 from game.systems.economy.market_service import MarketService
 from game.systems.work.builder_system import BuilderSystem
+from game.systems.work.production_system import ProductionSystem
 from game.systems.work.tool_condition import ToolConditionSystem
 from game.config import TILE_SIZE, CHEST_INTERACTION_RADIUS
 
@@ -684,16 +685,17 @@ class ToolmakerSystem:
     @classmethod
     def _craft_personal_or_spare_step(cls, toolmaker, tool_name, is_spare, dt,
                                       furniture_manager, building_manager,
-                                      villager_manager, all_entities, player, day_cycle):
-        """Forge either a missing personal job tool directly into pocket (no fee, no deadlock)
-        or a spare backup tool into the household chest."""
+                                      villager_manager, all_entities, player, day_cycle,
+                                      allow_restock=False, is_quota_product=False):
+        """Forge either a missing personal job tool directly into pocket (no fee, no deadlock),
+        a spare backup tool into the household chest, or a quota product into the workstation."""
         chest = cls._family_chest(toolmaker, furniture_manager)
         benches = cls._toolmaker_workbenches(furniture_manager)
         if chest is None or not benches:
             return False
 
         if not cls._recipe_materials_ready(chest):
-            if is_spare:
+            if is_spare and not allow_restock:
                 return False
             if cls._ensure_materials_for_craft(
                 toolmaker, dt, chest, furniture_manager, building_manager,
@@ -735,7 +737,11 @@ class ToolmakerSystem:
         if state["progress"] >= needed:
             for item, amount in TOOLMAKER_TOOL_RECIPE.items():
                 cls._take_from_chest(chest, item, int(amount))
-            if is_spare:
+            if is_quota_product:
+                bench.store_item(tool_name, 1)
+                ToolConditionSystem.register_new_units(bench, tool_name, 1)
+                toolmaker.say(f"Forged {tool_name.replace('_', ' ')} for workstation stock.", duration=2.2)
+            elif is_spare:
                 chest.store_item(tool_name, 1)
                 ToolConditionSystem.register_new_units(chest, tool_name, 1)
                 toolmaker.say(f"Forged a spare {tool_name.replace('_', ' ')} for our chest.", duration=2.2)
@@ -811,7 +817,19 @@ class ToolmakerSystem:
                            villager_manager, all_entities, player, day_cycle):
             return True
 
-        # 5) Keep 1 spare set of Toolmaker tools in household chest when bars/wood are ready.
+        # 5) Lord-configured Stock Production quotas (Tab Product).
+        quota_item = ProductionSystem.get_next_needed_product(
+            "Toolmaker", building_manager, furniture_manager, stockpile_manager
+        )
+        if quota_item is not None:
+            if cls._craft_personal_or_spare_step(
+                toolmaker, quota_item["id"], True, dt, furniture_manager,
+                building_manager, villager_manager, all_entities, player, day_cycle,
+                allow_restock=True, is_quota_product=True,
+            ):
+                return True
+
+        # 6) Keep 1 spare set of Toolmaker tools in household chest when bars/wood are ready.
         spare_needed = cls._next_spare_tool_needed(chest)
         if spare_needed is not None:
             if cls._craft_personal_or_spare_step(

@@ -52,10 +52,10 @@ class TestLedgerTabMerge(unittest.TestCase):
             (i, t["title"]) for i, t in enumerate(self.ui.tabs)
             if not t.get("hidden", False)
         ]
-        self.assertEqual(len(visible_tabs), 5)
+        self.assertEqual(len(visible_tabs), 6)
         self.assertEqual(
             {t[1] for t in visible_tabs},
-            {"Town Hall", "Household", "Jobs", "Taxes", "Property"},
+            {"Town Hall", "Household", "Jobs", "Product", "Taxes", "Property"},
         )
         self.assertIsNotNone(self.ui.roadmap_header_btn_rect)
         res = self._click(self.ui.roadmap_header_btn_rect.center)

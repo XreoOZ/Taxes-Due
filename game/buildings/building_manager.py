@@ -29,6 +29,7 @@ class BuildingManager:
         self.buildings = []
         self.construction_sites = []
         self.demolition_sites = []
+        self.production_quotas = {}
         self.font = None
         self._pathfinder = None
         self._tile_to_building = {}

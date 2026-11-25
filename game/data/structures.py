@@ -455,6 +455,27 @@ FURNITURE_TYPES = {
         "color_panel": (146, 96, 48),
         "color_paper": (241, 245, 249),
         "color_pin": (220, 38, 38)
+    },
+    "toilet": {
+        "id": "toilet",
+        "name": "Toilet",
+        "category_id": "public_structure",
+        "public_structure": True,
+        "maintainable": True,
+        "movable": True,
+        "can_be_dropped": True,
+        "desc": "Medieval wooden outhouse latrine. Footprint: 1x1 tile. Movable and does not require a Permit.",
+        "capacity": 0,
+        "materials": {"Wood": 5, "Stone": 0},
+        "width_tiles": 1,
+        "height_tiles": 1,
+        "max_workers": 0,
+        "household_owned": False,
+        "placement_anywhere": True,
+        "rotatable": False,
+        "builder_commissionable": True,
+        "color": (120, 80, 40),
+        "border_color": (160, 110, 60),
     }
 }
 

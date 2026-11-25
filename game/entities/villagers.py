@@ -1822,7 +1822,11 @@ class Villager:
                     int(totals.get(mat, 0)) < int(target)
                     for mat, target in targets.items()
                 )
-                no_work_available = not (has_order or needs_stock)
+                from game.systems.work.production_system import ProductionSystem
+                has_production_quota = ProductionSystem.get_next_needed_product(
+                    "Builder", building_manager, furniture_manager, stockpile_manager
+                ) is not None
+                no_work_available = not (has_order or needs_stock or has_production_quota)
             elif self.job == "Gravedigger":
                 no_work_available = not CemeterySystem.has_gravedigger_work(
                     self, villager_manager, furniture_manager
@@ -1856,7 +1860,11 @@ class Villager:
                 needs_bars = (chest is not None
                               and ToolmakerSystem._chest_qty(chest, "Iron Bar") < TOOLMAKER_BAR_STOCK_TARGET)
                 needs_spare = ToolmakerSystem.has_spare_craft_ready(self, furniture_manager)
-                no_work_available = not (has_order or needs_wood or needs_bars or needs_spare)
+                from game.systems.work.production_system import ProductionSystem
+                has_production_quota = ProductionSystem.get_next_needed_product(
+                    "Toolmaker", building_manager, furniture_manager, stockpile_manager
+                ) is not None
+                no_work_available = not (has_order or needs_wood or needs_bars or needs_spare or has_production_quota)
             elif self.job == "Priest":
                 church_p = ChurchSystem.get_church_permit(permit_manager) if permit_manager else None
                 has_confession = ConfessionSystem.has_pending_requests_for_priest(self, permit_manager) if permit_manager else False

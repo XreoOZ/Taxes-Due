@@ -84,12 +84,14 @@ from game.ui.raport_tabs.immigrant_tab import ImmigrantMixin
 from game.ui.raport_tabs.tax_tab import TaxMixin
 from game.ui.raport_tabs.planning_tab import PlanningMixin
 from game.ui.raport_tabs.town_hall_tab import TownHallMixin
+from game.ui.raport_tabs.product_tab import ProductMixin
 
 from game.ui.raport_tabs.common import GRANTABLE_ITEMS
 from game.ui.ui_theme import ui_font, upx
 
 class RaportUI(
     TownHallMixin,
+    ProductMixin,
     BuildingMixin,
     PermitMixin,
     PriorityMixin,
@@ -133,9 +135,17 @@ class RaportUI(
             {"id": "tax", "title": "Taxes", "wip": False},
             {"id": "planning", "title": "Roadmap", "wip": True, "hidden": True},
             {"id": "town_hall", "title": "Town Hall", "wip": False},
+            {"id": "product", "title": "Product", "wip": False},
         ]
-        # 5 visible tabs: Town Hall | Household | Jobs | Taxes | Property
-        self.tab_display_order = [9, 4, 5, 7, 0, 1, 2, 3, 6, 8]
+        # 6 visible tabs: Town Hall | Household | Jobs | Product | Taxes | Property
+        self.tab_display_order = [9, 4, 5, 10, 7, 0, 1, 2, 3, 6, 8]
+        self.product_filter = "all"
+        self.product_scroll_y = 0
+        self.product_max_scroll = 0
+        self.product_viewport_rect = None
+        self.product_filter_rects = {}
+        self.product_quota_dec_rects = {}
+        self.product_quota_inc_rects = {}
         self.roadmap_header_btn_rect = None
         self.subview_toggle_rects = {}
         self.town_hall_action_btns = []
@@ -833,6 +843,11 @@ class RaportUI(
                     and self.town_hall_max_scroll > 0):
                 self.town_hall_scroll_y = max(0, min(self.town_hall_scroll_y - event.y * upx(36), self.town_hall_max_scroll))
                 return "town_hall_scroll"
+            if (self.is_open and self.active_tab == 10
+                    and self.product_viewport_rect and self.product_viewport_rect.collidepoint(pygame.mouse.get_pos())
+                    and self.product_max_scroll > 0):
+                self.product_scroll_y = max(0, min(self.product_scroll_y - event.y * upx(36), self.product_max_scroll))
+                return "product_scroll"
             return None
 
         # Scrollbar Dragging with Mouse Motion
@@ -1700,6 +1715,12 @@ class RaportUI(
                 if btn_rect.collidepoint(mouse_pos):
                     return self.execute_alert_action(alert["action_type"], alert.get("target_id"))
 
+        # 11. Tab 10: Artisan Product Quotas
+        elif self.active_tab == 10:
+            res = self._handle_product_click(mouse_pos, building_manager)
+            if res is not None:
+                return res
+
         return None
 
     def execute_alert_action(self, action_type, target_id=None):
@@ -1898,6 +1919,8 @@ class RaportUI(
             self._draw_planning_tab(surface, mx, content_y)
         elif self.active_tab == 9:
             self._draw_town_hall_tab(surface, mx, content_y, villager_manager, permit_manager, building_manager, furniture_manager=furniture_manager, stockpile_manager=stockpile_manager, servant_manager=servant_manager)
+        elif self.active_tab == 10:
+            self._draw_product_tab(surface, mx, content_y, building_manager, furniture_manager=furniture_manager, stockpile_manager=stockpile_manager)
 
 
 

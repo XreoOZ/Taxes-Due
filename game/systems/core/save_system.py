@@ -467,6 +467,7 @@ def serialize_game_state(day_cycle, resources, player, permit_manager, building_
         "servants": servants_data,
         "schedules": schedules_data,
         "production_records": serialized_prod,
+        "production_quotas": dict(getattr(building_manager, "production_quotas", {}) or {}),
         "burial_commissions": burial_commissions,
         "confession_state": confession_state,
         "taxation_state": taxation_state,
@@ -621,6 +622,10 @@ def deserialize_game_state(data, day_cycle, resources, player, permit_manager, b
         building_manager.buildings.append(b)
 
     building_manager.construction_sites.clear()
+    raw_quotas = data.get("production_quotas", {})
+    building_manager.production_quotas = {
+        str(k): max(0, int(v)) for k, v in raw_quotas.items()
+    } if isinstance(raw_quotas, dict) else {}
     for s_d in data.get("construction_sites", []):
         tiles = {(t[0], t[1]) for t in s_d.get("tiles", [])}
         door_pos = tuple(s_d["door_pos"]) if s_d.get("door_pos") else None

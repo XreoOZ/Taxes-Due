@@ -21,7 +21,9 @@ from game.data.config import (
     BUILDER_INSUFFICIENT_LANDLORD_COIN_MESSAGES,
     COMMISSION_CLAIM_RETRY_SECONDS,
     DEFAULT_COMMISSION_ARTISAN_JOB,
+    PRODUCTION_BUILDER_CRAFT_HOURS,
 )
+from game.systems.work.production_system import ProductionSystem
 from game.systems.economy.currency import (
     CURRENCY_DENOMINATIONS,
     canonical_denomination,
@@ -1944,7 +1946,11 @@ class BuilderSystem:
 
         active = furniture_active
         if not active:
-            return False
+            return cls._stock_production_step(
+                builder, dt, building_manager, furniture_manager,
+                villager_manager, all_entities, player, day_cycle,
+                stockpile_manager=stockpile_manager, permit_manager=permit_manager,
+            )
 
         order = active.construction_order
         order["builder_id"] = str(builder.id)
@@ -2091,4 +2097,120 @@ class BuilderSystem:
     def _refund_collect_step(cls, *args, **kwargs):
         from game.systems.work.artisan_commission import ArtisanCommissionSystem
         return ArtisanCommissionSystem._refund_collect_step(*args, **kwargs)
+
+    @classmethod
+    def _consume_household_materials(cls, recipe, chest, family_id, stockpile_manager):
+        """Consume required recipe quantities from household chest and/or family ground stacks."""
+        for mat, qty in (recipe or {}).items():
+            rem = max(0, int(qty))
+            if rem <= 0:
+                continue
+            if chest is not None and hasattr(chest, "take_item"):
+                taken = chest.take_item(mat, rem)
+                rem -= taken
+            if rem > 0 and stockpile_manager is not None and family_id is not None:
+                for stack in list(getattr(stockpile_manager, "stacks", [])):
+                    if rem <= 0:
+                        break
+                    if (getattr(stack, "resource_type", "") == mat
+                            and str(getattr(stack, "owner_id", "")) == str(family_id)):
+                        avail = max(0, int(getattr(stack, "amount", 0) or 0))
+                        take = min(rem, avail)
+                        if take > 0:
+                            stack.amount -= take
+                            rem -= take
+                            if stack.amount <= 0 and stack in stockpile_manager.stacks:
+                                stockpile_manager.stacks.remove(stack)
+
+    @classmethod
+    def _stock_production_step(cls, builder, dt, building_manager, furniture_manager,
+                               villager_manager, all_entities, player, day_cycle,
+                               stockpile_manager=None, permit_manager=None):
+        """Proactively craft furniture items into household storage for Tab Product quotas."""
+        if cls._block_until_tools_ready(builder):
+            return False
+
+        needed_item = ProductionSystem.get_next_needed_product(
+            "Builder", building_manager, furniture_manager, stockpile_manager
+        )
+        if needed_item is None:
+            builder._builder_stock_craft = None
+            return False
+
+        benches = [
+            f for f in getattr(furniture_manager, "furnitures", [])
+            if getattr(f, "furniture_type", "") == "builder_workbench"
+            and not getattr(f, "is_dropped", False)
+            and getattr(f, "stored_in_id", None) is None
+            and not getattr(f, "is_broken", False)
+            and not (isinstance(getattr(f, "construction_order", None), dict)
+                     and f.construction_order.get("status") not in (None, "COMPLETE"))
+        ]
+        if not benches:
+            return False
+
+        item_id = needed_item["id"]
+        recipe = {m: int(q) for m, q in (needed_item.get("recipe", {}) or {}).items() if int(q) > 0}
+        chest, totals = cls._materials_in_storage(builder, furniture_manager, stockpile_manager)
+        short = {
+            m: q - int(totals.get(m, 0) or 0)
+            for m, q in recipe.items()
+            if int(totals.get(m, 0) or 0) < q
+        }
+        if short:
+            if cls._begin_restock(builder, short, building_manager, furniture_manager,
+                                  villager_manager, exact_only=True):
+                builder.active_tool = None
+                return True
+            return False
+
+        bench = min(benches, key=lambda b: math.hypot(
+            b.get_world_pos(TILE_SIZE)[0] - builder.x,
+            b.get_world_pos(TILE_SIZE)[1] - builder.y,
+        ))
+        dest = bench.get_approach_point(
+            builder.x, builder.y, worker_id=builder.id,
+            all_entities=all_entities, tile_size=TILE_SIZE, bm=building_manager,
+        )
+        builder.task = "BUILDER_CRAFTING"
+        builder.active_tool = "Hammer" if int((getattr(builder, "inventory", {}) or {}).get("Hammer", 0)) > 0 else None
+        arrived = builder._move_towards(
+            dest[0], dest[1], dt, arrival_dist=CHEST_INTERACTION_RADIUS,
+            all_entities=all_entities, player=player,
+            building_manager=building_manager, furniture_manager=furniture_manager,
+            interaction_target=bench,
+        )
+        if not arrived:
+            return True
+
+        day_seconds = day_cycle.day_length_seconds if day_cycle else DAY_LENGTH_OPTIONS[DEFAULT_DAY_LENGTH_INDEX]["seconds"]
+        seconds_per_hour = day_seconds / 24.0
+        duration = max(1.0, seconds_per_hour * float(PRODUCTION_BUILDER_CRAFT_HOURS))
+
+        state = getattr(builder, "_builder_stock_craft", None)
+        if not isinstance(state, dict) or state.get("item_id") != item_id:
+            state = {"item_id": item_id, "progress": 0.0, "needed": duration}
+            builder._builder_stock_craft = state
+
+        state["progress"] = float(state.get("progress", 0.0)) + dt
+        builder._activity_total = duration
+        builder.builder_work_timer = state["progress"]
+        if state["progress"] >= duration:
+            fam_id = getattr(builder, "family_id", None)
+            cls._consume_household_materials(recipe, chest, fam_id, stockpile_manager)
+            ProductionSystem.store_crafted_product(
+                builder, item_id,
+                furniture_manager=furniture_manager,
+                building_manager=building_manager,
+                stockpile_manager=stockpile_manager,
+                permit_manager=permit_manager,
+                workbench=bench,
+            )
+            builder._builder_stock_craft = None
+            builder.builder_work_timer = 0.0
+            builder._activity_total = 0.0
+            builder.task = "IDLE"
+            builder.active_tool = None
+            builder.say(f"Crafted {needed_item['name']} for stock!", duration=2.2)
+        return True
 

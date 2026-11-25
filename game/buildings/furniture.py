@@ -183,6 +183,9 @@ class Furniture:
     def get_world_pos(self, tile_size=TILE_SIZE):
         return (self.grid_x + 0.5) * tile_size, (self.grid_y + 0.5) * tile_size
 
+    def get_center_world(self, tile_size=TILE_SIZE):
+        return self.get_world_pos(tile_size)
+
     def get_approach_point(self, worker_x, worker_y, worker_id=None, all_entities=None, tile_size=TILE_SIZE, bm=None, excluded_points=None):
         """Mendapatkan titik pendekatan bebas rintangan di sekeliling furniture untuk multi-worker concurrency"""
         gx, gy = self.grid_x, self.grid_y
@@ -613,6 +616,24 @@ class Furniture:
                 ny = board_rect.centery - nh / 2 + (i % 2) * 2
                 pygame.draw.rect(surface, nc, (nx, ny, nw, nh), border_radius=1)
                 pygame.draw.circle(surface, pc, (nx + nw / 2, ny + 2), max(1, int(scaled_t * 0.04)))
+
+        elif self.furniture_type == "toilet":
+            # Wooden outhouse latrine (1x1)
+            pad = max(2, int(scaled_t * 0.1))
+            box_rect = pygame.Rect(sx + pad, sy + pad, max(4, scaled_w - pad * 2), max(4, scaled_h - pad * 2))
+            pygame.draw.rect(surface, (0, 0, 0, 60), box_rect.move(1, 2), border_radius=3)
+            wood_col = self.type_cfg.get("color", (120, 80, 40))
+            border_col = self.type_cfg.get("border_color", (160, 110, 60))
+            pygame.draw.rect(surface, wood_col, box_rect, border_radius=3)
+            pygame.draw.rect(surface, border_col, box_rect, width=max(1, int(scaled_t * 0.06)), border_radius=3)
+            # Slanted roof plank & crescent/door slit
+            roof_rect = pygame.Rect(box_rect.x, box_rect.y, box_rect.width, max(3, int(box_rect.height * 0.36)))
+            pygame.draw.rect(surface, (92, 57, 34), roof_rect, border_radius=2)
+            door_w = max(3, int(box_rect.width * 0.44))
+            door_h = max(4, int(box_rect.height * 0.52))
+            door_rect = pygame.Rect(box_rect.centerx - door_w // 2, box_rect.bottom - door_h - 1, door_w, door_h)
+            pygame.draw.rect(surface, (70, 45, 25), door_rect, border_radius=2)
+            pygame.draw.circle(surface, (234, 179, 8), (door_rect.centerx, door_rect.y + max(2, door_h // 3)), max(1, int(scaled_t * 0.05)))
 
         elif self.furniture_type in ("woodsman_lodge", "miner_workstation"):
             # Production station: footprint-sized work pad with stock badge.

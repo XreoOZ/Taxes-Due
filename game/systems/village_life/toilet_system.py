@@ -46,16 +46,30 @@ class ToiletSystem:
         return cls._instance
 
     @classmethod
-    def get_completed_toilets(cls, building_manager):
-        """Returns all completed, active Toilet buildings in the settlement."""
-        if not building_manager:
-            return []
-        return [
-            b for b in getattr(building_manager, "buildings", [])
-            if (getattr(b, "building_type", "") == "toilet"
-                and getattr(b, "is_available_for_use", True)
-                and not getattr(b, "is_under_construction", False))
-        ]
+    def get_completed_toilets(cls, building_manager, furniture_manager=None):
+        """Returns all completed, active Toilet structures (buildings + movable toilet furniture)."""
+        toilets = []
+        if building_manager:
+            for b in getattr(building_manager, "buildings", []):
+                if (getattr(b, "building_type", "") == "toilet"
+                        and getattr(b, "is_available_for_use", True)
+                        and not getattr(b, "is_under_construction", False)):
+                    toilets.append(b)
+        if furniture_manager:
+            for f in getattr(furniture_manager, "furnitures", []):
+                if getattr(f, "furniture_type", "") != "toilet":
+                    continue
+                if getattr(f, "is_dropped", False) or getattr(f, "stored_in_id", None) is not None:
+                    continue
+                if getattr(f, "status", "INSTALLED") != "INSTALLED":
+                    continue
+                if getattr(f, "is_broken", False):
+                    continue
+                order = getattr(f, "construction_order", None)
+                if isinstance(order, dict) and order.get("status") not in (None, "COMPLETE"):
+                    continue
+                toilets.append(f)
+        return toilets
 
     @classmethod
     def calculate_toilet_score(cls, villager, toilet):
@@ -99,7 +113,7 @@ class ToiletSystem:
         - Balances geometric distance and waiting queue length to prevent bottlenecks.
         Returns: (toilet_building, is_free) or (None, False)
         """
-        toilets = cls.get_completed_toilets(building_manager)
+        toilets = cls.get_completed_toilets(building_manager, furniture_manager)
         if not toilets:
             return None, False
 
@@ -233,7 +247,7 @@ class ToiletSystem:
         toilet = getattr(villager, "target_toilet", None)
 
         # Validate targeted toilet still exists
-        all_toilets = cls.get_completed_toilets(building_manager)
+        all_toilets = cls.get_completed_toilets(building_manager, furniture_manager)
         if toilet not in all_toilets:
             toilet, _ = cls.find_best_toilet(villager, building_manager, furniture_manager)
             villager.target_toilet = toilet

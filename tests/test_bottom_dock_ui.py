@@ -177,7 +177,7 @@ class TestBottomDockUI(unittest.TestCase):
         self.assertIsNotNone(toilet_rect)
         ev_item_click = pygame.event.Event(pygame.MOUSEBUTTONDOWN, {"button": 1, "pos": toilet_rect.center})
         res_item = self.dock.handle_event(ev_item_click, planning_mode="NONE")
-        self.assertEqual(res_item, {"action": "START_PLANNING", "kind": "BUILDING", "id": "toilet"})
+        self.assertEqual(res_item, {"action": "START_PLANNING", "kind": "FURNITURE", "id": "toilet"})
         self.assertIsNone(self.dock.active_category)
 
     def test_planning_pill_interaction(self):

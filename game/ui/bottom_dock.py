@@ -89,7 +89,7 @@ class BottomDockUI:
                     })
         elif target_cat == "public":
             # 1. Public Buildings (Civic amenities maintained by Lord)
-            b_order = ["well", "toilet", "market", "tax_house"]
+            b_order = ["well", "market", "tax_house"]
             for k in b_order:
                 if k in BUILDING_TYPES:
                     cfg = BUILDING_TYPES[k]
@@ -108,8 +108,8 @@ class BottomDockUI:
                         "size_str": size_str,
                         "rotatable": cfg.get("rotatable", True),
                     })
-            # 2. Public Fixtures
-            f_order = ["notice_board", "confession_box"]
+            # 2. Public Fixtures (movable furniture)
+            f_order = ["toilet", "notice_board", "confession_box"]
             for k in f_order:
                 if k in FURNITURE_TYPES:
                     cfg = FURNITURE_TYPES[k]

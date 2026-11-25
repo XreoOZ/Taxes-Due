@@ -67,6 +67,13 @@ DEFAULT_ITEM_PRICES = {
     "Tongs": 10,
     "Iron Ore": 4,      # Raw ore; base for smelting cost
     "Iron Bar": 10,     # Smelted bar: ore + wood + labor priced in
+    "bed": 12,
+    "household_storage": 24,
+    "builder_workbench": 12,
+    "toolmaker_workbench": 65,
+    "confession_box": 12,
+    "notice_board": 24,
+    "toilet": 12,
 }
 
 
@@ -90,7 +97,29 @@ MARKET_TRADEABLE_ITEMS = {
     "Tongs": "Tongs",
     "Iron Ore": "Iron Ore",
     "Iron Bar": "Iron Bar",
+    "bed": "Furniture",
+    "household_storage": "Furniture",
+    "builder_workbench": "Furniture",
+    "toolmaker_workbench": "Furniture",
+    "confession_box": "Furniture",
+    "notice_board": "Furniture",
+    "toilet": "Furniture",
 }
+
+# Production System (Config-Driven, Zero Hardcode)
+PRODUCTION_DEFAULT_QUOTA = 0
+PRODUCTION_QUOTA_STEP = 1
+PRODUCTION_QUOTA_MAX = 50
+PRODUCTION_BUILDER_CRAFT_HOURS = 1.0
+PRODUCTION_BUILDER_FURNITURE_IDS = (
+    "bed",
+    "household_storage",
+    "builder_workbench",
+    "toolmaker_workbench",
+    "confession_box",
+    "notice_board",
+    "toilet",
+)
 
 MARKET_CURRENCY_DENOMINATIONS = ("Gold", "Silver", "Copper")
 

@@ -30,6 +30,7 @@ from game.data.config import (
     MARKET_DEFAULT_HOUSEHOLD_SALE_PERCENT,
     MARKET_HOUSEHOLD_SALE_PERCENT_MIN,
     MARKET_HOUSEHOLD_SALE_PERCENT_MAX,
+    PRODUCTION_BUILDER_FURNITURE_IDS,
     TOOL_TYPES,
     TOOLMAKER_SPARE_TOOLS_TARGET,
 )
@@ -126,11 +127,30 @@ class HouseholdStallSystem:
                 and getattr(s, "amount", 0) > 0]
 
     @classmethod
+    def _family_workstations(cls, family_id, furniture_manager):
+        """Installed artisan workbenches owned by family_id."""
+        if not furniture_manager or not family_id:
+            return []
+        wtypes = {"toolmaker_workbench", "builder_workbench"}
+        return [
+            f for f in getattr(furniture_manager, "furnitures", [])
+            if getattr(f, "furniture_type", "") in wtypes
+            and getattr(f, "family_id", None) == family_id
+            and not getattr(f, "is_dropped", False)
+            and getattr(f, "stored_in_id", None) is None
+        ]
+
+    @classmethod
     def _stall_source_stock(cls, family_id, item_name, furniture_manager,
                             stockpile_manager=None, villager_manager=None):
         """Quantity of item_name the stall chore can physically source:
-        household chests plus household-owned loose ground stacks."""
+        artisan workstations, household chests, and household-owned loose stacks."""
         total = 0
+        is_tool = item_name in TOOL_TYPES
+        is_furn = item_name in PRODUCTION_BUILDER_FURNITURE_IDS
+        if is_tool or is_furn:
+            for ws in cls._family_workstations(family_id, furniture_manager):
+                total += cls._inventory_item_quantity(getattr(ws, "inventory", None), item_name)
         for chest in cls._family_chests(family_id, furniture_manager):
             total += cls._inventory_item_quantity(getattr(chest, "inventory", None), item_name)
         target = canonical_item_name(item_name)
@@ -143,12 +163,22 @@ class HouseholdStallSystem:
     def _nearest_goods_source(cls, villager, item_name, furniture_manager,
                               stockpile_manager=None, villager_manager=None,
                               tile_size=TILE_SIZE):
-        """Nearest household storage point (chest or owned loose stack) that
-        physically holds item_name. Returns (kind, source, x, y, qty) or None."""
+        """Nearest household/workstation storage point that physically holds item_name."""
         fam_id = getattr(villager, "family_id", None)
         vx, vy = getattr(villager, "x", 0.0), getattr(villager, "y", 0.0)
         target = canonical_item_name(item_name)
+        is_tool = item_name in TOOL_TYPES
+        is_furn = item_name in PRODUCTION_BUILDER_FURNITURE_IDS
         best = None
+        if is_tool or is_furn:
+            for ws in cls._family_workstations(fam_id, furniture_manager):
+                qty = cls._inventory_item_quantity(getattr(ws, "inventory", None), item_name)
+                if qty <= 0:
+                    continue
+                wx, wy = ws.get_world_pos(tile_size)
+                dist = math.hypot(wx - vx, wy - vy)
+                if best is None or dist < best[0]:
+                    best = (dist, "workstation", ws, wx, wy, qty)
         for chest in cls._family_chests(fam_id, furniture_manager):
             qty = cls._inventory_item_quantity(getattr(chest, "inventory", None), item_name)
             if qty <= 0:
@@ -398,9 +428,17 @@ class HouseholdStallSystem:
         owned = cls.get_household_owned_sale_items(
             family_id, furniture_manager, villager_manager, stockpile_manager
         )
+        workstation_items = set()
+        for ws in cls._family_workstations(family_id, furniture_manager):
+            for k, v in (getattr(ws, "inventory", None) or {}).items():
+                if int(v or 0) > 0:
+                    workstation_items.add(k)
+
         added = []
         for item_name in MARKET_TRADEABLE_ITEMS:
-            if item_name in TOOL_TYPES or item_name not in owned or item_name in market.sale_items:
+            if item_name not in owned or item_name in market.sale_items:
+                continue
+            if item_name in TOOL_TYPES and item_name not in workstation_items:
                 continue
             summary = cls.get_household_stock_summary(
                 market, family_id, item_name, furniture_manager,
