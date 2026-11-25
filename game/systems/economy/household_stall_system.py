@@ -16,13 +16,22 @@ from game.systems.economy.currency import (
 from game.systems.economy.market_pricing import MarketPricingSystem
 from game.systems.economy.wealth_system import VillageWealthSystem
 from game.systems.economy.household_inventory import canonical_item_name
+from game.systems.work.job_tool_system import get_job_required_tools
 from game.config import TILE_SIZE
 from game.data.config import (
+    DAILY_FOOD_REQUIREMENT,
+    DAILY_WATER_REQUIREMENT,
+    DEDICATED_JOBS,
+    DEFAULT_ITEM_PRICES,
+    HOUSEHOLD_STALL_FOOD_RESERVE_DAYS,
     HOUSEHOLD_STALL_HAUL_CAPACITY,
+    HOUSEHOLD_STALL_WATER_RESERVE_DAYS,
     MARKET_TRADEABLE_ITEMS,
     MARKET_DEFAULT_HOUSEHOLD_SALE_PERCENT,
     MARKET_HOUSEHOLD_SALE_PERCENT_MIN,
     MARKET_HOUSEHOLD_SALE_PERCENT_MAX,
+    TOOL_TYPES,
+    TOOLMAKER_SPARE_TOOLS_TARGET,
 )
 
 
@@ -295,52 +304,139 @@ class HouseholdStallSystem:
         return list(market.sale_items)
 
     @classmethod
+    def get_item_reserve(cls, family_id, item_name, villager_manager=None):
+        """Essential quantity kept in household storage before calculating stall surplus.
+        Protects daily food/water buffer for living family members and unequipped job tools."""
+        if not family_id or not villager_manager or not hasattr(villager_manager, "get_family_by_id"):
+            return 0
+        fam = villager_manager.get_family_by_id(family_id)
+        if not fam:
+            return 0
+        living = [m for m in getattr(fam, "members", []) if getattr(m, "is_alive", True)]
+        if not living:
+            return 0
+        category = MARKET_TRADEABLE_ITEMS.get(item_name)
+        if category == "Food":
+            return len(living) * DAILY_FOOD_REQUIREMENT * HOUSEHOLD_STALL_FOOD_RESERVE_DAYS
+        if category == "Water":
+            return len(living) * DAILY_WATER_REQUIREMENT * HOUSEHOLD_STALL_WATER_RESERVE_DAYS
+        if item_name in TOOL_TYPES:
+            needed = 0
+            raw_tm = DEDICATED_JOBS.get("Toolmaker", {}).get("required_tools", [])
+            tm_tools = set(raw_tm.keys() if isinstance(raw_tm, dict) else raw_tm)
+            for member in living:
+                job_id = getattr(member, "job", "Unassigned")
+                req = get_job_required_tools(job_id).get(item_name, 0)
+                if req > 0:
+                    held = cls._inventory_item_quantity(getattr(member, "inventory", None), item_name)
+                    needed += max(0, req - held)
+                if job_id == "Toolmaker" and item_name in tm_tools:
+                    needed += max(0, int(TOOLMAKER_SPARE_TOOLS_TARGET))
+            return needed
+        artisan_reserve = 0
+        for member in living:
+            job_id = getattr(member, "job", "Unassigned")
+            targets = DEDICATED_JOBS.get(job_id, {}).get("material_stock_target", {}) or {}
+            artisan_reserve += max(0, int(targets.get(item_name, 0) or 0))
+        if artisan_reserve > 0:
+            return artisan_reserve
+        return 0
+
+    @classmethod
+    def get_household_stock_summary(cls, market, family_id, item_name, furniture_manager,
+                                    stockpile_manager=None, villager_manager=None):
+        """Returns home stock, essential reserve, sellable surplus, percentage cap, and allocatable amount."""
+        empty = {
+            "home_stock": 0, "reserve": 0, "surplus": 0,
+            "max_alloc": 0, "stall_stock": 0, "in_transit": 0, "allocatable": 0,
+        }
+        if not market or not family_id or not furniture_manager:
+            return empty
+
+        home_stock = cls._stall_source_stock(
+            family_id, item_name, furniture_manager,
+            stockpile_manager=stockpile_manager,
+            villager_manager=villager_manager,
+        )
+        reserve = cls.get_item_reserve(family_id, item_name, villager_manager)
+        surplus = max(0, home_stock - reserve)
+        allocations = getattr(market, "item_allocations", {})
+        raw_pct = (
+            allocations.get(item_name, getattr(market, "household_sale_percent", MARKET_DEFAULT_HOUSEHOLD_SALE_PERCENT))
+            if isinstance(allocations, dict)
+            else getattr(market, "household_sale_percent", MARKET_DEFAULT_HOUSEHOLD_SALE_PERCENT)
+        )
+        pct = max(MARKET_HOUSEHOLD_SALE_PERCENT_MIN, min(MARKET_HOUSEHOLD_SALE_PERCENT_MAX, int(raw_pct)))
+        max_alloc = min(surplus, int(math.ceil(surplus * (pct / 100.0)))) if (surplus > 0 and pct > 0) else 0
+        stall_stock = max(0, int(market.inventory.get(item_name, 0))) if hasattr(market, "inventory") else 0
+        in_transit = max(0, int(getattr(market, "_stall_in_transit", {}).get(item_name, 0)))
+        allocatable = min(max(0, max_alloc - (stall_stock + in_transit)), surplus)
+        return {
+            "home_stock": home_stock,
+            "reserve": reserve,
+            "surplus": surplus,
+            "max_alloc": max_alloc,
+            "stall_stock": stall_stock,
+            "in_transit": in_transit,
+            "allocatable": allocatable,
+        }
+
+    @classmethod
+    def auto_list_surplus_items(cls, market, furniture_manager, villager_manager=None,
+                                stockpile_manager=None):
+        """Automatically list household-owned non-tool surplus goods on an assigned stall."""
+        family_id = getattr(market, "assigned_family_id", None) if market else None
+        if not market or not family_id or not furniture_manager:
+            return []
+        if not isinstance(getattr(market, "sale_items", None), list):
+            market.sale_items = []
+        if not isinstance(getattr(market, "item_allocations", None), dict):
+            market.item_allocations = {}
+        if not isinstance(getattr(market, "prices", None), dict):
+            market.prices = {}
+
+        owned = cls.get_household_owned_sale_items(
+            family_id, furniture_manager, villager_manager, stockpile_manager
+        )
+        added = []
+        for item_name in MARKET_TRADEABLE_ITEMS:
+            if item_name in TOOL_TYPES or item_name not in owned or item_name in market.sale_items:
+                continue
+            summary = cls.get_household_stock_summary(
+                market, family_id, item_name, furniture_manager,
+                stockpile_manager=stockpile_manager, villager_manager=villager_manager,
+            )
+            if summary["surplus"] <= 0:
+                continue
+            market.sale_items.append(item_name)
+            market.prices.setdefault(item_name, DEFAULT_ITEM_PRICES.get(item_name, 1))
+            market.item_allocations.setdefault(item_name, MARKET_DEFAULT_HOUSEHOLD_SALE_PERCENT)
+            added.append(item_name)
+        return added
+
+    @classmethod
     def calculate_allocatable_goods(cls, market, family_id, item_name, furniture_manager,
                                     stockpile_manager=None, villager_manager=None):
         """
         Calculates the maximum quantity of an item that may be hauled to the market.
         Formula:
-            alloc_pct = market.item_allocations.get(item_name, 0)
-            household_stock = total of item_name in household chests + owned loose stacks
-            max_allocatable = floor(household_stock * (alloc_pct / 100.0))
-            market_stock = market.inventory.get(item_name, 0)
-            in_transit = carried by hauling villager
+            surplus = max(0, household_stock - essential_reserve)
+            max_allocatable = min(surplus, ceil(surplus * (alloc_pct / 100.0)))
             available_to_haul = max(0, max_allocatable - (market_stock + in_transit))
         """
         if not market or not family_id or not furniture_manager:
             return 0
-
         if item_name not in MARKET_TRADEABLE_ITEMS or item_name not in getattr(market, "sale_items", []):
             return 0
-        pct = max(MARKET_HOUSEHOLD_SALE_PERCENT_MIN, min(MARKET_HOUSEHOLD_SALE_PERCENT_MAX, int(getattr(market, "item_allocations", {}).get(
-            item_name, getattr(market, "household_sale_percent", MARKET_DEFAULT_HOUSEHOLD_SALE_PERCENT)
-        ))))
-        if pct <= 0:
-            return 0
 
-        # Stock the stall chore can physically reach: every household chest
-        # plus household-owned loose ground stacks (canonical-name matched).
-        chest_stock = cls._stall_source_stock(
-            family_id, item_name, furniture_manager,
-            stockpile_manager=stockpile_manager,
-            villager_manager=villager_manager,
+        summary = cls.get_household_stock_summary(
+            market, family_id, item_name, furniture_manager,
+            stockpile_manager=stockpile_manager, villager_manager=villager_manager,
         )
-        if chest_stock <= 0:
-            return 0
-
-        # Percentage is live: the cap always tracks the household's CURRENT
-        # chest stock, so 10% of 100 potatoes sells 10, and if the chest
-        # grows to 200 it sells up to 20 — never a stale absolute number.
-        max_alloc = int(math.ceil(chest_stock * (pct / 100.0)))
         if not isinstance(getattr(market, "household_sale_limits", None), dict):
             market.household_sale_limits = {}
-        market.household_sale_limits[item_name] = max_alloc
-        current_mkt_stock = market.inventory.get(item_name, 0) if hasattr(market, "inventory") else 0
-        in_transit = getattr(market, "_stall_in_transit", {}).get(item_name, 0)
-
-        remaining_alloc = max(0, max_alloc - (current_mkt_stock + in_transit))
-        # Replenish sales up to the percentage cap without exceeding actual household stock.
-        return min(remaining_alloc, chest_stock)
+        market.household_sale_limits[item_name] = summary["max_alloc"]
+        return summary["allocatable"]
 
     @classmethod
     def get_assigned_market_for_family(cls, family_id, building_manager):

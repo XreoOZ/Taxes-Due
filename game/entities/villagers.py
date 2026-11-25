@@ -36,6 +36,10 @@ from game.config import (
     AI_DECISION_MAX_INTERVAL_SECONDS,
     AI_DECISION_REFERENCE_POPULATION,
     AI_DECISION_TICK_INTERVAL_SECONDS,
+    AI_LOD_POPULATION_THRESHOLD,
+    AI_LOD_ZOOM_THRESHOLD,
+    AI_SEPARATION_MAX_ACTIVE_ACTORS,
+    TOOL_MARKET_FAIL_COOLDOWN_SECONDS,
     HAPPINESS_REFRESH_INTERVAL_SECONDS,
     WATERING_DURATION_INGAME_HOURS,
     TILLING_DURATION_INGAME_HOURS,
@@ -1113,7 +1117,7 @@ class Villager:
         candidates.sort(key=lambda c: c[0])
         return candidates[0][1]
 
-    def _ensure_tool_commissions(self, missing_tools, building_manager, furniture_manager, villager_manager):
+    def _ensure_tool_commissions(self, missing_tools, building_manager, furniture_manager, villager_manager, stockpile_manager=None):
         """Queue toolmaker commissions for missing job tools instead of idling.
 
         Every missing tool that a toolmaker workbench can forge gets an active
@@ -1146,9 +1150,14 @@ class Villager:
 
         craftable = set(ToolmakerSystem.craftable_tools())
         chest = furniture_manager.get_storage_for_family(str(self.family_id)) if furniture_manager else None
+        spm = stockpile_manager or getattr(self, "stockpile_manager", None)
         pocket_funds = to_copper(normalize_wallet(self.inventory))
-        chest_funds = to_copper(normalize_wallet(chest.inventory)) if chest else 0
-        total_funds = pocket_funds + chest_funds
+        total_funds = BuilderSystem._family_coin_total_copper(
+            self.family_id, chest, spm, villager_manager=villager_manager
+        )
+        if villager_manager is None:
+            chest_funds = to_copper(normalize_wallet(chest.inventory)) if chest else 0
+            total_funds = max(total_funds, pocket_funds + chest_funds)
 
         for tool_name, qty in missing_tools:
             if tool_name in covered or tool_name not in craftable:
@@ -1176,6 +1185,90 @@ class Villager:
             return False
 
         return all(tool_name in covered for tool_name, _ in missing_tools)
+
+    def _retrieve_household_coins_for_errand(
+        self, needed_copper, dt, furniture_manager, stockpile_manager,
+        villager_manager, building_manager, all_entities, player,
+        use_market_withdraw=False,
+    ):
+        """Gather at least `needed_copper` from pocket, chest, loose ground coin stacks,
+        or abstract household/member wallets. Returns (status, error_message)."""
+        needed = max(0, int(needed_copper))
+        if to_copper(normalize_wallet(self.inventory)) >= needed:
+            return "READY", ""
+
+        chest = furniture_manager.get_storage_for_family(self.family_id) if furniture_manager else None
+        if chest and to_copper(normalize_wallet(getattr(chest, "inventory", {}))) > 0:
+            chest_x, chest_y = chest.get_world_pos(TILE_SIZE)
+            arrived = self._move_towards(
+                chest_x, chest_y, dt, arrival_dist=CHEST_INTERACTION_RADIUS,
+                all_entities=all_entities, player=player,
+                building_manager=building_manager, furniture_manager=furniture_manager,
+                interaction_target=chest,
+            )
+            if not arrived:
+                return "MOVING", ""
+            if use_market_withdraw:
+                AIMarketPurchasingSystem.withdraw_household_coins(
+                    self, needed, furniture_manager, villager_manager
+                )
+            else:
+                deficit = max(0, needed - to_copper(normalize_wallet(self.inventory)))
+                take = min(deficit, to_copper(normalize_wallet(chest.inventory)))
+                if take > 0:
+                    BuilderSystem._move_exact_value(chest.inventory, self.inventory, take)
+            if to_copper(normalize_wallet(self.inventory)) >= needed:
+                return "READY", ""
+
+        spm = stockpile_manager or getattr(self, "stockpile_manager", None)
+        coin_stacks = [
+            s for s in BuilderSystem._family_coin_stacks(self.family_id, spm)
+            if int(getattr(s, "amount", 0)) > 0
+        ]
+        if coin_stacks:
+            stack = min(coin_stacks, key=lambda s: math.hypot(
+                (s.grid_x + 0.5) * TILE_SIZE - self.x,
+                (s.grid_y + 0.5) * TILE_SIZE - self.y,
+            ))
+            sx, sy = (stack.grid_x + 0.5) * TILE_SIZE, (stack.grid_y + 0.5) * TILE_SIZE
+            arrived = self._move_towards(
+                sx, sy, dt, arrival_dist=LOOSE_ITEM_ARRIVAL_DIST,
+                all_entities=all_entities, player=player,
+                building_manager=building_manager, furniture_manager=furniture_manager,
+                interaction_target=stack,
+            )
+            if not arrived:
+                return "MOVING", ""
+            denom = canonical_denomination(stack.resource_type)
+            denom_val = max(1, to_copper({denom: 1})) if denom else 1
+            deficit = max(0, needed - to_copper(normalize_wallet(self.inventory)))
+            take = min(int(stack.amount), max(1, math.ceil(deficit / denom_val)))
+            stack.amount -= take
+            if stack.amount <= 0:
+                if stack in spm.stacks:
+                    spm.stacks.remove(stack)
+                spm.mark_totals_dirty()
+            if denom:
+                self.inventory[denom] = int(self.inventory.get(denom, 0)) + take
+                compact_currency_wallet(self.inventory)
+            if to_copper(normalize_wallet(self.inventory)) >= needed:
+                return "READY", ""
+            if any(int(getattr(s, "amount", 0)) > 0 for s in BuilderSystem._family_coin_stacks(self.family_id, spm)):
+                return "MOVING", ""
+
+        for wallet in BuilderSystem._family_abstract_wallets(self.family_id, villager_manager):
+            if wallet is self.inventory:
+                continue
+            deficit = max(0, needed - to_copper(normalize_wallet(self.inventory)))
+            if deficit <= 0:
+                break
+            take = min(deficit, to_copper(normalize_wallet(wallet)))
+            if take > 0:
+                BuilderSystem._move_exact_value(wallet, self.inventory, take)
+        if to_copper(normalize_wallet(self.inventory)) >= needed:
+            return "READY", ""
+
+        return "INSUFFICIENT", "Household does not have enough coins for the purchase."
 
     def get_irrelevant_tools(self):
         """
@@ -1709,10 +1802,8 @@ class Villager:
                 )
                 no_work_available = not (has_order or needs_stock)
             elif self.job == "Gravedigger":
-                inst = CemeterySystem.get_instance()
-                no_work_available = not (
-                    getattr(inst, "pending_commissions", None)
-                    or getattr(inst, "overflow_corpses", None)
+                no_work_available = not CemeterySystem.has_gravedigger_work(
+                    self, villager_manager, furniture_manager
                 )
             elif self.job == "Tax Collector":
                 round_state = getattr(self, "socage_tax_round", None)
@@ -1742,7 +1833,8 @@ class Villager:
                 needs_wood = chest is not None and wood_target > ToolmakerSystem._chest_qty(chest, "Wood")
                 needs_bars = (chest is not None
                               and ToolmakerSystem._chest_qty(chest, "Iron Bar") < TOOLMAKER_BAR_STOCK_TARGET)
-                no_work_available = not (has_order or needs_wood or needs_bars)
+                needs_spare = ToolmakerSystem.has_spare_craft_ready(self, furniture_manager)
+                no_work_available = not (has_order or needs_wood or needs_bars or needs_spare)
             else:
                 # Generic fallback for every other job (Priest, WIP jobs, and any
                 # future job): counts as having work only while actually executing
@@ -2990,35 +3082,16 @@ class Villager:
             chest = furniture_manager.get_storage_for_family(self.family_id) if furniture_manager else None
 
             if self.task == "BUYING_JOB_TOOLS_RETRIEVE_COINS":
-                pocket_funds = to_copper(normalize_wallet(self.inventory))
-                if pocket_funds >= total_cost:
+                status, message = self._retrieve_household_coins_for_errand(
+                    total_cost, dt, furniture_manager, stockpile_manager,
+                    villager_manager, building_manager, all_entities, player,
+                    use_market_withdraw=True,
+                )
+                if status == "READY":
                     self.task = "BUYING_JOB_TOOLS_TRAVEL_TO_MARKET"
-                elif chest:
-                    chest_x, chest_y = chest.get_world_pos(TILE_SIZE)
-                    arrived = self._move_towards(
-                        chest_x, chest_y, dt, arrival_dist=CHEST_INTERACTION_RADIUS,
-                        all_entities=all_entities, player=player,
-                        building_manager=building_manager, furniture_manager=furniture_manager,
-                        interaction_target=chest,
-                    )
-                    if arrived:
-                        success, message = AIMarketPurchasingSystem.withdraw_household_coins(
-                            self, total_cost, furniture_manager, villager_manager
-                        )
-                        if success:
-                            self.task = "BUYING_JOB_TOOLS_TRAVEL_TO_MARKET"
-                        else:
-                            self.task = "MISSING_TOOL"
-                            self.say(message, duration=2.5)
-                else:
-                    success, message = AIMarketPurchasingSystem.withdraw_household_coins(
-                        self, total_cost, furniture_manager, villager_manager
-                    )
-                    if success:
-                        self.task = "BUYING_JOB_TOOLS_TRAVEL_TO_MARKET"
-                    else:
-                        self.task = "MISSING_TOOL"
-                        self.say(message, duration=2.5)
+                elif status == "INSUFFICIENT":
+                    self.task = "MISSING_TOOL"
+                    self.say(message, duration=2.5)
                 return
 
             if self.task == "BUYING_JOB_TOOLS_TRAVEL_TO_MARKET":
@@ -3085,27 +3158,14 @@ class Villager:
             chest = furniture_manager.get_storage_for_family(self.family_id) if furniture_manager else None
 
             if self.task == "COMMISSIONING_TOOL_RETRIEVE_COINS":
-                pocket_funds = to_copper(normalize_wallet(self.inventory))
-                if pocket_funds >= fee:
+                status, _ = self._retrieve_household_coins_for_errand(
+                    fee, dt, furniture_manager, stockpile_manager,
+                    villager_manager, building_manager, all_entities, player,
+                    use_market_withdraw=False,
+                )
+                if status == "READY":
                     self.task = "COMMISSIONING_TOOL_TRAVEL"
-                elif chest:
-                    chest_x, chest_y = chest.get_world_pos(TILE_SIZE)
-                    arrived = self._move_towards(
-                        chest_x, chest_y, dt, arrival_dist=CHEST_INTERACTION_RADIUS,
-                        all_entities=all_entities, player=player,
-                        building_manager=building_manager, furniture_manager=furniture_manager,
-                        interaction_target=chest,
-                    )
-                    if arrived:
-                        success = BuilderSystem._move_exact_value(chest.inventory, self.inventory, fee)
-                        if success:
-                            self.task = "COMMISSIONING_TOOL_TRAVEL"
-                        else:
-                            self.task = "MISSING_TOOL"
-                            self.say(f"Our household cannot afford to commission a {tool_name.replace('_', ' ')}.", duration=2.5)
-                            self.commission_tool_bench = None
-                            self.commission_tool_name = None
-                else:
+                elif status == "INSUFFICIENT":
                     self.task = "MISSING_TOOL"
                     self.say(f"Our household cannot afford to commission a {tool_name.replace('_', ' ')}.", duration=2.5)
                     self.commission_tool_bench = None
@@ -3311,50 +3371,73 @@ class Villager:
                             self._move_towards(storage_pos[0], storage_pos[1], dt, arrival_dist=TOOL_STOW_ARRIVAL_DIST, all_entities=all_entities, player=player, building_manager=building_manager, furniture_manager=furniture_manager, interaction_target=storage_obj)
                             return
                 else:
-                    requested_items = dict(missing_tools)
-                    market, purchase_items, total_cost = AIMarketPurchasingSystem.find_market_for_items(
-                        self, requested_items, building_manager, furniture_manager, villager_manager
-                    )
-                    if market:
-                        self.job_tool_purchase_market = market
-                        self.job_tool_purchase_items = purchase_items
-                        self.task = "BUYING_JOB_TOOLS_RETRIEVE_COINS"
-                        return
-                    if getattr(self, "task", None) in ("COMMISSIONING_TOOL_RETRIEVE_COINS", "COMMISSIONING_TOOL_TRAVEL"):
-                        return
-                    if self._ensure_tool_commissions(
-                            missing_tools, building_manager, furniture_manager, villager_manager):
-                        # Commission queued/active — wait at home while payment/forge/delivery runs.
-                        self.task = "MISSING_TOOL"
-                        if not getattr(self, "speech_text", None):
-                            self.say("My tools are on order — waiting at home while toolmaker forges them.", duration=2.5)
-                    elif getattr(self, "task", None) in ("COMMISSIONING_TOOL_RETRIEVE_COINS", "COMMISSIONING_TOOL_TRAVEL"):
-                        return
-                    elif self.job in ("Builder", "Toolmaker"):
-                        # Builder/Toolmaker commission errands (claiming orders, payment
-                        # requests, material hauling) do not need the specific workpiece tools.
-                        pass
-                    else:
-                        self.task = "MISSING_TOOL"
-                        if not getattr(self, "speech_text", None):
-                            self.say("My job tools are missing, and our household cannot afford to commission new tools.", duration=2.5)
-                        return
+                    if self.job == "Toolmaker":
+                        # Toolmaker self-forges missing craftable job tools directly
+                        # inside ToolmakerSystem.update_worker — never commission/wait at home.
+                        craftable_tm = set(ToolmakerSystem.craftable_tools())
+                        non_craftable = [(t, q) for t, q in missing_tools if t not in craftable_tm]
+                        if not non_craftable:
+                            missing_tools = []
+                        else:
+                            missing_tools = non_craftable
+                    if missing_tools:
+                        if getattr(self, "_tool_market_fail_cooldown", 0.0) > 0.0:
+                            self._tool_market_fail_cooldown = max(0.0, self._tool_market_fail_cooldown - dt)
+                            market = None
+                            purchase_items = {}
+                            total_cost = 0
+                        else:
+                            requested_items = dict(missing_tools)
+                            market, purchase_items, total_cost = AIMarketPurchasingSystem.find_market_for_items(
+                                self, requested_items, building_manager, furniture_manager, villager_manager,
+                                stockpile_manager=stockpile_manager,
+                            )
+                            if not market:
+                                self._tool_market_fail_cooldown = TOOL_MARKET_FAIL_COOLDOWN_SECONDS
+                        if market:
+                            self.job_tool_purchase_market = market
+                            self.job_tool_purchase_items = purchase_items
+                            self.task = "BUYING_JOB_TOOLS_RETRIEVE_COINS"
+                            return
+                        if getattr(self, "task", None) in ("COMMISSIONING_TOOL_RETRIEVE_COINS", "COMMISSIONING_TOOL_TRAVEL"):
+                            return
+                        if self._ensure_tool_commissions(
+                                missing_tools, building_manager, furniture_manager, villager_manager,
+                                stockpile_manager=stockpile_manager):
+                            # Commission queued/active — wait at home while payment/forge/delivery runs.
+                            self.task = "MISSING_TOOL"
+                            if not getattr(self, "speech_text", None):
+                                self.say("My tools are on order — waiting at home while toolmaker forges them.", duration=2.5)
+                        elif getattr(self, "task", None) in ("COMMISSIONING_TOOL_RETRIEVE_COINS", "COMMISSIONING_TOOL_TRAVEL"):
+                            return
+                        elif self.job == "Builder":
+                            # Builder commission errands (claiming orders, payment
+                            # requests, material hauling) do not need the specific workpiece tools.
+                            pass
+                        else:
+                            self.task = "MISSING_TOOL"
+                            if not getattr(self, "speech_text", None):
+                                self.say("My job tools are missing, and our household cannot afford to commission new tools.", duration=2.5)
+                            return
 
         if sched_activity in ("WORK", "ANY") and self.task == "MISSING_TOOL":
-            dest_x, dest_y = self._get_home_storage_dest(
-                permit_manager, building_manager, furniture_manager, all_entities=all_entities
-            )
-            dist = math.hypot(dest_x - self.x, dest_y - self.y)
-            if dist > CHEST_INTERACTION_RADIUS:
-                self._move_towards(
-                    dest_x, dest_y, dt, arrival_dist=CHEST_INTERACTION_RADIUS,
-                    all_entities=all_entities, player=player,
-                    building_manager=building_manager, furniture_manager=furniture_manager,
-                    exclusive_target=False,
-                )
+            if self.job == "Toolmaker":
+                self.task = "IDLE"
             else:
-                self.is_moving = False
-            return
+                dest_x, dest_y = self._get_home_storage_dest(
+                    permit_manager, building_manager, furniture_manager, all_entities=all_entities
+                )
+                dist = math.hypot(dest_x - self.x, dest_y - self.y)
+                if dist > CHEST_INTERACTION_RADIUS:
+                    self._move_towards(
+                        dest_x, dest_y, dt, arrival_dist=CHEST_INTERACTION_RADIUS,
+                        all_entities=all_entities, player=player,
+                        building_manager=building_manager, furniture_manager=furniture_manager,
+                        exclusive_target=False,
+                    )
+                else:
+                    self.is_moving = False
+                return
 
         # -------------------------------------------------------------
         # Rutinitas 2: Jam Kerja (WORK / ANY)
@@ -4583,6 +4666,15 @@ class Villager:
 
         bob = math.sin(self.walk_cycle) * (2.2 * camera.zoom) if self.is_moving else 0.0
         char_y = sy + int(bob)
+        job_colors = DEDICATED_JOBS.get(self.job, DEDICATED_JOBS["Unassigned"])
+        body_color = job_colors.get("color", DEDICATED_JOBS["Unassigned"]["color"])
+
+        # Songs-of-Syx style zoom/crowd LOD: minimal sprite when zoomed far out or dense crowds
+        if (camera.zoom < AI_LOD_ZOOM_THRESHOLD or getattr(self, "_lod_simplify", False)) and not getattr(self, "speech_text", None) and not getattr(self, "carrying_corpse_id", None):
+            pygame.draw.circle(surface, body_color, (sx, char_y), r)
+            if r >= 4:
+                pygame.draw.circle(surface, COLOR_VILLAGER_OUTLINE, (sx, char_y), r, 1)
+            return
 
         # 1. Bayangan di tanah
         shadow_w = int(r * 1.8)
@@ -4591,8 +4683,6 @@ class Villager:
         surface.blit(shadow_surf, (sx - shadow_w // 2, sy + int(r * 0.4)))
 
         # 2. Badan Karakter Villager (Peasant Forest Green Tunic)
-        job_colors = DEDICATED_JOBS.get(self.job, DEDICATED_JOBS["Unassigned"])
-        body_color = job_colors.get("color", DEDICATED_JOBS["Unassigned"]["color"])
         pygame.draw.circle(surface, body_color, (sx, char_y), r)
         outline_w = max(1, int(3 * camera.zoom))
         pygame.draw.circle(surface, COLOR_VILLAGER_OUTLINE, (sx, char_y), r, outline_w)
@@ -5121,6 +5211,9 @@ class VillagerManager:
         self.last_ai_update_count = 0
         self.ai_updates_since_profile = 0
         self._all_villagers_cache = None
+        self._spatial_index = None
+        self._frame_tax_collector = None
+        self._frame_has_unburied_corpse = False
 
     def get_ai_tick_interval(self, population):
         reference = max(1, AI_DECISION_REFERENCE_POPULATION)
@@ -5330,9 +5423,39 @@ class VillagerManager:
         all_vils = self.get_all_villagers()
 
         if run_ai_scheduler:
-            all_entities = SpatialEntityIndex(
-                list(all_vils) + list(all_servants or ()), TILE_SIZE
-            )
+            servants_list = list(all_servants or ())
+            entities_sig = (len(all_vils), len(servants_list))
+            if self._spatial_index is None:
+                self._spatial_index = SpatialEntityIndex(list(all_vils) + servants_list, TILE_SIZE)
+                self._spatial_sync_tick = 0
+                self._spatial_entities_sig = entities_sig
+            else:
+                self._spatial_sync_tick = (getattr(self, "_spatial_sync_tick", 0) + 1) % 10
+                if getattr(self, "_spatial_entities_sig", None) != entities_sig or self._spatial_sync_tick == 0:
+                    self._spatial_index.sync_all(list(all_vils) + servants_list)
+                    self._spatial_entities_sig = entities_sig
+                else:
+                    for s in servants_list:
+                        self._spatial_index.update(s)
+            all_entities = self._spatial_index
+
+            # Per-frame O(1) caches for Tax Collector and unburied corpse checks
+            frame_collector = None
+            has_unburied = False
+            living_population = 0
+            for villager in all_vils:
+                if getattr(villager, "is_alive", True):
+                    living_population += 1
+                    if (frame_collector is None
+                            and getattr(villager, "job", None) == "Tax Collector"
+                            and isinstance(getattr(villager, "socage_tax_round", None), dict)):
+                        frame_collector = villager
+                elif (not has_unburied
+                        and not getattr(villager, "is_buried", False)
+                        and not getattr(villager, "is_picked_up", False)):
+                    has_unburied = True
+            self._frame_tax_collector = frame_collector
+            self._frame_has_unburied_corpse = has_unburied
 
             # Dispatch pending household death recoveries once per rendered frame.
             for fam in self.families:
@@ -5348,10 +5471,10 @@ class VillagerManager:
                                 rep.recovery_target_drop = drop
                                 rep.recovery_state = "APPROACHING_DROP"
 
-            living_population = sum(
-                1 for villager in all_vils if getattr(villager, "is_alive", True)
-            )
             self._ai_tick_interval = self.get_ai_tick_interval(living_population)
+            active_tick_interval = AISimulationScheduler.active_interval_for_population(
+                living_population, AI_DECISION_TICK_INTERVAL_SECONDS
+            )
 
             def update_villager(villager, actor_dt):
                 villager.update(
@@ -5369,13 +5492,13 @@ class VillagerManager:
             ]
             self.last_ai_update_count = AISimulationScheduler.update_actors(
                 active_ai_actors, dt if ai_dt is None else ai_dt, self._ai_tick_interval,
-                update_villager, active_interval=AI_DECISION_TICK_INTERVAL_SECONDS,
+                update_villager, active_interval=active_tick_interval,
             )
             self.ai_updates_since_profile += self.last_ai_update_count
 
-        # Spatial buckets keep gentle separation local and throttled to rendered frames
-        # instead of running multiple spatial hashing passes on every physics substep.
-        if run_ai_scheduler:
+        # Spatial buckets keep gentle separation local and throttled to rendered frames;
+        # skip crowd separation at massive Songs-of-Syx population scale to preserve FPS.
+        if run_ai_scheduler and living_population <= AI_SEPARATION_MAX_ACTIVE_ACTORS:
             cell_size = max(1.0, VILLAGER_SEPARATION_CELL_SIZE)
             neighbor_span = max(
                 1,
@@ -5484,12 +5607,18 @@ class VillagerManager:
 
     def draw(self, surface, camera):
         self._ensure_font()
-        for v in self.get_all_villagers():
-            render_position = AISimulationScheduler.render_position(
-                v, AISimulationScheduler.render_alpha(
-                    v, getattr(v, "_ai_tick_interval", self._ai_tick_interval)
+        all_vils = self.get_all_villagers()
+        simplify_lod = len(all_vils) >= AI_LOD_POPULATION_THRESHOLD
+        for v in all_vils:
+            v._lod_simplify = simplify_lod
+            if getattr(v, "is_moving", False):
+                render_position = AISimulationScheduler.render_position(
+                    v, AISimulationScheduler.render_alpha(
+                        v, getattr(v, "_ai_tick_interval", self._ai_tick_interval)
+                    )
                 )
-            )
+            else:
+                render_position = (v.x, v.y)
             render_x, render_y = render_position
             radius = max(0, float(getattr(v, "radius", 0)))
             if not camera.is_world_rect_visible(render_x - radius, render_y - radius, radius * 2, radius * 2):

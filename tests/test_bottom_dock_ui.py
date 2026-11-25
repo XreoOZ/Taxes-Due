@@ -207,6 +207,81 @@ class TestBottomDockUI(unittest.TestCase):
         res = self.dock.handle_event(ev_cancel, planning_mode="BUILDING")
         self.assertEqual(res, {"action": "PILL_CANCEL"})
 
+    def test_permit_planning_pill_compatibility(self):
+        """Verifies that PermitManager implements can_afford_permit and create_permit for the planning pill."""
+        from game.world.permits import PermitManager
+        pm = PermitManager()
+        resources = {"Wood": 0, "Stone": 0}
+        tiles = {(10, 10), (10, 11), (11, 10), (11, 11)}
+
+        # 1. can_afford_permit check
+        self.assertTrue(pm.can_afford_permit("farm", resources))
+        can_place, status_msg = pm.can_place_permit_tiles(tiles)
+        self.assertTrue(can_place)
+
+        # 2. create_permit helper
+        permit = pm.create_permit("farm", tiles, resources)
+        self.assertIsNotNone(permit)
+        self.assertEqual(permit.permit_type, "farm")
+        self.assertIn("Farm Lot #", permit.name)
+        self.assertEqual(permit.tiles, tiles)
+
+        # 3. Render planning pill with permit info and tiles badge
+        surf = pygame.Surface((1280, 720))
+        planning_info = {
+            "name": "Farm Permit",
+            "tiles_str": "24 tiles (6x4)",
+            "cost_str": "Free Deed",
+            "status_msg": "Ready to issue",
+            "is_valid": True,
+            "rotatable": False,
+        }
+        self.dock.draw(surf, planning_mode="PERMIT", planning_info=planning_info)
+        self.assertGreater(self.dock.pill_confirm_rect.width, 0)
+
+    def test_planning_pill_tiles_badge_narrow_and_building_modes(self):
+        """Verifies planning pill renders tiles_str cleanly across modes and narrow viewports."""
+        for size in ((1280, 720), (800, 600)):
+            surf = pygame.Surface(size)
+            for mode, info in (
+                (
+                    "BUILDING",
+                    {
+                        "name": "Wooden Structure",
+                        "tiles_str": "18 tiles (6x3)",
+                        "cost_str": "90W 18S",
+                        "status_msg": "Ready to build",
+                        "is_valid": True,
+                        "rotatable": False,
+                    },
+                ),
+                (
+                    "FURNITURE",
+                    {
+                        "name": "Bed",
+                        "tiles_str": "4 tiles (1x1 ea)",
+                        "cost_str": "5W 0S each",
+                        "status_msg": "4 placed",
+                        "is_valid": True,
+                        "rotatable": True,
+                    },
+                ),
+                (
+                    "PERMIT",
+                    {
+                        "name": "Farm Permit",
+                        "tiles_str": "0 tiles",
+                        "cost_str": "Free Deed",
+                        "status_msg": "Drag area on map",
+                        "is_valid": False,
+                        "rotatable": False,
+                    },
+                ),
+            ):
+                self.dock.draw(surf, planning_mode=mode, planning_info=info)
+                self.assertGreater(self.dock.pill_confirm_rect.width, 0)
+                self.assertLessEqual(self.dock.pill_cancel_rect.right, size[0])
+
 
 if __name__ == "__main__":
     unittest.main()

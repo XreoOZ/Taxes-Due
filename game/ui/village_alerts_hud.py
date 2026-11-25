@@ -6,7 +6,7 @@ Every alert is clickable to jump directly to the fix.
 """
 
 import pygame
-from game.systems.village_life.village_alerts import collect_village_alerts
+from game.systems.village_life.village_alerts import collect_village_alerts, group_village_alerts
 from game.ui.ui_theme import ui_font, upx
 
 
@@ -23,6 +23,7 @@ class VillageAlertsHUD:
         self.max_visible = max_visible
         self.collapsed = False
         self.alerts = []
+        self.grouped_alerts = []
         self.toggle_btn_rect = pygame.Rect(0, 0, 0, 0)
         self.more_btn_rect = pygame.Rect(0, 0, 0, 0)
         self.alert_row_rects = []  # [(rect, alert_dict), ...]
@@ -45,6 +46,7 @@ class VillageAlertsHUD:
             stockpile_manager=stockpile_manager,
             servant_manager=servant_manager,
         )
+        self.grouped_alerts = group_village_alerts(self.alerts)
         return self.alerts
 
     def handle_event(self, event):
@@ -82,8 +84,9 @@ class VillageAlertsHUD:
         m_pos = pygame.mouse.get_pos()
 
         total_count = len(self.alerts)
-        visible_alerts = self.alerts[:self.max_visible]
-        overflow = max(0, total_count - len(visible_alerts))
+        grouped = self.grouped_alerts or group_village_alerts(self.alerts)
+        visible_alerts = grouped[:self.max_visible]
+        overflow = max(0, len(grouped) - len(visible_alerts))
 
         if self.collapsed:
             panel_h = header_h
@@ -152,6 +155,8 @@ class VillageAlertsHUD:
                 title_txt = title_txt[:max_chars - 2] + ".."
             txt_surf = ui_font(10, bold=is_hov).render(title_txt, True, (255, 255, 255) if is_hov else (226, 232, 240))
             surface.blit(txt_surf, (row_rect.x + upx(16), row_rect.centery - txt_surf.get_height() // 2))
+            arrow_s = ui_font(10, bold=True).render(">", True, (96, 165, 250) if is_hov else (100, 116, 139))
+            surface.blit(arrow_s, (row_rect.right - arrow_s.get_width() - upx(6), row_rect.centery - arrow_s.get_height() // 2))
             cur_y += row_h + upx(2)
 
         if overflow > 0:

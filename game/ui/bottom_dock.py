@@ -550,7 +550,7 @@ class BottomDockUI:
 
     def _draw_planning_pill(self, surface, screen_w, screen_h, planning_mode, planning_info):
         """Draws a sleek, unified action pill at the bottom when in any planning/build mode."""
-        pill_w = upx(620)
+        pill_w = min(upx(660), max(upx(420), screen_w - upx(20)))
         pill_h = upx(46)
         pill_x = (screen_w - pill_w) // 2
         pill_y = screen_h - pill_h - upx(10)
@@ -564,11 +564,20 @@ class BottomDockUI:
 
         m_pos = pygame.mouse.get_pos()
 
+        # Precompute right-side button positions so left texts never overlap them
+        btn_h = upx(30)
+        btn_y = pill_y + upx(8)
+        btn_w_confirm = upx(90)
+        btn_w_cancel = upx(80)
+        confirm_x = pill_x + pill_w - upx(200)
+        max_text_right = confirm_x - upx(10)
+
         # Format title based on mode
         info = planning_info or {}
         mode_title = f"{planning_mode.replace('_', ' ').title()}"
         item_name = info.get("name", "")
         cost_info = info.get("cost_str", "")
+        tiles_info = info.get("tiles_str", "")
         status_msg = info.get("status_msg", "")
         is_valid = info.get("is_valid", True)
 
@@ -576,8 +585,24 @@ class BottomDockUI:
         if planning_mode == "DESTROY":
             title_str = "Demolish Mode — Click object/road to mark for removal"
 
+        title_x = pill_x + upx(16)
         title_surf = ui_font(12, bold=True).render(title_str, True, (255, 255, 255))
-        surface.blit(title_surf, (pill_x + upx(16), pill_y + upx(8)))
+        surface.blit(title_surf, (title_x, pill_y + upx(8)))
+
+        # Total tiles badge beside the title when available
+        if tiles_info:
+            badge_font = ui_font(10, bold=True)
+            badge_txt = badge_font.render(tiles_info, True, (125, 211, 252))
+            badge_pad_x = upx(8)
+            badge_pad_y = upx(2)
+            badge_w = badge_txt.get_width() + badge_pad_x * 2
+            badge_h = badge_txt.get_height() + badge_pad_y * 2
+            badge_x = title_x + title_surf.get_width() + upx(10)
+            if badge_x + badge_w <= max_text_right:
+                badge_rect = pygame.Rect(badge_x, pill_y + upx(7), badge_w, badge_h)
+                pygame.draw.rect(surface, (30, 58, 138), badge_rect, border_radius=upx(5))
+                pygame.draw.rect(surface, (56, 189, 248), badge_rect, width=1, border_radius=upx(5))
+                surface.blit(badge_txt, (badge_x + badge_pad_x, badge_rect.y + badge_pad_y))
 
         # Subtitle / Hints
         if planning_mode == "DESTROY":
@@ -587,22 +612,26 @@ class BottomDockUI:
         else:
             hint_str = f"[L-Click: Place/Drag] [Enter: Done] [Esc: Cancel] | {cost_info}"
 
+        hint_x = pill_x + upx(16)
         hint_surf = ui_font(9).render(hint_str, True, (148, 163, 184))
-        surface.blit(hint_surf, (pill_x + upx(16), pill_y + upx(26)))
+        surface.blit(hint_surf, (hint_x, pill_y + upx(26)))
 
-        # Status / Warning text
+        # Status / Warning text positioned dynamically right after hint_surf
         if status_msg:
             stat_col = (34, 197, 94) if is_valid else (239, 68, 68)
-            stat_surf = ui_font(9, bold=True).render(status_msg, True, stat_col)
-            surface.blit(stat_surf, (pill_x + upx(340), pill_y + upx(26)))
+            stat_x = hint_x + hint_surf.get_width() + upx(12)
+            avail_w = max_text_right - stat_x
+            if avail_w > upx(24):
+                stat_font = ui_font(9, bold=True)
+                disp_stat = status_msg
+                while len(disp_stat) > 4 and stat_font.size(disp_stat)[0] > avail_w:
+                    disp_stat = disp_stat[:-4] + "..."
+                stat_surf = stat_font.render(disp_stat, True, stat_col)
+                surface.blit(stat_surf, (stat_x, pill_y + upx(26)))
 
-        # Interactive Buttons on Pill (Confirm, Clear, Cancel)
-        btn_h = upx(30)
-        btn_y = pill_y + upx(8)
-
+        # Interactive Buttons on Pill (Confirm, Cancel)
         # 1. Confirm / Done button
-        btn_w_confirm = upx(90)
-        self.pill_confirm_rect = pygame.Rect(pill_x + pill_w - upx(200), btn_y, btn_w_confirm, btn_h)
+        self.pill_confirm_rect = pygame.Rect(confirm_x, btn_y, btn_w_confirm, btn_h)
         c_hover = self.pill_confirm_rect.collidepoint(m_pos)
         c_bg = (34, 197, 94) if is_valid else (71, 85, 105)
         if c_hover and is_valid:
@@ -613,7 +642,6 @@ class BottomDockUI:
         surface.blit(c_surf, c_surf.get_rect(center=self.pill_confirm_rect.center))
 
         # 2. Cancel button
-        btn_w_cancel = upx(80)
         self.pill_cancel_rect = pygame.Rect(pill_x + pill_w - upx(95), btn_y, btn_w_cancel, btn_h)
         x_hover = self.pill_cancel_rect.collidepoint(m_pos)
         x_bg = (220, 38, 38) if x_hover else (185, 28, 28)

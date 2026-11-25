@@ -20,7 +20,7 @@ pygame.display.set_mode((1280, 720))
 from game.buildings.building import Building
 from game.buildings.building_manager import BuildingManager
 from game.entities.villagers import Family, Villager, VillagerManager
-from game.furniture import FurnitureManager
+from game.furniture import Furniture, FurnitureManager
 from game.systems.village_life.village_alerts import collect_village_alerts
 from game.systems.work.workplace_system import (
     auto_sort_all_workers,
@@ -175,6 +175,51 @@ class TestJobsStepperAlertsAndTownHall(unittest.TestCase):
         self.assertEqual(act_res, f"alert_open_grant_{self.fam.id}")
         self.assertEqual(ui.active_tab, 4)
         self.assertTrue(ui.show_grant_dialog)
+
+    def test_grouped_notice_board_and_town_hall_category_filter_and_culling(self):
+        """Notice Board collapses large alert counts into category summaries; clicking opens filtered Town Hall."""
+        # Create 40 broken fixtures + 40 struggling families
+        for i in range(40):
+            f_broken = Furniture(f"b_fix_{i}", "bed", 2 + i, 2, permit_id=None, family_id=None)
+            f_broken.condition = 0.0
+            self.fm.furnitures.append(f_broken)
+            fam = Family(f"fam_need_{i}", f"Need{i}")
+            v = Villager(f"v_need_{i}", "A", f"Need{i}", "Male", 25, 2, "Father", f"fam_need_{i}")
+            fam.members = [v]
+            self.vm.families.append(fam)
+
+        hud = VillageAlertsHUD()
+        hud.refresh(self.vm, self.pm, self.bm, self.fm, self.sm)
+        surf = pygame.Surface((1280, 720))
+        hud.draw(surf, right_x=1264, top_y=220)
+
+        titles = [a["title"] for _, a in hud.alert_row_rects]
+        self.assertLessEqual(len(hud.alert_row_rects), hud.max_visible)
+        self.assertTrue(any(t.startswith("Needs Repair: ") for t in titles), titles)
+        self.assertTrue(any(t.startswith("Households in Need: ") for t in titles), titles)
+
+        # Click "Needs Repair: ..." row -> routes to Town Hall filtered to "repair"
+        repair_rect, _ = next((r, a) for r, a in hud.alert_row_rects if a.get("group") == "repair")
+        click_res = hud.handle_event(pygame.event.Event(pygame.MOUSEBUTTONDOWN, {"button": 1, "pos": repair_rect.center}))
+        self.assertEqual(click_res["action"], "OPEN_TOWN_HALL")
+        self.assertEqual(click_res["target_id"], "repair")
+
+        ui = RaportUI()
+        ui.execute_alert_action(click_res["action"], click_res["target_id"])
+        self.assertEqual(ui.active_tab, 9)
+        self.assertEqual(ui.town_hall_filter, "repair")
+        ui.draw(surf, self.bm, self.pm, self.resources, villager_manager=self.vm, furniture_manager=self.fm, stockpile_manager=self.sm)
+        # Viewport culling must only create buttons for visible rows, not all 40+
+        self.assertLess(len(ui.town_hall_action_btns), 15)
+        self.assertTrue(all(a["category"] == "repair" for _, a in ui.town_hall_action_btns))
+
+        # Clicking "Households (...)" chip switches filter to household_need
+        hh_chip = ui.town_hall_filter_rects["household_need"]
+        ui.handle_event(
+            pygame.event.Event(pygame.MOUSEBUTTONDOWN, {"button": 1, "pos": hh_chip.center}),
+            self.bm, self.pm, self.resources, villager_manager=self.vm, furniture_manager=self.fm, stockpile_manager=self.sm,
+        )
+        self.assertEqual(ui.town_hall_filter, "household_need")
 
 
 if __name__ == "__main__":

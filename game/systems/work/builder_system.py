@@ -1263,20 +1263,77 @@ class BuilderSystem:
         return False
 
     @classmethod
+    def _clear_restock_state(cls, builder, cooldown_seconds=0.0):
+        """Reset transient restock targets and optionally apply retry cooldown."""
+        builder.target_restock_market = None
+        builder.target_restock_mat = None
+        builder.target_restock_qty = 0
+        builder.target_restock_payer_type = None
+        builder.target_restock_family_id = None
+        if cooldown_seconds > 0.0:
+            builder._restock_cooldown_until = time.time() + float(cooldown_seconds)
+
+    @classmethod
+    def _idle_buffer_coin_reserve(cls, builder, furniture_manager, villager_manager, building_manager):
+        """Minimum coins reserved for living members' daily food before idle buffer buying."""
+        if not villager_manager or not hasattr(villager_manager, "get_family_by_id"):
+            return 0
+        fam = villager_manager.get_family_by_id(getattr(builder, "family_id", None))
+        if not fam:
+            return 0
+        living = [m for m in getattr(fam, "members", []) if getattr(m, "is_alive", True)]
+        if not living:
+            return 0
+        chest = furniture_manager.get_storage_for_family(builder.family_id) if furniture_manager else None
+        inv_food = sum(
+            int(v) for k, v in (getattr(chest, "inventory", {}) or {}).items()
+            if MARKET_TRADEABLE_ITEMS.get(k) == "Food" and int(v) > 0
+        )
+        needed_food = len(living) * DAILY_FOOD_REQUIREMENT
+        if inv_food >= needed_food:
+            return 0
+        markets = MarketService.get_all_markets(building_manager)
+        food_price = cls._food_unit_price(markets, minimum_stock=1)
+        return max(0, (needed_food - inv_food) * int(food_price))
+
+    @classmethod
     def _begin_restock(cls, builder, missing, building_manager, furniture_manager, villager_manager,
-                       payer_type=None, family_id=None):
+                       payer_type=None, family_id=None, exact_only=False, is_idle_buffer=False):
         from game.systems.economy.market_purchasing import AIMarketPurchasingSystem
         from game.data.catalog import DEDICATED_JOBS
         from game.data.config import DEFAULT_MATERIAL_RESTOCK_BATCH, VILLAGER_INVENTORY_CAPACITY
+        if float(getattr(builder, "_restock_cooldown_until", 0.0) or 0.0) > time.time():
+            return False
         job = getattr(builder, "job", "")
         stock_targets = DEDICATED_JOBS.get(job, {}).get("material_stock_target", {})
+        coin_family = (family_id if family_id is not None and payer_type != "landlord" else getattr(builder, "family_id", None))
+        chest = furniture_manager.get_storage_for_family(coin_family) if furniture_manager else None
+        coin_reserve = (
+            cls._idle_buffer_coin_reserve(builder, furniture_manager, villager_manager, building_manager)
+            if is_idle_buffer else 0
+        )
         for material, quantity in missing.items():
-            # Desired batch: buy in bulk up to stock target or needed quantity (max bag capacity 50)
-            target_stock = stock_targets.get(material, DEFAULT_MATERIAL_RESTOCK_BATCH)
-            desired_batch = min(VILLAGER_INVENTORY_CAPACITY, max(int(quantity), int(target_stock)))
-            market, _, affordable = AIMarketPurchasingSystem.find_nearest_market_for_material(
+            req_qty = max(0, int(quantity))
+            if req_qty <= 0:
+                continue
+            if exact_only:
+                desired_batch = min(VILLAGER_INVENTORY_CAPACITY, req_qty)
+            else:
+                target_stock = int(stock_targets.get(material, DEFAULT_MATERIAL_RESTOCK_BATCH))
+                cur_chest = int((getattr(chest, "inventory", {}) or {}).get(material, 0)) if chest else 0
+                desired_batch = min(VILLAGER_INVENTORY_CAPACITY, max(req_qty, target_stock - cur_chest))
+            if desired_batch <= 0:
+                continue
+            market, unit_price, affordable = AIMarketPurchasingSystem.find_nearest_market_for_material(
                 builder, material, desired_batch, building_manager, furniture_manager, villager_manager)
-            if market and affordable:
+            if market and affordable and is_idle_buffer and coin_reserve > 0 and unit_price > 0:
+                wallet, source = MarketService.get_household_funds_and_source(
+                    builder, furniture_manager, villager_manager)
+                pocket = getattr(builder, "inventory", {})
+                total_funds = to_copper(wallet) + (0 if source is pocket else to_copper(normalize_wallet(pocket)))
+                spendable = max(0, total_funds - coin_reserve)
+                affordable = min(affordable, spendable // int(unit_price))
+            if market and affordable > 0:
                 builder.target_restock_market = market
                 builder.target_restock_mat = material
                 builder.target_restock_qty = affordable
@@ -1303,11 +1360,7 @@ class BuilderSystem:
         ) if furniture_manager else None)
         if not market or not material or quantity <= 0:
             builder.task = "IDLE"
-            builder.target_restock_market = None
-            builder.target_restock_mat = None
-            builder.target_restock_qty = 0
-            builder.target_restock_payer_type = None
-            builder.target_restock_family_id = None
+            cls._clear_restock_state(builder)
             return True
         unit_price = MarketService.get_item_price(material, market)
         if task == "BUILDER_RESTOCK_RETRIEVE_COINS":
@@ -1344,6 +1397,7 @@ class BuilderSystem:
                     builder.task = "BUILDER_RESTOCK_TRAVEL_TO_MARKET"
                 else:
                     builder.say(message or "The household does not have enough coins for the purchase.", duration=2.5)
+                    cls._clear_restock_state(builder, cooldown_seconds=10.0)
                     builder.task = "IDLE"
             return True
         if task == "BUILDER_RESTOCK_TRAVEL_TO_MARKET":
@@ -1357,6 +1411,7 @@ class BuilderSystem:
                     builder.task = "BUILDER_RESTOCK_HAULING_HOME"
                 else:
                     builder.say(message, duration=2.5)
+                    cls._clear_restock_state(builder, cooldown_seconds=10.0)
                     builder.task = "IDLE"
             return True
         if task == "BUILDER_RESTOCK_HAULING_HOME":
@@ -1628,7 +1683,8 @@ class BuilderSystem:
                 if int(stored_materials.get(material, 0)) < int(target)
             }
             if low_stock and cls._begin_restock(
-                    builder, low_stock, building_manager, furniture_manager, villager_manager):
+                    builder, low_stock, building_manager, furniture_manager, villager_manager,
+                    exact_only=True, is_idle_buffer=True):
                 builder.active_tool = None
                 return True
 
@@ -1703,12 +1759,29 @@ class BuilderSystem:
             cls._ensure_paid_seq(order, furniture_manager, building_manager)
             seq = int(order.get("paid_seq", 0) or 0)
             kind_rank = 0 if is_public_site else (1 if is_public_repair else 2)
-            candidates.append((seq, kind_rank, is_public_site, is_public_repair, subject))
-        candidates.sort(key=lambda c: (c[0], c[1]))
+            is_priority = bool(order.get("priority") or getattr(subject, "is_priority", False) or getattr(subject, "priority", False))
+            priority_rank = 0 if is_priority else 1
+            candidates.append((priority_rank, seq, kind_rank, is_public_site, is_public_repair, subject))
+        candidates.sort(key=lambda c: (c[0], c[1], c[2]))
         chosen = candidates[0] if candidates else None
-        public_site = chosen[4] if chosen and chosen[2] else None
-        public_repair = chosen[4] if chosen and chosen[3] else None
-        furniture_active = chosen[4] if chosen and not chosen[2] and not chosen[3] else None
+        public_site = chosen[5] if chosen and chosen[3] else None
+        public_repair = chosen[5] if chosen and chosen[4] else None
+        furniture_active = chosen[5] if chosen and not chosen[3] and not chosen[4] else None
+
+        # Priority pre-emption: If the top workable order is priority and builder is engaged in another non-priority order, switch immediately
+        if chosen and chosen[0] == 0:
+            chosen_subject = chosen[5]
+            chosen_order = getattr(chosen_subject, "construction_order", {}) or {}
+            chosen_order_id = chosen_order.get("id")
+            cur_target_id = getattr(builder, "builder_target_order_id", None)
+            if cur_target_id and chosen_order_id and str(cur_target_id) != str(chosen_order_id):
+                builder.builder_work_timer = 0.0
+                builder.active_tool = None
+                builder.builder_target_order_id = None
+                builder.builder_target_position = None
+                builder.task = "IDLE"
+                if not getattr(builder, "speech_text", None):
+                    builder.say("Prioritizing urgent construction!", duration=2.5)
 
         if public_site:
             order = public_site.construction_order
@@ -1734,7 +1807,8 @@ class BuilderSystem:
                     if missing and cls._begin_restock(builder, missing, building_manager,
                                                       furniture_manager, villager_manager,
                                                       payer_type=order.get("payer_type"),
-                                                      family_id=order.get("payer_family_id")):
+                                                      family_id=order.get("payer_family_id"),
+                                                      exact_only=True):
                         order["status"] = "AWAITING_MATERIAL"
                         return True
                     ready = cls._deliver_build_materials(
@@ -1809,7 +1883,8 @@ class BuilderSystem:
             if missing and cls._begin_restock(builder, missing, building_manager,
                                               furniture_manager, villager_manager,
                                               payer_type=order.get("payer_type"),
-                                              family_id=order.get("payer_family_id")):
+                                              family_id=order.get("payer_family_id"),
+                                              exact_only=True):
                 order["status"] = "AWAITING_MATERIAL"
                 return True
             if not order.get("materials_committed"):
@@ -1889,7 +1964,8 @@ class BuilderSystem:
         short_recipe = {item: amount - int(totals.get(item, 0)) for item, amount in required.items()
                         if totals.get(item, 0) < amount}
         missing = dict(short_recipe)
-        if missing and cls._begin_restock(builder, missing, building_manager, furniture_manager, villager_manager):
+        if missing and cls._begin_restock(builder, missing, building_manager, furniture_manager, villager_manager,
+                                          exact_only=True):
             return True
         if short_recipe:
             builder.say("I need this furniture's materials, but none are available to buy right now.", duration=2.5)

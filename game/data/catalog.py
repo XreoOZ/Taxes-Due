@@ -77,6 +77,9 @@ TOOLMAKER_TOOL_MIN_INGAME_HOURS = 1.0
 
 TOOLMAKER_TOOL_MAX_INGAME_HOURS = 2.0
 
+# Spare set kept in the toolmaker's household chest for quick replacement
+TOOLMAKER_SPARE_TOOLS_TARGET = 1
+
 # Craftable catalogue = every item whose ITEM_CATEGORIES value is "TOOL".
 # -----------------------------------------------------------------------------
 # Tool Condition Lifecycle (per-unit wear on every TOOL item)
@@ -240,7 +243,7 @@ DEDICATED_JOBS = {
         "workplace_furniture_type": "builder_workbench",
         "desc": "Crafts furniture, structural beams, and wooden barrels.",
         "required_tools": ["Saw", "Adze"],
-        "material_stock_target": {"Wood": 10, "Stone": 10}
+        "material_stock_target": {"Wood": 5, "Stone": 5}
     },
     "Tax Collector": {
         "id": "Tax Collector",
@@ -743,18 +746,18 @@ CROP_TYPES = {
         "name": "Potato",
         "icon": "🥔",
         "wip": False,
-        "desc": "Hearty staple tuber crop. Each tile yields 2 potatoes 80% of the time, 4 potatoes 15% of the time, and 5 potatoes 5% of the time every 10 days.",
+        "desc": "Hearty staple tuber crop. Each tile yields 5 potatoes 80% of the time, 6 potatoes 15% of the time, and 8 potatoes 5% of the time every 10 days.",
         "growth_days": 10.0,
         "sprout_day": 2.0,
         "leaf_day": 4.0,
         "harvest_day": 10.0,
         "yield_distribution": [
-            {"amount": 2, "weight": 0.80},
-            {"amount": 4, "weight": 0.15},
-            {"amount": 5, "weight": 0.05},
+            {"amount": 5, "weight": 0.80},
+            {"amount": 6, "weight": 0.15},
+            {"amount": 8, "weight": 0.05},
         ],
-        "yield_per_tile": 2,
-        "yield": 2
+        "yield_per_tile": 5,
+        "yield": 5
     },
     "wheat": {
         "id": "wheat",

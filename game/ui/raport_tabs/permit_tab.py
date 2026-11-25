@@ -193,11 +193,16 @@ class PermitMixin:
             # -----------------------------------------------------------------
             # SCREEN 1: Permit Categories Selection Screen
             # -----------------------------------------------------------------
-            p_title = self.font_sub.render(f" Landlord Permit Categories ({len(categories)} categories, {len(permit_manager.permits)} total lots):", True, COLOR_TEXT_TITLE)
+            p_title = self.font_sub.render(f"Property — Permit Lots ({len(permit_manager.permits)} total):", True, COLOR_TEXT_TITLE)
             surface.blit(p_title, (mx + upx(24), cy))
 
+            self._draw_subview_toggle(
+                surface, mx + self.modal_w - upx(24), cy - upx(4),
+                [(0, "Buildings"), (1, "Permits")], 1, m_pos,
+            )
+
             sub_txt = self.font_body.render("Select a category below to inspect and manage designated lots, or quick-issue a permit:", True, COLOR_TEXT_MUTED)
-            surface.blit(sub_txt, (mx + upx(28), cy + upx(22)))
+            surface.blit(sub_txt, (mx + upx(24), cy + upx(22)))
 
             card_y = cy + upx(44)
             for cat in categories:

@@ -120,22 +120,27 @@ class RaportUI(
         # Left HUD Button (Town Ledger)
         self.btn_left_rect = pygame.Rect(upx(16), upx(200), upx(116), upx(42))
 
-        # Tabs (keep 0..8 fixed so existing shortcuts/tests stay intact; 9 = Town Hall Overview)
+        # Tabs (keep 0..9 fixed so existing shortcuts/tests stay intact;
+        # absorbed tabs are hidden and reached via sub-toggles / header Roadmap)
         self.tabs = [
-            {"id": "building", "title": "Buildings", "wip": False},
-            {"id": "permit", "title": "Permits", "wip": False},
-            {"id": "priority", "title": "Priority", "wip": False},
+            {"id": "building", "title": "Property", "wip": False},
+            {"id": "permit", "title": "Permits", "wip": False, "hidden": True},
+            {"id": "priority", "title": "Priority", "wip": False, "hidden": True},
             {"id": "schedule", "title": "Schedule", "wip": False, "hidden": True},
             {"id": "villagers", "title": "Household", "wip": False},
             {"id": "workers", "title": "Jobs", "wip": False},
-            {"id": "immigrant", "title": "Immigrant", "wip": False},
+            {"id": "immigrant", "title": "Immigrant", "wip": False, "hidden": True},
             {"id": "tax", "title": "Taxes", "wip": False},
-            {"id": "planning", "title": "Roadmap", "wip": True},
+            {"id": "planning", "title": "Roadmap", "wip": True, "hidden": True},
             {"id": "town_hall", "title": "Town Hall", "wip": False},
         ]
-        # Display Town Hall & daily-management tabs first from left to right
-        self.tab_display_order = [9, 4, 5, 6, 7, 0, 1, 2, 3, 8]
+        # 5 visible tabs: Town Hall | Household | Jobs | Taxes | Property
+        self.tab_display_order = [9, 4, 5, 7, 0, 1, 2, 3, 6, 8]
+        self.roadmap_header_btn_rect = None
+        self.subview_toggle_rects = {}
         self.town_hall_action_btns = []
+        self.town_hall_filter_rects = {}
+        self.town_hall_filter = "all"
         self.town_hall_scroll_y = 0
         self.town_hall_max_scroll = 0
         self.town_hall_viewport_rect = None
@@ -258,6 +263,7 @@ class RaportUI(
         self.permit_household_btn_rects = {}
         self.building_household_btn_rects = {}
         self.household_view_permit_btn_rect = None
+        self.priority_toggle_btn_rects = {}
         self.cancel_construction_btn_rects = {}
         self.public_commission_btn_rects = {}
         self.selected_public_commission = None
@@ -979,6 +985,16 @@ class RaportUI(
             self.building_scroll_y = 0
             return "close_raport"
 
+        if self.roadmap_header_btn_rect and self.roadmap_header_btn_rect.collidepoint(mouse_pos):
+            self.active_tab = 8
+            self.selected_building_category = None
+            self.selected_permit_category = None
+            self.selected_family_id = None
+            self.selected_job_id = None
+            self.selected_schedule_job_id = None
+            self.selected_workstation_job_id = None
+            return "open_roadmap_tab"
+
         # 3. Tab Switching
         for i, tr in enumerate(self.tab_rects):
             if tr.collidepoint(mouse_pos):
@@ -997,9 +1013,24 @@ class RaportUI(
                 self.show_assign_permit_picker = False
                 self.selected_job_id = None
                 self.selected_schedule_job_id = None
+                self.selected_workstation_job_id = None
                 self.selected_building_owner = None
                 self.building_scroll_y = 0
                 return f"switch_tab_{i}"
+
+        # 3.5 Sub-view segmented toggles inside merged tabs
+        for sub_tab_idx, sub_rect in list(getattr(self, "subview_toggle_rects", {}).items()):
+            if sub_rect.collidepoint(mouse_pos):
+                self.active_tab = sub_tab_idx
+                self.selected_building_category = None
+                self.selected_permit_category = None
+                self.selected_building_owner = None
+                self.building_scroll_y = 0
+                self.selected_family_id = None
+                self.selected_job_id = None
+                self.selected_schedule_job_id = None
+                self.selected_workstation_job_id = None
+                return f"switch_subview_{sub_tab_idx}"
 
         # Crop picker dialog is modal-ish: handle it before tab dispatch so it
         # works when opened from Jobs > Workstations as well as the Permit tab.
@@ -1078,6 +1109,15 @@ class RaportUI(
                     building_manager.cancel_construction(s, resources=resources, stockpile_manager=stockpile_manager, all_servants=servants, furniture_manager=furniture_manager)
                     self.cancel_construction_btn_rects.clear()
                     return "cancel_construction"
+
+            # Check Priority Toggle buttons (Construction Sites, Repairs, Furniture)
+            for item, rect in list(getattr(self, "priority_toggle_btn_rects", {}).items()):
+                if rect.collidepoint(mouse_pos):
+                    if hasattr(item, "toggle_priority"):
+                        item.toggle_priority()
+                    elif isinstance(getattr(item, "construction_order", None), dict):
+                        item.construction_order["priority"] = not item.construction_order.get("priority", False)
+                    return "toggle_priority"
 
             # Check Destroy Building buttons
             for b, rect in list(self.destroy_building_btn_rects.items()):
@@ -1651,6 +1691,11 @@ class RaportUI(
 
         # 10. Tab 9: Town Hall Action Center
         elif self.active_tab == 9:
+            for fkey, frect in list(getattr(self, "town_hall_filter_rects", {}).items()):
+                if frect.collidepoint(mouse_pos):
+                    self.town_hall_filter = fkey
+                    self.town_hall_scroll_y = 0
+                    return f"town_hall_filter_{fkey}"
             for btn_rect, alert in list(getattr(self, "town_hall_action_btns", [])):
                 if btn_rect.collidepoint(mouse_pos):
                     return self.execute_alert_action(alert["action_type"], alert.get("target_id"))
@@ -1662,6 +1707,9 @@ class RaportUI(
         if action_type == "OPEN_TOWN_HALL":
             self.is_open = True
             self.active_tab = 9
+            self.town_hall_scroll_y = 0
+            valid_filters = ("all", "repair", "household_need", "water", "jobs", "immigration")
+            self.town_hall_filter = target_id if target_id in valid_filters else "all"
             return "open_town_hall"
         if action_type == "OPEN_HOUSEHOLD" and target_id is not None:
             self.open_household_directly(target_id)
@@ -1693,6 +1741,39 @@ class RaportUI(
             self.close()
             return "alert_focus_tile"
         return "handled"
+
+    _TAB_GROUPS = {0: (0, 1), 4: (4, 6), 5: (5, 2, 3)}
+
+    def _tab_is_visually_active(self, tab_idx):
+        return self.active_tab in self._TAB_GROUPS.get(tab_idx, (tab_idx,))
+
+    def _draw_subview_toggle(self, surface, right_x, y, options, active_tab_idx, mouse_pos):
+        """Draw a right-aligned segmented pill toggle for merged sub-views and return its left x."""
+        self.subview_toggle_rects = {}
+        pad_x = upx(12)
+        h = upx(24)
+        gap = upx(4)
+        rendered = [(idx, self.font_badge.render(lbl, True, (255, 255, 255))) for idx, lbl in options]
+        widths = [surf.get_width() + 2 * pad_x for _, surf in rendered]
+        total_w = sum(widths) + gap * max(0, len(options) - 1) + upx(6)
+        start_x = right_x - total_w
+        bg_rect = pygame.Rect(start_x, y - upx(2), total_w, h + upx(4))
+        pygame.draw.rect(surface, (15, 23, 42), bg_rect, border_radius=upx(6))
+        pygame.draw.rect(surface, (51, 65, 85), bg_rect, width=1, border_radius=upx(6))
+
+        cur_x = start_x + upx(3)
+        for (idx, lbl), (_, lbl_surf), w in zip(options, rendered, widths):
+            r = pygame.Rect(cur_x, y, w, h)
+            self.subview_toggle_rects[idx] = r
+            is_sel = (idx == active_tab_idx)
+            hov = r.collidepoint(mouse_pos)
+            bg = (37, 99, 235) if is_sel else ((30, 41, 59) if hov else (15, 23, 42))
+            pygame.draw.rect(surface, bg, r, border_radius=upx(4))
+            txt_c = (255, 255, 255) if is_sel else COLOR_TEXT_MUTED
+            t = self.font_badge.render(lbl, True, txt_c)
+            surface.blit(t, (r.centerx - t.get_width() // 2, r.centery - t.get_height() // 2))
+            cur_x += w + gap
+        return start_x
 
     def draw(self, surface, building_manager, permit_manager, resources, servant_manager=None, villager_manager=None, schedule_manager=None, day_cycle=None, furniture_manager=None, stockpile_manager=None, production_system=None):
         self._init_fonts()
@@ -1734,18 +1815,30 @@ class RaportUI(
         title_surf = self.font_title.render("TOWN LEDGER", True, COLOR_TEXT_TITLE)
         surface.blit(title_surf, (mx + upx(20), my + upx(16)))
 
-        # Close (X)
+        # Close (X) & Header Roadmap pill
         self.close_btn_rect = pygame.Rect(mx + self.modal_w - upx(36), my + upx(14), upx(22), upx(22))
         close_hover = self.close_btn_rect.collidepoint(mouse_pos)
         close_col = (239, 68, 68) if close_hover else COLOR_TEXT_MUTED
         close_surf = self.font_btn.render("X", True, close_col)
         surface.blit(close_surf, (self.close_btn_rect.x + upx(5), self.close_btn_rect.y + 1))
 
+        self.roadmap_header_btn_rect = pygame.Rect(mx + self.modal_w - upx(118), my + upx(12), upx(74), upx(24))
+        rm_active = (self.active_tab == 8)
+        rm_hov = self.roadmap_header_btn_rect.collidepoint(mouse_pos)
+        rm_bg = (30, 58, 138) if rm_active else ((51, 65, 85) if rm_hov else (24, 34, 52))
+        rm_border = (96, 165, 250) if rm_active else (71, 85, 105)
+        pygame.draw.rect(surface, rm_bg, self.roadmap_header_btn_rect, border_radius=upx(5))
+        pygame.draw.rect(surface, rm_border, self.roadmap_header_btn_rect, width=1, border_radius=upx(5))
+        rm_txt = self.font_badge.render("Roadmap", True, (255, 255, 255) if rm_active else COLOR_TEXT_MUTED)
+        surface.blit(rm_txt, (self.roadmap_header_btn_rect.centerx - rm_txt.get_width() // 2,
+                              self.roadmap_header_btn_rect.centery - rm_txt.get_height() // 2))
+
         # Tabs (rendered in display order, stored at true index in tab_rects)
         self.tab_rects = [pygame.Rect(-upx(9999), -upx(9999), 0, 0) for _ in self.tabs]
+        self.subview_toggle_rects = {}
         tab_x = mx + upx(20)
         tab_y = my + upx(50)
-        tab_spacing = upx(6)
+        tab_spacing = upx(8)
         visible_indices = [idx for idx in self.tab_display_order if idx < len(self.tabs) and not self.tabs[idx].get("hidden", False)]
         avail_w = self.modal_w - upx(40) - ((len(visible_indices) - 1) * tab_spacing)
         tab_w = avail_w // max(1, len(visible_indices))
@@ -1755,7 +1848,7 @@ class RaportUI(
             tab = self.tabs[i]
             t_rect = pygame.Rect(tab_x, tab_y, tab_w, tab_h)
             self.tab_rects[i] = t_rect
-            is_active = (i == self.active_tab)
+            is_active = self._tab_is_visually_active(i)
 
             t_bg = COLOR_TAB_ACTIVE if is_active else COLOR_TAB_INACTIVE
             pygame.draw.rect(surface, t_bg, t_rect, border_radius=upx(6))

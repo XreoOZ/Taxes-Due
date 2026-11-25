@@ -357,19 +357,60 @@ class CemeterySystem:
              if entry.get("corpse_id") == corpse_id),
             None,
         )
-        if existing:
-            return existing
-
         fam_id = getattr(deceased_villager, "family_id", None)
+        gd_fam_id = getattr(gravedigger, "family_id", None) if gravedigger else None
+        is_own_family = (fam_id is not None and gd_fam_id is not None and str(fam_id) == str(gd_fam_id))
+        if existing:
+            # Unstick stale unpaid commissions whose payer died, went missing, or is own family
+            if existing.get("status") != "PAID":
+                if is_own_family:
+                    existing["fee_available"] = 0
+                    existing["fee_paid"] = 0
+                    existing["payer_type"] = "self"
+                    existing["status"] = "PAID"
+                elif existing.get("payer_type") == "representative":
+                    payer_id = str(existing.get("payer_id", ""))
+                    all_v = villager_manager.get_all_villagers() if villager_manager else []
+                    payer_alive = any(
+                        str(getattr(v, "id", "")) == payer_id and getattr(v, "is_alive", True)
+                        for v in all_v
+                    )
+                    if not payer_alive:
+                        cls.get_instance().pending_commissions.remove(existing)
+                        existing = None
+            if existing:
+                return existing
+
         family = villager_manager.get_family_by_id(fam_id) if (villager_manager and fam_id) else None
         surviving = [m for m in getattr(family, "members", []) if getattr(m, "is_alive", True)] if family else []
+        inst = cls.get_instance()
+
+        # Own family member died -> Gravedigger buries immediately with no self-fee deadlock
+        if is_own_family:
+            commission = {
+                "corpse_id": corpse_id,
+                "corpse_name": deceased_villager.full_name,
+                "corpse_obj": deceased_villager,
+                "fee_paid": 0,
+                "fee_available": 0,
+                "payer_type": "self",
+                "payer_id": getattr(gravedigger, "id", None),
+                "gravedigger_id": getattr(gravedigger, "id", None),
+                "status": "PAID",
+            }
+            inst.pending_commissions.append(commission)
+            return commission
+
         payer_type = "representative" if surviving else "landlord"
         payer = None
         if surviving:
             payer = family.get_available_recovery_representative() if family else None
-            payer = payer or surviving[0]
-            if payer is gravedigger:
-                payer = next((member for member in surviving if member is not gravedigger), None)
+            if payer is None or payer is gravedigger or getattr(payer, "age", 18) < 12:
+                payer = next(
+                    (member for member in surviving
+                     if member is not gravedigger and getattr(member, "age", 18) >= 12),
+                    None,
+                )
             if payer:
                 chest = furniture_manager.get_storage_for_family(fam_id) if furniture_manager else None
                 available = to_copper(getattr(chest, "inventory", {})) if chest else 0
@@ -393,7 +434,6 @@ class CemeterySystem:
             "gravedigger_id": getattr(gravedigger, "id", None),
             "status": "PAYMENT_PENDING" if fee_available > 0 else "PAID",
         }
-        inst = cls.get_instance()
         inst.pending_commissions.append(commission)
 
         if fee_available > 0 and payer_type == "representative" and payer:
@@ -411,6 +451,37 @@ class CemeterySystem:
         elif payer_type == "representative" and payer:
             payer.say("No household coins were available for the burial fee.", duration=2.5)
         return commission
+
+    _GRAVEDIGGER_ACTIVE_TASKS = frozenset({
+        "CARRYING_CORPSE", "DIGGING_GRAVE", "BURYING_GRAVE", "FETCHING_CORPSE",
+        "GRAVEDIGGER_RESTOCK_RETRIEVE_COINS", "GRAVEDIGGER_RESTOCK_TRAVEL_TO_MARKET",
+        "GRAVEDIGGER_RESTOCK_HAULING_HOME", "GRAVEDIGGER_BURIAL_PAYMENT_RETRIEVE",
+        "WAITING_FOR_BURIAL_PAYMENT",
+    })
+
+    @classmethod
+    def has_gravedigger_work(cls, gravedigger, villager_manager=None, furniture_manager=None):
+        """True if Gravedigger has an active burial/restock task, pending commission,
+        overflow corpse, or any unburied corpse waiting on the map."""
+        if getattr(gravedigger, "carrying_corpse_id", None):
+            return True
+        if getattr(gravedigger, "task", "") in cls._GRAVEDIGGER_ACTIVE_TASKS:
+            return True
+        inst = cls.get_instance()
+        if getattr(inst, "pending_commissions", None) or getattr(inst, "overflow_corpses", None):
+            return True
+        if villager_manager is not None:
+            cached = getattr(villager_manager, "_frame_has_unburied_corpse", None)
+            if cached is not None:
+                return bool(cached)
+            overflow_ids = cls.get_overflow_corpse_ids()
+            for v in villager_manager.get_all_villagers():
+                if (not getattr(v, "is_alive", True)
+                        and not getattr(v, "is_buried", False)
+                        and not getattr(v, "is_picked_up", False)
+                        and str(getattr(v, "id", "")) not in overflow_ids):
+                    return True
+        return False
 
     @classmethod
     def _landlord_coin_stacks(cls, stockpile_manager):

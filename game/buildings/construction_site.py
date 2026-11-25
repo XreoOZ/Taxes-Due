@@ -60,7 +60,24 @@ class ConstructionSite:
         self.delivered_cost = {res: 0 for res in self.required_cost}
         self.reserved_cost = {res: 0 for res in self.required_cost}
         self.build_progress = 0.0
+        self._priority = False
         self.font = None
+
+    @property
+    def is_priority(self):
+        if isinstance(getattr(self, "construction_order", None), dict):
+            return bool(self.construction_order.get("priority", False))
+        return bool(getattr(self, "_priority", False))
+
+    @is_priority.setter
+    def is_priority(self, val):
+        self._priority = bool(val)
+        if isinstance(getattr(self, "construction_order", None), dict):
+            self.construction_order["priority"] = bool(val)
+
+    def toggle_priority(self):
+        self.is_priority = not self.is_priority
+        return self.is_priority
 
     def get_wall_rects(self, tile_size):
         # Construction sites are open blueprints/groundwork; workers must be able to walk onto them to build!
@@ -375,6 +392,14 @@ class ConstructionSite:
 
         pygame.draw.rect(surface, (15, 23, 42, 220), (bar_x - 2, bar_y - 2, bar_w + 4, bar_h + 4), border_radius=4)
         pygame.draw.rect(surface, (71, 85, 105), (bar_x - 2, bar_y - 2, bar_w + 4, bar_h + 4), width=1, border_radius=4)
+
+        if self.is_priority:
+            p_text = self.font.render("⭐ PRIORITY", True, (255, 255, 255))
+            p_bg = pygame.Rect(0, 0, p_text.get_width() + 10, p_text.get_height() + 4)
+            p_bg.center = (scx, bar_y - 12)
+            pygame.draw.rect(surface, (217, 119, 6), p_bg, border_radius=4)
+            pygame.draw.rect(surface, (251, 191, 36), p_bg, width=1, border_radius=4)
+            surface.blit(p_text, (p_bg.x + 5, p_bg.y + 2))
 
         if is_public_build and public_status in ("AWAITING_PAYMENT", "LANDLORD_PAYMENT_PENDING",
                                                  "LANDLORD_RETRIEVING", "PAYMENT_TRAVELING"):

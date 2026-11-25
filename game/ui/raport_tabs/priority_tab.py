@@ -8,11 +8,17 @@ from game.ui.ui_theme import ui_font, upx
 class PriorityMixin:
     def _draw_priority_tab(self, surface, mx, cy, servant_manager):
         """RimWorld-Style Work Priorities Grid (1=High, 4=Low, -=Off)"""
-        title = self.font_sub.render(" Servant Work Priorities (RimWorld Priority Matrix)", True, COLOR_TEXT_TITLE)
-        surface.blit(title, (mx + upx(24), cy))
+        mouse_pos = pygame.mouse.get_pos()
+        title = self.font_title.render("SERVANT WORK PRIORITIES", True, COLOR_TEXT_TITLE)
+        surface.blit(title, (mx + upx(24), cy - upx(4)))
+
+        self._draw_subview_toggle(
+            surface, mx + self.modal_w - upx(24), cy - upx(4),
+            [(5, "Villager Jobs"), (2, "Servant Priority")], 2, mouse_pos,
+        )
 
         sub_desc = self.font_body.render("Left-click each cell to cycle priority: 1 (High) → 2 → 3 → 4 (Low) → - (Off)", True, COLOR_TEXT_MUTED)
-        surface.blit(sub_desc, (mx + upx(24), cy + upx(20)))
+        surface.blit(sub_desc, (mx + upx(24), cy + upx(22)))
 
         if not servant_manager or not servant_manager.servants:
             none_s = self.font_body.render("- No servants currently assigned to manor.", True, COLOR_TEXT_MUTED)

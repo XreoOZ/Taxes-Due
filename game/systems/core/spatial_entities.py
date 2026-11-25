@@ -54,24 +54,62 @@ class SpatialEntityIndex:
         self._locations[key] = (entity, family_id, permit_id, tile, target)
 
     def update(self, entity):
-        """Refresh one actor after its state machine has moved or reassigned it."""
+        """Refresh one actor only if its spatial/group keys actually changed."""
         key = self._key(entity)
         old = self._locations.get(key)
+        family_id = getattr(entity, "family_id", None)
+        permit_id = getattr(entity, "assigned_permit_id", None)
+        tile = self._tile(entity.x, entity.y)
+        target = getattr(entity, "path_target_tile", None)
+        target = tuple(target) if target else None
         if old:
-            _, family_id, permit_id, tile, target = old
-            self._discard(self._by_family, family_id, entity)
-            self._discard(self._by_permit, permit_id, entity)
-            target_bucket = self._by_target_tile.get(target)
+            _, o_fam, o_perm, o_tile, o_target = old
+            if o_fam == family_id and o_perm == permit_id and o_tile == tile and o_target == target:
+                return
+            self._discard(self._by_family, o_fam, entity)
+            self._discard(self._by_permit, o_perm, entity)
+            target_bucket = self._by_target_tile.get(o_target)
             if target_bucket:
                 target_bucket.discard(entity)
                 if not target_bucket:
-                    self._by_target_tile.pop(target, None)
-            bucket = self._by_tile.get(tile)
+                    self._by_target_tile.pop(o_target, None)
+            bucket = self._by_tile.get(o_tile)
             if bucket:
                 bucket.discard(entity)
                 if not bucket:
-                    self._by_tile.pop(tile, None)
-        self._index(entity)
+                    self._by_tile.pop(o_tile, None)
+        self._by_id[key] = entity
+        self._add(self._by_family, family_id, entity)
+        self._add(self._by_permit, permit_id, entity)
+        self._by_tile.setdefault(tile, set()).add(entity)
+        if target is not None:
+            self._by_target_tile.setdefault(target, set()).add(entity)
+        self._locations[key] = (entity, family_id, permit_id, tile, target)
+
+    def sync_all(self, entities):
+        """Incrementally synchronize the index across frames without full rebuilds."""
+        entities_list = list(entities or ())
+        live_keys = set()
+        for entity in entities_list:
+            live_keys.add(self._key(entity))
+            self.update(entity)
+        for stale_key in list(self._locations.keys()):
+            if stale_key not in live_keys:
+                ent, o_fam, o_perm, o_tile, o_target = self._locations.pop(stale_key)
+                self._by_id.pop(stale_key, None)
+                self._discard(self._by_family, o_fam, ent)
+                self._discard(self._by_permit, o_perm, ent)
+                target_bucket = self._by_target_tile.get(o_target)
+                if target_bucket:
+                    target_bucket.discard(ent)
+                    if not target_bucket:
+                        self._by_target_tile.pop(o_target, None)
+                bucket = self._by_tile.get(o_tile)
+                if bucket:
+                    bucket.discard(ent)
+                    if not bucket:
+                        self._by_tile.pop(o_tile, None)
+        self._entities = entities_list
 
     def by_id(self, entity_id):
         return self._by_id.get(str(entity_id))

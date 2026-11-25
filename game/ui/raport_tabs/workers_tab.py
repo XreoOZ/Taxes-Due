@@ -281,24 +281,14 @@ class WorkersMixin:
         if self.selected_workstation_job_id is not None:
             self._draw_workplaces_view(surface, mx, cy, villager_manager, permit_manager, furniture_manager, building_manager)
         elif self.selected_job_id is None:
-            # Title
-            w_title = self.font_title.render("VILLAGE WORKFORCE & JOBS DIRECTORY", True, COLOR_TEXT_TITLE)
+            # Title & Segmented Sub-View Toggle (Villager Jobs | Servant Priority)
+            w_title = self.font_title.render("WORKFORCE & JOBS", True, COLOR_TEXT_TITLE)
             surface.blit(w_title, (mx + upx(24), cy - upx(4)))
 
-            # Unassign All + Auto Sort All Buttons (Top Right)
-            self.unassign_all_btn_rect = pygame.Rect(mx + self.modal_w - upx(352), cy - upx(6), upx(140), upx(28))
-            ua_hover = self.unassign_all_btn_rect.collidepoint(mouse_pos)
-            pygame.draw.rect(surface, (122, 72, 48) if ua_hover else (96, 56, 38), self.unassign_all_btn_rect, border_radius=upx(6))
-            pygame.draw.rect(surface, (214, 120, 90), self.unassign_all_btn_rect, width=1, border_radius=upx(6))
-            ua_lbl = self.font_badge.render("Unassign All", True, (255, 255, 255))
-            surface.blit(ua_lbl, (self.unassign_all_btn_rect.centerx - ua_lbl.get_width() // 2, self.unassign_all_btn_rect.centery - ua_lbl.get_height() // 2))
-
-            self.auto_sort_all_btn_rect = pygame.Rect(mx + self.modal_w - upx(200), cy - upx(6), upx(176), upx(28))
-            as_hover = self.auto_sort_all_btn_rect.collidepoint(mouse_pos)
-            pygame.draw.rect(surface, (16, 185, 129) if as_hover else (5, 150, 105), self.auto_sort_all_btn_rect, border_radius=upx(6))
-            pygame.draw.rect(surface, (52, 211, 153), self.auto_sort_all_btn_rect, width=1, border_radius=upx(6))
-            as_lbl = self.font_badge.render("Auto Sort All Workers", True, (255, 255, 255))
-            surface.blit(as_lbl, (self.auto_sort_all_btn_rect.centerx - as_lbl.get_width() // 2, self.auto_sort_all_btn_rect.centery - as_lbl.get_height() // 2))
+            self._draw_subview_toggle(
+                surface, mx + self.modal_w - upx(24), cy - upx(4),
+                [(5, "Villager Jobs"), (2, "Servant Priority")], 5, mouse_pos,
+            )
 
             sub_txt = self.font_body.render("Job roles dictate villager daily routines. Workers prioritize nearest designated lots.", True, COLOR_TEXT_MUTED)
             surface.blit(sub_txt, (mx + upx(24), cy + upx(22)))
@@ -323,9 +313,9 @@ class WorkersMixin:
                     surface.blit(summary, (self.universal_schedule_btn_rect.right - summary.get_width() - upx(12),
                                            self.universal_schedule_btn_rect.centery - summary.get_height() // 2))
 
-            # Job search box — type to filter the directory instead of scrolling
+            # Job search box + Unassign All / Auto Sort All Workers on the same clean toolbar row
             search_y = cy + upx(84)
-            self.job_search_rect = pygame.Rect(mx + upx(24), search_y, upx(320), upx(30))
+            self.job_search_rect = pygame.Rect(mx + upx(24), search_y, upx(280), upx(28))
             s_hover = self.job_search_rect.collidepoint(mouse_pos)
             pygame.draw.rect(surface, (24, 34, 52) if not self.job_search_active else (15, 23, 42), self.job_search_rect, border_radius=6)
             pygame.draw.rect(surface, (56, 189, 248) if (self.job_search_active or s_hover) else (71, 85, 105), self.job_search_rect, width=1, border_radius=upx(6))
@@ -336,6 +326,20 @@ class WorkersMixin:
             if self.job_search_text:
                 clear_lbl = self.font_badge.render("ESC clear", True, COLOR_TEXT_MUTED)
                 surface.blit(clear_lbl, (self.job_search_rect.right - clear_lbl.get_width() - upx(10), self.job_search_rect.centery - clear_lbl.get_height() // 2))
+
+            self.auto_sort_all_btn_rect = pygame.Rect(mx + self.modal_w - upx(194), search_y, upx(170), upx(28))
+            as_hover = self.auto_sort_all_btn_rect.collidepoint(mouse_pos)
+            pygame.draw.rect(surface, (16, 185, 129) if as_hover else (5, 150, 105), self.auto_sort_all_btn_rect, border_radius=upx(6))
+            pygame.draw.rect(surface, (52, 211, 153), self.auto_sort_all_btn_rect, width=1, border_radius=upx(6))
+            as_lbl = self.font_badge.render("Auto Sort All Workers", True, (255, 255, 255))
+            surface.blit(as_lbl, (self.auto_sort_all_btn_rect.centerx - as_lbl.get_width() // 2, self.auto_sort_all_btn_rect.centery - as_lbl.get_height() // 2))
+
+            self.unassign_all_btn_rect = pygame.Rect(self.auto_sort_all_btn_rect.left - upx(132), search_y, upx(124), upx(28))
+            ua_hover = self.unassign_all_btn_rect.collidepoint(mouse_pos)
+            pygame.draw.rect(surface, (122, 72, 48) if ua_hover else (96, 56, 38), self.unassign_all_btn_rect, border_radius=upx(6))
+            pygame.draw.rect(surface, (214, 120, 90), self.unassign_all_btn_rect, width=1, border_radius=upx(6))
+            ua_lbl = self.font_badge.render("Unassign All", True, (255, 255, 255))
+            surface.blit(ua_lbl, (self.unassign_all_btn_rect.centerx - ua_lbl.get_width() // 2, self.unassign_all_btn_rect.centery - ua_lbl.get_height() // 2))
 
             query = self.job_search_text.strip().lower()
             visible_jobs = [

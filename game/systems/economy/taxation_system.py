@@ -21,6 +21,9 @@ from game.systems.economy.wealth_system import VillageWealthSystem
 from game.world.navigation.navigation import distance_to_object
 
 
+_UNSET_COLLECTOR = object()
+
+
 class TaxationSystem:
     _socage_enabled = DEFAULT_SOCAGE_TAX_ENABLED
     _socage_percent = DEFAULT_SOCAGE_TAX_PERCENT
@@ -279,7 +282,12 @@ class TaxationSystem:
 
     @classmethod
     def _active_collector(cls, villager_manager):
-        for villager in (villager_manager.get_all_villagers() if villager_manager else []):
+        if villager_manager is None:
+            return None
+        cached = getattr(villager_manager, "_frame_tax_collector", _UNSET_COLLECTOR)
+        if cached is not _UNSET_COLLECTOR:
+            return cached
+        for villager in villager_manager.get_all_villagers():
             if (getattr(villager, "job", None) == "Tax Collector"
                     and getattr(villager, "is_alive", True)
                     and isinstance(getattr(villager, "socage_tax_round", None), dict)):

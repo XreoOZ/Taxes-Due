@@ -29,19 +29,26 @@ class BuildingMixin:
         self.furniture_move_btn_rects = {}
         self.furniture_uninstall_btn_rects = {}
         self.furniture_destroy_btn_rects = {}
+        self.priority_toggle_btn_rects = {}
 
         if self.selected_building_category is None:
-            b_title = self.font_sub.render("Buildings — Choose a Household", True, COLOR_TEXT_TITLE)
+            b_title = self.font_sub.render("Property — Buildings by Household", True, COLOR_TEXT_TITLE)
             surface.blit(b_title, (mx + upx(24), cy))
-            sub_txt = self.font_body.render("View a household's assets directly, or open a separate Structure or Furniture list below.", True, COLOR_TEXT_MUTED)
-            surface.blit(sub_txt, (mx + upx(28), cy + upx(22)))
 
-            # Destroy Mode entry: mark multiple objects on the map, then confirm once.
-            self.destroy_mode_btn_rect = pygame.Rect(mx + self.modal_w - upx(190), cy + upx(16), upx(166), upx(30))
+            self._draw_subview_toggle(
+                surface, mx + self.modal_w - upx(24), cy - upx(4),
+                [(0, "Buildings"), (1, "Permits")], 0, m_pos,
+            )
+
+            sub_txt = self.font_body.render("View a household's assets directly, or open a separate Structure or Furniture list below.", True, COLOR_TEXT_MUTED)
+            surface.blit(sub_txt, (mx + upx(24), cy + upx(22)))
+
+            # Destroy Mode entry aligned on subtitle row right
+            self.destroy_mode_btn_rect = pygame.Rect(mx + self.modal_w - upx(158), cy + upx(21), upx(134), upx(22))
             d_hov = self.destroy_mode_btn_rect.collidepoint(m_pos)
             pygame.draw.rect(surface, (220, 38, 38) if d_hov else (153, 27, 27),
-                             self.destroy_mode_btn_rect, border_radius=upx(6))
-            pygame.draw.rect(surface, (248, 113, 113), self.destroy_mode_btn_rect, width=1, border_radius=upx(6))
+                             self.destroy_mode_btn_rect, border_radius=upx(5))
+            pygame.draw.rect(surface, (248, 113, 113), self.destroy_mode_btn_rect, width=1, border_radius=upx(5))
             d_lbl = self.font_badge.render("Destroy Mode", True, (255, 255, 255))
             surface.blit(d_lbl, (self.destroy_mode_btn_rect.centerx - d_lbl.get_width() // 2,
                                  self.destroy_mode_btn_rect.centery - d_lbl.get_height() // 2))
@@ -241,6 +248,19 @@ class BuildingMixin:
                         txt = f"• {f.name} at ({f.grid_x}, {f.grid_y}) — Owner: {fam_str} | Status: [{f.status}]"
                         surface.blit(self.font_body.render(txt, True, COLOR_TEXT_MAIN), (mx + upx(36), y_cur + 2))
 
+                        f_order = getattr(f, "construction_order", None)
+                        if getattr(f, "is_broken", False) or (isinstance(f_order, dict) and f_order.get("status") not in (None, "COMPLETE")):
+                            fp_btn = pygame.Rect(row_rect.right - upx(360), y_cur - 1, upx(84), upx(22))
+                            self.priority_toggle_btn_rects[f] = fp_btn
+                            fp_hov = fp_btn.collidepoint(m_pos)
+                            is_fp = getattr(f, "is_priority", False)
+                            fp_bg = ((245, 158, 11) if fp_hov else (217, 119, 6)) if is_fp else ((45, 58, 82) if fp_hov else (30, 41, 59))
+                            fp_border = (251, 191, 36) if is_fp else (71, 85, 105)
+                            pygame.draw.rect(surface, fp_bg, fp_btn, border_radius=upx(4))
+                            pygame.draw.rect(surface, fp_border, fp_btn, width=1, border_radius=upx(4))
+                            fp_lbl = self.font_badge.render("⭐ Priority" if is_fp else "☆ Priority", True, (255, 255, 255))
+                            surface.blit(fp_lbl, (fp_btn.centerx - fp_lbl.get_width() // 2, fp_btn.centery - fp_lbl.get_height() // 2))
+
                         # Move button (hidden for unmovable furniture, e.g. mine-bound workstations)
                         if f.type_cfg.get("movable", True):
                             mv_btn = pygame.Rect(row_rect.right - upx(270), y_cur - 1, upx(84), upx(22))
@@ -274,6 +294,16 @@ class BuildingMixin:
                         y_cur += upx(26)
                     for s in b_sites:
                         surface.blit(self.font_body.render(f"[Building] {s.name} ({s.total_delivered()}/{s.total_required()} materials)", True, (245, 158, 11)), (mx + upx(36), y_cur + 2))
+                        p_btn = pygame.Rect(mx + self.modal_w - upx(120), y_cur - 1, upx(88), upx(22))
+                        self.priority_toggle_btn_rects[s] = p_btn
+                        p_hov = p_btn.collidepoint(m_pos)
+                        is_p = getattr(s, "is_priority", False)
+                        p_bg = ((245, 158, 11) if p_hov else (217, 119, 6)) if is_p else ((45, 58, 82) if p_hov else (30, 41, 59))
+                        p_border = (251, 191, 36) if is_p else (71, 85, 105)
+                        pygame.draw.rect(surface, p_bg, p_btn, border_radius=upx(4))
+                        pygame.draw.rect(surface, p_border, p_btn, width=1, border_radius=upx(4))
+                        p_lbl = self.font_badge.render("⭐ Priority" if is_p else "☆ Priority", True, (255, 255, 255))
+                        surface.blit(p_lbl, (p_btn.centerx - p_lbl.get_width() // 2, p_btn.centery - p_lbl.get_height() // 2))
                         y_cur += upx(26)
                     for b in b_built:
                         surface.blit(self.font_body.render(f"{b.name} ({len(b.tiles)} tiles) | Status: Built", True, COLOR_TEXT_MAIN), (mx + upx(36), y_cur + 2))
@@ -313,7 +343,19 @@ class BuildingMixin:
                             }
                             status = status_labels.get(order.get("status"), "Builder order")
                             status_text = self.font_badge.render(status, True, (56, 189, 248))
-                            surface.blit(status_text, (mx + self.modal_w - status_text.get_width() - upx(136), y_cur + upx(4)))
+                            surface.blit(status_text, (mx + self.modal_w - status_text.get_width() - upx(225), y_cur + upx(4)))
+
+                        # Priority Toggle Button
+                        p_btn = pygame.Rect(mx + self.modal_w - upx(214), y_cur - 1, upx(88), upx(22))
+                        self.priority_toggle_btn_rects[s] = p_btn
+                        p_hov = p_btn.collidepoint(m_pos)
+                        is_p = getattr(s, "is_priority", False)
+                        p_bg = ((245, 158, 11) if p_hov else (217, 119, 6)) if is_p else ((45, 58, 82) if p_hov else (30, 41, 59))
+                        p_border = (251, 191, 36) if is_p else (71, 85, 105)
+                        pygame.draw.rect(surface, p_bg, p_btn, border_radius=upx(4))
+                        pygame.draw.rect(surface, p_border, p_btn, width=1, border_radius=upx(4))
+                        p_lbl = self.font_badge.render("⭐ Priority" if is_p else "☆ Priority", True, (255, 255, 255))
+                        surface.blit(p_lbl, (p_btn.centerx - p_lbl.get_width() // 2, p_btn.centery - p_lbl.get_height() // 2))
 
                         c_btn = pygame.Rect(mx + self.modal_w - upx(120), y_cur - 1, upx(80), upx(22))
                         self.cancel_construction_btn_rects[s] = c_btn
@@ -341,6 +383,19 @@ class BuildingMixin:
 
                         txt = f"{b.name} ({len(b.tiles)} tiles | Door: {door_side_str}) — Refund: +{ref_w}W, +{ref_s}S"
                         surface.blit(self.font_body.render(txt, True, (255, 255, 255) if is_focused else COLOR_TEXT_MAIN), (mx + upx(36), y_cur + 2))
+
+                        b_order = getattr(b, "construction_order", None)
+                        if getattr(b, "is_broken", False) or (isinstance(b_order, dict) and b_order.get("status") not in (None, "COMPLETE")):
+                            bp_btn = pygame.Rect(row_rect.right - upx(370), y_cur - 1, upx(88), upx(22))
+                            self.priority_toggle_btn_rects[b] = bp_btn
+                            bp_hov = bp_btn.collidepoint(m_pos)
+                            is_bp = getattr(b, "is_priority", False)
+                            bp_bg = ((245, 158, 11) if bp_hov else (217, 119, 6)) if is_bp else ((45, 58, 82) if bp_hov else (30, 41, 59))
+                            bp_border = (251, 191, 36) if is_bp else (71, 85, 105)
+                            pygame.draw.rect(surface, bp_bg, bp_btn, border_radius=upx(4))
+                            pygame.draw.rect(surface, bp_border, bp_btn, width=1, border_radius=upx(4))
+                            bp_lbl = self.font_badge.render("⭐ Priority" if is_bp else "☆ Priority", True, (255, 255, 255))
+                            surface.blit(bp_lbl, (bp_btn.centerx - bp_lbl.get_width() // 2, bp_btn.centery - bp_lbl.get_height() // 2))
 
                         # Contextual Button: Jump to Household if building is occupied by a family
                         tenant_fam = None

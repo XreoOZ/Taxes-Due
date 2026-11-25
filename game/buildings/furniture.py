@@ -29,6 +29,7 @@ class Furniture:
         self.construction_order = None
         self.construction_progress = 0.0
         self.condition = 1.0
+        self._priority = False
         self.designated_target = None  # (tgx, tgy, target_permit_id) when marked for move/reinstall
         self.carrier_id = None  # ID of villager or servant currently hauling this furniture
         self.is_selected = False
@@ -97,6 +98,22 @@ class Furniture:
     @property
     def can_be_dropped(self):
         return bool(self.type_cfg.get("can_be_dropped", True))
+
+    @property
+    def is_priority(self):
+        if isinstance(getattr(self, "construction_order", None), dict):
+            return bool(self.construction_order.get("priority", False))
+        return bool(getattr(self, "_priority", False))
+
+    @is_priority.setter
+    def is_priority(self, val):
+        self._priority = bool(val)
+        if isinstance(getattr(self, "construction_order", None), dict):
+            self.construction_order["priority"] = bool(val)
+
+    def toggle_priority(self):
+        self.is_priority = not self.is_priority
+        return self.is_priority
 
     def designate_move(self, tgx, tgy, permit_id=None):
         """Menetapkan petak tujuan baru untuk memindahkan/memasang ulang furniture ini"""
@@ -325,6 +342,9 @@ class Furniture:
             label_text = "REPAIR" if is_repair else (
                 "BUILD" if self.construction_order.get("status") == "BUILDING" else
                 "PAY" if "PAYMENT" in self.construction_order.get("status", "") or self.construction_order.get("status") == "AWAITING_PAYMENT" else "MATERIAL")
+            if self.is_priority:
+                label_text = f"⭐ {label_text}"
+                pygame.draw.rect(surface, (245, 158, 11), (sx, sy, scaled_w, scaled_h), width=3, border_radius=4)
             label = self.font.render(label_text, True, (255, 255, 255))
             surface.blit(label, (sx + (scaled_t - label.get_width()) // 2, sy + 3))
             if self.construction_order.get("status") in ("BUILDING", "REPAIRING"):

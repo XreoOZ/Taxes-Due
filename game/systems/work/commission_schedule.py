@@ -74,7 +74,10 @@ class CommissionScheduleSystem:
         if CommissionScheduleSystem._errand_in_flight(villager):
             return False
         head_task = str(queue[0].get("task", ""))
-        work_errand = schedule_activity == "WORK" and head_task.startswith("BUILDER_FEE_")
+        work_errand = schedule_activity == "WORK" and (
+            head_task.startswith("BUILDER_FEE_")
+            or head_task == "GRAVEDIGGER_BURIAL_PAYMENT_RETRIEVE"
+        )
         if schedule_activity not in FREE_TIME_SCHEDULE_ACTIVITIES and not work_errand:
             return False
         entry = queue.pop(0)

@@ -1,6 +1,7 @@
 """Population-scaled, staggered decision ticks for individual AI actors."""
 
 from game.config import (
+    AI_ACTIVE_MAX_INTERVAL_SECONDS,
     AI_DECISION_MAX_INTERVAL_SECONDS,
     AI_DECISION_REFERENCE_POPULATION,
     AI_DECISION_TICK_INTERVAL_SECONDS,
@@ -17,6 +18,15 @@ class AISimulationScheduler:
         max_interval = max(base_interval, float(AI_DECISION_MAX_INTERVAL_SECONDS))
         scale = max(1.0, max(0, int(population)) / reference)
         return min(max_interval, base_interval * scale)
+
+    @staticmethod
+    def active_interval_for_population(population, base_active=None):
+        """Scale moving-actor tick interval gently at huge populations; render interpolation keeps 60 FPS smooth."""
+        reference = max(1, int(AI_DECISION_REFERENCE_POPULATION) * 2)
+        base = max(0.001, float(base_active or AI_DECISION_TICK_INTERVAL_SECONDS))
+        max_active = max(base, float(AI_ACTIVE_MAX_INTERVAL_SECONDS))
+        scale = max(1.0, max(0, int(population)) / reference)
+        return min(max_active, base * scale)
 
     @staticmethod
     def update_actors(actors, dt, interval, update_actor, active_interval=None):

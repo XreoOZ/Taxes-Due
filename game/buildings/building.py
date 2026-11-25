@@ -19,6 +19,7 @@ class Building:
         self.condition = 1.0
         self.construction_order = None
         self.construction_progress = 0.0
+        self._priority = False
         self.assigned_workers = []
         self.type_cfg = BUILDING_TYPES.get(building_type, BUILDING_TYPES["wooden_structure"])
         self.tiles = set(tiles)
@@ -83,6 +84,22 @@ class Building:
     def is_available_for_use(self):
         order = getattr(self, "construction_order", None) or {}
         return not self.is_broken and order.get("status") in (None, "COMPLETE")
+
+    @property
+    def is_priority(self):
+        if isinstance(getattr(self, "construction_order", None), dict):
+            return bool(self.construction_order.get("priority", False))
+        return bool(getattr(self, "_priority", False))
+
+    @is_priority.setter
+    def is_priority(self, val):
+        self._priority = bool(val)
+        if isinstance(getattr(self, "construction_order", None), dict):
+            self.construction_order["priority"] = bool(val)
+
+    def toggle_priority(self):
+        self.is_priority = not self.is_priority
+        return self.is_priority
 
     def request_door_passage(self, entity_id, is_outside, tile_size=TILE_SIZE):
         """

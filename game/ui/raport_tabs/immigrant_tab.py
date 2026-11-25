@@ -26,6 +26,13 @@ class ImmigrantMixin:
         title = self.font_title.render("IMMIGRATION — NOTICE BOARD", True, COLOR_TEXT_TITLE)
         surface.blit(title, (mx + upx(24), cy - upx(4)))
 
+        imm_count = sum(1 for h in imm.pending if h["state"] in (STATE_TRAVELING, STATE_WAITING))
+        imm_lbl = f"Immigration ({imm_count})" if imm_count > 0 else "Immigration"
+        self._draw_subview_toggle(
+            surface, mx + self.modal_w - upx(24), cy - upx(4),
+            [(4, "Settlers"), (6, imm_lbl)], 6, mouse_pos,
+        )
+
         boards = imm.notice_boards(furniture_manager)
         if not boards:
             msg = self.font_body.render(

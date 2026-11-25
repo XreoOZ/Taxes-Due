@@ -149,6 +149,49 @@ def get_rect_tiles(start_pt, cur_pt):
     th = abs(cur_pt[1] - start_pt[1]) + 1
     return {(gx + c, gy + r) for c in range(tw) for r in range(th)}
 
+def compute_live_planning_tiles(base_tiles, drag_start, erase_start, cursor_tile):
+    """Return planned tiles including any currently dragged add/erase rectangle."""
+    tiles = set(base_tiles)
+    if drag_start:
+        tiles.update(get_rect_tiles(drag_start, cursor_tile))
+    if erase_start:
+        tiles.difference_update(get_rect_tiles(erase_start, cursor_tile))
+    return tiles
+
+def format_tiles_label(tiles, empty_label="0 tiles"):
+    """Format total tile count and WxH dimensions when rectangular."""
+    if not tiles:
+        return empty_label
+    n = len(tiles)
+    unit = "tile" if n == 1 else "tiles"
+    min_x = min(t[0] for t in tiles)
+    max_x = max(t[0] for t in tiles)
+    min_y = min(t[1] for t in tiles)
+    max_y = max(t[1] for t in tiles)
+    w = max_x - min_x + 1
+    h = max_y - min_y + 1
+    if w * h == n:
+        return f"{n} {unit} ({w}x{h})"
+    return f"{n} {unit}"
+
+def draw_drag_tile_badge(screen, cursor_pos, label, is_erase=False):
+    """Draw a compact live tile-count badge near the cursor during drag selection."""
+    if not label:
+        return
+    txt_col = (254, 202, 202) if is_erase else (187, 247, 208)
+    border_col = (239, 68, 68) if is_erase else (34, 197, 94)
+    txt_surf = ui_font(10, bold=True).render(label, True, txt_col)
+    pad_x, pad_y = upx(8), upx(4)
+    bw = txt_surf.get_width() + pad_x * 2
+    bh = txt_surf.get_height() + pad_y * 2
+    bx = min(screen.get_width() - bw - upx(8), cursor_pos[0] + upx(14))
+    by = max(upx(8), cursor_pos[1] - bh - upx(10))
+    bg = pygame.Surface((bw, bh), pygame.SRCALPHA)
+    bg.fill((15, 23, 42, 235))
+    screen.blit(bg, (bx, by))
+    pygame.draw.rect(screen, border_col, (bx, by, bw, bh), width=1, border_radius=upx(5))
+    screen.blit(txt_surf, (bx + pad_x, by + pad_y))
+
 def draw_placement_orientation(surface, rect, rotation):
     """Draw a clear compass arrow for square one-tile placement previews."""
     if rect.width <= 0 or rect.height <= 0:
@@ -196,6 +239,10 @@ def furniture_menu_actions(f):
     # "Workstation" button here would just reopen the same popup (navigation loop).
     if workplace_bases_for("furniture", f) and not furniture_mine_bound(f):
         acts.append(("workplace", "Workstation"))
+    f_order = getattr(f, "construction_order", None)
+    if getattr(f, "is_broken", False) or (isinstance(f_order, dict) and f_order.get("status") not in (None, "COMPLETE")):
+        p_label = "⭐ Priority" if getattr(f, "is_priority", False) else "☆ Priority"
+        acts.append(("toggle_priority", p_label))
     return acts
 
 
@@ -206,6 +253,10 @@ def structure_menu_actions(b):
         acts.append(("market", "Market"))
     if workplace_bases_for("building", b):
         acts.append(("workplace", "Workstation"))
+    b_order = getattr(b, "construction_order", None)
+    if getattr(b, "is_broken", False) or (isinstance(b_order, dict) and b_order.get("status") not in (None, "COMPLETE")):
+        p_label = "⭐ Priority" if getattr(b, "is_priority", False) else "☆ Priority"
+        acts.append(("toggle_priority", p_label))
     return acts
 
 
@@ -887,6 +938,8 @@ def main():
                                     permit_manager.create_permit(planning_permit_type, planning_permit_tiles, resources)
                                     planning_mode = "NONE"
                                     planning_permit_tiles.clear()
+                                    permit_drag_start = None
+                                    permit_erase_start = None
                             elif planning_mode == "EDIT_PERMIT":
                                 target_p = next((p for p in permit_manager.permits if p.id == editing_permit_id), None)
                                 if target_p:
@@ -1824,6 +1877,8 @@ def main():
                                             raport_ui.open_immigrant_tab()
                                         elif act == "workplace":
                                             workplace_popup = {"kind": "furniture", "obj": selected_furniture, "pos": event.pos}
+                                        elif act == "toggle_priority":
+                                            selected_furniture.toggle_priority()
                                         selected_furniture = None
                                         furn_action_hit = True
                                         break
@@ -1876,6 +1931,8 @@ def main():
                                             raport_ui.close()
                                         elif act == "workplace":
                                             workplace_popup = {"kind": "building", "obj": s_b, "pos": event.pos}
+                                        elif act == "toggle_priority":
+                                            s_b.toggle_priority()
                                         elif act == "destroy":
                                             building_manager.start_demolition(s_b)
                                         selected_structure = None
@@ -2130,6 +2187,8 @@ def main():
 
             profile_simulation_start = perf_counter() if profile_enabled else 0.0
             run_ai_scheduler = True
+            if getattr(building_manager, "pathfinder", None):
+                building_manager.pathfinder.begin_frame()
             for _step in range(sub_steps):
                 if not is_modal_open:
                     player.handle_input(keys, step_dt, building_manager, TILE_SIZE)
@@ -2270,6 +2329,7 @@ def main():
                         t_surf = get_alpha_surface(scaled_t, scaled_t, (34, 197, 94, 100))
                         screen.blit(t_surf, (sx, sy))
                         pygame.draw.rect(screen, (34, 197, 94), (sx, sy, scaled_t, scaled_t), width=1)
+                    draw_drag_tile_badge(screen, pygame.mouse.get_pos(), format_tiles_label(cur_box), is_erase=False)
 
                 # C. Render Active Erase Box Preview
                 if permit_erase_start:
@@ -2279,6 +2339,7 @@ def main():
                         t_surf = get_alpha_surface(scaled_t, scaled_t, (239, 68, 68, 120))
                         screen.blit(t_surf, (sx, sy))
                         pygame.draw.rect(screen, (239, 68, 68), (sx, sy, scaled_t, scaled_t), width=1)
+                    draw_drag_tile_badge(screen, pygame.mouse.get_pos(), f"-{format_tiles_label(cur_box)}", is_erase=True)
 
                 btn_confirm_rect.update(bottom_dock.pill_confirm_rect)
                 btn_cancel_rect.update(bottom_dock.pill_cancel_rect)
@@ -2307,6 +2368,7 @@ def main():
                             t_surf = get_alpha_surface(scaled_t, scaled_t, (34, 197, 94, 120))
                             screen.blit(t_surf, (sx, sy))
                             pygame.draw.rect(screen, (34, 197, 94), (sx, sy, scaled_t, scaled_t), width=1)
+                        draw_drag_tile_badge(screen, pygame.mouse.get_pos(), f"+{format_tiles_label(cur_box)}", is_erase=False)
 
                     # C. Active Drag Erase Box
                     if permit_erase_start:
@@ -2316,6 +2378,7 @@ def main():
                             t_surf = get_alpha_surface(scaled_t, scaled_t, (239, 68, 68, 130))
                             screen.blit(t_surf, (sx, sy))
                             pygame.draw.rect(screen, (239, 68, 68), (sx, sy, scaled_t, scaled_t), width=1)
+                        draw_drag_tile_badge(screen, pygame.mouse.get_pos(), f"-{format_tiles_label(cur_box)}", is_erase=True)
 
                     btn_confirm_rect.update(bottom_dock.pill_confirm_rect)
                     btn_cancel_rect.update(bottom_dock.pill_cancel_rect)
@@ -2393,6 +2456,7 @@ def main():
                         t_surf = get_alpha_surface(scaled_t, scaled_t, (34, 197, 94, 90))
                         screen.blit(t_surf, (sx, sy))
                         pygame.draw.rect(screen, (34, 197, 94), (sx, sy, scaled_t, scaled_t), width=1)
+                    draw_drag_tile_badge(screen, pygame.mouse.get_pos(), format_tiles_label(cur_box), is_erase=False)
 
                 # E. Render Active Erase Box Preview
                 if building_erase_start:
@@ -2402,6 +2466,7 @@ def main():
                         t_surf = get_alpha_surface(scaled_t, scaled_t, (239, 68, 68, 120))
                         screen.blit(t_surf, (sx, sy))
                         pygame.draw.rect(screen, (239, 68, 68), (sx, sy, scaled_t, scaled_t), width=1)
+                    draw_drag_tile_badge(screen, pygame.mouse.get_pos(), f"-{format_tiles_label(cur_box)}", is_erase=True)
 
                 # F. Floating Bottom Control Bar
                 matching_permit, status_msg = permit_manager.find_matching_permit_for_tiles(
@@ -3410,18 +3475,26 @@ def main():
                 planning_info = {}
                 if planning_mode == "BUILDING" and planning_building_type:
                     b_cfg = BUILDING_TYPES.get(planning_building_type, {})
+                    live_tiles = compute_live_planning_tiles(
+                        planning_building_tiles, building_drag_start, building_erase_start, (m_gx, m_gy)
+                    )
+                    live_count = len(live_tiles)
+                    fixed_n = b_cfg.get("fixed_tiles_count")
+                    empty_lbl = f"Size: {fixed_n} tiles" if fixed_n else "0 tiles"
+                    tiles_str = format_tiles_label(live_tiles, empty_label=empty_lbl)
                     matching_permit, status_msg = permit_manager.find_matching_permit_for_tiles(
                         planning_building_type, planning_building_tiles, building_manager, furniture_manager=furniture_manager
                     )
                     can_afford = building_manager.can_afford(planning_building_type, resources, len(planning_building_tiles))
-                    is_valid_tile_count = (len(planning_building_tiles) == b_cfg.get("fixed_tiles_count")) if b_cfg.get("fixed_tiles_count") else (len(planning_building_tiles) > 0)
-                    if b_cfg.get("fixed_tiles_count") and len(planning_building_tiles) > 0 and len(planning_building_tiles) != b_cfg.get("fixed_tiles_count"):
-                        status_msg = f"Must be {b_cfg.get('fixed_tiles_count')} tiles"
+                    is_valid_tile_count = (len(planning_building_tiles) == fixed_n) if fixed_n else (len(planning_building_tiles) > 0)
+                    if fixed_n and len(planning_building_tiles) > 0 and len(planning_building_tiles) != fixed_n:
+                        status_msg = f"Must be {fixed_n} tiles"
                     is_valid_build = (matching_permit is not None) and can_afford and is_valid_tile_count
-                    w_cost = b_cfg.get("cost_wood", 0) * (len(planning_building_tiles) if not b_cfg.get("fixed_tiles_count") else 1)
-                    s_cost = b_cfg.get("cost_stone", 0) * (len(planning_building_tiles) if not b_cfg.get("fixed_tiles_count") else 1)
+                    w_cost = b_cfg.get("cost_wood", 0) * (live_count if not fixed_n else 1)
+                    s_cost = b_cfg.get("cost_stone", 0) * (live_count if not fixed_n else 1)
                     planning_info = {
                         "name": b_cfg.get("name", planning_building_type),
+                        "tiles_str": tiles_str,
                         "cost_str": f"{w_cost}W {s_cost}S",
                         "status_msg": status_msg or ("Ready to build" if is_valid_build else "Drag area on map"),
                         "is_valid": is_valid_build,
@@ -3431,8 +3504,21 @@ def main():
                     f_cfg = FURNITURE_TYPES.get(planning_furniture_type, {})
                     mat = f_cfg.get("materials", {})
                     count = len(session_planned_furniture)
+                    fw = max(1, int(f_cfg.get("width_tiles", 1)))
+                    fh = max(1, int(f_cfg.get("height_tiles", 1)))
+                    if planning_furniture_rotation % 180:
+                        fw, fh = fh, fw
+                    unit_tiles = fw * fh
+                    total_tiles = count * unit_tiles
+                    unit_word = "tile" if unit_tiles == 1 else "tiles"
+                    tiles_str = (
+                        f"{total_tiles} tiles ({fw}x{fh} ea)"
+                        if count > 0
+                        else f"Size: {unit_tiles} {unit_word} ({fw}x{fh})"
+                    )
                     planning_info = {
                         "name": f_cfg.get("name", planning_furniture_type),
+                        "tiles_str": tiles_str,
                         "cost_str": f"{mat.get('Wood', 0)}W {mat.get('Stone', 0)}S each",
                         "status_msg": f"{count} placed" if count > 0 else "Click on map to place",
                         "is_valid": count > 0,
@@ -3440,11 +3526,15 @@ def main():
                     }
                 elif planning_mode == "PERMIT" and planning_permit_type:
                     p_cfg = PERMIT_TYPES.get(planning_permit_type, {})
+                    live_tiles = compute_live_planning_tiles(
+                        planning_permit_tiles, permit_drag_start, permit_erase_start, (m_gx, m_gy)
+                    )
                     can_place, status_msg = permit_manager.can_place_permit_tiles(planning_permit_tiles)
                     can_afford = permit_manager.can_afford_permit(planning_permit_type, resources)
                     is_valid = can_place and can_afford and len(planning_permit_tiles) > 0
                     planning_info = {
                         "name": p_cfg.get("name", planning_permit_type),
+                        "tiles_str": format_tiles_label(live_tiles),
                         "cost_str": "Free Deed",
                         "status_msg": status_msg or ("Ready to issue" if is_valid else "Drag area on map"),
                         "is_valid": is_valid,
@@ -3453,24 +3543,35 @@ def main():
                 elif planning_mode == "EDIT_PERMIT":
                     target_p = next((p for p in permit_manager.permits if p.id == editing_permit_id), None)
                     if target_p:
+                        live_tiles = compute_live_planning_tiles(
+                            planning_permit_tiles, permit_drag_start, permit_erase_start, (m_gx, m_gy)
+                        )
                         can_resize, status_msg = target_p.can_resize(
                             planning_permit_tiles,
                             other_permits=permit_manager.permits,
                             building_manager=building_manager,
                             furniture_manager=furniture_manager
                         )
-                        diff = len(planning_permit_tiles) - len(original_permit_tiles)
+                        diff = len(live_tiles) - len(original_permit_tiles)
                         diff_str = f"({diff:+d} tiles)" if diff != 0 else "(no change)"
                         planning_info = {
                             "name": f"Resize {target_p.name} {diff_str}",
-                            "cost_str": f"{len(planning_permit_tiles)} tiles",
+                            "tiles_str": format_tiles_label(live_tiles),
+                            "cost_str": f"{len(live_tiles)} tiles",
                             "status_msg": status_msg or "Drag L-Click add, R-Click erase",
                             "is_valid": can_resize and len(planning_permit_tiles) > 0,
                             "rotatable": False,
                         }
                 elif planning_mode == "MOVE_FURNITURE" and moving_furniture:
+                    fw = max(1, int(moving_furniture.type_cfg.get("width_tiles", 1)))
+                    fh = max(1, int(moving_furniture.type_cfg.get("height_tiles", 1)))
+                    if getattr(moving_furniture, "rotation", 0) % 180:
+                        fw, fh = fh, fw
+                    unit_tiles = fw * fh
+                    unit_word = "tile" if unit_tiles == 1 else "tiles"
                     planning_info = {
                         "name": f"Relocate {moving_furniture.name}",
+                        "tiles_str": f"Size: {unit_tiles} {unit_word} ({fw}x{fh})",
                         "cost_str": "Carry",
                         "status_msg": "Left-Click target tile to relocate (Esc to cancel)",
                         "is_valid": True,
@@ -3485,6 +3586,7 @@ def main():
                     cost_str = f"{w_cost}W {s_cost}S" if (w_cost or s_cost) else "Free"
                     planning_info = {
                         "name": r_cfg.get("name", planning_road_type),
+                        "tiles_str": format_tiles_label(planning_road_tiles),
                         "cost_str": cost_str,
                         "status_msg": f"{tile_count} tiles painted" if tile_count > 0 else "Drag to paint path",
                         "is_valid": tile_count > 0,

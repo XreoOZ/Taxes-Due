@@ -919,6 +919,16 @@ class PermitManager:
         self.permits.append(p)
         return p
 
+    def create_permit(self, permit_type, tiles, resources=None):
+        """Helper to create and register a new permit by type and tiles."""
+        p_title = str(permit_type).replace('_', ' ').title()
+        p_name = f"{p_title} Lot #{self.permit_counter}"
+        return self.add_permit(p_name, permit_type, tiles)
+
+    def can_afford_permit(self, permit_type, resources=None):
+        """Permits are official landlord deeds and free to issue."""
+        return True
+
     def add_permit_rect(self, name, permit_type, gx, gy, tw, th):
         rect_tiles = {(gx + c, gy + r) for c in range(tw) for r in range(th)}
         return self.add_permit(name, permit_type, rect_tiles)

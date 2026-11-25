@@ -24,11 +24,22 @@ class VillagersMixin:
             title = self.font_sub.render(f" Town Census & Family Directory ({total_villagers} Settlers | {len(families)} Families)", True, COLOR_TEXT_TITLE)
             surface.blit(title, (mx + upx(24), cy))
 
+            from game.systems.village_life.immigration_system import (
+                get_immigration_system, STATE_TRAVELING, STATE_WAITING,
+            )
+            imm = get_immigration_system()
+            imm_count = sum(1 for h in imm.pending if h["state"] in (STATE_TRAVELING, STATE_WAITING))
+            imm_lbl = f"Immigration ({imm_count})" if imm_count > 0 else "Immigration"
+            toggle_left = self._draw_subview_toggle(
+                surface, mx + self.modal_w - upx(24), cy - upx(4),
+                [(4, "Settlers"), (6, imm_lbl)], 4, mouse_pos,
+            )
+
             # Button: [+ Add Family (Cheat)] — only visible when cheats unlocked via ESC menu
             if self.cheats_active:
-                btn_w = upx(175)
-                btn_h = upx(30)
-                self.add_family_cheat_btn_rect = pygame.Rect(mx + self.modal_w - btn_w - upx(24), cy - upx(4), btn_w, btn_h)
+                btn_w = upx(150)
+                btn_h = upx(26)
+                self.add_family_cheat_btn_rect = pygame.Rect(toggle_left - btn_w - upx(8), cy - upx(4), btn_w, btn_h)
                 btn_hover = self.add_family_cheat_btn_rect.collidepoint(mouse_pos)
                 btn_col = (126, 34, 206) if btn_hover else (107, 33, 168)
 

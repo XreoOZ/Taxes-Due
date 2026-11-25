@@ -95,8 +95,11 @@ class AIFoodPurchasingSystem:
         wallet = {"Copper": 0, "Silver": 0, "Gold": 0}
 
         def _add(source):
-            for denom, count in normalize_wallet(source).items():
-                wallet[denom] = wallet.get(denom, 0) + count
+            if not isinstance(source, dict):
+                return
+            wallet["Copper"] += int(source.get("Copper", source.get("copper", 0)) or 0)
+            wallet["Silver"] += int(source.get("Silver", source.get("silver", 0)) or 0)
+            wallet["Gold"] += int(source.get("Gold", source.get("gold", 0)) or 0)
 
         fam_id = getattr(villager, "family_id", None)
         fam_str = str(fam_id or "")
@@ -577,7 +580,7 @@ class AIMarketPurchasingSystem:
         return transfer_currency_value(source, pocket, deficit)
 
     @classmethod
-    def find_market_for_items(cls, villager, requested_items, building_manager, furniture_manager=None, villager_manager=None):
+    def find_market_for_items(cls, villager, requested_items, building_manager, furniture_manager=None, villager_manager=None, stockpile_manager=None):
         """Find the nearest market that can sell at least one affordable required item."""
         if not building_manager or not requested_items:
             return None, {}, 0
@@ -585,6 +588,14 @@ class AIMarketPurchasingSystem:
         wallet, source = MarketService.get_household_funds_and_source(villager, furniture_manager, villager_manager)
         pocket_funds = to_copper(normalize_wallet(getattr(villager, "inventory", {})))
         available_funds = to_copper(wallet) + (0 if source is getattr(villager, "inventory", None) else pocket_funds)
+        spm = stockpile_manager or getattr(villager, "stockpile_manager", None)
+        fam_id = getattr(villager, "family_id", None)
+        if spm and fam_id is not None:
+            from game.systems.work.builder_system import BuilderSystem
+            for stack in BuilderSystem._family_coin_stacks(fam_id, spm):
+                denom = canonical_denomination(getattr(stack, "resource_type", ""))
+                if denom:
+                    available_funds += to_copper({denom: int(getattr(stack, "amount", 0) or 0)})
         best_market = None
         best_items = {}
         best_cost = 0

@@ -256,6 +256,63 @@ class TestBuilderCommissionNoInfiniteRestock(unittest.TestCase):
         self.assertEqual(builder.target_restock_mat, "Wood")
         self.assertNotEqual(builder.target_restock_mat, "Stone")
         self.assertEqual(builder.task, "BUILDER_RESTOCK_RETRIEVE_COINS")
+        self.assertEqual(builder.target_restock_qty, 5, "Must restock exact Bed shortfall (5), not bloated 10")
+
+    def test_idle_restock_tops_up_exact_deficit_and_protects_food_coins(self):
+        """Idle Builder only tops up missing target (5 - 4 = 1) and does not drain food coins."""
+        builder = SimpleNamespace(
+            id="b_idle", family_id="fam_b", job="Builder", is_alive=True,
+            task="IDLE", x=100.0, y=100.0, inventory={"Copper": 10},
+            hunger=100.0, thirst=100.0, need_toilet=100.0,
+            current_path=[], path_index=0, path_target=None, is_moving=False,
+            active_tool=None, builder_payment_order_id=None,
+            builder_target_order_id=None, builder_target_position=None,
+            builder_failed_approach_points=set(),
+        )
+        builder.say = lambda *a, **k: None
+        chest = SimpleNamespace(inventory={"Wood": 4, "Stone": 5}, get_approach_point=lambda *a, **k: (100.0, 100.0))
+        fm = SimpleNamespace(furnitures=[], get_storage_for_family=lambda fid: chest if fid == "fam_b" else None)
+        market = SimpleNamespace(
+            id="mkt_1", building_type="market", is_under_construction=False,
+            inventory={"Wood": 50, "Stone": 50, "Potato": 20},
+            prices={"Wood": 2, "Stone": 3, "Potato": 3},
+            currency={"Copper": 0}, grid_x=2, grid_y=2,
+        )
+        market.get_approach_point = lambda *a, **k: (64.0, 64.0)
+        bm = SimpleNamespace(buildings=[market], construction_sites=[])
+        fam = SimpleNamespace(id="fam_b", members=[builder], currency={})
+        vm = SimpleNamespace(get_family_by_id=lambda fid: fam if fid == "fam_b" else None, get_all_villagers=lambda: [builder])
+
+        # With 10c pocket and 0 food (food reserve = 3c): max spendable = 7c, needed Wood = 5 - 4 = 1
+        started = BuilderSystem.update_worker(builder, 0.25, "WORK", bm, fm, vm, [], None, None)
+        self.assertTrue(started)
+        self.assertEqual(builder.target_restock_mat, "Wood")
+        self.assertEqual(builder.target_restock_qty, 1)
+
+        # Reset and reduce funds to only 3c (strictly needed for food): idle restock must stop
+        builder.task = "IDLE"
+        builder.inventory = {"Copper": 3}
+        builder.target_restock_market = None
+        builder.target_restock_mat = None
+        builder.target_restock_qty = 0
+        started_low = BuilderSystem.update_worker(builder, 0.25, "WORK", bm, fm, vm, [], None, None)
+        self.assertFalse(started_low)
+
+    def test_household_stall_reserves_builder_material_stock_target(self):
+        """Builder household stall does not haul away Builder's Wood/Stone reserve."""
+        from game.systems.economy.household_stall_system import HouseholdStallSystem
+
+        builder = SimpleNamespace(
+            id="b_stall", family_id="fam_bs", job="Builder", is_alive=True, inventory={}
+        )
+        chest = SimpleNamespace(furniture_type="household_storage", family_id="fam_bs", is_available_for_use=True, inventory={"Wood": 5, "Stone": 7})
+        fm = SimpleNamespace(furnitures=[chest], get_storage_for_family=lambda fid: chest if str(fid) == "fam_bs" else None)
+        fam = SimpleNamespace(id="fam_bs", members=[builder])
+        vm = SimpleNamespace(get_family_by_id=lambda fid: fam if str(fid) == "fam_bs" else None)
+        market = SimpleNamespace(assigned_family_id="fam_bs", sale_items=["Wood", "Stone"], item_allocations={"Wood": 100, "Stone": 100}, inventory={})
+
+        self.assertEqual(HouseholdStallSystem.calculate_allocatable_goods(market, "fam_bs", "Wood", fm, villager_manager=vm), 0)
+        self.assertEqual(HouseholdStallSystem.calculate_allocatable_goods(market, "fam_bs", "Stone", fm, villager_manager=vm), 2)
 
 
 if __name__ == "__main__":

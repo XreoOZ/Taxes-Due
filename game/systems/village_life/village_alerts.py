@@ -13,10 +13,6 @@ from game.systems.economy.household_inventory import (
     canonical_item_name,
     get_household_possessions,
 )
-from game.systems.village_life.immigration_system import (
-    STATE_WAITING,
-    get_immigration_system,
-)
 from game.systems.work.job_tool_system import get_missing_tools_for_worker
 
 
@@ -33,6 +29,10 @@ def collect_village_alerts(
     servant_manager=None,
 ):
     """Collect sorted, actionable alerts describing urgent village and household needs."""
+    from game.systems.village_life.immigration_system import (
+        STATE_WAITING,
+        get_immigration_system,
+    )
     alerts = []
 
     # 1. Waiting immigrants at Notice Board
@@ -211,3 +211,113 @@ def collect_village_alerts(
 
     alerts.sort(key=lambda a: (_SEVERITY_ORDER.get(a["severity"], 9), a["title"]))
     return alerts
+
+
+_HOUSEHOLD_NEED_CATEGORIES = frozenset({"housing", "currency", "food", "tools"})
+
+
+def alert_group_key(alert):
+    """Map an individual alert's category to its high-level Notice Board summary group."""
+    cat = alert.get("category", "")
+    if cat in _HOUSEHOLD_NEED_CATEGORIES:
+        return "household_need"
+    if cat == "repair":
+        return "repair"
+    if cat == "water":
+        return "water"
+    if cat == "jobs":
+        return "jobs"
+    if cat == "immigration":
+        return "immigration"
+    return "other"
+
+
+def filter_alerts_by_group(alerts, group_key):
+    """Return only alerts matching a summary group key (or all alerts if 'all')."""
+    if not group_key or group_key == "all":
+        return list(alerts)
+    return [a for a in alerts if alert_group_key(a) == group_key]
+
+
+def group_village_alerts(alerts):
+    """Collapse raw per-entity alerts into compact category summaries with counts.
+    Clicking a grouped summary opens Town Hall filtered directly to those items."""
+    if not alerts:
+        return []
+
+    buckets = {}
+    for alert in alerts:
+        gkey = alert_group_key(alert)
+        bucket = buckets.setdefault(gkey, {"items": [], "severity": "info", "families": set()})
+        bucket["items"].append(alert)
+        if _SEVERITY_ORDER.get(alert["severity"], 9) < _SEVERITY_ORDER.get(bucket["severity"], 9):
+            bucket["severity"] = alert["severity"]
+        if gkey == "household_need" and alert.get("target_id") is not None:
+            bucket["families"].add(str(alert["target_id"]))
+
+    summaries = []
+    for gkey, bucket in buckets.items():
+        items = bucket["items"]
+        sev = bucket["severity"]
+        if gkey == "repair":
+            count = len(items)
+            summaries.append({
+                "id": "group:repair",
+                "group": "repair",
+                "severity": sev,
+                "count": count,
+                "title": f"Needs Repair: {count}",
+                "hint": f"{count} broken structure(s)/fixture(s) need Builder repair.",
+                "action_label": "View Details",
+                "action_type": "OPEN_TOWN_HALL",
+                "target_id": "repair",
+            })
+        elif gkey == "household_need":
+            hh_count = len(bucket["families"]) or len(items)
+            summaries.append({
+                "id": "group:household_need",
+                "group": "household_need",
+                "severity": sev,
+                "count": hh_count,
+                "title": f"Households in Need: {hh_count}",
+                "hint": f"{hh_count} household(s) lack housing, coins, food, or tools ({len(items)} alert(s)).",
+                "action_label": "View Details",
+                "action_type": "OPEN_TOWN_HALL",
+                "target_id": "household_need",
+            })
+        elif gkey == "water":
+            first = items[0]
+            summaries.append({
+                **first,
+                "group": "water",
+                "count": len(items),
+            })
+        elif gkey == "jobs":
+            first = items[0]
+            summaries.append({
+                **first,
+                "group": "jobs",
+                "count": len(items),
+            })
+        elif gkey == "immigration":
+            first = items[0]
+            summaries.append({
+                **first,
+                "group": "immigration",
+                "count": len(items),
+            })
+        else:
+            summaries.append({
+                "id": f"group:{gkey}",
+                "group": gkey,
+                "severity": sev,
+                "count": len(items),
+                "title": f"Other Alerts: {len(items)}",
+                "hint": "Click to inspect details in Town Hall.",
+                "action_label": "View Details",
+                "action_type": "OPEN_TOWN_HALL",
+                "target_id": "all",
+            })
+
+    summaries.sort(key=lambda a: (_SEVERITY_ORDER.get(a["severity"], 9), a["title"]))
+    return summaries

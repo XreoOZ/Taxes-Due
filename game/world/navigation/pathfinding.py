@@ -14,6 +14,7 @@ from game.config import (
     PATH_DIAGONAL_STEP_COST,
     PATH_NEIGHBOR_OFFSETS,
     PATH_MAX_ASTAR_ITERATIONS,
+    PATH_FRAME_ASTAR_BUDGET,
     PATH_ROUTE_CACHE_MAX_ENTRIES,
     PATH_RESERVATION_CLEARANCE,
     PATH_WAIT_RECHECK_INTERVAL,
@@ -127,6 +128,13 @@ class Pathfinder:
         self.building_manager = building_manager
         self._route_cache = {}
         self._performance_stats = {"queries": 0, "cache_hits": 0, "astar_nodes": 0}
+        self._frame_budget_active = False
+        self._frame_astar_count = 0
+
+    def begin_frame(self):
+        """Reset per-frame fresh A* budget (only enforced during live frames)."""
+        self._frame_budget_active = True
+        self._frame_astar_count = 0
 
     def get_performance_stats(self, reset=False):
         stats = dict(self._performance_stats)
@@ -333,6 +341,37 @@ class Pathfinder:
         if cached_route is not None:
             self._performance_stats["cache_hits"] += 1
             return list(cached_route)
+
+        # Straight-line fast path: skip A* heap expansion when outdoor route is unobstructed.
+        b_start = bm.get_building_at(start_tile[0], start_tile[1]) if bm else None
+        if not filtered_avoid and b_start is None and b_tar is None:
+            line_tiles = get_tiles_along_segment(start_tile, target_tile)
+            tiles_ok = True
+            prev_t = None
+            for gx, gy in line_tiles:
+                if (gx, gy) in filtered_avoid or not is_land_tile(gx, gy) or (bm and bm.get_building_at(gx, gy) is not None):
+                    tiles_ok = False
+                    break
+                if prev_t is not None and prev_t[0] != gx and prev_t[1] != gy:
+                    s1 = (prev_t[0], gy)
+                    s2 = (gx, prev_t[1])
+                    if (s1 in filtered_avoid or s2 in filtered_avoid
+                            or not is_land_tile(*s1) or not is_land_tile(*s2)
+                            or (bm and (bm.get_building_at(*s1) is not None or bm.get_building_at(*s2) is not None))):
+                        tiles_ok = False
+                        break
+                prev_t = (gx, gy)
+            if tiles_ok and self.is_segment_clear(
+                (sx, sy), (tx, ty), bm, tile_size=tile_size,
+                furniture_manager=furniture_manager, exclude_tile=target_tile,
+            ):
+                fast_route = [(tx, ty)]
+                self._cache_route(cache_key, fast_route)
+                return fast_route
+
+        if self._frame_budget_active and self._frame_astar_count >= PATH_FRAME_ASTAR_BUDGET:
+            return []
+        self._frame_astar_count += 1
 
         # Algoritma A* Search
         h_start = self._octile_distance(start_tile, target_tile)

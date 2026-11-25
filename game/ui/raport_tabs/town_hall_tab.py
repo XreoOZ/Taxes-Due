@@ -2,7 +2,11 @@
 
 import pygame
 from game.config import COLOR_TEXT_MUTED, COLOR_TEXT_TITLE
-from game.systems.village_life.village_alerts import collect_village_alerts
+from game.systems.village_life.village_alerts import (
+    alert_group_key,
+    collect_village_alerts,
+    filter_alerts_by_group,
+)
 from game.ui.ui_theme import upx
 
 
@@ -88,29 +92,65 @@ class TownHallMixin:
             surface.blit(lbl_s, (k_rect.x + upx(10), k_rect.y + upx(4)))
             surface.blit(val_s, (k_rect.x + upx(10), k_rect.y + upx(16)))
 
-        # Urgent Action Checklist
-        list_y = kpi_y + kpi_h + upx(12)
-        sec_hdr = self.font_sub.render("Actionable Checklist (Click any button to resolve):", True, COLOR_TEXT_TITLE)
-        surface.blit(sec_hdr, (mx + upx(24), list_y))
+        # Urgent Action Checklist + Category Filter Chips
+        list_y = kpi_y + kpi_h + upx(10)
+        sec_hdr = self.font_sub.render("Actionable Checklist:", True, COLOR_TEXT_TITLE)
+        surface.blit(sec_hdr, (mx + upx(24), list_y + upx(2)))
 
-        vp_y = list_y + upx(24)
+        group_counts = {}
+        for a in alerts:
+            gk = alert_group_key(a)
+            group_counts[gk] = group_counts.get(gk, 0) + 1
+
+        active_filter = getattr(self, "town_hall_filter", "all") or "all"
+        chip_specs = [
+            ("all", f"All ({len(alerts)})"),
+            ("repair", f"Repair ({group_counts.get('repair', 0)})"),
+            ("household_need", f"Households ({group_counts.get('household_need', 0)})"),
+            ("jobs", f"Jobs ({group_counts.get('jobs', 0)})"),
+        ]
+        other_cnt = group_counts.get("water", 0) + group_counts.get("immigration", 0) + group_counts.get("other", 0)
+        if other_cnt > 0 or active_filter in ("water", "immigration", "other"):
+            chip_specs.append(("water" if active_filter == "water" else ("immigration" if active_filter == "immigration" else "all"), f"Other ({other_cnt})") if active_filter in ("water", "immigration") else ("immigration", f"Immigration ({group_counts.get('immigration', 0)})"))
+
+        self.town_hall_filter_rects = {}
+        chip_x = mx + upx(24) + sec_hdr.get_width() + upx(12)
+        for fkey, flbl in chip_specs:
+            if fkey == "all" and flbl.startswith("Other"):
+                continue
+            csurf = self.font_badge.render(flbl, True, (255, 255, 255) if active_filter == fkey else COLOR_TEXT_MUTED)
+            cw = csurf.get_width() + upx(14)
+            crect = pygame.Rect(chip_x, list_y, cw, upx(22))
+            self.town_hall_filter_rects[fkey] = crect
+            is_sel = (active_filter == fkey)
+            hov = crect.collidepoint(mouse_pos)
+            pygame.draw.rect(surface, (37, 99, 235) if is_sel else ((45, 60, 82) if hov else (24, 34, 52)), crect, border_radius=upx(5))
+            pygame.draw.rect(surface, (96, 165, 250) if is_sel else (51, 65, 85), crect, width=1, border_radius=upx(5))
+            surface.blit(csurf, (crect.centerx - csurf.get_width() // 2, crect.centery - csurf.get_height() // 2))
+            chip_x += cw + upx(6)
+
+        filtered_alerts = filter_alerts_by_group(alerts, active_filter)
+
+        vp_y = list_y + upx(26)
         bottom = (surface.get_height() + self.modal_h) // 2 - upx(14)
         self.town_hall_viewport_rect = pygame.Rect(mx + upx(16), vp_y, self.modal_w - upx(32), max(0, bottom - vp_y))
 
         card_h = upx(46)
         card_gap = upx(6)
-        content_h = len(alerts) * (card_h + card_gap)
+        card_step = card_h + card_gap
+        content_h = len(filtered_alerts) * card_step
         self.town_hall_max_scroll = max(0, content_h - self.town_hall_viewport_rect.height)
         self.town_hall_scroll_y = max(0, min(getattr(self, "town_hall_scroll_y", 0), self.town_hall_max_scroll))
 
         old_clip = surface.get_clip()
         surface.set_clip(self.town_hall_viewport_rect)
 
-        if not alerts:
+        if not filtered_alerts:
             ok_card = pygame.Rect(mx + upx(24), vp_y + upx(4), self.modal_w - upx(48), upx(64))
             pygame.draw.rect(surface, (20, 48, 36), ok_card, border_radius=upx(8))
             pygame.draw.rect(surface, (34, 197, 94), ok_card, width=1, border_radius=upx(8))
-            t1 = self.font_sub.render("All Clear — Village Running Smoothly!", True, (74, 222, 128))
+            ok_title = "All Clear — Village Running Smoothly!" if not alerts else "No Issues in This Category!"
+            t1 = self.font_sub.render(ok_title, True, (74, 222, 128))
             t2 = self.font_body.render(
                 "Every household has shelter, funds, food, and tools. Use the Bottom Dock [B/Z/P] to expand your settlement.",
                 True, (203, 213, 225),
@@ -118,8 +158,12 @@ class TownHallMixin:
             surface.blit(t1, (ok_card.x + upx(16), ok_card.y + upx(12)))
             surface.blit(t2, (ok_card.x + upx(16), ok_card.y + upx(36)))
         else:
-            y_cur = vp_y - self.town_hall_scroll_y
-            for alert in alerts:
+            # Viewport-cull alert cards so thousands of alerts render in O(1)
+            first_idx = max(0, self.town_hall_scroll_y // card_step)
+            last_idx = min(len(filtered_alerts), (self.town_hall_scroll_y + self.town_hall_viewport_rect.height) // card_step + 2)
+            for idx in range(first_idx, last_idx):
+                alert = filtered_alerts[idx]
+                y_cur = vp_y + idx * card_step - self.town_hall_scroll_y
                 card = pygame.Rect(mx + upx(24), y_cur, self.modal_w - upx(48), card_h)
                 pygame.draw.rect(surface, (24, 34, 52), card, border_radius=upx(7))
                 dot_col = _SEVERITY_COLORS.get(alert["severity"], (148, 163, 184))
@@ -140,8 +184,6 @@ class TownHallMixin:
                 pygame.draw.rect(surface, (96, 165, 250), btn_rect, width=1, border_radius=upx(5))
                 b_lbl = self.font_badge.render(alert["action_label"], True, (255, 255, 255))
                 surface.blit(b_lbl, b_lbl.get_rect(center=btn_rect.center))
-
-                y_cur += card_h + card_gap
 
         surface.set_clip(old_clip)
 

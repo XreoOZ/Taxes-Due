@@ -26,10 +26,12 @@ from game.data.config import (
     TOOLMAKER_TOOL_MAX_INGAME_HOURS,
     TOOLMAKER_TOOL_MIN_INGAME_HOURS,
     TOOLMAKER_TOOL_RECIPE,
+    TOOLMAKER_SPARE_TOOLS_TARGET,
 )
 from game.systems.economy.currency import normalize_wallet, to_copper
 from game.systems.economy.market_service import MarketService
 from game.systems.work.builder_system import BuilderSystem
+from game.systems.work.tool_condition import ToolConditionSystem
 from game.config import TILE_SIZE, CHEST_INTERACTION_RADIUS
 
 
@@ -301,11 +303,13 @@ class ToolmakerSystem:
 
     @classmethod
     def _begin_material_restock(cls, toolmaker, missing, building_manager,
-                                furniture_manager, villager_manager):
+                                furniture_manager, villager_manager,
+                                exact_only=False, is_idle_buffer=False):
         """Reuse Builder's market-buy errand (BUILDER_RESTOCK_* tasks are
         material-agnostic and resolved by ToolmakerSystem.update_worker)."""
         return BuilderSystem._begin_restock(
-            toolmaker, missing, building_manager, furniture_manager, villager_manager)
+            toolmaker, missing, building_manager, furniture_manager, villager_manager,
+            exact_only=exact_only, is_idle_buffer=is_idle_buffer)
 
     # ------------------------------------------------------------------
     # Tool order claiming & crafting
@@ -366,12 +370,51 @@ class ToolmakerSystem:
         return out
 
     @classmethod
-    def _order_materials_ready(cls, order, chest):
+    def _recipe_materials_ready(cls, chest):
         """Next unit's recipe must be in the toolmaker's household chest."""
         for item, amount in TOOLMAKER_TOOL_RECIPE.items():
             if cls._chest_qty(chest, item) < int(amount):
                 return False
         return True
+
+    @classmethod
+    def _order_materials_ready(cls, order, chest):
+        return cls._recipe_materials_ready(chest)
+
+    @classmethod
+    def _ensure_materials_for_craft(cls, toolmaker, dt, chest, furniture_manager,
+                                    building_manager, villager_manager,
+                                    all_entities, player, day_cycle):
+        """Smelts bars or restocks ore/wood when crafting materials are short. Returns True if restock/smelt started."""
+        missing = {}
+        for item, amount in TOOLMAKER_TOOL_RECIPE.items():
+            short = int(amount) - cls._chest_qty(chest, item)
+            if short > 0:
+                missing[item] = short
+        wood_target = int((DEDICATED_JOBS.get("Toolmaker", {}).get("material_stock_target", {}) or {}).get("Wood", 0))
+        if wood_target > cls._chest_qty(chest, "Wood"):
+            missing["Wood"] = max(missing.get("Wood", 0), wood_target - cls._chest_qty(chest, "Wood"))
+        if "Iron Bar" in missing:
+            if cls._smelt_step(toolmaker, dt, furniture_manager, building_manager,
+                               villager_manager, all_entities, player, day_cycle, for_order=True):
+                return True
+            ore_missing = {}
+            stock_targets = DEDICATED_JOBS.get("Toolmaker", {}).get("material_stock_target", {}) or {}
+            for r_item, r_amt in TOOLMAKER_BAR_RECIPE.items():
+                c_qty = cls._chest_qty(chest, r_item)
+                if c_qty < int(r_amt):
+                    ore_missing[r_item] = max(int(r_amt) - c_qty, int(stock_targets.get(r_item, 10)) - c_qty)
+            if ore_missing and cls._begin_material_restock(toolmaker, ore_missing, building_manager,
+                                                           furniture_manager, villager_manager):
+                return True
+            if cls._begin_material_restock(toolmaker, {"Iron Bar": missing["Iron Bar"]}, building_manager,
+                                           furniture_manager, villager_manager):
+                return True
+            missing.pop("Iron Bar", None)
+        if missing and cls._begin_material_restock(toolmaker, missing, building_manager,
+                                                   furniture_manager, villager_manager):
+            return True
+        return False
 
     @classmethod
     def _unit_seconds(cls, day_cycle):
@@ -397,42 +440,12 @@ class ToolmakerSystem:
 
         # Material gate: wood restock / bar smelting feed the bench.
         if not cls._order_materials_ready(order, chest):
-            missing = {}
-            for item, amount in TOOLMAKER_TOOL_RECIPE.items():
-                short = int(amount) - cls._chest_qty(chest, item)
-                if short > 0:
-                    missing[item] = short
-            wood_target = int((DEDICATED_JOBS.get("Toolmaker", {}).get("material_stock_target", {}) or {}).get("Wood", 0))
-            if wood_target > cls._chest_qty(chest, "Wood"):
-                missing["Wood"] = max(missing.get("Wood", 0), wood_target - cls._chest_qty(chest, "Wood"))
-            if "Iron Bar" in missing:
-                # 1. First priority: try smelting Iron Bar (bypass daily cap for active paid order)
-                if cls._smelt_step(toolmaker, dt, furniture_manager, building_manager,
-                                   villager_manager, all_entities, player, day_cycle, for_order=True):
-                    order["status"] = "AWAITING_MATERIAL"
-                    return True
-                # If smelting could not start because chest lacks ore/wood, restock ore/wood in bulk to smelt:
-                ore_missing = {}
-                stock_targets = DEDICATED_JOBS.get("Toolmaker", {}).get("material_stock_target", {}) or {}
-                for r_item, r_amt in TOOLMAKER_BAR_RECIPE.items():
-                    c_qty = cls._chest_qty(chest, r_item)
-                    if c_qty < int(r_amt):
-                        ore_missing[r_item] = max(int(r_amt) - c_qty, int(stock_targets.get(r_item, 10)) - c_qty)
-                if ore_missing and cls._begin_material_restock(toolmaker, ore_missing, building_manager,
-                                                               furniture_manager, villager_manager):
-                    order["status"] = "AWAITING_MATERIAL"
-                    return True
-                # 2. Second priority: if raw ore is not sold at market, can we buy Iron Bar directly?
-                if cls._begin_material_restock(toolmaker, {"Iron Bar": missing["Iron Bar"]}, building_manager,
-                                               furniture_manager, villager_manager):
-                    order["status"] = "AWAITING_MATERIAL"
-                    return True
-                missing.pop("Iron Bar", None)
-            if missing and cls._begin_material_restock(toolmaker, missing, building_manager,
-                                                       furniture_manager, villager_manager):
-                order["status"] = "AWAITING_MATERIAL"
-                return True
             order["status"] = "AWAITING_MATERIAL"
+            if cls._ensure_materials_for_craft(
+                toolmaker, dt, chest, furniture_manager, building_manager,
+                villager_manager, all_entities, player, day_cycle
+            ):
+                return True
             if not getattr(toolmaker, "speech_text", None):
                 toolmaker.say("I need wood and iron before I can forge more tools.", duration=2.5)
             return True
@@ -635,6 +648,111 @@ class ToolmakerSystem:
         return True
 
     # ------------------------------------------------------------------
+    # Self-replacement & spare set forging (prevents self-tool deadlock)
+    # ------------------------------------------------------------------
+    @classmethod
+    def _required_tool_names(cls):
+        raw = DEDICATED_JOBS.get("Toolmaker", {}).get("required_tools", [])
+        if isinstance(raw, dict):
+            return list(raw.keys())
+        return list(raw or [])
+
+    @classmethod
+    def _next_own_missing_tool(cls, toolmaker, chest):
+        inv = getattr(toolmaker, "inventory", {}) or {}
+        for tool_name in cls._required_tool_names():
+            if int(inv.get(tool_name, 0) or 0) <= 0 and cls._chest_qty(chest, tool_name) <= 0:
+                return tool_name
+        return None
+
+    @classmethod
+    def _next_spare_tool_needed(cls, chest):
+        if chest is None or TOOLMAKER_SPARE_TOOLS_TARGET <= 0:
+            return None
+        for tool_name in cls._required_tool_names():
+            if cls._chest_qty(chest, tool_name) < TOOLMAKER_SPARE_TOOLS_TARGET:
+                return tool_name
+        return None
+
+    @classmethod
+    def has_spare_craft_ready(cls, toolmaker, furniture_manager):
+        chest = cls._family_chest(toolmaker, furniture_manager)
+        if chest is None or not cls._toolmaker_workbenches(furniture_manager):
+            return False
+        return cls._next_spare_tool_needed(chest) is not None and cls._recipe_materials_ready(chest)
+
+    @classmethod
+    def _craft_personal_or_spare_step(cls, toolmaker, tool_name, is_spare, dt,
+                                      furniture_manager, building_manager,
+                                      villager_manager, all_entities, player, day_cycle):
+        """Forge either a missing personal job tool directly into pocket (no fee, no deadlock)
+        or a spare backup tool into the household chest."""
+        chest = cls._family_chest(toolmaker, furniture_manager)
+        benches = cls._toolmaker_workbenches(furniture_manager)
+        if chest is None or not benches:
+            return False
+
+        if not cls._recipe_materials_ready(chest):
+            if is_spare:
+                return False
+            if cls._ensure_materials_for_craft(
+                toolmaker, dt, chest, furniture_manager, building_manager,
+                villager_manager, all_entities, player, day_cycle
+            ):
+                return True
+            return False
+
+        bench = min(benches, key=lambda b: math.hypot(
+            b.get_world_pos(TILE_SIZE)[0] - toolmaker.x,
+            b.get_world_pos(TILE_SIZE)[1] - toolmaker.y))
+        dest = bench.get_approach_point(toolmaker.x, toolmaker.y, worker_id=toolmaker.id,
+                                        all_entities=all_entities, tile_size=TILE_SIZE,
+                                        bm=building_manager)
+        arrived = toolmaker._move_towards(
+            dest[0], dest[1], dt, arrival_dist=CHEST_INTERACTION_RADIUS,
+            all_entities=all_entities, player=player,
+            building_manager=building_manager, furniture_manager=furniture_manager,
+            interaction_target=bench)
+        toolmaker.task = "TOOLMAKER_CRAFTING"
+        toolmaker.active_tool = "Hammer" if int((getattr(toolmaker, "inventory", {}) or {}).get("Hammer", 0)) > 0 else None
+        if not arrived:
+            return True
+
+        state = getattr(toolmaker, "_toolmaker_self_craft", None)
+        if not isinstance(state, dict) or state.get("tool") != tool_name or bool(state.get("is_spare")) != bool(is_spare):
+            state = {
+                "tool": tool_name,
+                "is_spare": bool(is_spare),
+                "progress": 0.0,
+                "needed": cls._unit_seconds(day_cycle),
+            }
+            toolmaker._toolmaker_self_craft = state
+
+        state["progress"] = float(state.get("progress", 0.0)) + dt
+        needed = max(1.0, float(state.get("needed", 0.0) or cls._unit_seconds(day_cycle)))
+        toolmaker._activity_total = needed
+        toolmaker.toolmaker_craft_timer = state["progress"]
+        if state["progress"] >= needed:
+            for item, amount in TOOLMAKER_TOOL_RECIPE.items():
+                cls._take_from_chest(chest, item, int(amount))
+            if is_spare:
+                chest.store_item(tool_name, 1)
+                ToolConditionSystem.register_new_units(chest, tool_name, 1)
+                toolmaker.say(f"Forged a spare {tool_name.replace('_', ' ')} for our chest.", duration=2.2)
+            else:
+                if not hasattr(toolmaker, "inventory") or not isinstance(toolmaker.inventory, dict):
+                    toolmaker.inventory = {}
+                toolmaker.inventory[tool_name] = int(toolmaker.inventory.get(tool_name, 0) or 0) + 1
+                ToolConditionSystem.register_new_units(toolmaker, tool_name, 1)
+                toolmaker.say(f"Forged a replacement {tool_name.replace('_', ' ')} for myself!", duration=2.2)
+            toolmaker._toolmaker_self_craft = None
+            toolmaker.toolmaker_craft_timer = 0.0
+            toolmaker._activity_total = 0.0
+            toolmaker.task = "IDLE"
+            toolmaker.active_tool = None
+        return True
+
+    # ------------------------------------------------------------------
     # Entry point — called from Villager.update() inside WORK slots
     # ------------------------------------------------------------------
     @classmethod
@@ -661,7 +779,7 @@ class ToolmakerSystem:
             BuilderSystem._claim_awaiting_order(
                 toolmaker, awaiting, villager_manager, furniture_manager, stockpile_manager)
 
-        # 2) Active craft order wins; otherwise deliver ready orders; otherwise smelt bars.
+        # 2) Active craft order wins; otherwise deliver ready orders.
         active = cls._craftable_order(toolmaker, furniture_manager)
         if active is not None:
             return cls._craft_step(toolmaker, active, dt, furniture_manager,
@@ -677,17 +795,37 @@ class ToolmakerSystem:
                                      villager_manager=villager_manager,
                                      permit_manager=permit_manager)
 
-        # 3) Automatic bar production keeps the household chest stocked.
+        chest = cls._family_chest(toolmaker, furniture_manager)
+
+        # 3) Missing own job tool (Hammer/Tongs): self-forge directly without commissions/deadlock.
+        own_missing = cls._next_own_missing_tool(toolmaker, chest)
+        if own_missing is not None:
+            if cls._craft_personal_or_spare_step(
+                toolmaker, own_missing, False, dt, furniture_manager,
+                building_manager, villager_manager, all_entities, player, day_cycle
+            ):
+                return True
+
+        # 4) Automatic bar production keeps the household chest stocked.
         if cls._smelt_step(toolmaker, dt, furniture_manager, building_manager,
                            villager_manager, all_entities, player, day_cycle):
             return True
 
-        # 4) Wood stock target restock when completely idle.
-        chest = cls._family_chest(toolmaker, furniture_manager)
+        # 5) Keep 1 spare set of Toolmaker tools in household chest when bars/wood are ready.
+        spare_needed = cls._next_spare_tool_needed(chest)
+        if spare_needed is not None:
+            if cls._craft_personal_or_spare_step(
+                toolmaker, spare_needed, True, dt, furniture_manager,
+                building_manager, villager_manager, all_entities, player, day_cycle
+            ):
+                return True
+
+        # 6) Wood stock target restock when completely idle.
         wood_target = int((DEDICATED_JOBS.get("Toolmaker", {}).get("material_stock_target", {}) or {}).get("Wood", 0))
         if chest is not None and wood_target > cls._chest_qty(chest, "Wood"):
             missing = {"Wood": wood_target - cls._chest_qty(chest, "Wood")}
             if cls._begin_material_restock(toolmaker, missing, building_manager,
-                                           furniture_manager, villager_manager):
+                                           furniture_manager, villager_manager,
+                                           exact_only=True, is_idle_buffer=True):
                 return True
         return False

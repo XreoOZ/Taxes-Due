@@ -181,5 +181,68 @@ class TestToolmakerSmeltingSupplyChain(unittest.TestCase):
         self.assertEqual(chest_inv["Wood"], 9, "Should have consumed 1 Wood")
 
 
+class TestChestlessGroundCoinsToolErrands(unittest.TestCase):
+    def test_chestless_immigrant_can_commission_and_buy_tools_with_ground_coins(self):
+        """Chestless households with coins dropped on house tiles can both commission and buy tools."""
+        from game.entities.villagers import Villager, Family, VillagerManager
+        from game.world.stockpile import ResourceStack, StockpileManager
+        from game.systems.economy.market_purchasing import AIMarketPurchasingSystem
+        from game.buildings.furniture import Furniture
+
+        vm = VillagerManager()
+        fam = Family("fam_imm", "Settler")
+        farmer = Villager("v_imm", "Leo", "Settler", "Male", 25, 2, "Father", family_id="fam_imm", x=100.0, y=100.0)
+        farmer.set_job("Farmer")
+        farmer.inventory = {}
+        farmer._move_towards = lambda *a, **k: True
+        fam.members = [farmer]
+        vm.families = [fam]
+
+        spm = StockpileManager()
+        coin_stack = ResourceStack("Gold", 1, 2, 2, owner_type="villager", owner_id="fam_imm")
+        spm.stacks.append(coin_stack)
+
+        bench = Furniture("wb_1", "toolmaker_workbench", 6, 6, family_id="fam_tm")
+        fm = SimpleNamespace(
+            furnitures=[bench],
+            get_storage_for_family=lambda fid: None,  # Chestless household!
+            invalidate_cache=lambda: None,
+        )
+        bm = SimpleNamespace(buildings=[])
+
+        # 1. Ground coins allow tool commission
+        farmer._ensure_tool_commissions([("Hoe", 1)], bm, fm, vm, stockpile_manager=spm)
+        self.assertEqual(farmer.task, "COMMISSIONING_TOOL_RETRIEVE_COINS")
+        status, _ = farmer._retrieve_household_coins_for_errand(
+            farmer.commission_tool_fee, 0.1, fm, spm, vm, bm, [], None
+        )
+        self.assertEqual(status, "READY")
+        self.assertGreaterEqual(farmer.inventory.get("Gold", 0), 1)
+        self.assertNotIn(coin_stack, spm.stacks)
+
+        # 2. Ground coins allow finding & withdrawing for Market tool purchase
+        farmer.inventory = {}
+        coin_stack2 = ResourceStack("Silver", 5, 2, 2, owner_type="villager", owner_id="fam_imm")
+        spm.stacks.append(coin_stack2)
+        market = SimpleNamespace(
+            id="mkt_tools", building_type="market", is_under_construction=False,
+            inventory={"Hoe": 2}, prices={"Hoe": 8}, sale_items=["Hoe"],
+            currency={"Copper": 100}, grid_x=8, grid_y=8,
+        )
+        market.get_approach_point = lambda *a, **k: (512.0, 512.0)
+        bm_with_mkt = SimpleNamespace(buildings=[market])
+
+        found_mkt, items, cost = AIMarketPurchasingSystem.find_market_for_items(
+            farmer, {"Hoe": 1}, bm_with_mkt, fm, vm, stockpile_manager=spm
+        )
+        self.assertIs(found_mkt, market)
+        self.assertEqual(items, {"Hoe": 1})
+        self.assertEqual(cost, 8)
+        status2, _ = farmer._retrieve_household_coins_for_errand(
+            cost, 0.1, fm, spm, vm, bm_with_mkt, [], None, use_market_withdraw=True
+        )
+        self.assertEqual(status2, "READY")
+
+
 if __name__ == "__main__":
     unittest.main()

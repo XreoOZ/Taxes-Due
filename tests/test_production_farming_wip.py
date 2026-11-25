@@ -227,15 +227,15 @@ class TestProductionDistributionAndWIP(unittest.TestCase):
     def test_potato_config_yield_value(self):
         """Potato config defines the minimum fallback yield and the weighted outcomes."""
         potato_cfg = CROP_TYPES.get("potato", {})
-        self.assertEqual(potato_cfg.get("yield_per_tile"), 2)
-        self.assertEqual(potato_cfg.get("yield"), 2)
+        self.assertEqual(potato_cfg.get("yield_per_tile"), 5)
+        self.assertEqual(potato_cfg.get("yield"), 5)
         self.assertEqual(potato_cfg.get("growth_days"), 10.0)
         self.assertEqual(
             potato_cfg.get("yield_distribution"),
             [
-                {"amount": 2, "weight": 0.80},
-                {"amount": 4, "weight": 0.15},
-                {"amount": 5, "weight": 0.05},
+                {"amount": 5, "weight": 0.80},
+                {"amount": 6, "weight": 0.15},
+                {"amount": 8, "weight": 0.05},
             ],
         )
 
@@ -243,7 +243,7 @@ class TestProductionDistributionAndWIP(unittest.TestCase):
         """Harvest uses the configured possible yields and probabilities."""
         from unittest.mock import patch
 
-        for expected_yield in (2, 4, 5):
+        for expected_yield in (5, 6, 8):
             farm = AreaPermit("farm_1", "Potato Farm", "farm", [(5, 5)])
             farm.crop = "Potato"
             farm.tile_crops = {
@@ -260,7 +260,7 @@ class TestProductionDistributionAndWIP(unittest.TestCase):
                 "game.world.permits.random.choices", return_value=[expected_yield]
             ) as choose_yield:
                 self.assertEqual(farm.harvest_tile(5, 5), expected_yield)
-                choose_yield.assert_called_once_with([2, 4, 5], weights=[0.80, 0.15, 0.05], k=1)
+                choose_yield.assert_called_once_with([5, 6, 8], weights=[0.80, 0.15, 0.05], k=1)
 
     def test_unripe_potato_tile_produces_zero(self):
         """Growth stages & 10-day cycle preserved: tile under 10 days produces 0."""
