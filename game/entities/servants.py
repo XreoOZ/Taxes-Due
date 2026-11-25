@@ -76,8 +76,10 @@ from game.systems.work.builder_system import BuilderSystem
 from game.systems.village_life.cemetery_system import CemeterySystem
 from game.systems.economy.lord_treasury import LordTreasurySystem
 from game.systems.economy.currency import (
-    compact_currency_wallet, from_copper, to_copper, normalize_wallet, canonical_denomination
+    compact_currency_wallet, from_copper, to_copper, normalize_wallet, canonical_denomination,
+    CURRENCY_DENOMINATIONS, calculate_payment_and_change, execute_currency_transfer
 )
+from game.systems.economy.market_service import MarketService
 from game.systems.economy.market_sales_report import MarketSalesReportSystem
 from game.systems.economy.wealth_system import VillageWealthSystem
 from game.systems.economy.market_pricing import MarketPricingSystem
@@ -1060,10 +1062,6 @@ class Servant:
             all_vils = villager_manager.get_all_villagers() if villager_manager else []
             all_ents = list(all_servants or []) + all_vils
             if self._move_towards(self.target_buy_market_pos[0], self.target_buy_market_pos[1], dt, arrival_dist=32, all_servants=all_servants, player=player, building_manager=building_manager, all_entities=all_ents, furniture_manager=furniture_manager, exclusive_target=False):
-                from game.systems.economy.market_service import MarketService
-                from game.systems.economy.currency import (
-                    calculate_payment_and_change, execute_currency_transfer,
-                )
                 item_name = order["item_name"]
                 stock = max(0, int(mkt.inventory.get(item_name, 0)))
                 qty = min(self.target_buy_chunk, stock)
@@ -1372,7 +1370,6 @@ class Servant:
         # the household's auto-pricing/manual price) is paid into market.currency,
         # which the household later collects as earnings. Change returns to treasury.
         if servant_manager and getattr(servant_manager, "buy_orders", None) and furniture_manager:
-            from game.systems.economy.market_service import MarketService
             treasury_chest = LordTreasurySystem.get_chest(furniture_manager)
             if treasury_chest is not None:
                 for order in list(servant_manager.buy_orders):

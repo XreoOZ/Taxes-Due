@@ -120,6 +120,7 @@ from game.systems.economy.wealth_system import VillageWealthSystem
 from game.systems.core.cheat_system import apply_add_item_cheat, clean_resources_dictionary, spawn_item_physically
 from game.systems.work.activity_preview import ActivityPreviewSystem
 from game.systems.village_life.happiness_system import HappinessSystem
+from game.ui.bottom_dock import BottomDockUI
 from game.ui.ui_theme import ui_font, upx
 
 STATE_MENU = "menu"
@@ -243,6 +244,7 @@ def main():
     camera = Camera(WINDOW_WIDTH, WINDOW_HEIGHT)
     world = World(tile_size=TILE_SIZE)
     resource_hud = ResourceHUD()
+    bottom_dock = BottomDockUI()
     raport_ui = RaportUI()
     market_modal = MarketProfileModal()
     add_item_modal = AddItemModal()
@@ -429,6 +431,7 @@ def main():
         builder_catalog_modal.close()
         toolmaker_catalog_modal.close()
         help_modal.close()
+        bottom_dock.close_palette()
         original_permit_tiles.clear()
         planning_road_tiles.clear()
         road_drag_start = None
@@ -722,6 +725,178 @@ def main():
                     speed_action = speed_controller.handle_event(event)
                     if speed_action is not None:
                         continue
+
+                    # Bottom Action Dock & Palette input handling
+                    dock_action = bottom_dock.handle_event(event, planning_mode=planning_mode)
+                    if dock_action:
+                        act_type = dock_action.get("action")
+                        if act_type == "HANDLED":
+                            continue
+                        elif act_type == "TOGGLE_RAPORT":
+                            if raport_ui.is_open:
+                                raport_ui.close()
+                            else:
+                                raport_ui.open()
+                                planning_mode = "NONE"
+                            continue
+                        elif act_type == "TOGGLE_DEMOLISH":
+                            if planning_mode == "DESTROY":
+                                planning_mode = "NONE"
+                                destroy_marks.clear()
+                                destroy_confirm = None
+                            else:
+                                planning_mode = "DESTROY"
+                                destroy_marks.clear()
+                                destroy_confirm = None
+                                selected_furniture = None
+                                selected_entity = None
+                                workplace_popup = None
+                                mine_popup = None
+                            continue
+                        elif act_type == "START_PLANNING":
+                            kind = dock_action.get("kind")
+                            item_id = dock_action.get("id")
+                            selected_furniture = None
+                            selected_entity = None
+                            workplace_popup = None
+                            mine_popup = None
+                            if kind == "BUILDING":
+                                planning_mode = "BUILDING"
+                                planning_building_type = item_id
+                                planning_building_rotation = 0
+                                planning_building_tiles.clear()
+                                planned_door_tile = None
+                                planned_door_side = "bottom"
+                            elif kind == "FURNITURE":
+                                planning_mode = "FURNITURE"
+                                planning_furniture_type = item_id
+                                planning_furniture_rotation = 0
+                                session_planned_furniture.clear()
+                                selected_planned_furniture = None
+                            elif kind == "PERMIT":
+                                planning_mode = "PERMIT"
+                                planning_permit_type = item_id
+                                planning_permit_tiles.clear()
+                                permit_drag_start = None
+                                permit_erase_start = None
+                            elif kind == "ROAD":
+                                planning_mode = "ROAD"
+                                planning_road_type = item_id
+                                planning_road_tiles.clear()
+                                road_drag_start = None
+                            continue
+                        elif act_type == "PILL_CANCEL":
+                            planning_mode = "NONE"
+                            planning_building_tiles.clear()
+                            session_planned_furniture.clear()
+                            selected_planned_furniture = None
+                            planning_permit_tiles.clear()
+                            planning_road_tiles.clear()
+                            destroy_marks.clear()
+                            destroy_confirm = None
+                            editing_permit_id = None
+                            moving_furniture = None
+                            continue
+                        elif act_type == "PILL_CLEAR":
+                            if planning_mode == "BUILDING":
+                                planning_building_tiles.clear()
+                                planned_door_tile = None
+                            elif planning_mode == "FURNITURE":
+                                session_planned_furniture.clear()
+                                selected_planned_furniture = None
+                            elif planning_mode == "PERMIT":
+                                planning_permit_tiles.clear()
+                            elif planning_mode == "EDIT_PERMIT":
+                                planning_permit_tiles = set(original_permit_tiles)
+                            elif planning_mode == "ROAD":
+                                planning_road_tiles.clear()
+                            elif planning_mode == "DESTROY":
+                                destroy_marks.clear()
+                            continue
+                        elif act_type == "PILL_CONFIRM":
+                            if planning_mode == "BUILDING":
+                                b_cfg = BUILDING_TYPES.get(planning_building_type, {})
+                                matching_permit, status_msg = permit_manager.find_matching_permit_for_tiles(
+                                    planning_building_type, planning_building_tiles, building_manager, furniture_manager=furniture_manager
+                                )
+                                can_afford = building_manager.can_afford(planning_building_type, resources, len(planning_building_tiles))
+                                is_valid_tile_count = (len(planning_building_tiles) == b_cfg["fixed_tiles_count"]) if b_cfg.get("fixed_tiles_count") else (len(planning_building_tiles) > 0)
+                                is_valid_build = (matching_permit is not None) and can_afford and is_valid_tile_count
+                                if is_valid_build:
+                                    started = building_manager.start_construction(
+                                        planning_building_type, planning_building_tiles,
+                                        planned_door_tile, planned_door_side, permit_manager,
+                                        rotation=planning_building_rotation
+                                    )
+                                    if started and b_cfg.get("builder_commissionable"):
+                                        BuilderSystem.dispatch_pending_public_commissions(
+                                            building_manager, servant_manager, villager_manager,
+                                            furniture_manager, day_cycle=day_cycle,
+                                            stockpile_manager=stockpile_manager,
+                                        )
+                                    planning_mode = "NONE"
+                                    planning_building_tiles.clear()
+                                    planned_door_tile = None
+                            elif planning_mode == "FURNITURE":
+                                if session_planned_furniture:
+                                    for pf in session_planned_furniture:
+                                        furniture_manager.add_furniture(
+                                            pf["type"], pf["gx"], pf["gy"],
+                                            permit_manager, villager_manager, resources,
+                                            building_manager=building_manager,
+                                            rotation=pf.get("rotation", 0)
+                                        )
+                                    session_planned_furniture.clear()
+                                    selected_planned_furniture = None
+                                    planning_mode = "NONE"
+                                    planning_furniture_type = None
+                            elif planning_mode == "PERMIT":
+                                can_place, status_msg = permit_manager.can_place_permit_tiles(planning_permit_tiles)
+                                can_afford = permit_manager.can_afford_permit(planning_permit_type, resources)
+                                if can_place and can_afford and len(planning_permit_tiles) > 0:
+                                    permit_manager.create_permit(planning_permit_type, planning_permit_tiles, resources)
+                                    planning_mode = "NONE"
+                                    planning_permit_tiles.clear()
+                            elif planning_mode == "EDIT_PERMIT":
+                                target_p = next((p for p in permit_manager.permits if p.id == editing_permit_id), None)
+                                if target_p:
+                                    can_resize, _ = target_p.can_resize(
+                                        planning_permit_tiles,
+                                        other_permits=permit_manager.permits,
+                                        building_manager=building_manager,
+                                        furniture_manager=furniture_manager
+                                    )
+                                    if can_resize and len(planning_permit_tiles) > 0:
+                                        target_p.resize(planning_permit_tiles)
+                                        planning_mode = "NONE"
+                                        planning_permit_tiles.clear()
+                                        editing_permit_id = None
+                            elif planning_mode == "ROAD":
+                                roads = get_roads()
+                                r_cfg = ROAD_TYPES.get(planning_road_type, ROAD_TYPES["dirt_road"])
+                                rcost = r_cfg.get("cost", {})
+                                w_needed = rcost.get("Wood", 0) * len(planning_road_tiles)
+                                s_needed = rcost.get("Stone", 0) * len(planning_road_tiles)
+                                can_afford = (resources.get("Wood", 0) >= w_needed and resources.get("Stone", 0) >= s_needed)
+                                if can_afford and len(planning_road_tiles) > 0:
+                                    resources["Wood"] = max(0, resources.get("Wood", 0) - w_needed)
+                                    resources["Stone"] = max(0, resources.get("Stone", 0) - s_needed)
+                                    for tx, ty in planning_road_tiles:
+                                        roads.set_tile(tx, ty, planning_road_type)
+                                    planning_mode = "NONE"
+                                    planning_road_tiles.clear()
+                            elif planning_mode == "DESTROY":
+                                if destroy_marks:
+                                    for kind, obj in list(destroy_marks):
+                                        if kind == "building":
+                                            building_manager.destroy_building(obj, stockpile_manager=stockpile_manager, resources=resources)
+                                        elif kind == "site":
+                                            building_manager.cancel_construction(obj, resources=resources)
+                                        elif kind == "road":
+                                            get_roads().remove_tile(obj[0], obj[1])
+                                    destroy_marks.clear()
+                                    planning_mode = "NONE"
+                            continue
 
                 if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                     if not any_modal_open and path_debug_overlay.handle_event(event):
@@ -2065,48 +2240,8 @@ def main():
                         screen.blit(t_surf, (sx, sy))
                         pygame.draw.rect(screen, (239, 68, 68), (sx, sy, scaled_t, scaled_t), width=1)
 
-                # D. Floating Bottom Control Bar
-                can_place, status_msg = permit_manager.can_place_permit_tiles(planning_permit_tiles)
-                bar_w = upx(620)
-                bar_h = upx(86)
-                bar_x = (screen.get_width() - bar_w) // 2
-                bar_y = screen.get_height() - bar_h - 14
-
-                bar_surf = pygame.Surface((bar_w, bar_h), pygame.SRCALPHA)
-                pygame.draw.rect(bar_surf, (15, 23, 42, 245), (0, 0, bar_w, bar_h), border_radius=upx(10))
-                pygame.draw.rect(bar_surf, (71, 85, 105), (0, 0, bar_w, bar_h), width=2, border_radius=upx(10))
-                screen.blit(bar_surf, (bar_x, bar_y))
-
-                # Header & Info
-                p_title = planning_permit_type.replace('_', ' ').title()
-                info_txt = f"Issue {p_title} Deed | Planned: {len(planning_permit_tiles)} Tiles"
-                screen.blit(ui_font(13, bold=True).render(info_txt, True, (56, 189, 248)), (bar_x + upx(16), bar_y + upx(10)))
-
-                stat_col = (34, 197, 94) if can_place and len(planning_permit_tiles) > 0 else (239, 68, 68)
-                stat_txt = f"Status: {status_msg} (Drag to add, Right-Click to erase)"
-                screen.blit(ui_font(12, bold=True).render(stat_txt, True, stat_col), (bar_x + upx(16), bar_y + upx(30)))
-
-                # Buttons
-                btn_y = bar_y + upx(46)
-                btn_confirm_rect.x = bar_x + upx(16)
-                btn_confirm_rect.y = btn_y
-                btn_clear_rect.x = bar_x + upx(180)
-                btn_clear_rect.y = btn_y
-                btn_cancel_rect.x = bar_x + upx(280)
-                btn_cancel_rect.y = btn_y
-
-                # Confirm Button
-                c_col = (16, 185, 129) if can_place and len(planning_permit_tiles) > 0 else (71, 85, 105)
-                pygame.draw.rect(screen, c_col, btn_confirm_rect, border_radius=upx(6))
-                screen.blit(ui_font(12, bold=True).render("ISSUE PERMIT", True, (255, 255, 255)), (btn_confirm_rect.x + upx(22), btn_confirm_rect.y + upx(8)))
-
-                # Clear Button
-                pygame.draw.rect(screen, (71, 85, 105), btn_clear_rect, border_radius=upx(6))
-                screen.blit(ui_font(12, bold=True).render("CLEAR", True, (255, 255, 255)), (btn_clear_rect.x + upx(22), btn_clear_rect.y + upx(8)))
-
-                # Cancel Button
-                pygame.draw.rect(screen, (220, 38, 38), btn_cancel_rect, border_radius=upx(6))
-                screen.blit(ui_font(12, bold=True).render("CANCEL", True, (255, 255, 255)), (btn_cancel_rect.x + upx(24), btn_cancel_rect.y + upx(8)))
+                btn_confirm_rect.update(bottom_dock.pill_confirm_rect)
+                btn_cancel_rect.update(bottom_dock.pill_cancel_rect)
 
             # -------------------------------------------------------------
             # 6B. OVERLAYS: EDIT PERMIT PLANNING MODE
@@ -2142,50 +2277,8 @@ def main():
                             screen.blit(t_surf, (sx, sy))
                             pygame.draw.rect(screen, (239, 68, 68), (sx, sy, scaled_t, scaled_t), width=1)
 
-                    # D. Floating Bottom Control Bar
-                    can_resize, status_msg = target_p.can_resize(
-                        planning_permit_tiles,
-                        other_permits=permit_manager.permits,
-                        building_manager=building_manager,
-                        furniture_manager=furniture_manager
-                    )
-                    bar_w = upx(660)
-                    bar_h = upx(86)
-                    bar_x = (screen.get_width() - bar_w) // 2
-                    bar_y = screen.get_height() - bar_h - 14
-
-                    bar_surf = pygame.Surface((bar_w, bar_h), pygame.SRCALPHA)
-                    pygame.draw.rect(bar_surf, (15, 23, 42, 245), (0, 0, bar_w, bar_h), border_radius=upx(10))
-                    pygame.draw.rect(bar_surf, (245, 158, 11), (0, 0, bar_w, bar_h), width=2, border_radius=upx(10))
-                    screen.blit(bar_surf, (bar_x, bar_y))
-
-                    diff = len(planning_permit_tiles) - len(original_permit_tiles)
-                    diff_str = f"({diff:+d} tiles)" if diff != 0 else "(no change)"
-                    info_txt = f"Edit Lot: {target_p.name} | Size: {len(original_permit_tiles)} -> {len(planning_permit_tiles)} Tiles {diff_str}"
-                    screen.blit(ui_font(13, bold=True).render(info_txt, True, (250, 204, 21)), (bar_x + upx(16), bar_y + upx(10)))
-
-                    stat_col = (34, 197, 94) if can_resize and len(planning_permit_tiles) > 0 else (239, 68, 68)
-                    stat_txt = f"Status: {status_msg} (Drag L-Click to add, R-Click to erase)"
-                    screen.blit(ui_font(12, bold=True).render(stat_txt, True, stat_col), (bar_x + upx(16), bar_y + upx(30)))
-
-                    # Buttons
-                    btn_y = bar_y + upx(46)
-                    btn_confirm_rect.x = bar_x + upx(16)
-                    btn_confirm_rect.y = btn_y
-                    btn_clear_rect.x = bar_x + upx(190)
-                    btn_clear_rect.y = btn_y
-                    btn_cancel_rect.x = bar_x + upx(290)
-                    btn_cancel_rect.y = btn_y
-
-                    c_col = (16, 185, 129) if can_resize and len(planning_permit_tiles) > 0 else (71, 85, 105)
-                    pygame.draw.rect(screen, c_col, btn_confirm_rect, border_radius=upx(6))
-                    screen.blit(ui_font(12, bold=True).render("APPLY RESIZE", True, (255, 255, 255)), (btn_confirm_rect.x + upx(20), btn_confirm_rect.y + upx(8)))
-
-                    pygame.draw.rect(screen, (71, 85, 105), btn_clear_rect, border_radius=upx(6))
-                    screen.blit(ui_font(12, bold=True).render("RESET", True, (255, 255, 255)), (btn_clear_rect.x + upx(20), btn_clear_rect.y + upx(8)))
-
-                    pygame.draw.rect(screen, (220, 38, 38), btn_cancel_rect, border_radius=upx(6))
-                    screen.blit(ui_font(12, bold=True).render("CANCEL", True, (255, 255, 255)), (btn_cancel_rect.x + upx(24), btn_cancel_rect.y + upx(8)))
+                    btn_confirm_rect.update(bottom_dock.pill_confirm_rect)
+                    btn_cancel_rect.update(bottom_dock.pill_cancel_rect)
 
             # -------------------------------------------------------------
             # 7. OVERLAYS: BUILDING PLANNING MODE
@@ -2291,56 +2384,8 @@ def main():
                     status_msg = f"Must be exactly {b_cfg['fixed_tiles_count']} tiles {dim_str}"
                 is_valid = (matching_permit is not None) and can_afford and is_valid_tile_count
 
-                bar_w = upx(700)
-                bar_h = upx(92)
-                bar_x = (screen.get_width() - bar_w) // 2
-                bar_y = screen.get_height() - bar_h - 14
-
-                bar_surf = pygame.Surface((bar_w, bar_h), pygame.SRCALPHA)
-                pygame.draw.rect(bar_surf, (15, 23, 42, 245), (0, 0, bar_w, bar_h), border_radius=upx(10))
-                pygame.draw.rect(bar_surf, (71, 85, 105), (0, 0, bar_w, bar_h), width=2, border_radius=upx(10))
-                screen.blit(bar_surf, (bar_x, bar_y))
-
-                # Header & Cost
-                tiles_label = f"Fixed: {b_cfg['fixed_tiles_count']} Tiles {dim_str}" if b_cfg.get("fixed_tiles_count") else f"Tiles: {len(planning_building_tiles)}"
-                if b_cfg.get("builder_commissionable"):
-                    info_txt = f"Design {b_cfg['name']} | {tiles_label} | Lord pays Builder commission"
-                else:
-                    info_txt = f"Design {b_cfg['name']} | {tiles_label} | Cost: {cost_w} Wood, {cost_s} Stone"
-                screen.blit(ui_font(13, bold=True).render(info_txt, True, (56, 189, 248)), (bar_x + upx(16), bar_y + upx(10)))
-
-                # Status & Door info
-                if not b_cfg.get("has_door", True):
-                    door_str = "Solid Structure (Impenetrable)" if b_cfg.get("is_solid", False) else "Open-air Market Stall"
-                    help_str = f"(R: Rotate | Click to place {dim_str} {b_cfg['name']})" if b_cfg.get("fixed_tiles_count") else "(R: Rotate | Drag to place)"
-                else:
-                    door_str = f"Door: {planned_door_tile} [{planned_door_side}]" if planned_door_tile else "Click any exterior wall tile to place Door"
-                    help_str = "(R: Rotate | Drag to expand, Right-Click to erase)"
-                stat_col = (34, 197, 94) if is_valid else (239, 68, 68)
-                stat_txt = f"Status: {status_msg} | {door_str} | {help_str}"
-                screen.blit(ui_font(12, bold=True).render(stat_txt, True, stat_col), (bar_x + upx(16), bar_y + upx(32)))
-
-                # Buttons
-                btn_y = bar_y + upx(52)
-                btn_confirm_rect.x = bar_x + upx(16)
-                btn_confirm_rect.y = btn_y
-                btn_clear_rect.x = bar_x + upx(180)
-                btn_clear_rect.y = btn_y
-                btn_cancel_rect.x = bar_x + upx(280)
-                btn_cancel_rect.y = btn_y
-
-                # Confirm Build Button
-                c_col = (16, 185, 129) if is_valid else (71, 85, 105)
-                pygame.draw.rect(screen, c_col, btn_confirm_rect, border_radius=upx(6))
-                screen.blit(ui_font(12, bold=True).render("ORDER", True, (255, 255, 255)), (btn_confirm_rect.x + upx(46), btn_confirm_rect.y + upx(8)))
-
-                # Clear Button
-                pygame.draw.rect(screen, (71, 85, 105), btn_clear_rect, border_radius=upx(6))
-                screen.blit(ui_font(12, bold=True).render("CLEAR", True, (255, 255, 255)), (btn_clear_rect.x + upx(22), btn_clear_rect.y + upx(8)))
-
-                # Cancel Button
-                pygame.draw.rect(screen, (220, 38, 38), btn_cancel_rect, border_radius=upx(6))
-                screen.blit(ui_font(12, bold=True).render("CANCEL", True, (255, 255, 255)), (btn_cancel_rect.x + upx(24), btn_cancel_rect.y + upx(8)))
+                btn_confirm_rect.update(bottom_dock.pill_confirm_rect)
+                btn_cancel_rect.update(bottom_dock.pill_cancel_rect)
 
             # -------------------------------------------------------------
             # 7.5. OVERLAYS: FURNITURE PLANNING MODE
@@ -2423,69 +2468,8 @@ def main():
                     # Hovering an already planned tile: show distinct highlight
                     pygame.draw.rect(screen, (239, 68, 68), (fsx, fsy, scaled_t, scaled_t), width=2)
 
-                # 3. Floating Bottom Bar
-                bar_w = upx(640)
-                bar_h = upx(96)
-                bar_x = (screen.get_width() - bar_w) // 2
-                bar_y = screen.get_height() - bar_h - 14
-
-                bar_surf = pygame.Surface((bar_w, bar_h), pygame.SRCALPHA)
-                pygame.draw.rect(bar_surf, (15, 23, 42, 245), (0, 0, bar_w, bar_h), border_radius=upx(10))
-                pygame.draw.rect(bar_surf, (71, 85, 105), (0, 0, bar_w, bar_h), width=2, border_radius=upx(10))
-                screen.blit(bar_surf, (bar_x, bar_y))
-
-                planned_count = len(session_planned_furniture)
-                is_valid_build = planned_count > 0
-
-                if f_cfg.get("instant_place"):
-                    info_txt = f"Place {f_cfg['name']} | Planned: {planned_count} | Free and ready immediately"
-                else:
-                    info_txt = f"Order {f_cfg['name']} | Planned: {planned_count} | Household pays commission; Builder supplies materials"
-                screen.blit(ui_font(13, bold=True).render(info_txt, True, (250, 204, 21)), (bar_x + upx(16), bar_y + upx(10)))
-
-                if is_occupied_planned:
-                    stat_msg = "Planned furniture selected! (Right-Click or Del to remove from session)"
-                    stat_col = (250, 204, 21)
-                elif planning_furniture_type == "miner_workstation" and mine_match is None:
-                    stat_msg = "Cannot place: Miner workstation must be placed exactly on a generated mine (5x5)!"
-                    stat_col = (239, 68, 68)
-                elif not is_valid_location:
-                    stat_msg = "Cannot place: Must be placed inside an issued Permit lot or tenant house!"
-                    stat_col = (239, 68, 68)
-                elif is_occupied_existing:
-                    stat_msg = "Cannot place: Tile already has built furniture!"
-                    stat_col = (239, 68, 68)
-                else:
-                    owner_family = None
-                    if target_permit:
-                        owner_family = next((fam for fam in villager_manager.families if fam.assigned_permit_id == target_permit.id), None)
-                    fam_str = f"The {owner_family.surname} Family" if owner_family else "Tenant house / lot"
-                    stat_msg = f"Ready to order! (R: rotate | Left-Click to place, Right-Click to erase. {fam_str})"
-                    stat_col = (34, 197, 94)
-
-                screen.blit(ui_font(12, bold=True).render(stat_msg, True, stat_col), (bar_x + upx(16), bar_y + upx(32)))
-
-                # Buttons
-                btn_y = bar_y + upx(52)
-                btn_confirm_rect.x = bar_x + upx(16)
-                btn_confirm_rect.y = btn_y
-                btn_clear_rect.x = bar_x + upx(180)
-                btn_clear_rect.y = btn_y
-                btn_cancel_rect.x = bar_x + upx(280)
-                btn_cancel_rect.y = btn_y
-
-                # Confirm Build Button
-                c_col = (16, 185, 129) if is_valid_build else (71, 85, 105)
-                pygame.draw.rect(screen, c_col, btn_confirm_rect, border_radius=upx(6))
-                screen.blit(ui_font(12, bold=True).render("BUILD", True, (255, 255, 255)), (btn_confirm_rect.x + upx(46), btn_confirm_rect.y + upx(8)))
-
-                # Clear Button
-                pygame.draw.rect(screen, (71, 85, 105), btn_clear_rect, border_radius=upx(6))
-                screen.blit(ui_font(12, bold=True).render("CLEAR", True, (255, 255, 255)), (btn_clear_rect.x + upx(22), btn_clear_rect.y + upx(8)))
-
-                # Cancel Button
-                pygame.draw.rect(screen, (220, 38, 38), btn_cancel_rect, border_radius=upx(6))
-                screen.blit(ui_font(12, bold=True).render("CANCEL", True, (255, 255, 255)), (btn_cancel_rect.x + upx(24), btn_cancel_rect.y + upx(8)))
+                btn_confirm_rect.update(bottom_dock.pill_confirm_rect)
+                btn_cancel_rect.update(bottom_dock.pill_cancel_rect)
 
             # -------------------------------------------------------------
             # 7.6. OVERLAYS: MOVE FURNITURE PLANNING MODE
@@ -2518,36 +2502,7 @@ def main():
                 screen.blit(f_surf, (fsx, fsy))
                 pygame.draw.rect(screen, (34, 197, 94) if is_valid_dest else (239, 68, 68), (fsx, fsy, scaled_t, scaled_t), width=2)
 
-                # Floating Bottom Bar
-                bar_w = upx(640)
-                bar_h = upx(86)
-                bar_x = (screen.get_width() - bar_w) // 2
-                bar_y = screen.get_height() - bar_h - 14
-
-                bar_surf = pygame.Surface((bar_w, bar_h), pygame.SRCALPHA)
-                pygame.draw.rect(bar_surf, (15, 23, 42, 245), (0, 0, bar_w, bar_h), border_radius=upx(10))
-                pygame.draw.rect(bar_surf, (56, 189, 248), (0, 0, bar_w, bar_h), width=2, border_radius=upx(10))
-                screen.blit(bar_surf, (bar_x, bar_y))
-
-                info_txt = f"Move {moving_furniture.name} (Status: {moving_furniture.status}) -> Target: ({m_gx}, {m_gy})"
-                screen.blit(ui_font(13, bold=True).render(info_txt, True, (56, 189, 248)), (bar_x + upx(16), bar_y + upx(10)))
-
-                if is_blocked:
-                    stat_msg = blocked_reason
-                elif is_occupied:
-                    stat_msg = "Cannot move here: Tile already has furniture!"
-                else:
-                    owner_family = next((fam for fam in villager_manager.families if fam.id == moving_furniture.family_id), None)
-                    fam_name = f"The {owner_family.surname} Family" if owner_family else "Royal Servants"
-                    stat_msg = f"Valid destination! Left-Click to confirm task ({fam_name} will haul it)."
-
-                stat_col = (34, 197, 94) if is_valid_dest else (239, 68, 68)
-                screen.blit(ui_font(12, bold=True).render(stat_msg, True, stat_col), (bar_x + upx(16), bar_y + upx(32)))
-
-                btn_cancel_rect.x = bar_x + bar_w - upx(126)
-                btn_cancel_rect.y = bar_y + upx(25)
-                pygame.draw.rect(screen, (220, 38, 38), btn_cancel_rect, border_radius=upx(6))
-                screen.blit(ui_font(12, bold=True).render("CANCEL", True, (255, 255, 255)), (btn_cancel_rect.x + upx(28), btn_cancel_rect.y + upx(8)))
+                btn_cancel_rect.update(bottom_dock.pill_cancel_rect)
 
             # -------------------------------------------------------------
             # 7.6b. OVERLAYS: ROAD PAINTING MODE
@@ -2602,40 +2557,8 @@ def main():
                 cost_str = ", ".join(f"{a} {r}" for r, a in cost.items()) or "free"
                 can_afford = all(resources.get(r, 0) >= a for r, a in cost.items())
 
-                bar_w = upx(700)
-                bar_h = upx(92)
-                bar_x = (screen.get_width() - bar_w) // 2
-                bar_y = screen.get_height() - bar_h - 14
-                bar_surf = pygame.Surface((bar_w, bar_h), pygame.SRCALPHA)
-                pygame.draw.rect(bar_surf, (15, 23, 42, 245), (0, 0, bar_w, bar_h), border_radius=upx(10))
-                pygame.draw.rect(bar_surf, (180, 83, 9), (0, 0, bar_w, bar_h), width=2, border_radius=upx(10))
-                screen.blit(bar_surf, (bar_x, bar_y))
-
-                screen.blit(ui_font(13, bold=True).render(
-                    f"Road: {r_cfg['name']} | {r_cfg['desc']} | Drag to paint ({new_count} new tiles)",
-                    True, (250, 204, 21)), (bar_x + upx(16), bar_y + upx(10)))
-                stat_col = (34, 197, 94) if (new_count > 0 and can_afford) else (239, 68, 68)
-                screen.blit(ui_font(12, bold=True).render(
-                    f"Cost: {cost_str} total | L-drag paint, R-click unpaint, Enter/Click confirm",
-                    True, stat_col), (bar_x + upx(16), bar_y + upx(34)))
-
-                btn_y = bar_y + upx(56)
-                btn_confirm_rect.x = bar_x + upx(16)
-                btn_confirm_rect.y = btn_y
-                btn_clear_rect.x = bar_x + upx(180)
-                btn_clear_rect.y = btn_y
-                btn_cancel_rect.x = bar_x + upx(280)
-                btn_cancel_rect.y = btn_y
-                c_col = (16, 185, 129) if (new_count > 0 and can_afford) else (71, 85, 105)
-                pygame.draw.rect(screen, c_col, btn_confirm_rect, border_radius=upx(6))
-                screen.blit(ui_font(12, bold=True).render("BUILD", True, (255, 255, 255)),
-                            (btn_confirm_rect.x + upx(46), btn_confirm_rect.y + upx(8)))
-                pygame.draw.rect(screen, (71, 85, 105), btn_clear_rect, border_radius=upx(6))
-                screen.blit(ui_font(12, bold=True).render("CLEAR", True, (255, 255, 255)),
-                            (btn_clear_rect.x + upx(22), btn_clear_rect.y + upx(8)))
-                pygame.draw.rect(screen, (220, 38, 38), btn_cancel_rect, border_radius=upx(6))
-                screen.blit(ui_font(12, bold=True).render("CANCEL", True, (255, 255, 255)),
-                            (btn_cancel_rect.x + upx(24), btn_cancel_rect.y + upx(8)))
+                btn_confirm_rect.update(bottom_dock.pill_confirm_rect)
+                btn_cancel_rect.update(bottom_dock.pill_cancel_rect)
 
             # -------------------------------------------------------------
             # 7.6c. OVERLAYS: DESTROY MODE (mark objects -> DONE -> confirm)
@@ -2665,36 +2588,8 @@ def main():
                 pygame.draw.rect(screen, (250, 204, 21),
                                  (sx, sy, scaled_t, scaled_t), width=1)
 
-                # Bottom bar
-                bar_w = upx(640)
-                bar_h = upx(86)
-                bar_x = (screen.get_width() - bar_w) // 2
-                bar_y = screen.get_height() - bar_h - 14
-                bar_surf = pygame.Surface((bar_w, bar_h), pygame.SRCALPHA)
-                pygame.draw.rect(bar_surf, (15, 23, 42, 245), (0, 0, bar_w, bar_h), border_radius=upx(10))
-                pygame.draw.rect(bar_surf, (220, 38, 38), (0, 0, bar_w, bar_h), width=2, border_radius=upx(10))
-                screen.blit(bar_surf, (bar_x, bar_y))
-
-                screen.blit(ui_font(13, bold=True).render(
-                    f"Destroy Mode — {len(destroy_marks)} marked | Click objects to mark/unmark",
-                    True, (248, 113, 113)), (bar_x + upx(16), bar_y + upx(10)))
-                screen.blit(ui_font(12, bold=True).render(
-                    "Buildings -> demolition (50% refund) | Sites -> cancel (materials refunded) | Roads -> gone, no refund",
-                    True, (148, 163, 184)),
-                    (bar_x + upx(16), bar_y + upx(34)))
-
-                btn_y = bar_y + upx(46)
-                btn_done_rect.x = bar_x + upx(16)
-                btn_done_rect.y = btn_y
-                btn_cancel_rect.x = bar_x + upx(140)
-                btn_cancel_rect.y = btn_y
-                done_col = (220, 38, 38) if destroy_marks else (71, 85, 105)
-                pygame.draw.rect(screen, done_col, btn_done_rect, border_radius=upx(6))
-                screen.blit(ui_font(12, bold=True).render(f"DONE ({len(destroy_marks)})", True, (255, 255, 255)),
-                            (btn_done_rect.x + upx(14), btn_done_rect.y + upx(8)))
-                pygame.draw.rect(screen, (71, 85, 105), btn_cancel_rect, border_radius=upx(6))
-                screen.blit(ui_font(12, bold=True).render("CANCEL", True, (255, 255, 255)),
-                            (btn_cancel_rect.x + upx(24), btn_cancel_rect.y + upx(8)))
+                btn_done_rect.update(bottom_dock.pill_confirm_rect)
+                btn_cancel_rect.update(bottom_dock.pill_cancel_rect)
 
                 # Confirm popup
                 if destroy_confirm is not None:
@@ -3444,6 +3339,105 @@ def main():
                     not_surf = ui_font(10, bold=True).render(cheat_notice, True, (250, 204, 21))
                     not_rect = not_surf.get_rect(right=screen_w - resource_hud.margin, top=btn_add_item_cheat_rect.bottom + 6)
                     screen.blit(not_surf, not_rect)
+
+            # 10.8. Bottom Action Dock & Quick Palette (Intuitive Building & Zones)
+            if not any_modal_open and pending_starter_id is None:
+                planning_info = {}
+                if planning_mode == "BUILDING" and planning_building_type:
+                    b_cfg = BUILDING_TYPES.get(planning_building_type, {})
+                    matching_permit, status_msg = permit_manager.find_matching_permit_for_tiles(
+                        planning_building_type, planning_building_tiles, building_manager, furniture_manager=furniture_manager
+                    )
+                    can_afford = building_manager.can_afford(planning_building_type, resources, len(planning_building_tiles))
+                    is_valid_tile_count = (len(planning_building_tiles) == b_cfg.get("fixed_tiles_count")) if b_cfg.get("fixed_tiles_count") else (len(planning_building_tiles) > 0)
+                    if b_cfg.get("fixed_tiles_count") and len(planning_building_tiles) > 0 and len(planning_building_tiles) != b_cfg.get("fixed_tiles_count"):
+                        status_msg = f"Must be {b_cfg.get('fixed_tiles_count')} tiles"
+                    is_valid_build = (matching_permit is not None) and can_afford and is_valid_tile_count
+                    w_cost = b_cfg.get("cost_wood", 0) * (len(planning_building_tiles) if not b_cfg.get("fixed_tiles_count") else 1)
+                    s_cost = b_cfg.get("cost_stone", 0) * (len(planning_building_tiles) if not b_cfg.get("fixed_tiles_count") else 1)
+                    planning_info = {
+                        "name": b_cfg.get("name", planning_building_type),
+                        "cost_str": f"{w_cost}W {s_cost}S",
+                        "status_msg": status_msg or ("Ready to build" if is_valid_build else "Drag area on map"),
+                        "is_valid": is_valid_build,
+                        "rotatable": b_cfg.get("rotatable", True),
+                    }
+                elif planning_mode == "FURNITURE" and planning_furniture_type:
+                    f_cfg = FURNITURE_TYPES.get(planning_furniture_type, {})
+                    mat = f_cfg.get("materials", {})
+                    count = len(session_planned_furniture)
+                    planning_info = {
+                        "name": f_cfg.get("name", planning_furniture_type),
+                        "cost_str": f"{mat.get('Wood', 0)}W {mat.get('Stone', 0)}S each",
+                        "status_msg": f"{count} placed" if count > 0 else "Click on map to place",
+                        "is_valid": count > 0,
+                        "rotatable": f_cfg.get("rotatable", True),
+                    }
+                elif planning_mode == "PERMIT" and planning_permit_type:
+                    p_cfg = PERMIT_TYPES.get(planning_permit_type, {})
+                    can_place, status_msg = permit_manager.can_place_permit_tiles(planning_permit_tiles)
+                    can_afford = permit_manager.can_afford_permit(planning_permit_type, resources)
+                    is_valid = can_place and can_afford and len(planning_permit_tiles) > 0
+                    planning_info = {
+                        "name": p_cfg.get("name", planning_permit_type),
+                        "cost_str": "Free Deed",
+                        "status_msg": status_msg or ("Ready to issue" if is_valid else "Drag area on map"),
+                        "is_valid": is_valid,
+                        "rotatable": False,
+                    }
+                elif planning_mode == "EDIT_PERMIT":
+                    target_p = next((p for p in permit_manager.permits if p.id == editing_permit_id), None)
+                    if target_p:
+                        can_resize, status_msg = target_p.can_resize(
+                            planning_permit_tiles,
+                            other_permits=permit_manager.permits,
+                            building_manager=building_manager,
+                            furniture_manager=furniture_manager
+                        )
+                        diff = len(planning_permit_tiles) - len(original_permit_tiles)
+                        diff_str = f"({diff:+d} tiles)" if diff != 0 else "(no change)"
+                        planning_info = {
+                            "name": f"Resize {target_p.name} {diff_str}",
+                            "cost_str": f"{len(planning_permit_tiles)} tiles",
+                            "status_msg": status_msg or "Drag L-Click add, R-Click erase",
+                            "is_valid": can_resize and len(planning_permit_tiles) > 0,
+                            "rotatable": False,
+                        }
+                elif planning_mode == "MOVE_FURNITURE" and moving_furniture:
+                    planning_info = {
+                        "name": f"Relocate {moving_furniture.name}",
+                        "cost_str": "Carry",
+                        "status_msg": "Left-Click target tile to relocate (Esc to cancel)",
+                        "is_valid": True,
+                        "rotatable": moving_furniture.type_cfg.get("rotatable", True),
+                    }
+                elif planning_mode == "ROAD" and planning_road_type:
+                    r_cfg = ROAD_TYPES.get(planning_road_type, {})
+                    rcost = r_cfg.get("cost", {})
+                    tile_count = len(planning_road_tiles)
+                    w_cost = rcost.get("Wood", 0) * tile_count
+                    s_cost = rcost.get("Stone", 0) * tile_count
+                    cost_str = f"{w_cost}W {s_cost}S" if (w_cost or s_cost) else "Free"
+                    planning_info = {
+                        "name": r_cfg.get("name", planning_road_type),
+                        "cost_str": cost_str,
+                        "status_msg": f"{tile_count} tiles painted" if tile_count > 0 else "Drag to paint path",
+                        "is_valid": tile_count > 0,
+                        "rotatable": False,
+                    }
+                elif planning_mode == "DESTROY":
+                    mark_count = len(destroy_marks)
+                    planning_info = {
+                        "name": "Demolition",
+                        "cost_str": f"{mark_count} items",
+                        "status_msg": f"{mark_count} items to destroy" if mark_count > 0 else "Click objects to mark",
+                        "is_valid": mark_count > 0,
+                        "rotatable": False,
+                    }
+                bottom_dock.draw(screen, planning_mode, planning_info)
+                if planning_mode != "NONE":
+                    btn_confirm_rect.update(bottom_dock.pill_confirm_rect)
+                    btn_cancel_rect.update(bottom_dock.pill_cancel_rect)
 
             # 11. Left Raport Button & Modal
             raport_ui.draw(screen, building_manager, permit_manager, resources, servant_manager, villager_manager, schedule_manager=schedule_manager, day_cycle=day_cycle, furniture_manager=furniture_manager, stockpile_manager=stockpile_manager, production_system=production_system)
