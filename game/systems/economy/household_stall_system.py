@@ -280,23 +280,36 @@ class HouseholdStallSystem:
     @classmethod
     def remove_sale_item(cls, market, item_name, furniture_manager=None,
                          stockpile_manager=None):
-        """Stop listing an item and drop remaining stock for its owner to haul."""
+        """Stop listing an item and return remaining stock to its workstation (or drop)."""
         if not market or item_name not in getattr(market, "sale_items", []):
             return False
         family_id = getattr(market, "assigned_family_id", None)
         stock = max(0, int(getattr(market, "inventory", {}).get(item_name, 0)))
-        if stock and stockpile_manager:
-            storage_item = MARKET_TRADEABLE_ITEMS.get(item_name, item_name)
-            market_center = market.get_center_world(TILE_SIZE)
-            approach = market.get_approach_point(market_center, TILE_SIZE, bm=None)
-            drop_tile = (int(math.floor(approach[0] / TILE_SIZE)),
-                         int(math.floor(approach[1] / TILE_SIZE)))
-            owner_type = "villager" if family_id is not None else "landlord"
-            stockpile_manager.drop_resource(
-                storage_item, stock, *drop_tile,
-                owner_type=owner_type,
-                owner_id=str(family_id) if family_id is not None else None,
-            )
+        if stock > 0:
+            returned_to_ws = False
+            is_tool = item_name in TOOL_TYPES
+            is_furn = item_name in PRODUCTION_BUILDER_FURNITURE_IDS
+            if family_id is not None and (is_tool or is_furn) and furniture_manager:
+                preferred = "toolmaker_workbench" if is_tool else "builder_workbench"
+                ws_list = cls._family_workstations(family_id, furniture_manager)
+                target_ws = next((w for w in ws_list if getattr(w, "furniture_type", "") == preferred), None)
+                if target_ws is None and ws_list:
+                    target_ws = ws_list[0]
+                if target_ws is not None and hasattr(target_ws, "store_item"):
+                    target_ws.store_item(item_name, stock)
+                    returned_to_ws = True
+
+            if not returned_to_ws and stockpile_manager:
+                market_center = market.get_center_world(TILE_SIZE)
+                approach = market.get_approach_point(market_center, TILE_SIZE, bm=None)
+                drop_tile = (int(math.floor(approach[0] / TILE_SIZE)),
+                             int(math.floor(approach[1] / TILE_SIZE)))
+                owner_type = "villager" if family_id is not None else "landlord"
+                stockpile_manager.drop_resource(
+                    item_name, stock, *drop_tile,
+                    owner_type=owner_type,
+                    owner_id=str(family_id) if family_id is not None else None,
+                )
             market.inventory[item_name] = 0
             market.inventory.pop(item_name, None)
         market.sale_items = [item for item in market.sale_items if item != item_name]
@@ -603,7 +616,8 @@ class HouseholdStallSystem:
         villager_manager = villager_manager or getattr(villager, "villager_manager", None)
 
         chest = furniture_manager.get_storage_for_family(fam_str) if furniture_manager else None
-        if not chest and not cls._household_loose_stacks(fam_id, stockpile_manager, villager_manager):
+        if (not chest and not cls._household_loose_stacks(fam_id, stockpile_manager, villager_manager)
+                and not cls._family_workstations(fam_id, furniture_manager)):
             return False
 
         # A. Priority 1: Household Coin Collection from Market
@@ -616,9 +630,13 @@ class HouseholdStallSystem:
             villager.say("Going to collect stall earnings from Market...", duration=2.5)
             return True
 
-        # B. Priority 2: Physical Goods Transportation to Market
+        # B. Priority 2: Autonomous Free-Market Auto-List & Physical Goods Transportation
         if not allow_restock:
             return False
+        cls.auto_list_surplus_items(
+            market, furniture_manager,
+            villager_manager=villager_manager, stockpile_manager=stockpile_manager,
+        )
         for item_name in getattr(market, "sale_items", []):
             alloc_qty = cls.calculate_allocatable_goods(
                 market, fam_id, item_name, furniture_manager,
@@ -673,13 +691,10 @@ class HouseholdStallSystem:
                     if amt > 0:
                         withdrawn[denom] = amt
                         mkt_curr[denom] = 0
-                        # Store in villager currency/inventory
-                        if not hasattr(villager, "currency") or not isinstance(villager.currency, dict):
-                            villager.currency = {"Copper": 0, "Silver": 0, "Gold": 0}
-                        villager.currency[denom] = villager.currency.get(denom, 0) + amt
                         villager.inventory[denom] = villager.inventory.get(denom, 0) + amt
+                    if hasattr(villager, "currency") and isinstance(villager.currency, dict):
+                        villager.currency[denom] = 0
                 compact_currency_wallet(mkt_curr)
-                compact_currency_wallet(villager.currency)
                 compact_currency_wallet(villager.inventory)
 
                 VillageWealthSystem.mark_dirty()
@@ -708,24 +723,17 @@ class HouseholdStallSystem:
                 # Deposit carried coins from pocket into chest
                 deposited = {}
                 for denom in ("Copper", "Silver", "Gold"):
-                    # Check villager pocket
-                    amt = villager.inventory.get(denom, 0)
-                    if hasattr(villager, "currency") and villager.currency.get(denom, 0) > amt:
-                        amt = villager.currency[denom]
+                    amt = max(0, int(villager.inventory.get(denom, 0) or 0))
                     if amt > 0:
                         deposited[denom] = amt
                         villager.inventory[denom] = 0
-                        if hasattr(villager, "currency"):
-                            villager.currency[denom] = 0
-                        # Store into chest
-                        if not hasattr(chest, "currency") or not isinstance(chest.currency, dict):
-                            chest.currency = {"Copper": 0, "Silver": 0, "Gold": 0}
-                        chest.currency[denom] = chest.currency.get(denom, 0) + amt
                         if hasattr(chest, "inventory") and isinstance(chest.inventory, dict):
                             chest.inventory[denom] = chest.inventory.get(denom, 0) + amt
-                compact_currency_wallet(chest.currency)
+                    if hasattr(villager, "currency") and isinstance(villager.currency, dict):
+                        villager.currency[denom] = 0
+                    if hasattr(chest, "currency") and isinstance(chest.currency, dict):
+                        chest.currency[denom] = 0
                 compact_currency_wallet(chest.inventory)
-                compact_currency_wallet(villager.currency)
                 compact_currency_wallet(villager.inventory)
 
                 VillageWealthSystem.mark_dirty()

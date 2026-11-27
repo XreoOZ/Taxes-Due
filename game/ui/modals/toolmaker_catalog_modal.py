@@ -189,7 +189,10 @@ class ToolmakerCatalogModal:
 
         title = self.font_title.render("TOOLMAKER WORKBENCH", True, COLOR_TEXT_TITLE)
         surface.blit(title, (modal_x + upx(24), modal_y + upx(18)))
-        rack = getattr(self.workbench, "output_inventory", {}) or {}
+        rack = dict(getattr(self.workbench, "output_inventory", {}) or {})
+        for sk, sv in (getattr(self.workbench, "inventory", {}) or {}).items():
+            if int(sv or 0) > 0:
+                rack[sk] = rack.get(sk, 0) + int(sv)
         rack_str = ", ".join(f"{v}x {k.replace('_', ' ')}" for k, v in rack.items() if v > 0) or "Empty"
         subtitle = self.font_sub.render(f"Output Rack: {rack_str} | Pick up completed tools at this workbench.", True, (134, 239, 172) if rack_str != "Empty" else COLOR_TEXT_MUTED)
         surface.blit(subtitle, (modal_x + upx(26), modal_y + upx(46)))

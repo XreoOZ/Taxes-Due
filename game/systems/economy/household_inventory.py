@@ -125,7 +125,9 @@ def get_household_possessions(fam, furniture_manager=None, stockpile_manager=Non
         visited_chests = set()
         furn_list = getattr(furniture_manager, "furnitures", getattr(furniture_manager, "furniture_list", []))
         for f in furn_list:
-            if str(getattr(f, "family_id", "")) == fam_id_str and hasattr(f, "inventory") and isinstance(f.inventory, dict):
+            if (getattr(f, "furniture_type", "") == "household_storage"
+                    and str(getattr(f, "family_id", "")) == fam_id_str
+                    and hasattr(f, "inventory") and isinstance(f.inventory, dict)):
                 visited_chests.add(id(f))
                 for it_name, it_count in f.inventory.items():
                     _add_item(it_name, it_count)

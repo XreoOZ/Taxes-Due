@@ -149,7 +149,7 @@ class TestMarketUXAndReserve(unittest.TestCase):
         self.assertEqual(modal.goods_page, 0)
 
     def test_modal_assign_auto_lists_and_alloc_stepper_and_quick_unassign(self):
-        self.chest.inventory = {"Potato": 20, "Wood": 10, "Hoe": 2}
+        self.chest.inventory = {"Potato": 50, "Wood": 10, "Hoe": 2}
         modal = MarketProfileModal()
         modal.open(self.market)
         surf = pygame.Surface((1280, 720))
@@ -169,13 +169,10 @@ class TestMarketUXAndReserve(unittest.TestCase):
         self.assertIn("Wood", self.market.sale_items)
         self.assertNotIn("Hoe", self.market.sale_items)
 
-        # Stepper +10% on Potato allocation
+        # Full Free Market: assigned stall uses 100% surplus automatically (no percentage stepper)
         modal.draw(surf, villager_manager=self.vm, furniture_manager=self.fm)
-        inc_alloc = modal.alloc_step_btns[("Potato", 10)]
-        modal.handle_event(pygame.event.Event(
-            pygame.MOUSEBUTTONDOWN, {"button": 1, "pos": inc_alloc.center}
-        ), villager_manager=self.vm, furniture_manager=self.fm)
-        self.assertEqual(HouseholdStallSystem.get_item_allocation(self.market, "Potato"), 30)
+        self.assertEqual(HouseholdStallSystem.get_item_allocation(self.market, "Potato"), 100)
+        self.assertEqual(modal.alloc_step_btns, {})
 
         # Quick Unassign button reverts to Lord Stall
         modal.draw(surf, villager_manager=self.vm, furniture_manager=self.fm)

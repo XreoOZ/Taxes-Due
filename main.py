@@ -985,7 +985,7 @@ def main():
                     if not any_modal_open and path_debug_overlay.handle_event(event):
                         continue
                     if not any_modal_open and cheats_active and btn_add_item_cheat_rect.collidepoint(event.pos):
-                        tgt = selected_furniture if (selected_furniture and getattr(selected_furniture, "furniture_type", "") == "household_storage") else None
+                        tgt = selected_furniture if (selected_furniture and getattr(selected_furniture, "furniture_type", "") in ("household_storage", "toolmaker_workbench", "builder_workbench")) else None
                         add_item_modal.open(target_storage=tgt)
                         continue
                 # -------------------------------------------------------------
@@ -2124,7 +2124,7 @@ def main():
                 for p in permit_manager.permits:
                     p.reset_daily_watering()
                 villager_manager.daily_midnight_update(day_cycle.day_number)
-                furniture_manager.daily_wear_update(days_passed)
+                furniture_manager.daily_wear_update(days_passed, current_day=day_cycle.day_number)
                 building_manager.daily_public_maintenance_update(days_passed)
                 ToolConditionSystem.daily_tick(
                     day_cycle.day_number, villager_manager, furniture_manager,
@@ -2165,8 +2165,20 @@ def main():
                 wealth_factor = MarketPricingSystem.get_village_wealth_factor(
                     wealth_data["total_wealth_copper"], living_population
                 )
+                village_demands = MarketPricingSystem.compute_village_demands(
+                    villager_manager=villager_manager,
+                    building_manager=building_manager,
+                    furniture_manager=furniture_manager,
+                )
+                village_supplies = MarketPricingSystem.compute_village_supplies(
+                    building_manager=building_manager,
+                )
                 for market in MarketService.get_all_markets(building_manager):
                     market.village_wealth_factor = wealth_factor
+                    market.village_item_demands = village_demands
+                    market.village_item_supplies = village_supplies
+                    if getattr(market, "auto_pricing", False):
+                        MarketPricingSystem.update_market_prices(market)
                 wealth_context_timer = MARKET_WEALTH_CONTEXT_REFRESH_SECONDS
             for p in permit_manager.permits:
                 p.update_growth(day_dt, current_day=cur_day_time)
@@ -2805,12 +2817,14 @@ def main():
                         else "Awaiting payment"
                     )
                     det_txt = f"Commission: {fee_txt} | {payment_txt}"
-                elif selected_furniture.furniture_type == "toolmaker_workbench":
-                    inv = getattr(selected_furniture, "output_inventory", {}) or {}
+                elif selected_furniture.furniture_type in ("toolmaker_workbench", "builder_workbench"):
+                    inv = dict(getattr(selected_furniture, "inventory", {}) or {})
+                    for ok, ov in (getattr(selected_furniture, "output_inventory", {}) or {}).items():
+                        if ov > 0:
+                            inv[ok] = inv.get(ok, 0) + ov
                     inv_str = ", ".join(f"{v}x {k.replace('_', ' ')}" for k, v in inv.items() if v > 0)
-                    orders = [s for s in (getattr(selected_furniture, "tool_order_subjects", None) or [])
-                              if getattr(s, "construction_order", {}).get("status") not in (None, "COMPLETE")]
-                    det_txt = f"Output Rack: {inv_str or 'Empty'} ({len(orders)} active orders)"
+                    total_inv = sum(max(0, int(v or 0)) for v in inv.values())
+                    det_txt = f"Stock ({total_inv}): {inv_str or 'Empty'}"
                 elif selected_furniture.furniture_type == "bed":
                     det_txt = f"Assigned: {selected_furniture.assigned_villager_id or 'Vacant Bed'}"
                 else:
@@ -2831,7 +2845,7 @@ def main():
                 row2_y = cy + upx(76) + act_row_h
 
                 # Contextual buttons — Household/Possessions hanya untuk
-                # household chest; furniture lain cukup Move/Destroy.
+                # household chest; workstation punya inventory terpisah.
                 if (owner_fam and not is_uninstalled
                         and selected_furniture.furniture_type == "household_storage"):
                     btn_furn_house_rect.x = cx + upx(14)

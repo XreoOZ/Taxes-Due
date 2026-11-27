@@ -126,10 +126,13 @@ class VillageWealthSystem:
                     for furn in furn_list:
                         if str(getattr(furn, "family_id", "")) == fam_id_str:
                             visited_chests.add(id(furn))
-                            f_wallet = _wallet_with_mirror_fallback(
-                                getattr(furn, "inventory", None),
-                                getattr(furn, "currency", None),
-                            )
+                            if getattr(furn, "furniture_type", "") == "household_storage" and isinstance(getattr(furn, "inventory", None), dict):
+                                f_wallet = normalize_wallet(furn.inventory)
+                            else:
+                                f_wallet = _wallet_with_mirror_fallback(
+                                    getattr(furn, "inventory", None),
+                                    getattr(furn, "currency", None),
+                                )
                             for denom in CURRENCY_DENOMINATIONS:
                                 fam_wallet[denom] += f_wallet[denom]
 
@@ -137,10 +140,13 @@ class VillageWealthSystem:
                     if hasattr(furniture_manager, "get_storage_for_family"):
                         st = furniture_manager.get_storage_for_family(fam_id_str)
                         if st and id(st) not in visited_chests:
-                            f_wallet = _wallet_with_mirror_fallback(
-                                getattr(st, "inventory", None),
-                                getattr(st, "currency", None),
-                            )
+                            if getattr(st, "furniture_type", "") == "household_storage" and isinstance(getattr(st, "inventory", None), dict):
+                                f_wallet = normalize_wallet(st.inventory)
+                            else:
+                                f_wallet = _wallet_with_mirror_fallback(
+                                    getattr(st, "inventory", None),
+                                    getattr(st, "currency", None),
+                                )
                             for denom in CURRENCY_DENOMINATIONS:
                                 fam_wallet[denom] += f_wallet[denom]
 

@@ -122,18 +122,6 @@ class BuilderSystem:
         total_landlord_funds = treasury_val + stockpile_val
 
         if total_landlord_funds < fee:
-            if order.get("order_type") == "REPAIR" and hasattr(subject, "building_type"):
-                # Emergency civic repair: public structure needs repair to keep town functional.
-                order["status"] = "PAID"
-                order["commission_paid"] = True
-                order["paid_by_id"] = "landlord"
-                order["paid_amount_copper"] = 0
-                order["builder_id"] = str(builder.id)
-                order["builder_family_id"] = str(getattr(builder, "family_id", "") or "")
-                cls._ensure_paid_seq(order, furniture_manager, building_manager)
-                if not getattr(builder, "speech_text", None):
-                    builder.say(f"Emergency public repair: {getattr(subject, 'name', 'structure')}.", duration=2.5)
-                return True, "Emergency civic repair order dispatched."
             message = random.choice(BUILDER_INSUFFICIENT_LANDLORD_COIN_MESSAGES)
             if servant_manager and getattr(servant_manager, "servants", None):
                 servant_manager.servants[0].say(message, duration=3.5)
@@ -162,7 +150,6 @@ class BuilderSystem:
             key=lambda worker: math.hypot(ref_x - worker.x, ref_y - worker.y),
         )
 
-        order["status"] = "LANDLORD_RETRIEVING"
         order["payer_type"] = "landlord"
         order["payer_id"] = "landlord"
         order["builder_id"] = str(builder.id)
@@ -176,8 +163,9 @@ class BuilderSystem:
         servant.builder_commission_builder_id = str(builder.id)
         servant.builder_commission_fee_copper = fee
         servant.builder_commission_remaining_copper = fee
-        servant.builder_commission_storage_tile = [treasury.grid_x, treasury.grid_y]
-        servant.builder_commission_treasury_id = str(treasury.id)
+        servant.builder_commission_storage_tile = storage_tile
+        servant.builder_commission_treasury_id = treasury_id
+        order["status"] = "LANDLORD_RETRIEVING"
         servant.state = "BUILDER_COMMISSION_RETRIEVE"
         servant.say("I am retrieving the commission from the Lord's Treasury Chest, my Lord.", duration=2.5)
         return True, "A servant is retrieving coins from the Lord's Treasury Chest."
@@ -238,35 +226,6 @@ class BuilderSystem:
                 ))
             fee = max(0, int(order.get("price_copper", 0)))
             if total_landlord_funds < fee:
-                if order.get("order_type") == "REPAIR" and hasattr(site, "building_type"):
-                    # Emergency civic repair for public structure (e.g. toilet, well)
-                    artisan_job = cls._artisan_job(order)
-                    builders = [v for v in villager_manager.get_all_villagers()
-                                if getattr(v, "job", None) == artisan_job and getattr(v, "is_alive", True)]
-                    if builders:
-                        if hasattr(site, "get_center_world"):
-                            tx, ty = site.get_center_world(TILE_SIZE)
-                        else:
-                            tx = (site.grid_x + getattr(site, "tiles_w", 1) / 2.0) * TILE_SIZE
-                            ty = (site.grid_y + getattr(site, "tiles_h", 1) / 2.0) * TILE_SIZE
-                        builder = min(
-                            builders,
-                            key=lambda worker: (
-                                cls._queue_length(worker.id, furniture_manager, building_manager),
-                                math.hypot(worker.x - tx, worker.y - ty),
-                            ),
-                        )
-                        order["status"] = "PAID"
-                        order["commission_paid"] = True
-                        order["paid_by_id"] = "landlord"
-                        order["paid_amount_copper"] = 0
-                        order["builder_id"] = str(builder.id)
-                        order["builder_family_id"] = str(getattr(builder, "family_id", "") or "")
-                        cls._ensure_paid_seq(order, furniture_manager, building_manager)
-                        if not getattr(builder, "speech_text", None):
-                            builder.say(f"Emergency public repair: {getattr(site, 'name', 'structure')}.", duration=2.5)
-                        started += 1
-                        continue
                 idle_servant = next((servant for servant in getattr(servant_manager, "servants", [])
                                      if getattr(servant, "state", "IDLE") == "IDLE"), None)
                 if idle_servant and not order.get("insufficient_coin_notice_sent"):

@@ -779,13 +779,16 @@ class FurnitureManager:
         self._storage_cache.clear()
         self._bed_cache.clear()
 
-    def daily_wear_update(self, days=1):
-        """Schedule random break-check times for each furniture at midnight."""
-        day_cycle_day = getattr(self.villager_manager, "current_day_number", 1) if self.villager_manager else 1
-        for _ in range(max(0, int(days))):
-            day_cycle_day += 1
+    def daily_wear_update(self, days=1, current_day=None):
+        """Schedule random break-check times for each furniture on a new day."""
+        if current_day is not None:
+            day_cycle_day = int(current_day)
+        else:
+            day_cycle_day = (getattr(self.villager_manager, "current_day_number", 1) if self.villager_manager else 1) + max(0, int(days))
+        if int(days) > 0:
             for furniture in self.furnitures:
                 furniture.break_check_day = day_cycle_day
+                furniture.break_checked_today = False
                 furniture.break_check_hour = random.uniform(0, 24)
         return []
 

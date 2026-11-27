@@ -912,7 +912,7 @@ class MarketProfileModal:
                 (row_x + upx(12), "ITEM"),
                 (row_x + upx(184), "STALL / HOME"),
                 (row_x + upx(324), "AUTO PRICE"),
-                (row_x + upx(420), "SALE CAP %"),
+                (row_x + upx(420), "FREE MARKET"),
                 (row_x + upx(568), "LORD BUY"),
                 (table.right - upx(34), "DEL"),
             )
@@ -1062,27 +1062,19 @@ class MarketProfileModal:
         # AUTO PRICE column
         price = MarketService.get_item_price(item_name, mkt)
         surface.blit(self.font_badge.render(self._format_copper(price), True, (250, 204, 21)), (rx + upx(324), ry + upx(14)))
-        surface.blit(self.font_badge.render("Scarcity Auto", True, COLOR_TEXT_MUTED), (rx + upx(324), ry + upx(34)))
+        surface.blit(self.font_badge.render("Supply/Demand Auto", True, COLOR_TEXT_MUTED), (rx + upx(324), ry + upx(34)))
 
-        # SALE CAP % stepper + live sellable cap
+        # Autonomous Free Market badge (100% surplus, 10-day household reserve protected)
         cap_x = rx + upx(418)
-        pct = HouseholdStallSystem.get_item_allocation(mkt, item_name)
-        dec_r = pygame.Rect(cap_x, ry + upx(9), upx(22), upx(24))
-        pct_rect = pygame.Rect(dec_r.right + upx(3), ry + upx(9), upx(48), upx(24))
-        inc_r = pygame.Rect(pct_rect.right + upx(3), ry + upx(9), upx(22), upx(24))
-        self.alloc_step_btns[(item_name, -MARKET_ALLOC_STEP)] = dec_r
-        self.alloc_step_btns[(item_name, MARKET_ALLOC_STEP)] = inc_r
-        self._draw_small_btn(surface, dec_r, "-", (30, 41, 59), (51, 65, 85), m_pos, self.font_badge)
-        pct_key = ("num", "alloc", item_name)
-        self.num_fields[pct_key] = {
-            "rect": pct_rect, "kind": "alloc", "item": item_name,
-            "min": MARKET_HOUSEHOLD_SALE_PERCENT_MIN, "max": MARKET_HOUSEHOLD_SALE_PERCENT_MAX,
-        }
-        self._draw_num_input(surface, pct_key, pct_rect, pct, is_percent=True)
-        self._draw_small_btn(surface, inc_r, "+", (30, 41, 59), (51, 65, 85), m_pos, self.font_badge)
+        badge_r = pygame.Rect(cap_x, ry + upx(9), upx(118), upx(24))
+        pygame.draw.rect(surface, (20, 83, 45), badge_r, border_radius=4)
+        pygame.draw.rect(surface, (34, 197, 94), badge_r, width=1, border_radius=4)
+        fm_lbl = self.font_badge.render("Free Market", True, (134, 239, 172))
+        surface.blit(fm_lbl, (badge_r.centerx - fm_lbl.get_width() // 2,
+                              badge_r.centery - fm_lbl.get_height() // 2))
 
-        cap_info = f"Sell up to {summary['max_alloc']} (surplus {summary['surplus']})"
-        cap_col = (134, 239, 172) if summary["max_alloc"] > 0 else COLOR_TEXT_MUTED
+        cap_info = f"Surplus: {summary['surplus']} (Keep {summary['reserve']})"
+        cap_col = (134, 239, 172) if summary["surplus"] > 0 else COLOR_TEXT_MUTED
         surface.blit(self.font_badge.render(cap_info, True, cap_col), (cap_x, ry + upx(38)))
 
         # LORD BUY column

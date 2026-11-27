@@ -318,10 +318,16 @@ class ChurchSystem:
             representative.church_tax_prepared_amount = 0
             return 0
         chest = furniture_manager.get_storage_for_family(fam_id) if furniture_manager else None
-        if chest and hasattr(chest, "currency") and isinstance(chest.currency, dict):
-            for den, cnt in chest.currency.items():
-                if cnt > 0 and chest.inventory.get(den, 0) == 0:
+        inv_copper = to_copper(normalize_wallet(chest.inventory)) if chest else 0
+        legacy_curr = normalize_wallet(getattr(chest, "currency", None)) if chest else {}
+        legacy_only = bool(chest and inv_copper == 0 and to_copper(legacy_curr) > 0)
+        if legacy_only:
+            for den, cnt in legacy_curr.items():
+                if cnt > 0:
                     chest.inventory[den] = cnt
+        elif chest and hasattr(chest, "currency") and isinstance(chest.currency, dict):
+            for den in ("Copper", "Silver", "Gold"):
+                chest.currency[den] = 0
         source = getattr(chest, "inventory", None) if chest else None
         available = to_copper(normalize_wallet(source))
         amount = min(due, available)
@@ -331,7 +337,7 @@ class ChurchSystem:
             success, _ = transfer_exact_value(source, representative.inventory, amount)
             if not success:
                 amount = 0
-            elif chest and hasattr(chest, "currency") and isinstance(chest.currency, dict):
+            elif legacy_only and hasattr(chest, "currency") and isinstance(chest.currency, dict):
                 chest.currency.update(normalize_wallet(chest.inventory))
         representative.church_tax_prepared_day = day
         representative.church_tax_prepared_amount = amount
@@ -526,10 +532,10 @@ class ChurchSystem:
         from game.systems.economy.currency import canonical_denomination
         inventory_wallet = normalize_wallet(priest.inventory)
         legacy_wallet = normalize_wallet(getattr(priest, "currency", {}))
-        combined_wallet = {
-            denomination: inventory_wallet[denomination] + legacy_wallet[denomination]
-            for denomination in ("Copper", "Silver", "Gold")
-        }
+        # Inventory is authoritative when it holds coins; never sum inventory + mirror.
+        combined_wallet = (
+            inventory_wallet if to_copper(inventory_wallet) > 0 else legacy_wallet
+        )
         total_deposited_copper = to_copper(combined_wallet)
         if total_deposited_copper <= 0:
             return 0
@@ -543,11 +549,22 @@ class ChurchSystem:
             priest.currency.update({"Copper": 0, "Silver": 0, "Gold": 0})
 
         if chest:
+            chest_inv_copper = to_copper(normalize_wallet(chest.inventory))
+            chest_curr = normalize_wallet(getattr(chest, "currency", None))
+            legacy_chest = bool(chest_inv_copper == 0 and to_copper(chest_curr) > 0)
+            if legacy_chest:
+                for den, count in chest_curr.items():
+                    if count > 0:
+                        chest.inventory[den] = count
             priest.inventory.update({den: count for den, count in combined_wallet.items() if count > 0})
             transfer_exact_value(priest.inventory, chest.inventory, total_deposited_copper)
             if hasattr(chest, "currency") and isinstance(chest.currency, dict):
-                for den, count in combined_wallet.items():
-                    chest.currency[den] = chest.currency.get(den, 0) + count
+                if legacy_chest:
+                    for den, count in combined_wallet.items():
+                        chest.currency[den] = chest.currency.get(den, 0) + count
+                else:
+                    for den in ("Copper", "Silver", "Gold"):
+                        chest.currency[den] = 0
             priest.say(f"Deposited {total_deposited_copper}c tithes into household chest.", duration=2.5)
         elif stockpile_manager:
             from game.world.permits import resolve_household_ground_drop_tile

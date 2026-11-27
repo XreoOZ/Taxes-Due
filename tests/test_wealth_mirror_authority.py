@@ -128,6 +128,64 @@ class TestWealthMirrorAuthority(unittest.TestCase):
         )
         self.assertEqual(wealth["total_wealth_copper"], 999)
 
+    def test_empty_household_storage_chest_ignores_stale_currency_mirror(self):
+        from game.buildings.furniture import Furniture
+        family = SimpleNamespace(
+            id="fam_1",
+            surname="Weaver",
+            members=[SimpleNamespace(id="w1", inventory={}, currency={})],
+        )
+        chest = Furniture("furn_2", "household_storage", 2, 2, family_id="fam_1", permit_id=1)
+        chest.inventory = {"Copper": 0, "Silver": 0, "Gold": 0}
+        chest.currency = {"Copper": 4, "Silver": 5, "Gold": 0}
+        fm = SimpleNamespace(furnitures=[chest], get_storage_for_family=lambda fid: chest)
+        wealth = VillageWealthSystem.calculate_village_wealth(
+            villager_manager=SimpleNamespace(families=[family]),
+            furniture_manager=fm,
+            force_recompute=True,
+        )
+        self.assertEqual(wealth["households"][0]["wealth_copper"], 0)
+        self.assertEqual(wealth["total_wealth_copper"], 0)
+
+    def test_church_tax_prep_and_tithe_deposit_never_resurrect_or_double_coins(self):
+        from game.buildings.furniture import Furniture, FurnitureManager
+        from game.entities.villagers import Family, Villager
+        from game.systems.economy.currency import to_copper, normalize_wallet
+        from game.systems.village_life.church_system import ChurchSystem
+        from game.world.permits import PermitManager
+
+        pm = PermitManager()
+        c_permit = pm.add_permit("Church", "church", {(0, 0)})
+        ChurchSystem.set_tax_settings(0, 0, 1, pm)
+        prev_enabled = ChurchSystem.is_tax_enabled()
+        ChurchSystem.set_tax_enabled(True)
+        try:
+            fm = FurnitureManager()
+            fam = Family("fam_1", "Cooper")
+            rep = Villager("v1", "Bob", "Cooper", "Male", 30, 1, "Farmer", family_id="fam_1")
+            fam.members.append(rep)
+            chest = Furniture("c1", "household_storage", 2, 2, family_id="fam_1", permit_id=1)
+            chest.inventory = {"Copper": 5, "Silver": 0, "Gold": 0}
+            # Stale mirror says 1 Gold, 7 Silver -> MUST NEVER resurrect 1 Gold!
+            chest.currency = {"Copper": 0, "Silver": 7, "Gold": 1}
+
+            priest = Villager("p1", "Father", "Tom", "Male", 40, 1, "Priest", family_id="fam_p")
+            priest_chest = Furniture("cp", "household_storage", 3, 3, family_id="fam_p", permit_id=2)
+            fm.furnitures = [chest, priest_chest]
+
+            prepared = ChurchSystem.prepare_church_tax_payment(rep, c_permit, fm, day_number=1)
+            self.assertEqual(prepared, 1)
+            self.assertEqual(to_copper(normalize_wallet(chest.inventory)), 4)
+
+            paid = ChurchSystem.process_church_tax_payment(rep, priest, c_permit, fm, day_number=1)
+            self.assertEqual(paid, 1)
+            deposited = ChurchSystem.priest_deposit_tithes_home(priest, fm)
+            # Must deposit exactly 1c (never 2c by summing priest.inventory + priest.currency)
+            self.assertEqual(deposited, 1)
+            self.assertEqual(to_copper(normalize_wallet(priest_chest.inventory)), 1)
+        finally:
+            ChurchSystem.set_tax_enabled(prev_enabled)
+
 
 if __name__ == "__main__":
     unittest.main()

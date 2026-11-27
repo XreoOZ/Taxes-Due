@@ -383,20 +383,24 @@ class Servant:
                 interaction_target=builder,
             )
             if arrived:
-                fee = max(0, int(order.get("price_copper", 0)))
-                if BuilderSystem._move_exact_value(self.inventory, builder.inventory, fee):
+                fee = max(0, int(getattr(self, "builder_commission_fee_copper", order.get("price_copper", 0))))
+                if fee == 0 or BuilderSystem._move_exact_value(self.inventory, builder.inventory, fee):
                     order["status"] = "PAID"
                     order["commission_paid"] = True
                     order["paid_by_id"] = "landlord"
                     order["paid_amount_copper"] = fee
                     BuilderSystem._ensure_paid_seq(order, furniture_manager, building_manager)
-                    MarketSalesReportSystem.record_household_income(
-                        villager_manager, getattr(builder, "family_id", None),
-                        "Public Builder Commissions", fee,
-                        getattr(villager_manager, "current_day_number", 1),
-                    )
-                    builder.say(f"Public commission received: {fee} Copper.", duration=3.0)
-                    self.say("Commission delivered to the Builder, my Lord.", duration=2.5)
+                    if fee > 0:
+                        MarketSalesReportSystem.record_household_income(
+                            villager_manager, getattr(builder, "family_id", None),
+                            "Public Builder Commissions", fee,
+                            getattr(villager_manager, "current_day_number", 1),
+                        )
+                        builder.say(f"Public commission received: {fee} Copper.", duration=3.0)
+                        self.say("Commission delivered to the Builder, my Lord.", duration=2.5)
+                    else:
+                        builder.say(f"Emergency public repair accepted: {getattr(order_subject, 'name', 'structure')}.", duration=3.0)
+                        self.say("Emergency repair order delivered to the Builder, my Lord.", duration=2.5)
                     BuilderSystem.refund_public_courier_coins(self, stockpile_manager, furniture_manager)
                 else:
                     BuilderSystem.refund_public_courier_coins(self, stockpile_manager, furniture_manager)

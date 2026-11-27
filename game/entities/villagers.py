@@ -482,6 +482,8 @@ class Villager:
             return "Waiting for furniture commission"
         elif task == "BUILDER_CONSTRUCTING":
             return "Building furniture"
+        elif task == "BUILDER_CRAFTING":
+            return "Crafting furniture stock"
         elif task == "BUILDER_COLLECTING_MATERIALS":
             return "Collecting building materials from household storage"
         elif task == "BUILDER_DELIVERING_MATERIALS":
@@ -1501,10 +1503,28 @@ class Villager:
             cur_gx = drop_tile[0] if drop_tile else int(math.floor(self.x / TILE_SIZE))
             cur_gy = drop_tile[1] if drop_tile else int(math.floor(self.y / TILE_SIZE))
 
+            from game.data.config import PRODUCTION_BUILDER_FURNITURE_IDS, TOOL_TYPES
             for item, amount in list(self._get_unneeded_inventory().items()):
                 if amount <= 0:
                     continue
-                if chest:
+                stored_in_ws = False
+                if furniture_manager and self.family_id is not None and (
+                        item in TOOL_TYPES or item in PRODUCTION_BUILDER_FURNITURE_IDS):
+                    pref_ws = "toolmaker_workbench" if item in TOOL_TYPES else "builder_workbench"
+                    ws = next(
+                        (f for f in getattr(furniture_manager, "furnitures", [])
+                         if getattr(f, "furniture_type", "") == pref_ws
+                         and getattr(f, "family_id", None) == self.family_id
+                         and not getattr(f, "is_dropped", False)
+                         and getattr(f, "stored_in_id", None) is None),
+                        None,
+                    )
+                    if ws is not None:
+                        ws.store_item(item, amount)
+                        stored_in_ws = True
+                if stored_in_ws:
+                    pass
+                elif chest:
                     chest.store_item(item, amount)
                 elif stockpile_manager:
                     stockpile_manager.drop_resource(
@@ -4671,7 +4691,7 @@ class Villager:
             timer = getattr(self, "station_work_timer", 0.0)
         elif task in ("FETCHING_WATER", "COLLECTING_HOUSEHOLD_WATER", "SEEKING_WATER"):
             timer = getattr(self, "well_draw_timer", 0.0)
-        elif task in ("BUILDER_CONSTRUCTING", "BUILDER_REPAIRING", "BUILDING", "REPAIRING"):
+        elif task in ("BUILDER_CONSTRUCTING", "BUILDER_REPAIRING", "BUILDER_CRAFTING", "BUILDING", "REPAIRING"):
             timer = getattr(self, "builder_work_timer", 0.0)
         elif task == "TOOLMAKER_CRAFTING":
             timer = getattr(self, "toolmaker_craft_timer", 0.0)
@@ -4782,7 +4802,7 @@ class Villager:
                 active_t = "Watering_Can"
             elif self.task == "HARVESTING":
                 active_t = "Sickle"
-            elif self.task in ("BUILDING", "REPAIRING", "BUILDER_CONSTRUCTING", "BUILDER_REPAIRING"):
+            elif self.task in ("BUILDING", "REPAIRING", "BUILDER_CONSTRUCTING", "BUILDER_REPAIRING", "BUILDER_CRAFTING"):
                 active_t = "Saw"
             elif self.task in ("TOOLMAKER_CRAFTING", "TOOLMAKER_SMELTING"):
                 active_t = "Hammer"
@@ -4886,7 +4906,7 @@ class Villager:
                 pygame.draw.arc(surface, (226, 232, 240), (hx - arc_r // 2, hy - arc_r, arc_r * 2, arc_r * 2), self.facing_angle, self.facing_angle + math.pi * 0.9, max(2, int(2 * camera.zoom)))
 
         elif active_t in ("Saw", "Adze"):
-            is_builder_working = self.task in ("BUILDER_CONSTRUCTING", "BUILDER_REPAIRING") and not self.is_moving
+            is_builder_working = self.task in ("BUILDER_CONSTRUCTING", "BUILDER_REPAIRING", "BUILDER_CRAFTING") and not self.is_moving
             phase = time.time() * BUILDER_TOOL_SWING_SPEED
             swing = math.sin(phase) * BUILDER_TOOL_SWING_ANGLE if is_builder_working else 0.0
             tool_angle = self.facing_angle - 0.55 + swing
@@ -4916,7 +4936,7 @@ class Villager:
                                    max(1, int(2 * camera.zoom)))
 
         elif active_t == "Hammer":
-            is_building = (self.task in ("BUILDING", "REPAIRING", "BUILDER_CONSTRUCTING", "BUILDER_REPAIRING", "TOOLMAKER_CRAFTING", "TOOLMAKER_SMELTING") and not getattr(self, "is_moving", False))
+            is_building = (self.task in ("BUILDING", "REPAIRING", "BUILDER_CONSTRUCTING", "BUILDER_REPAIRING", "BUILDER_CRAFTING", "TOOLMAKER_CRAFTING", "TOOLMAKER_SMELTING") and not getattr(self, "is_moving", False))
             shaft_len = int(14 * camera.zoom)
             head_w = max(4, int(8 * camera.zoom))
             head_h = max(3, int(5 * camera.zoom))

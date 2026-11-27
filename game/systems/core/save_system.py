@@ -689,7 +689,8 @@ def deserialize_game_state(data, day_cycle, resources, player, permit_manager, b
             rotation=f_d.get("rotation", 0)
         )
         f.inventory = dict(f_d.get("inventory", {}))
-        f.currency = dict(f_d.get("currency", {}))
+        # Real Furniture stores all coins in inventory; scrub stale .currency mirrors on load.
+        f.currency = {"Copper": 0, "Silver": 0, "Gold": 0} if f.furniture_type == "household_storage" else dict(f_d.get("currency", {}))
         f.is_dropped = f_d.get("is_dropped", False)
         f.stored_in_id = f_d.get("stored_in_id", None)
         f.construction_order = dict(f_d.get("construction_order", {}) or {}) or None

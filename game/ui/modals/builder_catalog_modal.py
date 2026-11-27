@@ -1,8 +1,16 @@
-"""Furniture catalogue and live commission quotes for Builder workbenches."""
+"""Furniture catalogue, live commission quotes, and workbench stock rack for Builder workbenches."""
 
 import pygame
 
-from game.data.config import BUILDING_TYPES, FURNITURE_TYPES, COLOR_MODAL_BG, COLOR_MODAL_BORDER, COLOR_TEXT_TITLE, COLOR_TEXT_MAIN, COLOR_TEXT_MUTED
+from game.data.config import (
+    BUILDING_TYPES,
+    COLOR_MODAL_BG,
+    COLOR_MODAL_BORDER,
+    COLOR_TEXT_MAIN,
+    COLOR_TEXT_MUTED,
+    COLOR_TEXT_TITLE,
+    FURNITURE_TYPES,
+)
 from game.systems.work.builder_system import BuilderSystem
 from game.systems.economy.currency import from_copper
 from game.config import TILE_SIZE
@@ -16,6 +24,8 @@ class BuilderCatalogModal:
         self.modal_rect = None
         self.close_rect = None
         self.viewport_rect = None
+        self.current_tab = "CATALOGUE"  # "CATALOGUE" or "WORKBENCH_RACK"
+        self.tab_rects = {}
         self.order_rects = {}
         self.scroll_y = 0
         self.max_scroll = 0
@@ -28,6 +38,7 @@ class BuilderCatalogModal:
     def open(self, workbench):
         self.workbench = workbench
         self.is_open = True
+        self.current_tab = "CATALOGUE"
         self.scroll_y = 0
 
     def close(self):
@@ -56,12 +67,18 @@ class BuilderCatalogModal:
             if self.close_rect and self.close_rect.collidepoint(event.pos):
                 self.close()
                 return "close"
+            for tab_name, tab_rect in self.tab_rects.items():
+                if tab_rect.collidepoint(event.pos):
+                    self.current_tab = tab_name
+                    self.scroll_y = 0
+                    return f"tab_{tab_name}"
             if self.viewport_rect and self.viewport_rect.collidepoint(event.pos):
-                for order_key, rect in self.order_rects.items():
-                    if rect.collidepoint(event.pos):
-                        self.close()
-                        kind, item_type = order_key.split(":", 1)
-                        return f"commission_{kind}_{item_type}"
+                if self.current_tab == "CATALOGUE":
+                    for order_key, rect in self.order_rects.items():
+                        if rect.collidepoint(event.pos):
+                            self.close()
+                            kind, item_type = order_key.split(":", 1)
+                            return f"commission_{kind}_{item_type}"
             return "blocked"
         return None
 
@@ -89,8 +106,20 @@ class BuilderCatalogModal:
 
         title = self.font_title.render("BUILDER WORKBENCH", True, COLOR_TEXT_TITLE)
         surface.blit(title, (modal_x + upx(24), modal_y + upx(18)))
-        subtitle = self.font_sub.render("Furniture and public build quotes use market material costs and living wages.", True, COLOR_TEXT_MUTED)
-        surface.blit(subtitle, (modal_x + upx(26), modal_y + upx(48)))
+
+        rack = dict(getattr(self.workbench, "inventory", {}) or {})
+        for ok, ov in (getattr(self.workbench, "output_inventory", {}) or {}).items():
+            if int(ov or 0) > 0:
+                rack[ok] = rack.get(ok, 0) + int(ov)
+        rack_str = ", ".join(
+            f"{v}x {FURNITURE_TYPES.get(k, {}).get('name', k.replace('_', ' ').title())}"
+            for k, v in rack.items() if int(v or 0) > 0
+        ) or "Empty"
+        subtitle = self.font_sub.render(
+            f"Workbench Stock: {rack_str} | Commission builds or inspect ready stock.",
+            True, (134, 239, 172) if rack_str != "Empty" else COLOR_TEXT_MUTED,
+        )
+        surface.blit(subtitle, (modal_x + upx(26), modal_y + upx(46)))
 
         self.close_rect = pygame.Rect(modal_x + modal_w - upx(42), modal_y + upx(16), upx(26), upx(26))
         pygame.draw.rect(surface, (30, 41, 59), self.close_rect, border_radius=upx(5))
@@ -98,64 +127,125 @@ class BuilderCatalogModal:
         surface.blit(close_label, (self.close_rect.centerx - close_label.get_width() // 2,
                                    self.close_rect.centery - close_label.get_height() // 2))
 
-        footer_h = upx(42)
-        viewport_top = modal_y + upx(82)
+        # --- Tabs (matching ToolmakerCatalogModal) ---
+        tab_y = modal_y + upx(72)
+        tab_h = upx(32)
+        self.tab_rects = {
+            "CATALOGUE": pygame.Rect(modal_x + upx(24), tab_y, upx(160), tab_h),
+            "WORKBENCH_RACK": pygame.Rect(modal_x + upx(192), tab_y, upx(190), tab_h),
+        }
+        tot_rack = sum(int(v or 0) for v in rack.values() if int(v or 0) > 0)
+        for tab_name, tab_rect in self.tab_rects.items():
+            is_active = (self.current_tab == tab_name)
+            bg_col = (37, 99, 235) if is_active else (30, 41, 59)
+            border_col = (147, 197, 253) if is_active else (71, 85, 105)
+            pygame.draw.rect(surface, bg_col, tab_rect, border_radius=upx(6))
+            pygame.draw.rect(surface, border_col, tab_rect, width=1 if not is_active else 2, border_radius=upx(6))
+            lbl_txt = "CATALOGUE" if tab_name == "CATALOGUE" else f"WORKBENCH RACK ({tot_rack})"
+            lbl = self.font_badge.render(lbl_txt, True, (255, 255, 255) if is_active else COLOR_TEXT_MUTED)
+            surface.blit(lbl, (tab_rect.centerx - lbl.get_width() // 2, tab_rect.centery - lbl.get_height() // 2))
+
+        footer_h = upx(24)
+        viewport_top = modal_y + upx(114)
         viewport_bottom = modal_y + modal_h - footer_h - upx(12)
         self.viewport_rect = pygame.Rect(modal_x + upx(20), viewport_top, modal_w - upx(40),
                                          max(0, viewport_bottom - viewport_top))
-        item_types = [(key, cfg, "furniture") for key, cfg in FURNITURE_TYPES.items()]
-        item_types.extend((key, cfg, "building") for key, cfg in BUILDING_TYPES.items()
-                          if cfg.get("builder_commissionable"))
-        row_h = upx(90)
-        row_step = row_h + 8
-        content_h = len(item_types) * row_step
-        self.max_scroll = max(0, content_h - self.viewport_rect.height)
-        self.scroll_y = max(0, min(self.scroll_y, self.max_scroll))
+
         self.order_rects = {}
         old_clip = surface.get_clip()
         surface.set_clip(self.viewport_rect)
+        content_h = 0
 
-        reference_position = self.workbench.get_world_pos(TILE_SIZE)
-        for index, (item_type, cfg, item_kind) in enumerate(item_types):
-            order_key = f"{item_kind}:{item_type}"
-            row = pygame.Rect(self.viewport_rect.x,
-                              self.viewport_rect.y + index * row_step - self.scroll_y,
-                              self.viewport_rect.width, row_h)
-            pygame.draw.rect(surface, (15, 23, 42), row, border_radius=upx(7))
-            pygame.draw.rect(surface, (51, 65, 85), row, width=1, border_radius=upx(7))
-            name = self.font_body.render(cfg.get("name", item_type.replace("_", " ").title()), True, COLOR_TEXT_MAIN)
-            surface.blit(name, (row.x + upx(14), row.y + upx(10)))
-            desc = self.font_sub.render(cfg.get("desc", ""), True, COLOR_TEXT_MUTED)
-            surface.blit(desc, (row.x + upx(14), row.y + upx(31)))
-            materials = cfg.get("materials", {})
-            if item_kind == "building":
-                quote = BuilderSystem.quote_building_order(item_type, building_manager, villager_manager)
-                materials = quote.get("materials", {})
-            material_text = ", ".join(f"{amount}x {item}" for item, amount in materials.items() if amount)
-            if not material_text:
-                material_text = "No material cost"
-            material_label = self.font_sub.render(f"Materials: {material_text}", True, COLOR_TEXT_MUTED)
-            surface.blit(material_label, (row.x + upx(14), row.y + upx(56)))
+        if self.current_tab == "CATALOGUE":
+            item_types = [(key, cfg, "furniture") for key, cfg in FURNITURE_TYPES.items()]
+            item_types.extend((key, cfg, "building") for key, cfg in BUILDING_TYPES.items()
+                              if cfg.get("builder_commissionable"))
+            row_h = upx(90)
+            row_step = row_h + 8
+            content_h = len(item_types) * row_step
+            self.max_scroll = max(0, content_h - self.viewport_rect.height)
+            self.scroll_y = max(0, min(self.scroll_y, self.max_scroll))
 
-            if item_kind == "furniture":
-                quote = BuilderSystem.quote_order(
-                    item_type, building_manager, villager_manager,
-                    reference_position=reference_position,
+            reference_position = self.workbench.get_world_pos(TILE_SIZE)
+            for index, (item_type, cfg, item_kind) in enumerate(item_types):
+                order_key = f"{item_kind}:{item_type}"
+                row = pygame.Rect(self.viewport_rect.x,
+                                  self.viewport_rect.y + index * row_step - self.scroll_y,
+                                  self.viewport_rect.width, row_h)
+                pygame.draw.rect(surface, (15, 23, 42), row, border_radius=upx(7))
+                pygame.draw.rect(surface, (51, 65, 85), row, width=1, border_radius=upx(7))
+                name = self.font_body.render(cfg.get("name", item_type.replace("_", " ").title()), True, COLOR_TEXT_MAIN)
+                surface.blit(name, (row.x + upx(14), row.y + upx(10)))
+                desc = self.font_sub.render(cfg.get("desc", ""), True, COLOR_TEXT_MUTED)
+                surface.blit(desc, (row.x + upx(14), row.y + upx(31)))
+                materials = cfg.get("materials", {})
+                if item_kind == "building":
+                    quote = BuilderSystem.quote_building_order(item_type, building_manager, villager_manager)
+                    materials = quote.get("materials", {})
+                material_text = ", ".join(f"{amount}x {item}" for item, amount in materials.items() if amount)
+                if not material_text:
+                    material_text = "No material cost"
+                material_label = self.font_sub.render(f"Materials: {material_text}", True, COLOR_TEXT_MUTED)
+                surface.blit(material_label, (row.x + upx(14), row.y + upx(56)))
+
+                if item_kind == "furniture":
+                    quote = BuilderSystem.quote_order(
+                        item_type, building_manager, villager_manager,
+                        reference_position=reference_position,
+                    )
+                price = self._format_price(quote["price_copper"])
+                price_label = self.font_badge.render(f"{price}  (material + living wage)", True, (250, 204, 21))
+                surface.blit(price_label, (row.right - upx(218), row.y + upx(14)))
+                order_rect = pygame.Rect(row.right - upx(128), row.y + upx(49), upx(112), upx(28))
+                self.order_rects[order_key] = order_rect
+                hovered = order_rect.collidepoint(pygame.mouse.get_pos())
+                pygame.draw.rect(surface, (16, 185, 129) if hovered else (5, 150, 105), order_rect, border_radius=upx(5))
+                pygame.draw.rect(surface, (52, 211, 153), order_rect, width=1, border_radius=upx(5))
+                order_label = self.font_badge.render("Commission" if item_kind == "furniture" else "Plan", True, (255, 255, 255))
+                surface.blit(order_label, (order_rect.centerx - order_label.get_width() // 2,
+                                           order_rect.centery - order_label.get_height() // 2))
+
+        elif self.current_tab == "WORKBENCH_RACK":
+            rack_items = [(k, int(v)) for k, v in rack.items() if int(v or 0) > 0]
+            row_h = upx(56)
+            row_step = row_h + 8
+            content_h = upx(30) + (len(rack_items) * row_step if rack_items else upx(50))
+            self.max_scroll = max(0, content_h - self.viewport_rect.height)
+            self.scroll_y = max(0, min(self.scroll_y, self.max_scroll))
+
+            cur_y = self.viewport_rect.y - self.scroll_y
+            lbl_rack = self.font_badge.render(
+                "FINISHED PRODUCTION STOCK ON BUILDER WORKBENCH (AVAILABLE FOR MARKET)",
+                True, (253, 224, 71),
+            )
+            surface.blit(lbl_rack, (self.viewport_rect.x + upx(4), cur_y))
+            cur_y += upx(26)
+
+            if not rack_items:
+                empty_row = pygame.Rect(self.viewport_rect.x, cur_y, self.viewport_rect.width, upx(42))
+                pygame.draw.rect(surface, (15, 23, 42), empty_row, border_radius=upx(6))
+                pygame.draw.rect(surface, (51, 65, 85), empty_row, width=1, border_radius=upx(6))
+                txt = self.font_sub.render(
+                    "Workbench stock is empty. Set quotas in Town Ledger -> Product to start stocking.",
+                    True, COLOR_TEXT_MUTED,
                 )
-            price = self._format_price(quote["price_copper"])
-            price_label = self.font_badge.render(f"{price}  (material + living wage)", True, (250, 204, 21))
-            surface.blit(price_label, (row.right - upx(218), row.y + upx(14)))
-            order_rect = pygame.Rect(row.right - upx(128), row.y + upx(49), upx(112), upx(28))
-            self.order_rects[order_key] = order_rect
-            hovered = order_rect.collidepoint(pygame.mouse.get_pos())
-            pygame.draw.rect(surface, (16, 185, 129) if hovered else (5, 150, 105), order_rect, border_radius=upx(5))
-            pygame.draw.rect(surface, (52, 211, 153), order_rect, width=1, border_radius=upx(5))
-            order_label = self.font_badge.render("Commission" if item_kind == "furniture" else "Plan", True, (255, 255, 255))
-            surface.blit(order_label, (order_rect.centerx - order_label.get_width() // 2,
-                                       order_rect.centery - order_label.get_height() // 2))
+                surface.blit(txt, (empty_row.x + upx(14), empty_row.y + upx(12)))
+            else:
+                for item_id, qty in rack_items:
+                    row = pygame.Rect(self.viewport_rect.x, cur_y, self.viewport_rect.width, row_h)
+                    pygame.draw.rect(surface, (15, 23, 42), row, border_radius=upx(7))
+                    pygame.draw.rect(surface, (51, 65, 85), row, width=1, border_radius=upx(7))
+                    disp_name = FURNITURE_TYPES.get(item_id, {}).get("name", item_id.replace("_", " ").title())
+                    name_s = self.font_body.render(disp_name, True, COLOR_TEXT_MAIN)
+                    surface.blit(name_s, (row.x + upx(14), row.y + upx(10)))
+                    sub_s = self.font_sub.render("Commercial furniture stock (auto-listed on family market stall)", True, COLOR_TEXT_MUTED)
+                    surface.blit(sub_s, (row.x + upx(14), row.y + upx(32)))
+                    qty_s = self.font_body.render(f"Qty: {qty}", True, (134, 239, 172))
+                    surface.blit(qty_s, (row.right - upx(90), row.centery - qty_s.get_height() // 2))
+                    cur_y += row_step
 
         surface.set_clip(old_clip)
-        if self.max_scroll:
+        if self.max_scroll and content_h > 0:
             track = pygame.Rect(self.viewport_rect.right - upx(4), self.viewport_rect.y, 3, self.viewport_rect.height)
             pygame.draw.rect(surface, (51, 65, 85), track, border_radius=2)
             thumb_h = max(upx(24), int(track.height * self.viewport_rect.height / content_h))

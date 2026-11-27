@@ -226,6 +226,43 @@ class TestProductionSystem(unittest.TestCase):
         self.assertEqual(b_bench.inventory.get("toilet", 0), 1)
         self.assertEqual(t_bench.inventory.get("Hoe", 0), 1)
 
+    def test_market_remove_and_readd_workstation_roundtrip(self):
+        from game.systems.economy.household_stall_system import HouseholdStallSystem
+
+        bm = BuildingManager()
+        fm = FurnitureManager()
+        sm = StockpileManager()
+
+        fam = Family(4, "Artisans")
+        chest = Furniture("f_chest4", "household_storage", 1, 1, family_id=4, permit_id=104)
+        b_bench = Furniture("f_b4", "builder_workbench", 2, 1, family_id=4, permit_id=104)
+        t_bench = Furniture("f_t4", "toolmaker_workbench", 4, 1, family_id=4, permit_id=104)
+        fm.furnitures.extend([chest, b_bench, t_bench])
+
+        market = Building("market", {(6, 6)})
+        bm.buildings.append(market)
+        HouseholdStallSystem.assign_stall(market, 4)
+
+        # Put 1 Hoe and 1 toilet in market as if hauled from workstations
+        market.sale_items = ["Hoe", "toilet"]
+        market.inventory = {"Hoe": 1, "toilet": 1}
+
+        # Remove from market -> must return directly to workstations, NOT household chest
+        self.assertTrue(HouseholdStallSystem.remove_sale_item(market, "Hoe", fm, sm))
+        self.assertTrue(HouseholdStallSystem.remove_sale_item(market, "toilet", fm, sm))
+
+        self.assertEqual(t_bench.inventory.get("Hoe", 0), 1)
+        self.assertEqual(b_bench.inventory.get("toilet", 0), 1)
+        self.assertEqual(chest.inventory.get("Hoe", 0), 0)
+        self.assertEqual(chest.inventory.get("toilet", 0), 0)
+
+        # Re-add / auto-list back to market must work seamlessly ("keluar masuk")
+        added = HouseholdStallSystem.auto_list_surplus_items(market, fm)
+        self.assertIn("Hoe", added)
+        self.assertIn("toilet", added)
+        self.assertIn("Hoe", market.sale_items)
+        self.assertIn("toilet", market.sale_items)
+
 
 if __name__ == "__main__":
     unittest.main()

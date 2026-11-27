@@ -221,6 +221,41 @@ class TestJobsStepperAlertsAndTownHall(unittest.TestCase):
         )
         self.assertEqual(ui.town_hall_filter, "household_need")
 
+    def test_no_food_alert_suppressed_with_coins_unless_market_has_no_food(self):
+        from game.buildings.building import Building
+        from game.systems.village_life.village_alerts import collect_village_alerts, group_village_alerts
+
+        fam = Family("f_coin", "Cooper")
+        fam.assigned_permit_id = "p_coin"
+        v = Villager("v_coin", "Dan", "Cooper", "Male", 28, 2, "Father", family_id="f_coin")
+        v.set_job("Farmer")
+        v.inventory = {"Hoe": 1, "Watering_Can": 1, "Sickle": 1, "Copper": 20}
+        fam.members.append(v)
+        self.vm.families.append(fam)
+        self.bm.buildings.append(Building("well", {(1, 1), (1, 2), (2, 1), (2, 2)}))
+
+        # 1. Market HAS food + household HAS coins -> NO "No Food" and NO "Market Has No Food"
+        mkt = Building("market", {(5, 5), (5, 6)})
+        mkt.inventory = {"Potato": 10}
+        self.bm.buildings.append(mkt)
+        alerts_ok = collect_village_alerts(self.vm, self.pm, self.bm, self.fm, self.sm)
+        self.assertFalse(any(a["id"] == "no_food:f_coin" for a in alerts_ok), alerts_ok)
+        self.assertFalse(any(a["id"] == "market_no_food" for a in alerts_ok), alerts_ok)
+
+        # 2. Market has NO food + household HAS coins -> "Market Has No Food" (not per-family "No Food")
+        mkt.inventory = {}
+        alerts_no_mkt_food = collect_village_alerts(self.vm, self.pm, self.bm, self.fm, self.sm)
+        self.assertFalse(any(a["id"] == "no_food:f_coin" for a in alerts_no_mkt_food), alerts_no_mkt_food)
+        self.assertTrue(any(a["title"] == "Market Has No Food" for a in alerts_no_mkt_food), alerts_no_mkt_food)
+        grouped = group_village_alerts(alerts_no_mkt_food)
+        self.assertTrue(any(g["title"] == "Market Has No Food" for g in grouped), grouped)
+
+        # 3. Household has 0 coins -> shows both "Out of Coins" and "No Food"
+        v.inventory = {"Hoe": 1, "Watering_Can": 1, "Sickle": 1}
+        alerts_broke = collect_village_alerts(self.vm, self.pm, self.bm, self.fm, self.sm)
+        self.assertTrue(any(a["id"] == "no_coins:f_coin" for a in alerts_broke), alerts_broke)
+        self.assertTrue(any(a["id"] == "no_food:f_coin" for a in alerts_broke), alerts_broke)
+
 
 if __name__ == "__main__":
     unittest.main()

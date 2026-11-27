@@ -7,13 +7,24 @@ Architecture:
   and the Town Hall Action Center inside the Town Ledger.
 """
 
-from game.data.config import DEDICATED_JOBS, TILE_SIZE
+from game.data.config import DEDICATED_JOBS, TILE_SIZE, is_food_item
 from game.systems.economy.currency import canonical_denomination, to_copper
 from game.systems.economy.household_inventory import (
     canonical_item_name,
     get_household_possessions,
 )
+from game.systems.economy.market_service import MarketService
 from game.systems.work.job_tool_system import get_missing_tools_for_worker
+
+
+def _market_has_food_for_sale(building_manager):
+    """Return True when at least one active market has food in stock for sale."""
+    for mkt in MarketService.get_all_markets(building_manager):
+        inv = getattr(mkt, "inventory", None) or {}
+        for item_name, qty in inv.items():
+            if is_food_item(item_name) and int(qty or 0) > 0 and MarketService.is_item_for_sale(mkt, item_name):
+                return True
+    return False
 
 
 _IDLE_JOBS = ("Unassigned", "Unemployed", "Peasant", None, "")
@@ -87,6 +98,8 @@ def collect_village_alerts(
     families = getattr(villager_manager, "families", []) if villager_manager else []
     total_living = 0
     total_household_water = 0
+    market_has_food = _market_has_food_for_sale(building_manager)
+    any_hungry_with_coins = False
 
     for fam in families:
         living_members = [m for m in getattr(fam, "members", []) if getattr(m, "is_alive", True)]
@@ -131,18 +144,24 @@ def collect_village_alerts(
             })
 
         # C. No Food in Household Storage / Inventory
+        # Suppress per-household "No Food" while the household still has coins
+        # (they can buy food at the Market unless no Market has food stocked).
         food_stk = fam.get_food_stock(furniture_manager, stockpile_manager) if hasattr(fam, "get_food_stock") else 0
         if food_stk <= 0:
-            alerts.append({
-                "id": f"no_food:{fam.id}",
-                "severity": "critical",
-                "category": "food",
-                "title": f"The {fam.surname}s: No Food",
-                "hint": "0 Food at home. Send Grant food or ensure Farm & Market have supply.",
-                "action_label": "Send Grant",
-                "action_type": "OPEN_GRANT",
-                "target_id": fam.id,
-            })
+            if total_copper > 0:
+                if not market_has_food:
+                    any_hungry_with_coins = True
+            else:
+                alerts.append({
+                    "id": f"no_food:{fam.id}",
+                    "severity": "critical",
+                    "category": "food",
+                    "title": f"The {fam.surname}s: No Food",
+                    "hint": "0 Food at home. Send Grant food or ensure Farm & Market have supply.",
+                    "action_label": "Send Grant",
+                    "action_type": "OPEN_GRANT",
+                    "target_id": fam.id,
+                })
 
         water_stk = fam.get_water_stock(furniture_manager, stockpile_manager) if hasattr(fam, "get_water_stock") else 0
         total_household_water += water_stk
@@ -173,7 +192,18 @@ def collect_village_alerts(
                 "target_id": fam.id,
             })
 
-    # 4. Village-wide water check
+    # 4. Village-wide food/water checks
+    if any_hungry_with_coins and not market_has_food:
+        alerts.append({
+            "id": "market_no_food",
+            "severity": "critical",
+            "category": "market_food",
+            "title": "Market Has No Food",
+            "hint": "Households have coins to buy food, but no Market has Food for sale.",
+            "action_label": "Open Jobs",
+            "action_type": "OPEN_JOBS",
+            "target_id": None,
+        })
     if total_living > 0:
         has_well = any(
             getattr(b, "building_type", "") == "well" and getattr(b, "is_available_for_use", True)
@@ -223,12 +253,8 @@ def alert_group_key(alert):
         return "household_need"
     if cat == "repair":
         return "repair"
-    if cat == "water":
-        return "water"
-    if cat == "jobs":
-        return "jobs"
-    if cat == "immigration":
-        return "immigration"
+    if cat in ("water", "jobs", "immigration", "market_food"):
+        return cat
     return "other"
 
 
@@ -285,25 +311,11 @@ def group_village_alerts(alerts):
                 "action_type": "OPEN_TOWN_HALL",
                 "target_id": "household_need",
             })
-        elif gkey == "water":
+        elif gkey in ("water", "jobs", "immigration", "market_food"):
             first = items[0]
             summaries.append({
                 **first,
-                "group": "water",
-                "count": len(items),
-            })
-        elif gkey == "jobs":
-            first = items[0]
-            summaries.append({
-                **first,
-                "group": "jobs",
-                "count": len(items),
-            })
-        elif gkey == "immigration":
-            first = items[0]
-            summaries.append({
-                **first,
-                "group": "immigration",
+                "group": gkey,
                 "count": len(items),
             })
         else:
